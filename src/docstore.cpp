@@ -1594,7 +1594,7 @@ DocstoreSession_c::~DocstoreSession_c()
 class DocstoreChecker_c
 {
 public:
-						DocstoreChecker_c ( CSphAutoreader & tReader, DebugCheckError_i & tReporter, int64_t iRowsCount );
+						DocstoreChecker_c ( CSphAutoreader & tReader, DebugCheckError_i & tReporter, int64_t iRowsCount, CSphVector<std::pair<RowID_t,RowID_t>> * pBadRows );
 
 	bool				Check();
 
@@ -1605,21 +1605,32 @@ private:
 	DocstoreFields_c	m_tFields;
 	std::unique_ptr<Compressor_i> m_pCompressor;
 	int64_t				m_iRowsCount = 0;
+	CSphVector<std::pair<RowID_t,RowID_t>> * m_pBadRows = nullptr;
 
+	void				AddBadRows ( RowID_t tStart, int64_t iEnd );
 	void				CheckSmallBlockDoc ( MemoryReader2_c & tReader, CSphBitvec & tEmptyFields, SphOffset_t tOffset );
-	void				CheckSmallBlock ( const Docstore_c::Block_t & tBlock );
-	void				CheckBlock ( const Docstore_c::Block_t & tBlock );
+	DWORD				CheckSmallBlock ( const Docstore_c::Block_t & tBlock );
+	DWORD				CheckBlock ( const Docstore_c::Block_t & tBlock );
 	void				CheckBigBlockField ( const Docstore_c::FieldInfo_t & tInfo, SphOffset_t & tOffset );
 	void				CheckBigBlock ( const Docstore_c::Block_t & tBlock );
 };
 
 
-DocstoreChecker_c::DocstoreChecker_c ( CSphAutoreader & tReader, DebugCheckError_i & tReporter, int64_t iRowsCount )
+DocstoreChecker_c::DocstoreChecker_c ( CSphAutoreader & tReader, DebugCheckError_i & tReporter, int64_t iRowsCount, CSphVector<std::pair<RowID_t,RowID_t>> * pBadRows )
 	: m_tReader ( tReader )
 	, m_tReporter ( tReporter )
 	, m_szFilename ( tReader.GetFilename().cstr() )
 	, m_iRowsCount ( iRowsCount )
+	, m_pBadRows ( pBadRows )
 {}
+
+
+void DocstoreChecker_c::AddBadRows ( RowID_t tStart, int64_t iEnd )
+{
+	iEnd = Min ( iEnd, m_iRowsCount );
+	if ( m_pBadRows && tStart<iEnd )
+		m_pBadRows->Add ( { tStart, (RowID_t)iEnd } );
+}
 
 
 bool DocstoreChecker_c::Check()
@@ -1712,12 +1723,35 @@ bool DocstoreChecker_c::Check()
 	if ( dBlocks.GetLength() )
 		dBlocks.Last().m_uSize = tHeaderOffset-dBlocks.Last().m_tOffset;
 
-	for ( auto & i : dBlocks )
+	// every row is stored in exactly one block, blocks follow each other without gaps
+	RowID_t tNextRowID = 0;
+	ARRAY_FOREACH ( iBlock, dBlocks )
 	{
-		if ( i.m_tOffset+i.m_uSize > m_tReader.GetFilesize() )
+		const Docstore_c::Block_t & tBlock = dBlocks[iBlock];
+		if ( tBlock.m_tOffset+tBlock.m_uSize > m_tReader.GetFilesize() )
 			return m_tReporter.Fail ( "Docstore block size+offset out of bounds in %s", m_szFilename );
 
-		CheckBlock(i);
+		if ( tBlock.m_tRowID!=tNextRowID )
+		{
+			m_tReporter.Fail ( "Docstore block starts at row %u, expected row %u in %s (offset " INT64_FMT ")", tBlock.m_tRowID, tNextRowID, m_szFilename, tBlock.m_tOffset );
+			AddBadRows ( Min ( tBlock.m_tRowID, tNextRowID ), Max ( tBlock.m_tRowID, tNextRowID ) );
+		}
+
+		int64_t iBlockEnd = iBlock+1<dBlocks.GetLength() ? dBlocks[iBlock+1].m_tRowID : m_iRowsCount;
+		int64_t iFails = m_tReporter.GetNumFails();
+		DWORD uDocs = CheckBlock ( tBlock );
+		if ( m_tReporter.GetNumFails()>iFails )
+		{
+			AddBadRows ( tBlock.m_tRowID, iBlockEnd );
+			tNextRowID = (RowID_t)iBlockEnd;
+		} else
+			tNextRowID = tBlock.m_tRowID + uDocs;
+	}
+
+	if ( tNextRowID!=m_iRowsCount )
+	{
+		m_tReporter.Fail ( "Docstore ends at row %u, but there are " INT64_FMT " rows in %s", tNextRowID, m_iRowsCount, m_szFilename );
+		AddBadRows ( tNextRowID, m_iRowsCount );
 	}
 
 	if ( m_tReader.GetErrorFlag() )
@@ -1757,7 +1791,7 @@ void DocstoreChecker_c::CheckSmallBlockDoc ( MemoryReader2_c & tReader, CSphBitv
 }
 
 
-void DocstoreChecker_c::CheckSmallBlock ( const Docstore_c::Block_t & tBlock )
+DWORD DocstoreChecker_c::CheckSmallBlock ( const Docstore_c::Block_t & tBlock )
 {
 	CSphFixedVector<BYTE> dBlock ( tBlock.m_uSize );
 
@@ -1807,6 +1841,7 @@ void DocstoreChecker_c::CheckSmallBlock ( const Docstore_c::Block_t & tBlock )
 		CheckSmallBlockDoc ( tReader, tEmptyFields, tBlock.m_tOffset );
 
 	SafeDelete ( tResult.m_pData );
+	return tResult.m_uNumDocs;
 }
 
 
@@ -1869,6 +1904,7 @@ void DocstoreChecker_c::CheckBigBlock ( const Docstore_c::Block_t & tBlock )
 		}
 	}
 
+	int iZeroLenFields = 0;
 	for ( int i = 0; i < m_tFields.GetNumFields(); i++ )
 	{
 		int iField = bNeedReorder ? dFieldSort[i] : i;
@@ -1885,12 +1921,19 @@ void DocstoreChecker_c::CheckBigBlock ( const Docstore_c::Block_t & tBlock )
 		if ( tInfo.m_uFlags & FIELD_FLAG_COMPRESSED )
 			tInfo.m_uCompressedLen = tReader.UnzipInt();
 
+		// the writer marks every empty field with FIELD_FLAG_EMPTY
+		if ( !tInfo.m_uUncompressedLen )
+			iZeroLenFields++;
+
 		if ( tInfo.m_uCompressedLen>tInfo.m_uUncompressedLen )
 			m_tReporter.Fail ( "Docstore block size mismatch: compressed=%u, uncompressed=%u in %s (offset " INT64_FMT ")", tInfo.m_uCompressedLen, tInfo.m_uUncompressedLen, m_szFilename, tBlock.m_tOffset );
 
 		if ( tReader.GetPos() > tReader.GetLength() )
 			m_tReporter.Fail ( "Out of bounds in docstore field data in %s (offset " INT64_FMT ")", m_szFilename, tBlock.m_tOffset );
 	}
+
+	if ( iZeroLenFields )
+		m_tReporter.Fail ( "Docstore big block has %d zero-length fields not marked as empty in %s (offset " INT64_FMT ")", iZeroLenFields, m_szFilename, tBlock.m_tOffset );
 
 	SphOffset_t tOffset = tBlock.m_tOffset+tBlock.m_uHeaderSize;
 
@@ -1899,12 +1942,13 @@ void DocstoreChecker_c::CheckBigBlock ( const Docstore_c::Block_t & tBlock )
 }
 
 
-void DocstoreChecker_c::CheckBlock ( const Docstore_c::Block_t & tBlock )
+DWORD DocstoreChecker_c::CheckBlock ( const Docstore_c::Block_t & tBlock )
 {
 	if ( tBlock.m_eType==BLOCK_TYPE_SMALL )
-		CheckSmallBlock(tBlock);
-	else
-		CheckBigBlock(tBlock);
+		return CheckSmallBlock(tBlock);
+
+	CheckBigBlock(tBlock);
+	return 1;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1963,8 +2007,18 @@ void ClearDocstoreCache()
 }
 
 
-bool CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_i & tReporter, int64_t iRowsCount )
+bool CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_i & tReporter, int64_t iRowsCount, CSphVector<std::pair<RowID_t,RowID_t>> * pBadRows )
 {
-	DocstoreChecker_c tChecker ( tReader, tReporter, iRowsCount );
-	return tChecker.Check();
+	DocstoreChecker_c tChecker ( tReader, tReporter, iRowsCount, pBadRows );
+	if ( tChecker.Check() )
+		return true;
+
+	// the docstore structure is unreadable, so no row can be trusted
+	if ( pBadRows && iRowsCount )
+	{
+		pBadRows->Resize(0);
+		pBadRows->Add ( { 0, (RowID_t)iRowsCount } );
+	}
+
+	return false;
 }

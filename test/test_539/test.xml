@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>knn brute force vs secondary indexes</name>
+
+<requires>
+	<knn/>
+	<secondary/>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+	secondary_indexes = 1
+}
+</config>
+
+<!-- Regression for #4971: when the planner bypasses the HNSW graph for a selective filter, the chunk must be planned like a plain scan,
+so the secondary indexes over the filters narrow it to the matching rows instead of walking the whole chunk -->
+
+<queries>
+
+<!-- ============ the planner flips to secondary indexes on its own ============ -->
+<!-- 3000 rows with a unique category each, 10 rows in category 'rare' near the anchor, plus one 'rare' row without a vector -->
+<sphinxql>
+	create table tb (title text, category string, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+</sphinxql>
+<var name="tb_bulk"/>
+<repeat count="3000" vars="i a b c d" init="1 3 5 7 11" inc="1 7 11 13 17"><var name="tb_bulk" delimiter=",">(<i/>, 'doc', 'c<i/>', (<a/>,<b/>,<c/>,<d/>))</var></repeat>
+<sphinxql skip="1">insert into tb values <tb_bulk/></sphinxql>
+<var name="tb_rare"/>
+<repeat count="10" vars="i a" init="3001 1" inc="1 1"><var name="tb_rare" delimiter=",">(<i/>, 'doc rare', 'rare', (<a/>,<a/>,<a/>,<a/>))</var></repeat>
+<sphinxql skip="1">insert into tb values <tb_rare/></sphinxql>
+<sphinxql>
+	insert into tb values (3011, 'doc rare', 'rare', ());
+	flush ramchunk tb;
+
+	<!-- selective string filter: brute force wins over the graph, and the filter must come from the secondary index -->
+	select id, knn_dist() d from tb where category='rare' and knn(vec, 5, (0,0,0,0)) order by d asc; show meta like 'index';
+
+	<!-- explicit fullscan is planned the same way -->
+	select id, knn_dist() d from tb where category='rare' and knn(vec, 5, (0,0,0,0), {fullscan=1}) order by d asc; show meta like 'index';
+
+	<!-- a filter that admits only the vector-less row still yields nothing on the iterator path -->
+	select id from tb where id=3011 and category='rare' and knn(vec, 5, (0,0,0,0));
+
+	<!-- full-text + knn + selective filter goes through the full-text iterator planner -->
+	select id, knn_dist() d from tb where match('rare') and category='rare' and knn(vec, 5, (0,0,0,0)) order by d asc;
+
+	<!-- no filter: the graph still answers -->
+	select id, knn_dist() d from tb where knn(vec, 3, (0,0,0,0)) order by d asc; show meta like 'index';
+	drop table tb;
+</sphinxql>
+
+<!-- ============ forced secondary index, ram chunk vs disk chunk ============ -->
+<!-- doc 26 holds no vector and shares the filtered category; it must stay excluded whether the filter runs as a plain filter or as an index iterator -->
+<sphinxql>
+	create table ts (title text, category int, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');
+	insert into ts values
+		(1, 'doc1', 1, (0.05, 0.15, 0.25, 0.35)),
+		(2, 'doc2', 2, (0.10, 0.20, 0.30, 0.40)),
+		(3, 'doc3', 3, (0.15, 0.25, 0.35, 0.45)),
+		(4, 'doc4', 1, (0.20, 0.30, 0.40, 0.50)),
+		(5, 'doc5', 2, (0.25, 0.35, 0.45, 0.55)),
+		(6, 'doc6', 3, (0.30, 0.40, 0.50, 0.60)),
+		(7, 'doc7', 1, (0.35, 0.45, 0.55, 0.65)),
+		(8, 'doc8', 2, (0.40, 0.50, 0.60, 0.70)),
+		(9, 'doc9', 3, (0.45, 0.55, 0.65, 0.75)),
+		(10, 'doc10', 1, (0.50, 0.60, 0.70, 0.80)),
+		(11, 'doc11', 2, (0.55, 0.65, 0.75, 0.85)),
+		(12, 'doc12', 3, (0.60, 0.70, 0.80, 0.90)),
+		(13, 'doc13', 1, (0.65, 0.75, 0.85, 0.95)),
+		(14, 'doc14', 2, (0.70, 0.80, 0.90, 1.00)),
+		(15, 'doc15', 3, (0.75, 0.85, 0.95, 1.05)),
+		(16, 'doc16', 1, (0.80, 0.90, 1.00, 1.10)),
+		(17, 'doc17', 2, (0.85, 0.95, 1.05, 1.15)),
+		(18, 'doc18', 3, (0.90, 1.00, 1.10, 1.20)),
+		(19, 'doc19', 1, (0.95, 1.05, 1.15, 1.25)),
+		(20, 'doc20', 2, (1.00, 1.10, 1.20, 1.30)),
+		(21, 'doc21', 3, (0.12, 0.22, 0.32, 0.42)),
+		(22, 'doc22', 1, (0.22, 0.32, 0.42, 0.52)),
+		(23, 'doc23', 2, (0.32, 0.42, 0.52, 0.62)),
+		(24, 'doc24', 3, (0.42, 0.52, 0.62, 0.72)),
+		(25, 'doc25', 1, (0.52, 0.62, 0.72, 0.82)),
+		(26, 'doc26', 1, ());
+
+	select id, category, knn_dist() d from ts where category=1 and knn(vec, 3, (0.15, 0.25, 0.35, 0.45)) /*+ SecondaryIndex(category) */; show meta like 'index';
+	select id, category, knn_dist() d from ts where category=1 and knn(vec, 3, (0.15, 0.25, 0.35, 0.45), {fullscan=1}) /*+ SecondaryIndex(category) */; show meta like 'index';
+	<!-- a predicate on the distance itself must see the computed distance, in both spellings and with or without another filter -->
+	select id, knn_dist() d from ts where knn(vec, 3, (0.15, 0.25, 0.35, 0.45)) and knn_dist()&lt;0.05 order by d asc;
+	select id, knn_dist() d from ts where knn(vec, 3, (0.15, 0.25, 0.35, 0.45)) and d&lt;0.05 order by d asc;
+	select id, knn_dist() d from ts where category=1 and knn(vec, 3, (0.15, 0.25, 0.35, 0.45)) and knn_dist()&lt;0.05 order by d asc;
+	select id, knn_dist() d from ts where category=1 and knn(vec, 3, (0.15, 0.25, 0.35, 0.45)) and knn_dist()&gt;0.05 order by d asc;
+
+	flush ramchunk ts;
+	<!-- ...and the disk chunk answers the same through the index iterator -->
+	select id, category, knn_dist() d from ts where category=1 and knn(vec, 3, (0.15, 0.25, 0.35, 0.45)) /*+ SecondaryIndex(category) */; show meta like 'index';
+	select id, category, knn_dist() d from ts where category=1 and knn(vec, 3, (0.15, 0.25, 0.35, 0.45), {fullscan=1}) /*+ SecondaryIndex(category) */; show meta like 'index';
+	select id from ts where id=26 and category=1 and knn(vec, 3, (0.15, 0.25, 0.35, 0.45)) /*+ SecondaryIndex(category) */;
+	select id, knn_dist() d from ts where knn(vec, 3, (0.15, 0.25, 0.35, 0.45)) and knn_dist()&lt;0.05 order by d asc;
+	select id, knn_dist() d from ts where knn(vec, 3, (0.15, 0.25, 0.35, 0.45)) and d&lt;0.05 order by d asc;
+	select id, knn_dist() d from ts where category=1 and knn(vec, 3, (0.15, 0.25, 0.35, 0.45)) and knn_dist()&lt;0.05 order by d asc;
+	select id, knn_dist() d from ts where category=1 and knn(vec, 3, (0.15, 0.25, 0.35, 0.45)) and knn_dist()&gt;0.05 order by d asc;
+	drop table ts;
+</sphinxql>
+
+</queries>
+
+</test>

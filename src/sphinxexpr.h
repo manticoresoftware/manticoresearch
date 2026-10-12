@@ -90,6 +90,8 @@ enum ESphExprCommand
 	SPH_EXPR_SET_QUERY,
 	SPH_EXPR_SET_EXTRA_DATA,
 	SPH_EXPR_SET_KNN_VEC,
+	SPH_EXPR_SET_KNN_EXACT_TAG_MAX,	///< matches tagged 1..N (const int * arg) already carry an exact knn_dist (RT RAM segments)
+	SPH_EXPR_GET_KNN_EXACT_TAG_MAX,	///< fetch it back (int * arg)
 	SPH_EXPR_GET_DEPENDENT_COLS,	///< used to determine proper evaluating stage
 	SPH_EXPR_GET_GEODIST_SETTINGS,
 	SPH_EXPR_GET_POLY2D_BBOX,

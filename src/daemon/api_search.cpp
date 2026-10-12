@@ -348,6 +348,10 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	tOut.SendByte ( (BYTE)q.m_eQueryRole );
 	SendFacetFilterTrait ( tOut, q.m_tFacetFilter, VER_COMMAND_SEARCH_MASTER );
 	SendStringVec ( tOut, q.m_dFacetOwnFilterAttrs );
+
+	// v36+
+	for ( const auto & tKNN : q.m_dKnnSettings )
+		tOut.SendInt ( (int)tKNN.m_eTerminationPolicy );
 }
 
 
@@ -1416,6 +1420,20 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 			return false;
 		if ( !ParseStringVec ( tReq, tOut, tQuery.m_dFacetOwnFilterAttrs, "facet own-filter attr" ) )
 			return false;
+	}
+
+	if ( uMasterVer>=36 )
+	{
+		for ( auto & tKNN : tQuery.m_dKnnSettings )
+		{
+			int iPolicy = tReq.GetInt();
+			if ( iPolicy!=(int)knn::HNSWTerminationPolicy_e::NONE && iPolicy!=(int)knn::HNSWTerminationPolicy_e::QUANTILE )
+			{
+				SendErrorReply ( tOut, "invalid KNN early termination policy %d", iPolicy );
+				return false;
+			}
+			tKNN.m_eTerminationPolicy = (knn::HNSWTerminationPolicy_e)iPolicy;
+		}
 	}
 
 	/////////////////////

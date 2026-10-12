@@ -1750,11 +1750,6 @@ bool QueueCreator_c::MaybeAddGroupbyMagic ( bool bGotDistinct )
 
 bool QueueCreator_c::AddKNNDistColumn()
 {
-	// Merge queues receive already-computed agent values. Adding a fresh
-	// sorter-only placeholder here changes the match layout without a producer.
-	if ( !m_tSettings.m_bComputeItems )
-		return true;
-
 	if ( m_tQuery.m_bHybridSearch )
 	{
 		// for hybrid search, add a plain knn_dist column that the hybrid executor will populate;
@@ -1888,9 +1883,7 @@ bool QueueCreator_c::AddKNNRescoreColumn()
 
 bool QueueCreator_c::AddHybridScoreColumn()
 {
-	// The hybrid executor populates this placeholder only on an executing node.
-	// A merge queue must consume the materialized score returned by its agents.
-	if ( !m_tSettings.m_bComputeItems || !m_tQuery.m_bHybridSearch )
+	if ( !m_tQuery.m_bHybridSearch )
 		return true;
 
 	CSphColumnInfo tHybridScore ( GetHybridScoreAttrName(), SPH_ATTR_FLOAT );

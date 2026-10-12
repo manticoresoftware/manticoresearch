@@ -1,0 +1,39 @@
+Issue when we unable to drop and create new table in some cases
+while it produces error that directory is not empty
+https://github.com/manticoresoftware/manticoresearch/issues/3075
+––– block: ../base/start-searchd –––
+––– input –––
+LOG_FILE=$(mktemp)
+––– output –––
+––– input –––
+while true; do
+	mysql -h0 -P9306 << EOF
+	INSERT INTO a (id, value) VALUES (0, 'hello world');
+EOF
+	sleep 2
+done > /dev/null &
+––– output –––
+––– input –––
+while true; do
+	mysql -h0 -P9306 << EOF
+	select * from a where match('world');
+EOF
+	sleep 0.2
+done > /dev/null &
+––– output –––
+––– input –––
+while true; do
+	mysql -h0 -P9306 << EOF
+	DROP TABLE IF EXISTS b;
+	CREATE TABLE b (id bigint, value string);
+EOF
+done > $LOG_FILE &
+––– output –––
+––– input –––
+timeout 10 tail -f $LOG_FILE | while read line; do
+	if echo "$line" | grep -q "directory is not empty"; then
+		kill $(jobs -p)
+		break
+	fi
+done
+––– output –––

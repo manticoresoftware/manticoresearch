@@ -1,0 +1,18 @@
+Test that covers the following issue: https://github.com/manticoresoftware/manticoresearch/issues/3048
+––– block: ../base/start-cluster-2-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "create table system.test (id bigint, name string, value json)"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "alter cluster c add system.test"
+––– output –––
+––– input –––
+for i in {1..20}; do
+	mysql -h0 -P1306 -e "update c:system.test set value = '{\"a\":2}' where name = 'node'" &
+	mysql -h0 -P2306 -e "insert into c:system.test values (0, 'slave', '{\"a\":1}')" &
+done
+––– output –––
+––– input –––
+timeout 10 sh -c "wait && echo 'All good'" || echo "There is issue with hang up of parallel request in different nodes"
+––– output –––
+All good

@@ -22,7 +22,6 @@
 #include "secondarylib.h"
 #include "indexsettings.h"
 #include "indexfiles.h"
-#include "knnmisc.h"
 #include "roaring/roaring64map.hh"
 
 #include "killlist.h"
@@ -1979,7 +1978,7 @@ bool SchemaConfigureCheckAttribute ( const CSphSchema & tSchema, const CSphColum
 		return false;
 	}
 
-	if ( sphIsInternalAttr ( tCol.m_sName ) && tCol.m_sName!=sphGetUuidDocidName() && !IsKnnChunkSpansAttr(tCol.m_sName) )
+	if ( sphIsInternalAttr ( tCol.m_sName ) && tCol.m_sName!=sphGetUuidDocidName() )
 	{
 		sError.SetSprintf ( "%s is not a valid attribute name", tCol.m_sName.cstr() );
 		return false;

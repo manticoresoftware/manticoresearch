@@ -1837,6 +1837,7 @@ private:
 	void						AddFieldToRamchunk ( const CSphString & sFieldName, DWORD uFieldFlags, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema );
 	void						RemoveFieldFromRamchunk ( const CSphString & sFieldName, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema );
 	void						AddRemoveFromRamDocstore ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema );
+	void						RebuildDocstoreFields ( const CSphSchema & tSchema );
 
 	bool						LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
 	bool						LoadMetaImpl ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
@@ -2557,6 +2558,7 @@ DocstoreBuilder_i::Doc_t * RtIndex_c::FetchDocFields ( DocstoreBuilder_i::Doc_t 
 	}
 
 	ProcessStoredAttrs ( tStoredDoc, tDoc, m_tSchema, dTmpAttrStorage );
+	AddEmptyKnnChunkSpansToDoc ( tStoredDoc, m_tSchema );
 
 	return &tStoredDoc;
 }
@@ -9788,9 +9790,6 @@ bool RtIndex_c::AddRemoveColumnarAttr ( RtGuard_t & tGuard, bool bAdd, const CSp
 		if ( !Alter_AddRemoveColumnar ( bAdd, tOldSchema, tNewSchema, pSeg->m_pColumnar.get(), pBuilder.get(), pSeg->m_uRows, GetFilebase(), sError ) )
 			return false;
 
-		if ( m_pDocstoreFields && m_pDocstoreFields->GetFieldId ( sAttrName, DOCSTORE_ATTR )!=-1 )
-			m_pDocstoreFields->RemoveField ( sAttrName, DOCSTORE_ATTR );
-
 		pSeg->m_pColumnar = CreateColumnarRT ( tNewSchema, pBuilder.get() );
 		pSeg->UpdateUsedRam();
 	}
@@ -9845,27 +9844,29 @@ void RtIndex_c::AddFieldToRamchunk ( const CSphString & sFieldName, DWORD uField
 	if ( !(uFieldFlags & CSphColumnInfo::FIELD_STORED) )
 		return;
 
-	if ( !m_pDocstoreFields )
-		m_pDocstoreFields = CreateDocstoreFields();
-
-	assert ( m_pDocstoreFields );
-	m_pDocstoreFields->AddField ( sFieldName, DOCSTORE_TEXT );
+	RebuildDocstoreFields(tNewSchema);
 	AddRemoveFromRamDocstore ( tOldSchema, tNewSchema );
+}
+
+
+// the index-level field list must use the same canonical layout as the rebuilt segment docstores
+// (stored fields, stored attributes, chunk spans); appending or removing single entries would break that order
+void RtIndex_c::RebuildDocstoreFields ( const CSphSchema & tSchema )
+{
+	m_pDocstoreFields.reset();
+	if ( !tSchema.HasStoredFields() && !tSchema.HasStoredAttrs() )
+		return;
+
+	m_pDocstoreFields = CreateDocstoreFields();
+	SetupDocstoreFields ( *m_pDocstoreFields, tSchema );
 }
 
 
 static int GetNumStored ( const CSphSchema & tSchema )
 {
-	int iStored = 0;
-	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
-		if ( tSchema.IsFieldStored(i) )
-			iStored++;
-
-	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
-		if ( tSchema.IsAttrStored(i) )
-			iStored++;
-
-	return iStored;
+	CSphVector<DocstoreFieldDesc_t> dFields;
+	CollectDocstoreFields ( tSchema, dFields );
+	return dFields.GetLength();
 }
 
 
@@ -9900,8 +9901,7 @@ void RtIndex_c::AddRemoveFromRamDocstore ( const CSphSchema & tOldSchema, const 
 
 void RtIndex_c::RemoveFieldFromRamchunk ( const CSphString & sFieldName, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema )
 {
-	if ( m_pDocstoreFields && m_pDocstoreFields->GetFieldId ( sFieldName, DOCSTORE_TEXT )!=-1 )
-		m_pDocstoreFields->RemoveField ( sFieldName, DOCSTORE_TEXT );
+	RebuildDocstoreFields(tNewSchema);
 
 	int iFieldId = tOldSchema.GetFieldIndex ( sFieldName.cstr () );
 	auto pSegs = m_tRtChunks.RamSegs();
@@ -10069,6 +10069,7 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 		AddRemoveRowwiseAttr ( tGuard, bAdd, tNewCtx.m_sName, tNewCtx.m_eType, tOldSchema, tNewSchema, sError );
 
 	AddRemoveFromRamDocstore ( tOldSchema, tNewSchema );
+	RebuildDocstoreFields(tNewSchema); // a dropped vector attribute takes its chunk spans docstore entry with it
 
 	if ( bModelBackedEmbedding )
 	{

@@ -50,7 +50,8 @@ struct CSphColumnInfo
 		ATTR_INDEXED_KNN		= 1 << 3,
 		ATTR_JOINED				= 1 << 4,
 		ATTR_INDEXED_SI			= 1 << 5,
-		ATTR_UUID_LINK			= 1 << 6
+		ATTR_UUID_LINK			= 1 << 6,
+		ATTR_KNN_CHUNK_SPANS	= 1 << 7	///< docstore keeps the source byte span of every auto-generated chunk vector
 	};
 
 	CSphString		m_sName;							///< column name
@@ -81,7 +82,6 @@ struct CSphColumnInfo
 	knn::ModelSettings_t m_tKNNModel;					///< knn model settings
 	CSphString		m_sKNNFrom;							///< fields/attrs used by the model
 	knn::ChunkSettings_t m_tKNNChunk;					///< how the model splits a document into vectors
-	int				m_iKNNChunkQueryCount = 0;			///< KNN clauses associated with synthetic chunk provenance
 
 	float			m_fTdigestCompression = 200.0f;		///< tdigest compression for extended aggs
 	AggrSettings_t	m_tAggrSettings;					///< full settings payload for extended aggs
@@ -106,6 +106,7 @@ struct CSphColumnInfo
 	bool IsIndexedSI() const;
 	bool IsStored() const;
 	bool IsUuidLinkedDocid() const;
+	bool HasKnnChunkSpans() const;
 };
 
 

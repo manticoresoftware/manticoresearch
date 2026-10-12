@@ -145,14 +145,6 @@ static void CollectDependentExprs ( const ISphSchema * pSchema, const char * szA
 }
 
 
-static void CollectKNNChunkBoundaryExpr ( const ISphSchema * pSchema, const char * szAttrName, CSphVector<ExprEval_t> & dExprs )
-{
-	const CSphColumnInfo * pAttr = pSchema->GetAttr(szAttrName);
-	if ( pAttr && pAttr->m_pExpr && pAttr->m_eAttrType==SPH_ATTR_BIGINT && pAttr->m_eStage==SPH_EVAL_PRESORT )
-		dExprs.Add ( { pAttr->m_tLocator, pAttr->m_eAttrType, pAttr->m_pExpr } );
-}
-
-
 static bool IsWeightDependentAttr ( const CSphColumnInfo & tAttr, const ISphSchema & tSchema, bool bPerHitOnly = false )
 {
 	StrVec_t dDeps;
@@ -426,7 +418,6 @@ void HybridExecutor_c::SetupKnnQueries ( const CSphQuery & tQuery )
 	{
 		m_dKnnQueries.Add ( tQuery );
 		auto & tKnnQuery = m_dKnnQueries.Last();
-		tKnnQuery.m_iKNNChunkQueryCount = tQuery.m_dKnnSettings.GetLength();
 		tKnnQuery.m_sQuery = "";
 		tKnnQuery.m_sRawQuery = "";
 		tKnnQuery.m_bHybridSearch = false;
@@ -491,13 +482,12 @@ bool HybridExecutor_c::SetupWeightFilters ( const ISphSchema & tSchema )
 
 void HybridExecutor_c::SetupTextQuery ( const CSphQuery & tQuery )
 {
-	m_tTextQuery.m_iKNNChunkQueryCount = tQuery.m_dKnnSettings.GetLength();
 	m_tTextQuery.m_dKnnSettings.Reset();
 	m_tTextQuery.m_bHybridSearch = false;
 	m_tTextQuery.m_eSort = SPH_SORT_EXTENDED;
 	if ( m_tTextQuery.m_sGroupBy.IsEmpty() )
 		m_tTextQuery.m_sSortBy = "@weight desc";
-	RemoveQueryItems ( m_tTextQuery.m_dItems, { "hybrid_score()", GetHybridScoreAttrName(), GetKnnDistAttrName(), "knn_dist()", "knn_chunk_index()", GetKnnChunkIndexAttrName(), "knn_chunk_start()", GetKnnChunkStartAttrName(), "knn_chunk_end()", GetKnnChunkEndAttrName() } );
+	RemoveQueryItems ( m_tTextQuery.m_dItems, { "hybrid_score()", GetHybridScoreAttrName(), GetKnnDistAttrName(), "knn_dist()" } );
 	m_tKnnDistNames.RemoveFilters ( m_tTextQuery.m_dFilters );
 
 	// when the original query uses a JSON parser but m_sQuery contains plain text
@@ -669,19 +659,22 @@ void HybridExecutor_c::SetMinKnnDist ( CSphMatch & tMatch, const ISphSchema * pD
 	}
 
 	tMatch.SetAttrFloat ( pDstKnnDist->m_tLocator, fMinDist );
-	for ( const char * szName : { GetKnnChunkIndexAttrName(), GetKnnChunkStartAttrName(), GetKnnChunkEndAttrName() } )
+
+	// the chunk slot must come from the same sub-result as the distance, or the highlight would show another chunk
+	const CSphColumnInfo * pDstSlot = pDstSchema->GetAttr ( GetKnnChunkSlotAttrName() );
+	if ( !pDstSlot )
+		return;
+
+	int64_t iSlot = -1;
+	if ( iMinSet>=0 )
 	{
-		const CSphColumnInfo * pDst = pDstSchema->GetAttr(szName);
-		if ( !pDst ) continue;
-		int64_t iValue = -1;
-		if ( iMinSet>=0 )
-		{
-			const auto & tSrcResult = m_dSubResults[iMinSet+1];
-			const CSphColumnInfo * pSrc = tSrcResult.m_pSorter->GetSchema()->GetAttr(szName);
-			if ( pSrc ) iValue = (int64_t)tSrcResult.m_dMatches[tEntry.m_dKnnMatchIdx[iMinSet]].GetAttr(pSrc->m_tLocator);
-		}
-		tMatch.SetAttr ( pDst->m_tLocator, iValue );
+		const auto & tSrcResult = m_dSubResults[iMinSet+1];
+		const CSphColumnInfo * pSrcSlot = tSrcResult.m_pSorter->GetSchema()->GetAttr ( GetKnnChunkSlotAttrName() );
+		if ( pSrcSlot )
+			iSlot = (int64_t)tSrcResult.m_dMatches[tEntry.m_dKnnMatchIdx[iMinSet]].GetAttr ( pSrcSlot->m_tLocator );
 	}
+
+	tMatch.SetAttr ( pDstSlot->m_tLocator, iSlot );
 }
 
 
@@ -792,11 +785,6 @@ void HybridExecutor_c::PushFusedMatches ( ISphMatchSorter * pSorter, const CSphV
 	CSphVector<ExprEval_t> dExprs;
 	CollectDependentExprs ( pDstSchema, GetHybridScoreAttrName(), dExprs );
 	CollectDependentExprs ( pDstSchema, GetKnnDistAttrName(), dExprs );
-	// A winning KNN source can replace the chunk slot after attributes were copied.
-	// Recompute only the scalar boundary expressions that consume that slot. In
-	// particular, post-limit string expressions such as HIGHLIGHT must stay lazy.
-	CollectKNNChunkBoundaryExpr ( pDstSchema, GetKnnChunkStartAttrName(), dExprs );
-	CollectKNNChunkBoundaryExpr ( pDstSchema, GetKnnChunkEndAttrName(), dExprs );
 
 	for ( auto & tEntry : dFused )
 		PushSingleFusedMatch ( tEntry, pSorter, iDynSize, dRemaps, tScoreLoc, pDstKnnDist, dKnnDistAttrs, dExprs );

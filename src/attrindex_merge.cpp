@@ -117,13 +117,7 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 		if ( !m_pDocstoreBuilder )
 			return false;
 
-		for ( int i = 0; i < tDstSchema.GetFieldsCount(); ++i )
-			if ( tDstSchema.IsFieldStored(i) )
-				m_pDocstoreBuilder->AddField ( tDstSchema.GetFieldName(i), DOCSTORE_TEXT );
-
-		for ( int i = 0; i < tDstSchema.GetAttrsCount(); ++i )
-			if ( tDstSchema.IsAttrStored(i) )
-				m_pDocstoreBuilder->AddField ( tDstSchema.GetAttr(i).m_sName, DOCSTORE_ATTR );
+		SetupDocstoreFields ( *m_pDocstoreBuilder, tDstSchema );
 	}
 
 	if ( tDstSchema.HasColumnarAttrs() )

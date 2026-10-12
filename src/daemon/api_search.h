@@ -14,8 +14,6 @@
 
 #include "searchdha.h"
 
-bool CanSendFloatVectorArray ( int iVer, WORD uMasterVer, bool bAgentMode );
-
 class SearchRequestBuilder_c final : public RequestBuilder_i
 {
 	const VecTraits_T<CSphQuery> & m_dQueries;

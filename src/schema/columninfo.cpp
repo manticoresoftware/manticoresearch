@@ -96,6 +96,12 @@ bool CSphColumnInfo::IsUuidLinkedDocid() const
 }
 
 
+bool CSphColumnInfo::HasKnnChunkSpans() const
+{
+	return !!(m_uAttrFlags & CSphColumnInfo::ATTR_KNN_CHUNK_SPANS);
+}
+
+
 CSphString sphDumpAttr ( const CSphColumnInfo & tAttr )
 {
 	CSphString sRes;

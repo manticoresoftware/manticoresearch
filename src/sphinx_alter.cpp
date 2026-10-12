@@ -509,22 +509,15 @@ void IndexAlterHelper_c::Alter_AddRemoveFromDocstore ( DocstoreBuilder_i & tBuil
 		int			m_iRsetId = -1;
 	};
 
-	CSphVector<Field_t> dStoredFields;
-	for ( int i = 0; i < tNewSchema.GetFieldsCount(); i++ )
-		if ( tNewSchema.IsFieldStored(i) )
-		{
-			const CSphString & sName = tNewSchema.GetFieldName(i);
-			int iFieldId = pDocstore ? pDocstore->GetFieldId ( sName, DOCSTORE_TEXT ) : -1;
-			dStoredFields.Add ( { sName, true, iFieldId, -1 } );
-		}
+	CSphVector<DocstoreFieldDesc_t> dNewFields;
+	CollectDocstoreFields ( tNewSchema, dNewFields );
 
-	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
-		if ( tNewSchema.IsAttrStored(i) )
-		{
-			const CSphString & sName = tNewSchema.GetAttr(i).m_sName;
-			int iFieldId = pDocstore ? pDocstore->GetFieldId ( sName, DOCSTORE_ATTR ) : -1;
-			dStoredFields.Add ( { sName, false, iFieldId, -1 } );
-		}
+	CSphVector<Field_t> dStoredFields;
+	for ( const auto & i : dNewFields )
+	{
+		int iFieldId = pDocstore ? pDocstore->GetFieldId ( i.m_sName, i.m_eType ) : -1;
+		dStoredFields.Add ( { i.m_sName, i.m_eType==DOCSTORE_TEXT, iFieldId, -1 } );
+	}
 
 	IntVec_t dStoredFieldIds;
 	for ( auto & i : dStoredFields )

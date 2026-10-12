@@ -5675,24 +5675,65 @@ bool CSphIndex_VLN::Build_SetupInplace ( SphOffset_t & iHitsGap, int iHitsMax, i
 }
 
 
-void SetupDocstoreFields ( DocstoreAddField_i & tFields, const CSphSchema & tSchema )
+CSphString GetKnnChunkSpansDocstoreName ( const CSphString & sVectorAttr )
 {
-	int iStored = 0;
+	CSphString sName;
+	sName.SetSprintf ( "@knn_chunk_spans_%s", sVectorAttr.cstr() );
+	return sName;
+}
+
+
+void CollectDocstoreFields ( const CSphSchema & tSchema, CSphVector<DocstoreFieldDesc_t> & dFields )
+{
+	dFields.Resize(0);
 	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
 		if ( tSchema.IsFieldStored(i) )
-		{
-			tFields.AddField ( tSchema.GetFieldName(i), DOCSTORE_TEXT );
-			iStored++;
-		}
+			dFields.Add ( { tSchema.GetFieldName(i), DOCSTORE_TEXT } );
 
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 		if ( tSchema.IsAttrStored(i) )
-		{
-			tFields.AddField ( tSchema.GetAttr(i).m_sName, DOCSTORE_ATTR );
-			iStored++;
-		}
+			dFields.Add ( { tSchema.GetAttr(i).m_sName, DOCSTORE_ATTR } );
 
-	assert(iStored);
+	// chunk spans ride along in the docstore only when the table has one anyway (that is also the only case
+	// in which the source text can be highlighted); they never create a docstore on their own
+	if ( dFields.GetLength() )
+		for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+			if ( tSchema.GetAttr(i).HasKnnChunkSpans() )
+				dFields.Add ( { GetKnnChunkSpansDocstoreName ( tSchema.GetAttr(i).m_sName ), DOCSTORE_ATTR } );
+}
+
+
+int GetNumKnnChunkSpansDocstoreFields ( const CSphSchema & tSchema )
+{
+	if ( !tSchema.HasStoredFields() && !tSchema.HasStoredAttrs() )
+		return 0;
+
+	int iCount = 0;
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+		if ( tSchema.GetAttr(i).HasKnnChunkSpans() )
+			iCount++;
+
+	return iCount;
+}
+
+
+// spans are filled in later, when the embeddings get generated; every other writer stores them empty
+void AddEmptyKnnChunkSpansToDoc ( DocstoreBuilder_i::Doc_t & tDoc, const CSphSchema & tSchema )
+{
+	int iCount = GetNumKnnChunkSpansDocstoreFields(tSchema);
+	for ( int i = 0; i < iCount; i++ )
+		tDoc.m_dFields.Add ( { nullptr, 0 } );
+}
+
+
+void SetupDocstoreFields ( DocstoreAddField_i & tFields, const CSphSchema & tSchema )
+{
+	CSphVector<DocstoreFieldDesc_t> dFields;
+	CollectDocstoreFields ( tSchema, dFields );
+	for ( const auto & i : dFields )
+		tFields.AddField ( i.m_sName, i.m_eType );
+
+	assert ( dFields.GetLength() );
 }
 
 
@@ -5930,6 +5971,7 @@ void CSphIndex_VLN::Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, 
 		if ( dStoredAttrs.BitGet(i) )
 			pAddedAttrs[iAttr++] = GetAttrForDocstore ( tDocID, i, m_tSchema, tMvaContainer, tSource, dTmpDocstoreAttrStorage[i] );
 
+	AddEmptyKnnChunkSpansToDoc ( tDoc, m_tSchema );
 	pDocstoreBuilder->AddDoc ( tSource.m_tDocInfo.m_tRowID, tDoc );
 }
 
@@ -8004,23 +8046,11 @@ bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHe
 
 bool CSphIndex_VLN::AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError )
 {
-	int iOldNumStored = 0;
-	for ( int i = 0; i < tOldSchema.GetFieldsCount(); i++ )
-		if ( tOldSchema.IsFieldStored(i) )
-			iOldNumStored++;
-
-	for ( int i = 0; i < tOldSchema.GetAttrsCount(); i++ )
-		if ( tOldSchema.IsAttrStored(i) )
-			iOldNumStored++;
-
-	int iNewNumStored = 0;
-	for ( int i = 0; i < tNewSchema.GetFieldsCount(); i++ )
-		if ( tNewSchema.IsFieldStored(i) )
-			iNewNumStored++;
-
-	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
-		if ( tNewSchema.IsAttrStored(i) )
-			iNewNumStored++;
+	CSphVector<DocstoreFieldDesc_t> dOldFields, dNewFields;
+	CollectDocstoreFields ( tOldSchema, dOldFields );
+	CollectDocstoreFields ( tNewSchema, dNewFields );
+	int iOldNumStored = dOldFields.GetLength();
+	int iNewNumStored = dNewFields.GetLength();
 
 	if ( iOldNumStored==iNewNumStored )
 		return true;

@@ -708,10 +708,10 @@ POST /search
 * **`MAX_CHUNKS` 会丢弃文本。** 超出上限时，剩余部分会合并到最后一个保留的 chunk 中，而该 chunk 随后会超过 `MAX_TOKENS`，在嵌入时被截断到模型的输入窗口。表面上不会留下可见空缺，但尾部内容已经丢失。
 * **本地模型和远程模型的分块方式不同。** 本地模型按模型真实的 token 切分。远程 API 模型（OpenAI、Voyage、Jina）没有本地分词器，因此改用保守的字节估算，所以相同的文本和设置会生成与本地模型不同数量的 chunk。
 
-对于自动分块的匹配，`knn_chunk_index()`、`knn_chunk_start()` 和 `knn_chunk_end()` 会返回从零开始计数的命中分块，以及它在传给分块器的原始文本中的半开 UTF-8 字节范围。对于手动提供的数组和未分块的向量，它们会返回 `-1`。在 HTTP 搜索响应中，只有在可获得该来源信息时才会包含 `_knn_chunk`；否则会省略该字段，而不是返回一个 `-1` 对象。在支持分块来源信息之前创建的表没有来源信息存储：这些表仍可搜索，但所有三个 SQL 函数都会对每一行返回 `-1`，包括升级后插入的行。要启用来源信息，请创建新表并重新索引，或将源文本复制进去。精确重打分会同时更新距离和分块；如出现并列，则选择分块索引最小的分块。
+对于 `fixed`、`recursive` 和 `sentence` 策略，Manticore 还会记住每个分块向量来自源文本的哪一部分，因此 KNN 匹配可以展示真正匹配的那段文本。为此请使用 [HIGHLIGHT()](../Searching/Highlighting.md#knn_chunk) 的 `knn_chunk` 选项：带全文查询时只在匹配的分块内高亮，不带全文查询时直接返回该分块。分块信息会在刷新、合并和重启后保留，精确重打分会同时更新距离和分块。这要求源字段是存储字段（默认即是），并且表是在支持此功能之后创建的；旧表仍可搜索，但其高亮会回退到整个字段。
 
 ```sql
-SELECT id, knn_dist(), knn_chunk_index(), knn_chunk_start(), knn_chunk_end()
+SELECT id, knn_dist(), HIGHLIGHT({knn_chunk=1},'body')
 FROM articles WHERE knn(chunks, 5, 'certificate rotation');
 ```
 

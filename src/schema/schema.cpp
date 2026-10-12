@@ -586,6 +586,10 @@ void CSphSchema::SetupKNNFlags ( const CSphSourceSettings & tSettings )
 		tAttr.m_tKNNModel	= static_cast<const knn::ModelSettings_t&>(tKNN);
 		tAttr.m_sKNNFrom	= tKNN.m_sFrom;
 		tAttr.m_tKNNChunk	= tKNN.m_tChunk;
+
+		// the flag is persisted with the schema, so tables created before chunk provenance keep their docstore layout
+		if ( tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY && !tAttr.m_tKNNModel.m_sModelName.empty() && knn::IsMultiVectorStrategy ( tAttr.m_tKNNChunk.m_eStrategy ) )
+			tAttr.m_uAttrFlags |= CSphColumnInfo::ATTR_KNN_CHUNK_SPANS;
 	}
 }
 

@@ -317,7 +317,7 @@ private:
 	bool	AddExpressionsForUpdates();
 	bool	MaybeAddGroupbyMagic ( bool bGotDistinct );
 	bool	AddKNNDistColumn();
-	bool	AddKNNChunkColumns();
+	bool	AddKNNChunkSlotColumn();
 	bool	AddKNNRescoreColumn();
 	bool	CanRescoreKNN() const;
 	bool	AddHybridScoreColumn();
@@ -1254,7 +1254,6 @@ bool QueueCreator_c::ParseResolvedQueryItem ( const CSphQueryItem & tItem )
 	tExprParseArgs.m_pEvalStage = &tExprCol.m_eStage;
 	tExprParseArgs.m_pStoredField = &tExprCol.m_uFieldFlags;
 	tExprParseArgs.m_pNeedDocIds = &bExprsNeedDocids;
-	tExprParseArgs.m_bKNNChunkHighlightDeferred = m_tQuery.m_iKNNChunkQueryCount>0 && !m_tQuery.HasKnn();
 
 	// tricky bit
 	// GROUP_CONCAT() adds an implicit TO_STRING() conversion on top of its argument
@@ -1803,84 +1802,37 @@ bool QueueCreator_c::AddKNNDistColumn()
 }
 
 
-bool QueueCreator_c::AddKNNChunkColumns()
+// HIGHLIGHT({knn_chunk=1}) needs to know which vector of a multi-vector row won the search. The slot travels as an
+// internal presort attribute: the KNN iterator fills it on the ANN path, fullscan and exact rescore recompute it
+bool QueueCreator_c::AddKNNChunkSlotColumn()
 {
-	if ( !m_tQuery.HasKnn() )
-		return true;
-	const int iKNNCount = m_tQuery.m_iKNNChunkQueryCount ? m_tQuery.m_iKNNChunkQueryCount : m_tQuery.m_dKnnSettings.GetLength();
-
-	// Merge queues receive provenance values computed by the agents. Do not
-	// shadow them with coordinator-side expressions that cannot access shard
-	// blob storage.
-	if ( !m_tSettings.m_bComputeItems )
+	// merge queues receive matches from agents that already evaluated the highlight; nothing to compute here
+	if ( !m_tQuery.HasKnn() || !m_tSettings.m_bComputeItems || !QueryUsesKnnChunkHighlight(m_tQuery) )
 		return true;
 
-	const bool bHaveSlot = m_pSorterSchema->GetAttrIndex ( GetKnnChunkIndexAttrName() )>=0;
-	const bool bHaveStart = m_pSorterSchema->GetAttrIndex ( GetKnnChunkStartAttrName() )>=0;
-	const bool bHaveEnd = m_pSorterSchema->GetAttrIndex ( GetKnnChunkEndAttrName() )>=0;
-	if ( bHaveSlot || bHaveStart || bHaveEnd )
-	{
-		if ( bHaveSlot && bHaveStart && bHaveEnd )
-			return true;
-		m_sError = "incomplete KNN chunk provenance result schema";
-		return false;
-	}
-
-	if ( m_tQuery.m_bHybridSearch )
-	{
-		const CSphString & sAttr = m_tQuery.SingleKnnSettings().m_sAttr;
-		const CSphColumnInfo * pVector = m_pSorterSchema->GetAttr ( sAttr.cstr() );
-		for ( const char * szName : { GetKnnChunkIndexAttrName(), GetKnnChunkStartAttrName(), GetKnnChunkEndAttrName() } )
-			if ( m_pSorterSchema->GetAttrIndex(szName)<0 )
-			{
-				CSphColumnInfo tCol ( szName, SPH_ATTR_BIGINT );
-				tCol.m_eStage = SPH_EVAL_SORTER;
-				if ( !strcmp ( szName, GetKnnChunkIndexAttrName() ) )
-				{
-					tCol.m_iKNNChunkQueryCount = iKNNCount;
-					if ( pVector )
-						tCol.m_sKNNFrom = pVector->m_sKNNFrom;
-				}
-				m_pSorterSchema->AddAttr ( tCol, true );
-				m_hQueryColumns.Add(szName);
-			}
+	if ( m_pSorterSchema->GetAttrIndex ( GetKnnChunkSlotAttrName() )>=0 )
 		return true;
-	}
+
+	if ( m_tQuery.m_dKnnSettings.GetLength()!=1 )
+		return Err ( "KNN chunk highlighting does not support multiple KNN clauses" );
 
 	const auto & tKNN = m_tQuery.SingleKnnSettings();
 	const CSphColumnInfo * pVector = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
-	const bool bCanHaveProvenance = pVector && pVector->m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY;
-	const CSphColumnInfo * pSpans = bCanHaveProvenance ? m_pSorterSchema->GetAttr ( GetKnnChunkSpansAttrName(tKNN.m_sAttr).cstr() ) : nullptr;
-	auto fnUnavailable = [&] () -> ISphExpr * { ExprParseArgs_t tArgs; return sphExprParse ( "-1", *m_pSorterSchema, m_sError, tArgs ); };
-	CSphColumnInfo tSlot ( GetKnnChunkIndexAttrName(), SPH_ATTR_BIGINT );
-	tSlot.m_eStage = SPH_EVAL_PRESORT;
-	tSlot.m_sKNNFrom = pVector->m_sKNNFrom;
-	tSlot.m_iKNNChunkQueryCount = iKNNCount;
-	tSlot.m_pExpr = pSpans ? CreateExpr_KNNChunkIndex ( tKNN.m_dVec, *pVector, *pSpans ) : fnUnavailable();
-	if ( !tSlot.m_pExpr ) return false;
-	m_pSorterSchema->AddAttr ( tSlot, true );
-	m_hQueryColumns.Add(tSlot.m_sName);
-	const CSphColumnInfo * pSlot = m_pSorterSchema->GetAttr ( GetKnnChunkIndexAttrName() );
-	assert(pSlot);
-	if ( pSpans )
+	if ( !pVector || !pVector->HasKnnChunkSpans() )
+		return true; // no chunk provenance for this attribute; highlighting falls back to the whole field
+
+	CSphColumnInfo tSlot ( GetKnnChunkSlotAttrName(), SPH_ATTR_BIGINT );
+	tSlot.m_sKNNFrom = pVector->m_sName; // names the vector attribute the slot belongs to; the highlight resolves its FROM field from the index schema
+	if ( m_tQuery.m_bHybridSearch )
+		tSlot.m_eStage = SPH_EVAL_SORTER; // the hybrid executor copies it from the winning KNN sub-result
+	else
 	{
-		const CSphColumnInfo * pDist = m_pSorterSchema->GetAttr ( GetKnnDistAttrName() );
-		if ( !pDist || !pDist->m_pExpr || !BindKNNChunkSlotExpressions ( pDist->m_pExpr, pSlot->m_pExpr, pSlot->m_tLocator ) )
-		{
-			m_sError = "unable to bind KNN chunk provenance expressions";
-			return false;
-		}
+		tSlot.m_eStage = SPH_EVAL_PRESORT;
+		tSlot.m_pExpr = CreateExpr_KNNChunkSlot ( tKNN.m_dVec, *pVector );
 	}
 
-	for ( bool bEnd : { false, true } )
-	{
-		CSphColumnInfo tBoundary ( bEnd ? GetKnnChunkEndAttrName() : GetKnnChunkStartAttrName(), SPH_ATTR_BIGINT );
-		tBoundary.m_eStage = SPH_EVAL_PRESORT;
-		tBoundary.m_pExpr = pSpans ? CreateExpr_KNNChunkBoundary ( *pSpans, pSlot->m_tLocator, bEnd ) : fnUnavailable();
-		if ( !tBoundary.m_pExpr ) return false;
-		m_pSorterSchema->AddAttr ( tBoundary, true );
-		m_hQueryColumns.Add(tBoundary.m_sName);
-	}
+	m_pSorterSchema->AddAttr ( tSlot, true );
+	m_hQueryColumns.Add ( tSlot.m_sName );
 	return true;
 }
 
@@ -1918,7 +1870,7 @@ bool QueueCreator_c::AddKNNRescoreColumn()
 	const auto & tKNN = m_tQuery.SingleKnnSettings();
 	const auto * pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
 	assert(pAttr);
-	const bool bNeedChunkSlot = m_pSorterSchema->GetAttr ( GetKnnChunkSpansAttrName(tKNN.m_sAttr).cstr() );
+	const bool bNeedChunkSlot = m_pSorterSchema->GetAttr ( GetKnnChunkSlotAttrName() )!=nullptr;
 	CSphColumnInfo tKNNDistRescored ( GetKnnDistRescoreAttrName(), SPH_ATTR_FLOAT );
 	// Small requests use the original final-stage expression unless exact rescore
 	// must also update auto-chunk provenance.
@@ -2977,7 +2929,8 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	// wrapper would look up a missing @knn_dist_rescore attr and crash on flatten.
 	if ( CanRescoreKNN() )
 	{
-		pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.SingleKnnSettings(), m_eMatchFunc );
+		const bool bNeedChunkSlot = m_pSorterSchema->GetAttr ( GetKnnChunkSlotAttrName() )!=nullptr;
+		pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.SingleKnnSettings(), m_eMatchFunc, UseBatchedKNNRescore ( m_tQuery.SingleKnnSettings(), bNeedChunkSlot ) );
 		if ( !pSorter )
 			return nullptr;
 	}
@@ -2992,7 +2945,7 @@ bool QueueCreator_c::SetupComputeQueue ()
 		&& AddJoinFilterAttrs()
 		&& MaybeAddGeodistColumn ()
 		&& AddKNNDistColumn()
-		&& AddKNNChunkColumns()
+		&& AddKNNChunkSlotColumn()
 		&& AddHybridScoreColumn()
 		&& MaybeAddExprColumn ()
 		&& MaybeAddExpressionsFromSelectList ()

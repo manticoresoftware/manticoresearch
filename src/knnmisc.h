@@ -58,20 +58,20 @@ private:
 bool							IsKnnDist ( const CSphString & sExpr );
 const char *					GetKnnDistAttrName();
 const char *					GetKnnDistRescoreAttrName();
-const char *					GetKnnChunkIndexAttrName();
-const char *					GetKnnChunkStartAttrName();
-const char *					GetKnnChunkEndAttrName();
-bool							IsKnnChunkResultAttr ( const CSphString & sAttr );
-CSphString						GetKnnChunkSpansAttrName ( const CSphString & sVectorAttr );
-bool							IsKnnChunkSpansAttr ( const CSphString & sAttr );
-CSphString						GetKnnAttrFromChunkSpansAttr ( const CSphString & sAttr );
+// internal sorter attribute carrying the row-local slot of the vector that won the KNN search for a multi-vector row;
+// it exists only when the query highlights with knn_chunk and feeds nothing else
+const char *					GetKnnChunkSlotAttrName();
+bool							IsKnnChunkSlotAttr ( const CSphString & sAttr );
+bool							QueryUsesKnnChunkHighlight ( const CSphQuery & tQuery );
 void							SetupKNNLimit ( CSphQuery & tQuery );
+
+// packed chunk spans of one row as stored in the docstore: "CSP1", version, count, then (start,end) byte offsets per chunk
+bool							PackKnnChunkSpans ( const knn::TextEmbeddingSpan_t * pSpans, size_t uCount, CSphVector<BYTE> & dPacked, CSphString & sError );
+bool							UnpackKnnChunkSpan ( ByteBlob_t tPacked, int64_t iSlot, int64_t & iStart, int64_t & iEnd );
 
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
 ISphExpr *						CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
-ISphExpr *						CreateExpr_KNNChunkIndex ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr, const CSphColumnInfo & tSpansAttr );
-ISphExpr *						CreateExpr_KNNChunkBoundary ( const CSphColumnInfo & tSpansAttr, const CSphAttrLocator & tSlotLoc, bool bEnd );
-bool							BindKNNChunkSlotExpressions ( ISphExpr * pDist, ISphExpr * pChunkIndex, const CSphAttrLocator & tSlotLoc );
+ISphExpr *						CreateExpr_KNNChunkSlot ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
 bool							UseBatchedKNNRescore ( const KnnSearchSettings_t & tSettings, bool bNeedChunkSlot );
 void							NormalizeVec ( VecTraits_T<float> & dData );
 
@@ -103,7 +103,7 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 RowIteratorsWithEstimates_t		CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, knn::KNNFilter_i * pFilter, knn::HNSWTerminationPolicy_e ePolicy, QueryProfile_c * pProfile, bool & bError, CSphString & sError );
 std::unique_ptr<knn::KNNFilter_i> CreateKNNPrefilter ( const CSphQueryContext & tCtx, const CSphRowitem * pAttrPool, int iStride, int iDynamicSize, int64_t iFilterCount );
 
-ISphMatchSorter *				CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings, ESphSortFunc eMatchFunc );
+ISphMatchSorter *				CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings, ESphSortFunc eMatchFunc, bool bBatchRescore );
 
 const char *					GetAPITimeoutErrorMsg();
 bool							ValidateEmbeddingsAPITimeout ( const CSphString & sValue, int & iTimeout, CSphString & sError );

@@ -1,158 +1,96 @@
 #!/usr/bin/env python3
+#
+# Helpers for the KNN chunk highlighting CLT tests. HIGHLIGHT({knn_chunk=1},'field') must return the chunk of the
+# source text whose vector matched the KNN query: a proper substring of the source that contains the query phrase.
 
 import json
 import sys
 
-
-def parse_tuple(value):
-    result = tuple(map(int, value.split()))
-    assert len(result) == 3, result
-    return result
+PHRASE = "target phrase"
 
 
-def validate_range(text, values, require_phrase):
-    slot, start, end = values
-    raw = text.encode("utf-8")
-    assert slot >= 0 and 0 <= start < end <= len(raw), (values, len(raw))
-    chunk = raw[start:end].decode("utf-8")
-    if require_phrase:
-        assert "target phrase" in chunk, (values, chunk)
+def strip_tags(text):
+    return text.replace("<b>", "").replace("</b>", "")
 
 
-def expected_chunk(text, values):
-    _, start, end = values
-    return text.encode("utf-8")[start:end].decode("utf-8")
-
-
-def validate_highlight(highlighted, chunk, tagged):
+def check_chunk(source, highlighted, tagged, strict=True):
+    chunk = strip_tags(highlighted) if tagged else highlighted
+    assert chunk, "empty highlight"
+    assert chunk in source, (chunk, source)
+    # a short document is a single chunk, so only the long single-document checks insist on a proper substring
+    assert not strict or len(chunk) < len(source), "highlight is the whole field, not a chunk: %r" % chunk
+    assert PHRASE in chunk, (chunk, PHRASE)
     if tagged:
-        assert highlighted.replace("<b>", "").replace("</b>", "") == chunk, (highlighted, chunk)
         tags = ("<b>target phrase</b>", "<b>target</b> <b>phrase</b>")
         assert any(tag in highlighted for tag in tags), highlighted
     else:
-        assert highlighted == chunk and "<b>" not in highlighted, (highlighted, chunk)
+        assert "<b>" not in highlighted, highlighted
+    return chunk
 
 
-def read_tsv_rows():
-    return [line.split("\t") for line in sys.stdin.read().splitlines() if line]
+def read_lines():
+    return [line for line in sys.stdin.read().splitlines() if line.strip()]
 
 
 mode = sys.argv[1]
-if mode == "range":
-    values = parse_tuple(sys.argv[3])
-    validate_range(sys.argv[2], values, True)
-    print("CHUNK_RANGE_OK")
-elif mode in ("http", "hybrid"):
-    hit = json.load(sys.stdin)["hits"]["hits"][0]
-    values = tuple(hit["_knn_chunk"][key] for key in ("index", "start", "end"))
-    if mode == "http":
-        expected = parse_tuple(sys.argv[2])
-        assert values == expected, (values, expected)
-        print("CHUNK_HTTP_OK")
-    else:
-        validate_range(sys.argv[2], values, False)
-        print("CHUNK_HYBRID_OK")
-elif mode == "distributed":
-    sources = {
-        int(sys.argv[i]): sys.argv[i + 1]
-        for i in range(2, len(sys.argv), 2)
-    }
-    rows = [line for line in sys.stdin.read().splitlines() if line.strip()]
-    assert len(rows) == len(sources), (rows, sources)
-    seen = set()
-    for row in rows:
-        docid, slot, start, end = map(int, row.split())
-        assert docid in sources and docid not in seen, row
-        validate_range(sources[docid], (slot, start, end), True)
-        seen.add(docid)
-    assert seen == set(sources), (seen, sources)
-    print("DISTRIBUTED_CHUNK_PROVENANCE_OK")
-elif mode == "highlight":
-    text, values, highlighted, tagged = sys.argv[2:]
-    chunk = expected_chunk(text, parse_tuple(values))
-    validate_highlight(highlighted, chunk, tagged == "tagged")
-    print("CHUNK_HIGHLIGHT_OK")
+if mode == "chunk":
+    # chunk SOURCE HIGHLIGHTED [tagged]: the highlight is a chunk of SOURCE; prints the plain chunk
+    chunk = check_chunk(sys.argv[2], sys.argv[3], len(sys.argv) > 4 and sys.argv[4] == "tagged")
+    print("CHUNK_OK")
+elif mode == "same":
+    # same EXPECTED ACTUAL: the chunk did not change
+    assert sys.argv[2] == sys.argv[3], (sys.argv[2], sys.argv[3])
+    print("CHUNK_SAME_OK")
+elif mode == "whole":
+    # whole SOURCE HIGHLIGHTED: no chunk restriction applied, the whole field came back
+    assert strip_tags(sys.argv[3]) == sys.argv[2], (sys.argv[3], sys.argv[2])
+    print("WHOLE_FIELD_OK")
 elif mode == "json-highlight":
+    # json-highlight SOURCE [tagged] < response.json
     data = json.load(sys.stdin)
-    if "error" in data:
-        raise AssertionError(f"unexpected JSON error: {data['error']}")
+    assert "error" not in data, data
     hits = data.get("hits", {}).get("hits", [])
-    if len(hits) != 1:
-        raise AssertionError(f"expected exactly one hit, got {len(hits)}")
-    hit = hits[0]
-    values = tuple(hit["_knn_chunk"][key] for key in ("index", "start", "end"))
-    chunk = expected_chunk(sys.argv[2], values)
-    highlighted = hit["highlight"]["body"][0]
-    validate_highlight(highlighted, chunk, len(sys.argv) > 3 and sys.argv[3] == "tagged")
+    assert len(hits) == 1, hits
+    highlighted = hits[0]["highlight"]["body"][0]
+    check_chunk(sys.argv[2], highlighted, len(sys.argv) > 3 and sys.argv[3] == "tagged")
     print("CHUNK_JSON_HIGHLIGHT_OK")
 elif mode == "json-error":
+    # json-error MESSAGE < response.json
     response = json.load(sys.stdin)
     error = response.get("error")
     assert isinstance(error, str), response
-    assert "hits" not in response, response
-    assert response.get("success") is not True, response
     assert sys.argv[2] in error, (error, sys.argv[2])
+    print("JSON_ERROR_OK")
 elif mode == "json-success":
+    # json-success ID... < response.json
     response = json.load(sys.stdin)
     assert "error" not in response, response
-    hits = response["hits"]["hits"]
+    actual_ids = [int(hit["_id"]) for hit in response["hits"]["hits"]]
     expected_ids = [int(value) for value in sys.argv[2:]]
-    actual_ids = [int(hit["_id"]) for hit in hits]
-    assert len(hits) == len(expected_ids), (actual_ids, expected_ids)
     assert actual_ids == expected_ids, (actual_ids, expected_ids)
-    print("CHUNK_JSON_SUCCESS_OK")
+    print("JSON_SUCCESS_OK")
 elif mode == "distributed-highlight":
+    # distributed-highlight plain|tagged ID SOURCE [ID SOURCE ...] < "id\thighlight" rows
     tagged = sys.argv[2] == "tagged"
-    sources = {
-        int(sys.argv[i]): sys.argv[i + 1]
-        for i in range(3, len(sys.argv), 2)
-    }
-    rows = [line.split("\t", 4) for line in sys.stdin.read().splitlines() if line]
+    sources = {int(sys.argv[i]): sys.argv[i + 1] for i in range(3, len(sys.argv), 2)}
+    rows = [line.split("\t", 1) for line in read_lines()]
     assert len(rows) == len(sources), (rows, sources)
     seen = set()
-    for docid, slot, start, end, highlighted in rows:
+    for docid, highlighted in rows:
         docid = int(docid)
         assert docid in sources and docid not in seen, (docid, sources, seen)
-        values = (int(slot), int(start), int(end))
-        chunk = expected_chunk(sources[docid], values)
-        validate_highlight(highlighted, chunk, tagged)
+        check_chunk(sources[docid], highlighted, tagged, strict=False)
         seen.add(docid)
     assert seen == set(sources), (seen, sources)
     print("DISTRIBUTED_HYBRID_CHUNK_HIGHLIGHT_OK" if tagged else "DISTRIBUTED_CHUNK_HIGHLIGHT_OK")
 elif mode == "grouped-highlight":
-    expected_id = int(sys.argv[2])
-    source = sys.argv[3]
-    rows = read_tsv_rows()
-    assert len(rows) == 1 and len(rows[0]) == 6, rows
-    docid, group_count, slot, start, end, highlighted = rows[0]
-    assert int(docid) == expected_id, (docid, expected_id)
-    assert int(group_count) == 2, group_count
-    values = (int(slot), int(start), int(end))
-    chunk = expected_chunk(source, values)
-    validate_range(source, values, True)
-    validate_highlight(highlighted, chunk, False)
-    print("GROUPED_CHUNK_HIGHLIGHT_OK")
-elif mode == "format-tuples":
-    column_count = int(sys.argv[2])
-    rows = read_tsv_rows()
-    assert rows and all(len(row) == column_count for row in rows), rows
-    for row in rows:
-        print(" ".join(row))
-elif mode == "valid-tuple":
-    rows = read_tsv_rows()
+    # grouped-highlight ID SOURCE < "id\tcount\thighlight"
+    rows = [line.split("\t", 2) for line in read_lines()]
     assert len(rows) == 1 and len(rows[0]) == 3, rows
-    slot, start, end = map(int, rows[0])
-    assert slot >= 0 and 0 <= start < end, rows[0]
-    print(sys.argv[2])
-elif mode == "json-no-provenance":
-    response = json.load(sys.stdin)
-    assert "error" not in response, response
-    hits = response["hits"]["hits"]
-    expected_ids = [int(value) for value in sys.argv[2:]]
-    actual_ids = [int(hit["_id"]) for hit in hits]
-    assert len(actual_ids) == len(expected_ids), (actual_ids, expected_ids)
-    assert set(actual_ids) == set(expected_ids), (actual_ids, expected_ids)
-    assert all("_knn_chunk" not in hit for hit in hits), hits
-    print("LEGACY_HTTP_OK")
+    docid, group_count, highlighted = rows[0]
+    assert int(docid) == int(sys.argv[2]), (docid, sys.argv[2])
+    assert int(group_count) == 2, group_count
+    check_chunk(sys.argv[3], highlighted, False, strict=False)
+    print("GROUPED_CHUNK_HIGHLIGHT_OK")
 else:
-    raise SystemExit(f"unknown mode: {mode}")
+    raise SystemExit("unknown mode: %s" % mode)

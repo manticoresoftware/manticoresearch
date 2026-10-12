@@ -601,7 +601,6 @@ struct CSphQuery
 	CSphVector<KnnSearchSettings_t> m_dKnnSettings;
 	HybridSearchSettings_t m_tHybridSettings;
 	bool			m_bHybridSearch = false;			///< true when fusion_method is set AND both text+KNN are present
-	int				m_iKNNChunkQueryCount = 0;		///< original KNN count retained by internal hybrid branches
 
 	JiebaMode_e		m_eJiebaMode = JiebaMode_e::NONE;	///< separate optional jieba mode for searches
 
@@ -1272,7 +1271,18 @@ struct UpdateContext_t
 };
 
 class DocstoreAddField_i;
-void SetupDocstoreFields ( DocstoreAddField_i & tFields, const CSphSchema & tSchema );
+// the docstore layout of a table is a pure function of its schema: stored fields, then stored attributes,
+// then one hidden entry per vector attribute that keeps the source spans of its auto-generated chunks
+struct DocstoreFieldDesc_t
+{
+	CSphString			m_sName;
+	DocstoreDataType_e	m_eType;
+};
+
+CSphString	GetKnnChunkSpansDocstoreName ( const CSphString & sVectorAttr );
+void		CollectDocstoreFields ( const CSphSchema & tSchema, CSphVector<DocstoreFieldDesc_t> & dFields );
+int			GetNumKnnChunkSpansDocstoreFields ( const CSphSchema & tSchema );
+void		SetupDocstoreFields ( DocstoreAddField_i & tFields, const CSphSchema & tSchema );
 bool CheckStoredFields ( const CSphSchema & tSchema, const CSphIndexSettings & tSettings, CSphString & sError );
 
 class DiskIndexQwordTraits_c;

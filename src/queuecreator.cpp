@@ -1823,18 +1823,24 @@ bool QueueCreator_c::AddKNNChunkSlotColumn()
 	if ( !pVector || !pVector->HasKnnChunkSpans() )
 		return true; // no chunk provenance for this attribute; highlighting falls back to the whole field
 
+	// the column has no expression of its own: the knn_dist() expression writes the slot along with the distance
+	// (one scan of the row's vectors for both), the rescore sorter updates it, and the hybrid executor copies it
+	// from the winning KNN sub-result
 	CSphColumnInfo tSlot ( GetKnnChunkSlotAttrName(), SPH_ATTR_BIGINT );
 	tSlot.m_sKNNFrom = pVector->m_sName; // names the vector attribute the slot belongs to; the highlight resolves its FROM field from the index schema
-	if ( m_tQuery.m_bHybridSearch )
-		tSlot.m_eStage = SPH_EVAL_SORTER; // the hybrid executor copies it from the winning KNN sub-result
-	else
-	{
-		tSlot.m_eStage = SPH_EVAL_PRESORT;
-		tSlot.m_pExpr = CreateExpr_KNNChunkSlot ( tKNN.m_dVec, *pVector );
-	}
-
+	tSlot.m_eStage = SPH_EVAL_SORTER;
 	m_pSorterSchema->AddAttr ( tSlot, true );
 	m_hQueryColumns.Add ( tSlot.m_sName );
+
+	if ( m_tQuery.m_bHybridSearch )
+		return true;
+
+	const CSphColumnInfo * pSlot = m_pSorterSchema->GetAttr ( GetKnnChunkSlotAttrName() );
+	const CSphColumnInfo * pDist = m_pSorterSchema->GetAttr ( GetKnnDistAttrName() );
+	if ( !pSlot || !pDist || !pDist->m_pExpr )
+		return Err ( "unable to bind the KNN chunk slot to knn_dist()" );
+
+	BindKNNChunkSlot ( pDist->m_pExpr, pSlot->m_tLocator );
 	return true;
 }
 

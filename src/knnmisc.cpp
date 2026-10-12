@@ -325,7 +325,7 @@ public:
 	void		FixupLocator ( const ISphSchema * pOld, const ISphSchema * pNew )	{ sphFixupLocator ( m_tAttr.m_tLocator, pOld, pNew ); }
 
 	float		CalcDist ( const CSphMatch & tMatch ) const;
-	uint32_t	CalcSlot ( const CSphMatch & tMatch ) const;
+	KNNDistanceSlot_t CalcDistAndSlot ( const CSphMatch & tMatch ) const;	///< one scan over the row's vectors for both
 	bool		HasVector ( const CSphMatch & tMatch ) const;
 	void		RescoreBatch ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const CSphAttrLocator * pSlotLoc, const GetBlobPoolFromMatch_fn & fnBlobPool, const GetColumnarFromMatch_fn & fnColumnar );
 	void		RescoreBatchLocal ( VecTraits_T<CSphMatch*> & dMatches, const CSphAttrLocator & tOutLoc, const CSphAttrLocator * pSlotLoc );
@@ -476,9 +476,13 @@ bool KNNVecDistCalc_c::HasVector ( const CSphMatch & tMatch ) const
 }
 
 
-uint32_t KNNVecDistCalc_c::CalcSlot ( const CSphMatch & tMatch ) const
+KNNDistanceSlot_t KNNVecDistCalc_c::CalcDistAndSlot ( const CSphMatch & tMatch ) const
 {
-	return m_bMulti ? MinDistAndSlotOverSlots ( FetchVecData(tMatch) ).m_uSlot : UINT32_MAX;
+	ByteBlob_t tData = FetchVecData(tMatch);
+	if ( m_bMulti )
+		return MinDistAndSlotOverSlots(tData);
+
+	return { CalcDistData(tData), UINT32_MAX };
 }
 
 
@@ -753,7 +757,7 @@ public:
 	float		Eval ( const CSphMatch & tMatch ) const override;
 	int			IntEval ( const CSphMatch & tMatch ) const override		{ return (int)Eval(tMatch); }
 	int64_t		Int64Eval ( const CSphMatch & tMatch ) const override	{ return (int64_t)Eval(tMatch); }
-	void		FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override { m_tCalc.FixupLocator ( pOldSchema, pNewSchema ); }
+	void		FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override;
 	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;
 	ISphExpr *	Clone() const override;
 	void		Command ( ESphExprCommand eCmd, void * pArg ) override;
@@ -761,13 +765,18 @@ public:
 	void		SetData ( const util::Span_T<const knn::DocDist_t> & dData );
 	KNNVecDistCalc_c *	GetVecDistCalc()	{ return &m_tCalc; }
 
+	// also store the row-local slot of the vector that produced the distance (-1 when unknown) into that attribute
+	void		BindChunkSlot ( const CSphAttrLocator & tSlotLoc )	{ m_tSlotLoc = tSlotLoc; m_bWriteSlot = true; }
+
 protected:
 	KNNVecDistCalc_c					m_tCalc;
 	util::Span_T<const  knn::DocDist_t>	m_dData;
 	mutable const knn::DocDist_t *		m_pStart = nullptr;
+	int									m_iExactTagMax = 0;		// matches tagged 1..N got their distance from an exact scan (RT RAM segments)
+	CSphAttrLocator						m_tSlotLoc;
+	bool								m_bWriteSlot = false;
 
 	const knn::DocDist_t * FindData ( const CSphMatch & tMatch ) const;
-	int									m_iExactTagMax = 0;		// matches tagged 1..N got their distance from an exact scan (RT RAM segments)
 };
 
 
@@ -775,17 +784,43 @@ ISphExpr * Expr_KNNDist_c::Clone() const
 {
 	auto pClone = new Expr_KNNDist_c ( m_tCalc.GetAnchor(), m_tCalc.GetAttr() );
 	pClone->m_iExactTagMax = m_iExactTagMax;
+	pClone->m_tSlotLoc = m_tSlotLoc;
+	pClone->m_bWriteSlot = m_bWriteSlot;
 	return pClone;
+}
+
+
+void Expr_KNNDist_c::FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+{
+	m_tCalc.FixupLocator ( pOldSchema, pNewSchema );
+	if ( m_bWriteSlot )
+		sphFixupLocator ( m_tSlotLoc, pOldSchema, pNewSchema );
 }
 
 
 float Expr_KNNDist_c::Eval ( const CSphMatch & tMatch ) const
 {
+	// the slot is a by-product of the same lookup or scan, written straight into the match being evaluated
+	auto fnStoreSlot = [this, &tMatch] ( uint32_t uSlot )
+	{
+		if ( m_bWriteSlot )
+			const_cast<CSphMatch&>(tMatch).SetAttr ( m_tSlotLoc, uSlot==UINT32_MAX ? -1 : (SphAttr_t)uSlot );
+	};
+
 	// this code path is used when no iterator is available, i.e. in ram chunk
 	if ( !m_pStart )
-		return m_tCalc.CalcDist(tMatch);
+	{
+		if ( !m_bWriteSlot )
+			return m_tCalc.CalcDist(tMatch);
 
-	return FindData(tMatch)->m_fDist;
+		KNNDistanceSlot_t tRes = m_tCalc.CalcDistAndSlot(tMatch);
+		fnStoreSlot ( tRes.m_uSlot );
+		return tRes.m_fDist;
+	}
+
+	const knn::DocDist_t * pData = FindData(tMatch);
+	fnStoreSlot ( pData->m_uVectorSlot );
+	return pData->m_fDist;
 }
 
 
@@ -842,6 +877,7 @@ void Expr_KNNDist_c::SetData ( const util::Span_T<const knn::DocDist_t> & dData 
 uint64_t Expr_KNNDist_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
 {
 	EXPR_CLASS_NAME("Expr_KNNDist_c");
+	CALC_POD_HASH(m_bWriteSlot);
 	return CALC_DEP_HASHES();
 }
 
@@ -859,34 +895,6 @@ const char * GetKnnDistRescoreAttrName()
 	static const char * szName = "@knn_dist_rescore";
 	return szName;
 }
-
-// Returns the row-local slot of the vector that won the KNN search for a multi-vector row, or -1 when unknown.
-// ANN results carry the slot from the KNN library; the fullscan path recomputes it from the stored vectors.
-// Only created when the query highlights with knn_chunk, so the extra fullscan pass is opt-in
-class Expr_KNNChunkSlot_c final : public Expr_KNNDist_c
-{
-public:
-				Expr_KNNChunkSlot_c ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr ) : Expr_KNNDist_c ( dAnchor, tAttr ) {}
-
-	float		Eval ( const CSphMatch & tMatch ) const final		{ return (float)Int64Eval(tMatch); }
-	int			IntEval ( const CSphMatch & tMatch ) const final		{ return (int)Int64Eval(tMatch); }
-	int64_t		Int64Eval ( const CSphMatch & tMatch ) const final
-	{
-		uint32_t uSlot = m_pStart ? FindData(tMatch)->m_uVectorSlot : m_tCalc.CalcSlot(tMatch);
-		return uSlot==UINT32_MAX ? -1 : (int64_t)uSlot;
-	}
-
-	uint64_t	GetHash ( const ISphSchema & tSchema, uint64_t uPrevHash, bool & bDisable ) final;
-	ISphExpr *	Clone() const final									{ return new Expr_KNNChunkSlot_c ( m_tCalc.GetAnchor(), m_tCalc.GetAttr() ); }
-};
-
-
-uint64_t Expr_KNNChunkSlot_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
-{
-	EXPR_CLASS_NAME("Expr_KNNChunkSlot_c");
-	return CALC_DEP_HASHES();
-}
-
 
 ISphExpr * CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr )
 {
@@ -920,9 +928,14 @@ uint64_t Expr_KNNHasVec_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t 
 }
 
 
-ISphExpr * CreateExpr_KNNChunkSlot ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr )
+// the chunk slot is a by-product of the distance: the one expression that scans a row's vectors writes both,
+// so highlighting with knn_chunk costs no second scan
+void BindKNNChunkSlot ( ISphExpr * pKNNDistExpr, const CSphAttrLocator & tSlotLoc )
 {
-	return new Expr_KNNChunkSlot_c ( dAnchor, tAttr );
+	assert(pKNNDistExpr);
+
+	// a @knn_dist column that carries an expression always holds Expr_KNNDist_c
+	((Expr_KNNDist_c*)pKNNDistExpr)->BindChunkSlot(tSlotLoc);
 }
 
 
@@ -1589,10 +1602,6 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 		pProfile->m_iKnnDistanceComputations += pIterator->GetStats().m_iDistanceComputations;
 
 	pKnnDist->SetData ( pIterator->GetData() );
-
-	// the chunk slot expression (if the query highlights with knn_chunk) reads the same per-row results
-	if ( const auto * pSlotAttr = tSorterSchema.GetAttr ( GetKnnChunkSlotAttrName() ); pSlotAttr && pSlotAttr->m_pExpr )
-		((Expr_KNNDist_c*)pSlotAttr->m_pExpr.Ptr())->SetData ( pIterator->GetData() );
 
 	return { CreateIteratorWrapper ( pIterator, nullptr ), false };
 }

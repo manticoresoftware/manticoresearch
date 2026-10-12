@@ -74,7 +74,7 @@ bool							KNNRescorePrefetch();
 
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
 ISphExpr *						CreateExpr_KNNHasVec ( ISphExpr * pKNNDistExpr );
-ISphExpr *						CreateExpr_KNNChunkSlot ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
+void							BindKNNChunkSlot ( ISphExpr * pKNNDistExpr, const CSphAttrLocator & tSlotLoc );
 void							NormalizeVec ( VecTraits_T<float> & dData );
 
 void							AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr );

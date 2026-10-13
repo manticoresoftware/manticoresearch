@@ -64,6 +64,7 @@ cases = [
     ('oversized-lenenc-auth', fixed_header(PROTOCOL_41 | LENENC_AUTH) + b'admin\x00\xfc\xff\xff'),
     ('oversized-attributes', fixed_header(PROTOCOL_41 | CONNECT_ATTRS) + b'admin\x00\x00\x05abc'),
     ('bad-attribute-value', fixed_header(PROTOCOL_41 | CONNECT_ATTRS) + b'admin\x00\x00\x03\x01a\x05'),
+    ('huge-attribute-value', fixed_header(PROTOCOL_41 | CONNECT_ATTRS) + b'admin\x00\x00\x0b\x01x\xfe' + struct.pack('<Q', 1 << 32)),
 ]
 for name, payload in cases:
     check(name, payload)
@@ -79,6 +80,7 @@ short-auth-data: rejected
 oversized-lenenc-auth: rejected
 oversized-attributes: rejected
 bad-attribute-value: rejected
+huge-attribute-value: rejected
 ––– comment –––
 Ordinary authenticated MySQL clients must still connect.
 ––– input –––

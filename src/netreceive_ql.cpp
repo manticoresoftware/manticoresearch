@@ -12,7 +12,6 @@
 
 #include "coroutine.h"
 #include "searchdssl.h"
-#include <cstring>
 #include "compressed_zlib_mysql.h"
 #include "compressed_zstd_mysql.h"
 #include "daemon/logger.h"
@@ -147,27 +146,28 @@ int64_t MysqlReadPackedInt ( InputBuffer_c& tIn )
 }
 
 // Read a NUL-terminated MySQL string without crossing the packet boundary.
-// An unterminated string makes the whole handshake invalid.
 bool MysqlReadSzStr ( InputBuffer_c& tIn, CSphString& sResult )
 {
-	const int iRemaining = tIn.HasBytes();
-	if ( tIn.GetError() || iRemaining<=0 )
+	if ( tIn.GetError() || tIn.HasBytes()<=0 )
 		return false;
 
-	const BYTE* pTerminator = (const BYTE*) memchr ( tIn.GetBufferPtr(), 0, iRemaining );
-	if ( !pTerminator )
+	const BYTE* pEnd = (const BYTE*) memchr ( tIn.GetBufferPtr(), 0, tIn.HasBytes() );
+	if ( !pEnd )
 		return false;
 
-	const int iLen = int ( pTerminator - tIn.GetBufferPtr() );
-	sResult = tIn.GetRawString ( iLen );
-	tIn.GetByte(); // consume NUL terminator
+	sResult = tIn.GetRawString ( int ( pEnd-tIn.GetBufferPtr() ) );
+	tIn.GetByte(); // skip NUL terminator
 	return !tIn.GetError();
 }
 
-CSphString MysqlReadVlStr ( InputBuffer_c& tIn )
+bool MysqlReadVlStr ( InputBuffer_c& tIn, CSphString& sResult )
 {
 	auto iLen = MysqlReadPackedInt ( tIn );
-	return tIn.GetRawString ( iLen );
+	if ( tIn.GetError() || iLen<0 || iLen>tIn.HasBytes() )
+		return false;
+
+	sResult = tIn.GetRawString ( int ( iLen ) );
+	return !tIn.GetError();
 }
 
 // RAII Mysql API block: in ctr reserve place for size, in dtr write LSB with size and packet ID
@@ -1108,7 +1108,6 @@ class HandshakeResponse41
 	BYTE m_uCharset = 0;
 	BYTE m_uCompressionLevel = 0;
 	bool m_bValid = false;
-	bool m_bSslRequest = false;
 
 public:
 	// see https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_handshake_response.html for ref
@@ -1127,10 +1126,10 @@ public:
 		tIn.SetBufferPos ( tIn.GetBufferPos() + 23 );
 
 		sphLogDebug ( "HandshakeResponse41. PackedLen=%d, hasBytes=%d", iPacketLen, tIn.HasBytes() );
-		// The 32-byte SSLRequest has no username. Only this form starts TLS.
+		// A 32-byte SSLRequest has no username; the next packet arrives over TLS.
 		if ( tIn.HasBytes()==0 )
 		{
-			m_bSslRequest = ( m_uCapabilities & CLIENT::SSL ) != 0;
+			m_bValid = ( m_uCapabilities & CLIENT::SSL ) != 0;
 			return;
 		}
 
@@ -1152,8 +1151,8 @@ public:
 		if ( tIn.GetError() || iAuthLen<0 || iAuthLen>tIn.HasBytes() )
 			return;
 		m_dAuthResponse.Reset ( int ( iAuthLen ) );
-		if ( iAuthLen && !tIn.GetBytes ( m_dAuthResponse.Begin(), int ( iAuthLen ) ) )
-			return;
+		if ( iAuthLen )
+			tIn.GetBytes ( m_dAuthResponse.Begin(), int ( iAuthLen ) );
 
 		// db name
 		if ( m_uCapabilities & CLIENT::CONNECT_WITH_DB )
@@ -1176,16 +1175,15 @@ public:
 		// attributes
 		if ( m_uCapabilities & CLIENT::CONNECT_ATTRS )
 		{
-			auto iAttrsLen = MysqlReadPackedInt ( tIn );
-			if ( tIn.GetError() || iAttrsLen<0 || iAttrsLen>tIn.HasBytes() )
+			auto iWatermark = MysqlReadPackedInt ( tIn );
+			if ( tIn.GetError() || iWatermark<0 || iWatermark>tIn.HasBytes() )
 				return;
-			sphLogDebug ( "%d bytes of attrs", (int) iAttrsLen );
-			const int iWatermark = tIn.HasBytes() - int ( iAttrsLen );
+			sphLogDebug ( "%d bytes of attrs", (int) iWatermark );
+			iWatermark = tIn.HasBytes() - iWatermark;
 			while ( iWatermark < tIn.HasBytes() )
 			{
-				auto sKey = MysqlReadVlStr ( tIn );
-				auto sVal = MysqlReadVlStr ( tIn );
-				if ( tIn.GetError() || tIn.HasBytes()<iWatermark )
+				CSphString sKey, sVal;
+				if ( !MysqlReadVlStr ( tIn, sKey ) || !MysqlReadVlStr ( tIn, sVal ) || tIn.HasBytes()<iWatermark )
 					return;
 				sphLogDebug ( "%s: %s", sKey.cstr(), sVal.cstr() );
 				m_hAttributes.Add ( std::move ( sVal ), sKey );
@@ -1201,11 +1199,6 @@ public:
 	[[nodiscard]] bool IsValid() const noexcept
 	{
 		return m_bValid;
-	}
-
-	[[nodiscard]] bool IsSSLRequest() const noexcept
-	{
-		return m_bSslRequest;
 	}
 
 	[[nodiscard]] const CSphString& GetUsername() const noexcept
@@ -1815,7 +1808,12 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 		}
 		case MYSQL_COM_FIELD_LIST:
 		{
-			auto sTable = MysqlReadSzStr ( tIn );
+			CSphString sTable;
+			if ( !MysqlReadSzStr ( tIn, sTable ) )
+			{
+				SendMysqlErrorPacket ( tOut, uPacketID, FROMS ( "malformed field list request" ), EMYSQL_ERR::UNKNOWN_COM_ERROR );
+				break;
+			}
 			sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, sTable.cstr() );
 			SqlRowBuffer_c tRows ( &uPacketID, &tOut );
 			tSess.m_pSqlRowBuffer = &tRows;
@@ -2103,8 +2101,8 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			tSess.SetTaskState ( TaskState_e::HANDSHAKE );
 			HandshakeResponse41 tResponse ( *pIn, iPacketLen );
 
-			// Do not process an incomplete handshake, except for a valid SSLRequest.
-			if ( !tResponse.IsValid() && !( !tSess.GetSsl() && tResponse.IsSSLRequest() ) )
+			// A 32-byte SSLRequest is valid only before TLS is established.
+			if ( !tResponse.IsValid() || ( tSess.GetSsl() && iPacketLen==32 ) )
 			{
 				SendMysqlErrorPacket ( *pOut, uPacketID, FROMS ( "malformed MySQL handshake response" ), EMYSQL_ERR::UNKNOWN_COM_ERROR );
 				pOut->Flush ();

@@ -2,7 +2,11 @@
 Shared bulk_import pool size of a bare shared comes from the daemon environment
 INDEXER_RT_BULK_SHARED_POOL_SIZE (else 1); shared=N wins over it. MANTICORE_LOG_BULK_IMPORT
 there turns on the BULK_IMPORT_SHARED lines of searchd.log. A daemon shutdown cancels open
-pools: no indexer child and no staging directory survive it.
+pools: no indexer child and no staging directory survive it. The pool size is clamped to
+searchd threads - 2, so the daemon gets threads = 8 for any CPU count of the runner.
+––– input –––
+sed -i '/^searchd *{/a threads = 8' /etc/manticoresearch/manticore.conf
+––– output –––
 ––– block: ../base/start-searchd –––
 ––– input –––
 cat > /tmp/shared.sh <<'EOF'

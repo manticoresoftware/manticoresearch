@@ -2,7 +2,11 @@
 Shared bulk_import control paths: PURGE refuses while a pool is open and OPTION
 clear_sessions=1 cancels it; DROP TABLE cancels the pool of the table; the pool size N is
 read only by the request that creates the pool; private bulk_import on another table works
-next to an open pool, while the same table stays reserved by the pool.
+next to an open pool, while the same table stays reserved by the pool. The pool size is
+clamped to searchd threads - 2, so the daemon gets threads = 8 for any CPU count of the runner.
+––– input –––
+sed -i '/^searchd *{/a threads = 8' /etc/manticoresearch/manticore.conf
+––– output –––
 ––– block: ../base/start-searchd –––
 ––– input –––
 cat > /tmp/shared.sh <<'EOF'

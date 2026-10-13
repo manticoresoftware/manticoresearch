@@ -3,7 +3,11 @@ Shared bulk_import (/bulk?bulk_import=<table>&shared or &shared=N): data request
 connection feed one pool of N indexer children per table; nothing is visible until a request
 without documents commits with an empty NDJSON line, which publishes one disk chunk per slot
 that got data and removes the pool. Replies are one JSON object with shared_state; the helpers
-print it with the HTTP code.
+print it with the HTTP code. The pool size is clamped to searchd threads - 2, so the daemon
+gets threads = 8 for any CPU count of the runner.
+––– input –––
+sed -i '/^searchd *{/a threads = 8' /etc/manticoresearch/manticore.conf
+––– output –––
 ––– block: ../base/start-searchd –––
 ––– input –––
 cat > /tmp/shared.sh <<'EOF'

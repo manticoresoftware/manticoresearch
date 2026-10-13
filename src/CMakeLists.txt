@@ -53,6 +53,11 @@ add_subdirectory ( dict )
 add_subdirectory ( sphinxquery )
 add_subdirectory ( indexing_sources )
 
+# searchnode.cpp is also compiled into gmanticoretest with test-only seams.
+# Keep its production object standalone so Unity builds do not pull duplicate symbols
+# from a combined lmanticore object when linking the test executable.
+set_source_files_properties ( searchnode.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON )
+
 # main bunch of sources (for libsphinx)
 add_library ( lmanticore STATIC sphinx.cpp sphinxutils.cpp
 		sphinxsort.cpp sortsetup.cpp sphinxexpr.cpp sphinxfilter.cpp sphinxsearch.cpp sphinxrt.cpp accumulator.cpp uuid_docid.cpp
@@ -83,6 +88,9 @@ target_link_libraries ( lmanticore PUBLIC indexcheck )
 
 target_link_libraries ( lmanticore PUBLIC lextra indexcheck conversion manticore_std stripper tokenizer
 		schema dict sphinxquery sourcedoc lmanticore_coro )
+if (WITH_ZLIB)
+	target_link_libraries ( lmanticore PUBLIC ZLIB::ZLIB )
+endif ()
 
 if (WITH_ICU OR WITH_JIEBA)
 	add_library ( lcjk cjkpreprocessor.cpp )
@@ -214,6 +222,7 @@ add_library ( digest_sha1 digest_sha1.cpp )
 add_library ( digest_sha256 digest_sha256.cpp )
 target_link_libraries ( digest_sha1 PRIVATE lextra )
 target_link_libraries ( digest_sha256 PRIVATE lextra )
+target_link_libraries ( lmanticore PUBLIC digest_sha1 )
 add_subdirectory ( sqlchecks )
 target_link_libraries ( lsearchd PUBLIC sqlchecks digest_sha1 digest_sha256 lextra nlohmann_json::nlohmann_json uni-algo::uni-algo )
 target_link_libraries ( lsearchd INTERFACE Boost::filesystem )

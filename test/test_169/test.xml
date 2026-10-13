@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>hitbuffer edge cases - common subtree regression</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

@@ -4,6 +4,7 @@
 <name>persistent connections</name>
 <requires>
 	<heavy/>
+	<mode-specific-model/>
 </requires>
 
 <config>

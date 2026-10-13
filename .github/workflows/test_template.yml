@@ -145,6 +145,7 @@ jobs:
         run: |
           for exe in \
             build/api/libsphinxclient/testcli \
+            build/api/libsphinxclient/sphinxclient_serialization_test \
             build/src/indexer \
             build/src/indextool \
             build/src/searchd \

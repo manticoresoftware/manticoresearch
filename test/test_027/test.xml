@@ -4,6 +4,7 @@
 <name>merge vs docinfo, range, mva</name>
 <requires>
 <non-rt/>
+<mode-specific-model/>
 </requires>
 
 <config>

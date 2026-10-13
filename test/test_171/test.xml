@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>new and old syntax for id, count, weight, count distinct</name>
+<requires><mode-specific-model/></requires>
 <config>
 indexer
 {

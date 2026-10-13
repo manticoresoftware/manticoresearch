@@ -1,5 +1,6 @@
 <test>
 <name>field position limit vs many hits</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

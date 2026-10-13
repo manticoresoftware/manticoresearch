@@ -97,7 +97,7 @@ mysql -h0 -P9306 -e "SET GLOBAL secondary_indexes=1; SELECT id, IN (properties.c
 | Variable_name  | Value                                        |
 +----------------+----------------------------------------------+
 | total          | 5                                            |
-| total_found    | %{NUMBER}                                           |
+| total_found    | #!/[0-9]+ +/!#|
 | total_relation | gte                                          |
 | time           | %{NUMBER}.%{NUMBER}                                        |
 | index          | properties['channels']:SecondaryIndex (100%) |

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>specials vs charset_table vs match_mode</name>
+<requires><mode-specific-model/></requires>
 <config>
 indexer
 {

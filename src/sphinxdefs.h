@@ -170,6 +170,9 @@ enum ESphRankMode
 	SPH_RANK_EXPR				= 8,	///< rank by user expression (eg. "sum(lcs*user_weight)*1000+bm25")
 	SPH_RANK_EXPORT				= 9,	///< rank by BM25, but compute and export all user expression factors
 	SPH_RANK_PLUGIN				= 10,	///< user-defined ranker
+	// Append-only: rank mode values are serialized by the binary API. Keeping
+	// every existing value stable preserves wire compatibility for old modes.
+	SPH_RANK_BM25A				= 11,	///< fixed 1000*bm25a(1.2,0.75,256) ranker
 
 	SPH_RANK_TOTAL,
 	SPH_RANK_DEFAULT			= SPH_RANK_PROXIMITY_BM25

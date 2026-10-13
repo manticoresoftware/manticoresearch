@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Test>
   <Name>stemmers + infixes (throttled)</Name>
+  <Requires><mode-specific-model/></Requires>
   <Config>
 indexer
 {

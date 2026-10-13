@@ -157,6 +157,9 @@ public:
 
 	/// notification that a rowid was assigned to a specific docid (used by joined fields)
 	virtual void			RowIDAssigned ( DocID_t tDocID, RowID_t tRowID );
+	void					EnableExactFieldLengths ( bool bEnable=true ) { m_bCollectExactFieldLengths = bEnable; }
+	const DWORD *			GetExactFieldLengths () const { return m_pFieldLengthAttrs; }
+	void					ResetExactFieldLength ( int iField );
 
 	/// fetch fields for a current document
 	virtual void			GetDocFields ( CSphVector<VecTraits_T<BYTE>> & dFields );
@@ -211,6 +214,8 @@ protected:
 	FILE *					m_fpDumpRows = nullptr;
 	int						m_iPlainFieldsLength = 0;
 	DWORD *					m_pFieldLengthAttrs = nullptr;	///< pointer into the part of m_tDocInfo where field lengths are stored
+	bool					m_bCollectExactFieldLengths = false;
+	CSphVector<DWORD>		m_dExactFieldLengths;
 
 	CSphVector<IDPair_t>	m_dAllIds;					///< used for joined fields FIXME! unlimited RAM use
 	bool					m_bIdsSorted = false;			///< we sort array to use binary search

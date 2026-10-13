@@ -4,6 +4,7 @@
 <name>merge vs hit mixing</name>
 <requires>
 <non-rt/>
+<mode-specific-model/>
 </requires>
 
 <config>

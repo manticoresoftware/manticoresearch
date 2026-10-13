@@ -11,6 +11,7 @@
 <embeddings/>
 <http/>
 <force-rt/>
+<mode-specific-model/>
 </requires>
 
 <config>

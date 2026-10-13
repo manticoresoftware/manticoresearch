@@ -2,6 +2,7 @@
 
 <test>
 <name>catching errors in multiqueries</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

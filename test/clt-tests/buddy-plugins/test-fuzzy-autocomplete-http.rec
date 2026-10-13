@@ -32,7 +32,7 @@ mysql -NE -h0 -P9306 -e "SELECT COUNT(*) FROM name"
 mysql -h0 -P9306 -e "FLUSH RAMCHUNK name; OPTIMIZE TABLE name OPTION sync=1, cutoff=1;"
 ––– output –––
 ––– input –––
-curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"EBGRNA"}}]}},"options":{"fuzzy":true}}' | jq -r '.hits.hits[]._source.username'
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"EBGRNA"}}]}},"options":{"fuzzy":true,"ranker":"proximity_bm25"}}' | jq -r '.hits.hits[]._source.username'
 ––– output –––
 BERNA TALBOTT
 BERNA WEBER
@@ -55,7 +55,7 @@ BERNA KOHLER
 BERNA TRAHAN
 BERNA DONOHUE
 ––– input –––
-curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"ANT"}}]}},"options":{"fuzzy":true}}' | jq -r '.hits.hits[]._source.username'
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"ANT"}}]}},"options":{"fuzzy":true,"ranker":"proximity_bm25"}}' | jq -r '.hits.hits[]._source.username'
 ––– output –––
 AN GANT
 KEENAN GANT
@@ -78,7 +78,7 @@ NORMAN CHAN
 AMEE GANT
 JAN CHAN
 ––– input –––
-curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"tony"}}]}},"options":{"fuzzy":true}}' | jq -M
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"tony"}}]}},"options":{"fuzzy":true,"ranker":"proximity_bm25"}}' | jq -M
 ––– output –––
 {
   "took": %{NUMBER},

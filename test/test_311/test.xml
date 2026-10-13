@@ -7,6 +7,7 @@
 <jieba/>
 <heavy/>
 <non-rt/>
+<mode-specific-model/>
 </requires>
 <skip_db/>
 <config>

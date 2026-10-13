@@ -117,6 +117,8 @@ class RtIndex_i;
 class ColumnarBuilderRT_i;
 class TableEmbeddings_c;
 
+bool ValidateRtBlobRows ( const BYTE * pRows, DWORD uRows, const BYTE * pBlobs, DWORD uBlobs, const CSphSchema & tSchema );
+
 /// indexing accumulator
 class RtAccum_t
 {
@@ -127,6 +129,7 @@ public:
 	int64_t 						m_iAccumBytes = 0;
 	CSphTightVector<CSphWordHit>	m_dAccum;
 	CSphTightVector<CSphRowitem>	m_dAccumRows;
+	CSphTightVector<DWORD>			m_dNorms;
 	CSphVector<DocID_t>				m_dAccumKlist;
 	CSphTightVector<BYTE>			m_dBlobs;
 	CSphVector<DWORD>				m_dPerDocHitsCount;
@@ -148,11 +151,15 @@ public:
 	void			Cleanup();
 	void			CleanReplicated();
 
-	void			AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t * pStoredDoc );
+	void			AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t * pStoredDoc, const DWORD * pExactFieldLengths=nullptr );
 	void			CleanupDuplicates ( int iRowSize );
 	void			ForEachUuidDocid ( const std::function<void ( ByteBlob_t )> & fnVisitor ) const;
 	void			GrabLastWarning ( CSphString & sWarning );
 	void			SetIndex ( RtIndex_i * pIndex );
+	void			CaptureReplicationValidation ( const RtIndex_i & tIndex );
+	void			CaptureReplicationValidation ( const CSphString & sName, int64_t iIndexId, uint64_t uSchemaHash, int iGeneration, DictFormat_e eDictFormat );
+	bool			CheckReplicationValidation ( const RtIndex_i & tIndex, CSphString & sError ) const;
+	bool			CheckReplicationValidation ( int64_t iIndexId, uint64_t uSchemaHash, int iGeneration, DictFormat_e eDictFormat, CSphString & sError ) const;
 
 	RowID_t			GenerateRowID();
 	void			ResetRowID();
@@ -169,8 +176,8 @@ public:
 
 	ReplicationCommand_t * AddCommand ( ReplCmd_e eCmd, CSphString sIndex, CSphString sCluster = CSphString() );
 
-	void			LoadRtTrx ( ByteBlob_t tTrx, DWORD uVer );
-	void			SaveRtTrx ( MemoryWriter_c & tWriter ) const;
+	bool			LoadRtTrx ( ByteBlob_t tTrx, DWORD uVer, const CSphSchema * pSchema=nullptr, DictFormat_e eDictFormat=DictFormat_e::CRC );
+	bool			SaveRtTrx ( MemoryWriter_c & tWriter ) const;
 
 	const BYTE *	GetPackedKeywords() const;
 	int				GetPackedLen() const;
@@ -194,6 +201,7 @@ private:
 	std::unique_ptr<DocstoreRT_i>		m_pDocstore;
 	std::unique_ptr<ColumnarBuilderRT_i> m_pColumnarBuilder;
 	std::unique_ptr<EmbeddingsSrc_c>	m_pEmbeddingsSrc;
+	CSphVector<DWORD>					m_dFieldLengthsScratch;
 	RowID_t								m_tNextRowID = 0;
 	CSphFixedVector<BYTE>				m_dPackedKeywords { 0 };
 	uint64_t							m_uSchemaHash = 0;
@@ -203,6 +211,8 @@ private:
 	int									m_iIndexGeneration = 0;
 	CSphString							m_sIndexName;
 	int64_t								m_iIndexId = 0;
+	bool								m_bReplicationValidation = false;
+	DictFormat_e						m_eValidationDictFormat = DictFormat_e::CRC;
 	UuidDocidRegistryPtr_t				m_pUuidRegistry;
 	CSphVector<UuidDocidKey_t>			m_dUuidLeases;
 

@@ -6,6 +6,7 @@
 <requires>
 	<knn/>
 	<force-rt/>
+	<mode-specific-model/>
 </requires>
 
 <skip_indexer/>

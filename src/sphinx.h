@@ -586,7 +586,7 @@ struct CSphQuery
 	int				m_iLimit=20;		///< limit into result set (as Y in MySQL LIMIT X,Y clause)
 	CSphVector<DWORD>	m_dWeights;		///< user-supplied per-field weights. may be NULL. default is NULL
 	ESphMatchMode	m_eMode = SPH_MATCH_EXTENDED;		///< match mode. default is "match all"
-	ESphRankMode	m_eRanker = SPH_RANK_DEFAULT;		///< ranking mode, default is proximity+BM25
+	ESphRankMode	m_eRanker = SPH_RANK_DEFAULT;		///< requested ranking mode; implicit default resolves at execution time
 	bool			m_bExplicitRanker = false;	///< whether ranker was explicitly specified by the client
 	bool			m_bExplicitBooleanMode = false;	///< whether boolean_mode was explicitly specified by the client
 	CSphString		m_sRankerExpr;		///< ranking expression for SPH_RANK_EXPR
@@ -694,6 +694,7 @@ struct CSphQuery
 	CSphVector<CSphQueryItem>	m_dRefItems;	///< select-list prior replacing by facet
 	ESphCollation				m_eCollation = SPH_COLLATION_DEFAULT;	///< ORDER BY collation
 	bool						m_bAgent = false;	///< agent mode (may need extra cols on output)
+	bool						m_bAutoRanklessCandidate = false; ///< internal: resolved to one direct local table
 
 	CSphString		m_sQueryTokenFilterLib;		///< token filter library name
 	CSphString		m_sQueryTokenFilterName;	///< token filter name
@@ -738,6 +739,8 @@ struct QueryExecutionSettings_t
 	CSphString		m_sUDRanker;
 	CSphString		m_sUDRankerOpts;
 	bool			m_bDefaultBoolOr = false;
+	bool			m_bImplicitDefaultRanker = false;
+	bool			m_bAutoIdTopK = false;
 
 	QueryExecutionSettings_t() = default;
 	explicit QueryExecutionSettings_t ( const CSphQuery & tQuery )
@@ -854,6 +857,9 @@ public:
 	CSphString				m_sScroll;				///< data to continue scroll
 
 	IteratorStats_t			m_tIteratorStats;		///< iterators used while calculating the query
+	int						m_iAutoRankless = 0;	///< local searches that used automatic score-independent ranking
+	int						m_iAutoIdTopK = 0;	///< local searches that retained only the smallest public IDs in the ranker
+	int						m_iAutoGroupRankless = 0; ///< local grouped COUNT searches that used membership-only ranking
 	bool					m_bBigram = false;		///< whatever to remove bigram symbol on adding word to stat
 	ExpansionStats_t		m_tExpansionStats;		///< full text query statistics for expanded and merged terms
 
@@ -1341,6 +1347,7 @@ public:
 	virtual void				Setup ( const CSphIndexSettings & tSettings );
 	const CSphIndexSettings &	GetSettings () const { return m_tSettings; }
 	virtual bool				IsRT() const { return false; }
+	virtual bool                IsExperimentalPostings() const { return false; }
 	virtual bool				IsPQ() const { return false; }
 	void						SetBinlog ( bool bBinlog ) { m_bBinlog = bBinlog; }
 	virtual int64_t *			GetFieldLens() const { return nullptr; }
@@ -1651,6 +1658,9 @@ struct SphQueueRes_t : public ISphNoncopyable
 };
 
 /////////////////////////////////////////////////////////////////////////////
+
+/// Experimental immutable snapshot maintenance gate (configured base, not .tmp).
+bool sphIsE1Snapshot ( const CSphString & sBase );
 
 /// create phrase fulltext index implementation
 std::unique_ptr<CSphIndex>		sphCreateIndexPhrase ( CSphString sIndexName, CSphString sFilename );

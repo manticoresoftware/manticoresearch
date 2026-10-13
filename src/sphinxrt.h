@@ -241,6 +241,7 @@ public:
 
 	// generation typically changes on Reconfigure
 	virtual int GetAlterGeneration() const { return 0; }
+	virtual DictFormat_e GetDictFormat() const { return DictFormat_e::CRC; }
 
 	/// do something const with disk chunk (query settings, status, etc.)
 	/// hides internal disk chunks storage
@@ -348,9 +349,12 @@ public:
 	CSphTightVector<BYTE>			m_dDocs;
 	CSphTightVector<BYTE>			m_dHits;
 
+	// Physical-row token ownership; rebuilt on adoption, never persisted separately.
+	CSphVector<int64_t>			m_dFieldLens;
 	DWORD							m_uRows = 0;			///< number of actually allocated rows
 	std::atomic<int64_t>			m_tAliveRows { 0 };		///< number of alive (non-killed) rows
 	CSphTightVector<CSphRowitem>	m_dRows GUARDED_BY ( m_tLock );				///< row data storage
+	CSphTightVector<DWORD>			m_dNorms GUARDED_BY ( m_tLock );			///< exact row-major field lengths
 	CSphTightVector<BYTE>			m_dBlobs GUARDED_BY ( m_tLock );            ///< storage for blob attrs
 	CSphVector<BYTE>				m_dKeywordCheckpoints;
 	std::atomic<int64_t> *			m_pRAMCounter = nullptr;///< external RAM counter
@@ -550,7 +554,9 @@ volatile bool &RTChangesAllowed () noexcept;
 volatile int & AutoOptimizeCutoffMultiplier() noexcept;
 volatile bool & OptimizeCutoffExplicit() noexcept;
 volatile int & ParallelChunkMergesLimit() noexcept;
-volatile int & MergeChunksPerJob() noexcept;
+std::atomic<int> & MergeChunksPerJob() noexcept;
+std::atomic<bool> & MergeChunksPerJobExplicit() noexcept;
+int GetMergeChunksPerJob ( bool bExperimentalPostings ) noexcept;
 volatile int AutoOptimizeCutoff() noexcept;
 volatile int AutoOptimizeCutoffKNN() noexcept;
 volatile int & KNNParallelBuild() noexcept;

@@ -4,6 +4,7 @@
 <name>hitless merge</name>
 <requires>
 <non-rt/>
+<mode-specific-model/>
 </requires>
 
 <config>

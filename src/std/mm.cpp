@@ -117,6 +117,9 @@ void mmadvise ( void* pMem, size_t uSize, Advise_e eAdvise )
 #endif
 		);
 		break;
+	case Advise_e::DONTNEED:
+		madvise ( pMem, uSize, MADV_DONTNEED );
+		break;
 	}
 }
 

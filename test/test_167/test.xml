@@ -3,6 +3,8 @@
 
 <name>min_word_len vs tail of the query</name>
 
+<requires><mode-specific-model/></requires>
+
 <config>
 indexer
 {

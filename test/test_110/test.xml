@@ -2,6 +2,7 @@
 <test>
 
 <name>naive guess about the block index</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

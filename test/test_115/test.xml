@@ -2,6 +2,7 @@
 <test>
 
 <name>NEAR syntax</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

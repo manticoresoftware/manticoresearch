@@ -6,6 +6,7 @@
 <requires>
 	<non-rt/>
 	<no_pseudo_sharding/>
+	<mode-specific-model/>
 </requires>
 <skip_db/>
 <config>

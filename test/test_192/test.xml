@@ -2,6 +2,7 @@
 
 <test>
 <name>blend_chars vs multiforms</name>
+<requires><mode-specific-model/></requires>
 <skip_db/>
 <config>
 searchd

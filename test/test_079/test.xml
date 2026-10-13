@@ -4,6 +4,7 @@
 <name>merge vs out-of-bounds dictionary reads</name>
 <requires>
 <non-rt/>
+<mode-specific-model/>
 </requires>
 
 <config>

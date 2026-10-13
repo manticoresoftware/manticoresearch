@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>automatic score-independent ranker RT numeric and UUID admission</name>
+<requires>
+	<force-rt/>
+	<non-columnar/>
+</requires>
+<skip_indexer/>
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+<queries>
+<sphinxql>
+CREATE TABLE score_independent_rt (body text, gid int);
+/* Two disk chunks and one RAM chunk, each with interleaved public IDs and more than K=9 matches. */
+INSERT INTO score_independent_rt (id,body,gid) VALUES (3000,'alpha',7),(2700,'alpha',2),(2400,'alpha',9),(2100,'alpha',7),(1800,'alpha',1),(1500,'alpha',2),(1200,'alpha',7),(900,'alpha',9),(600,'alpha',2),(300,'alpha',7);
+FLUSH RAMCHUNK score_independent_rt;
+INSERT INTO score_independent_rt (id,body,gid) VALUES (2900,'alpha',2),(2600,'alpha',7),(2300,'alpha',1),(2000,'alpha',9),(1700,'alpha',7),(1400,'alpha',2),(1100,'alpha',7),(800,'alpha',2),(500,'alpha',9),(200,'alpha',7);
+FLUSH RAMCHUNK score_independent_rt;
+INSERT INTO score_independent_rt (id,body,gid) VALUES (2800,'alpha',7),(2500,'alpha',2),(2200,'alpha',9),(1900,'alpha',7),(1600,'alpha',1),(1300,'alpha',2),(1000,'alpha',7),(700,'alpha',2),(400,'alpha',7),(100,'alpha',2);
+SELECT id FROM score_independent_rt WHERE MATCH('alpha') ORDER BY id ASC LIMIT 4,5;
+SHOW META LIKE 'total_found';
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+SELECT gid,COUNT(*) n FROM score_independent_rt WHERE MATCH('alpha') GROUP BY gid ORDER BY n DESC,gid ASC LIMIT 1,2;
+SHOW META LIKE 'total_found';
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_group_rankless';
+/* Score-dependent and otherwise unsupported grouped shapes must fail closed. */
+SELECT gid,COUNT(*) n,weight() w FROM score_independent_rt WHERE MATCH('alpha') GROUP BY gid ORDER BY w DESC,gid ASC LIMIT 2;
+SHOW META LIKE 'auto_group_rankless';
+SELECT gid,COUNT(*) n,weight() w FROM score_independent_rt WHERE MATCH('alpha') GROUP BY gid HAVING w&gt;0 ORDER BY n DESC,gid ASC LIMIT 2;
+SHOW META LIKE 'auto_group_rankless';
+SELECT gid,COUNT(*) n FROM score_independent_rt WHERE MATCH('alpha') GROUP BY gid ORDER BY n DESC,gid ASC LIMIT 2 OPTION ranker=bm25a;
+SHOW META LIKE 'auto_group_rankless';
+SELECT gid,COUNT(*) n FROM score_independent_rt WHERE MATCH('@body alpha') GROUP BY gid ORDER BY n DESC,gid ASC LIMIT 2;
+SHOW META LIKE 'auto_group_rankless';
+SELECT gid,COUNT(*) n FROM score_independent_rt WHERE MATCH('alpha') AND gid&gt;1 GROUP BY gid ORDER BY n DESC,gid ASC LIMIT 2;
+SHOW META LIKE 'auto_group_rankless';
+/* Alias collisions must be checked against resolved sorter attributes, not names alone. */
+SELECT gid n,COUNT(*) gid FROM score_independent_rt WHERE MATCH('alpha') GROUP BY gid ORDER BY gid DESC,n ASC LIMIT 2;
+SHOW META LIKE 'auto_group_rankless';
+CREATE TABLE score_independent_uuid (id uuid, body text);
+INSERT INTO score_independent_uuid (id,body) VALUES ('550e8400-e29b-41d4-a716-446655441900','alpha'),('550e8400-e29b-41d4-a716-446655441100','alpha');
+SELECT id FROM score_independent_uuid WHERE MATCH('alpha') ORDER BY id ASC LIMIT 2;
+SHOW META LIKE 'auto_rankless';
+SHOW META LIKE 'auto_id_topk';
+DROP TABLE score_independent_uuid;
+DROP TABLE score_independent_rt;
+</sphinxql>
+</queries>
+</test>

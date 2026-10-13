@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>SphinxQL: floats without leading zero</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

@@ -26,6 +26,7 @@ class CSphSchema;
 	SPH_QUERY_STATE ( LOCAL_SEARCH,	"local_search" ) \
 	SPH_QUERY_STATE ( SQL_PARSE,	"sql_parse" ) \
 	SPH_QUERY_STATE ( SETUP_ITER,	"setup_iter" ) \
+	SPH_QUERY_STATE ( FAST_COUNT,	"fast_count" ) \
 	SPH_QUERY_STATE ( FULLSCAN,		"fullscan" ) \
 	SPH_QUERY_STATE ( DICT_SETUP,	"dict_setup" ) \
 	SPH_QUERY_STATE ( PARSE,		"parse" ) \

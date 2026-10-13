@@ -6,6 +6,7 @@
 <force-rt/>
 <http/>
 <sphinxql_keep_null/>
+<mode-specific-model/>
 </requires>
 
 <skip_indexer/>

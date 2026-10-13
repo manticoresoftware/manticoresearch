@@ -6,6 +6,7 @@
 <requires>
 <http/>
 <non-rt-indexer/>
+<mode-specific-model/>
 </requires>
 
 <config>

@@ -5,6 +5,7 @@
 <requires>
 <!-- this test checks on_file_field_error behavior which is basically indexer-only -->
 <non-rt/>
+<mode-specific-model/>
 </requires>
 
 <Config>

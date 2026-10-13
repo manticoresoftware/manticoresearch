@@ -2,6 +2,7 @@
 <test>
 
 <name>php fread from socket test</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

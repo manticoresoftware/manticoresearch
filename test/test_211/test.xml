@@ -2,6 +2,7 @@
 <test>
 
 <name>field-start modifier vs star-expansion vs tiny-keyword cache</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

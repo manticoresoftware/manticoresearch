@@ -3,7 +3,7 @@
 
 <name>expand keywords - multiple options</name>
 
-<requires><non-rt-indexer/></requires>
+<requires><non-rt-indexer/><mode-specific-model/></requires>
 
 <config>
 indexer

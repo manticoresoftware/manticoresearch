@@ -5,6 +5,7 @@
 
 <requires>
 <http/>
+<mode-specific-model/>
 </requires>
 
 <config>

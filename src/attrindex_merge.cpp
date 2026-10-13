@@ -51,11 +51,13 @@ class AttrMerger_c::Impl_c
 	int64_t									m_iTotalDocs;
 	bool									m_bUuidLinked = false;
 	BuildBufferSettings_t					m_tBufferSettings;
+	CSphFixedVector<int64_t> m_dFieldLens { SPH_MAX_FIELDS };
 
 	CSphVector<PlainOrColumnar_t>	m_dSiAttrs;
 	std::unique_ptr<SI::Builder_i>	m_pSIdxBuilder;
 
 	StrVec_t &								m_dCreatedFiles;
+	std::vector<uint64_t> *				m_pPublicIDs;
 
 	struct KNNInputRef_t
 	{
@@ -83,14 +85,16 @@ private:
 	}
 
 public:
-	Impl_c ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings, StrVec_t & dCreatedFiles )
+	Impl_c ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings, StrVec_t & dCreatedFiles, std::vector<uint64_t> * pPublicIDs )
 		: m_tMonitor ( tMonitor )
 		, m_sError ( sError )
 		, m_iTotalDocs ( iTotalDocs )
 		, m_tBufferSettings ( tSettings )
 		, m_dCreatedFiles ( dCreatedFiles )
+		, m_pPublicIDs ( pPublicIDs )
 	{}
 
+	const int64_t * GetFieldLengths() const { return m_dFieldLens.Begin(); }
 	bool Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex );
 	bool AnalyzeAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
 	bool CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
@@ -99,6 +103,7 @@ public:
 
 bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex )
 {
+	m_dFieldLens.ZeroVec();
 	auto sSPA = GetTmpFilename ( pDstIndex, SPH_EXT_SPA );
 	const CSphSchema & tDstSchema = pDstIndex->GetMatchSchema();
 	if ( tDstSchema.HasNonColumnarAttrs() && !m_tWriterSPA.OpenFile ( sSPA, m_sError ) )
@@ -164,6 +169,14 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 
 	m_dDocidLookup.Reset ( m_iTotalDocs );
 	m_bUuidLinked = tDstSchema.GetAttr(0).IsUuidLinkedDocid();
+	const CSphColumnInfo & tDocID = tDstSchema.GetAttr(0);
+	if ( m_pPublicIDs && ( tDocID.m_sName!=sphGetDocidName() || tDocID.m_eAttrType!=SPH_ATTR_BIGINT || m_bUuidLinked ) )
+		m_pPublicIDs = nullptr;
+	if ( m_pPublicIDs )
+	{
+		m_pPublicIDs->clear();
+		m_pPublicIDs->reserve ( m_iTotalDocs );
+	}
 	m_dUuidLookup.Reset ( m_bUuidLinked ? m_iTotalDocs : 0 );
 	BuildCreateHistograms ( m_tHistograms, m_dAttrsForHistogram, tDstSchema );
 
@@ -185,6 +198,10 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 
 	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
 	CSphVector<int64_t> dTmp;
+	const auto & tSchema = tIndex.GetMatchSchema();
+	CSphVector<PlainOrColumnar_t> dFieldAttrs;
+	for ( int i=tSchema.GetAttrId_FirstFieldLen(); i>=0 && i<=tSchema.GetAttrId_LastFieldLen(); ++i )
+		dFieldAttrs.Add ( CreatePlainOrColumnar ( tSchema, tSchema.GetAttr(i) ) );
 
 	int iColumnarIdLoc = PURE_COLUMNAR ? 0 : ( tIndex.GetMatchSchema ().GetAttr ( 0 ).IsColumnar () ? 0 : -1 );
 	int iStride = tIndex.GetMatchSchema().GetRowSize();
@@ -211,6 +228,9 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 
 		const CSphRowitem * pRow = PURE_COLUMNAR ? nullptr : tIndex.GetRawAttrs() + (int64_t)tRowID * iStride;
 		const BYTE * pRawBlobAttrs = PURE_COLUMNAR ? nullptr : tIndex.GetRawBlobAttrs();
+
+		ARRAY_FOREACH ( iField, dFieldAttrs )
+			m_dFieldLens[iField] += dFieldAttrs[iField].Get ( tRowID, pRow, dColumnarIterators );
 
 		// limit granted by caller code
 		assert ( m_tResultRowID != INVALID_ROWID );
@@ -276,6 +296,8 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 		// KNN is built in a separate pass
 
 		m_dDocidLookup[m_tResultRowID] = { tDocID, m_tResultRowID };
+		if ( m_pPublicIDs )
+			m_pPublicIDs->push_back ( uint64_t(tDocID) );
 		++m_tResultRowID;
 	}
 
@@ -587,8 +609,8 @@ bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, 
 }
 
 
-AttrMerger_c::AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings, StrVec_t & dCreatedFiles )
-	: m_pImpl { std::make_unique<Impl_c> ( tMonitor, sError, iTotalDocs, tSettings, dCreatedFiles ) }
+AttrMerger_c::AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings, StrVec_t & dCreatedFiles, std::vector<uint64_t> * pPublicIDs )
+	: m_pImpl { std::make_unique<Impl_c> ( tMonitor, sError, iTotalDocs, tSettings, dCreatedFiles, pPublicIDs ) }
 {}
 
 AttrMerger_c::~AttrMerger_c() = default;
@@ -603,6 +625,11 @@ bool AttrMerger_c::AnalyzeAttributes ( const CSphIndex& tIndex, const VecTraits_
 {
 	TRACE_CORO ( "sph", "AttrMerger_c::AnalyzeAttributes" );
 	return m_pImpl->AnalyzeAttributes ( tIndex, dRowMap, uAlive );
+}
+
+const int64_t * AttrMerger_c::GetFieldLengths() const
+{
+	return m_pImpl->GetFieldLengths();
 }
 
 bool AttrMerger_c::CopyAttributes ( const CSphIndex& tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive )

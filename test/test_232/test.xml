@@ -2,6 +2,7 @@
 
 <test>
 <name>snippets and weights vs matching positions</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 searchd

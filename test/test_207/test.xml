@@ -4,6 +4,7 @@
 <requires>
 <lemmatizer_base/>
 <non-rt-indexer/>
+<mode-specific-model/>
 </requires>
 
 <name>aot morphology in utf-8</name>

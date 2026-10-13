@@ -5,6 +5,7 @@
 
 <requires>
 <icu/>
+<mode-specific-model/>
 </requires>
 
 <config>

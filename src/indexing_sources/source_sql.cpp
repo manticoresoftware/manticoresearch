@@ -1550,6 +1550,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphReader & tReader, CSphString 
 				m_iJoinedHitField = iField;
 				m_iJoinedHitID = tDocId;
 				m_iJoinedHitPos = 0;
+				ResetExactFieldLength ( iField );
 			}
 
 			m_tState.Reset();

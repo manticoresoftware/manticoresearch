@@ -35,6 +35,11 @@ endif()
 add_executable (testcli test.c)
 target_link_libraries ( testcli sphinxclient )
 
+add_executable (sphinxclient_serialization_test serialization_test.c)
+
+find_program ( PHP_EXECUTABLE php )
+find_program ( RUBY_EXECUTABLE ruby )
+
 configure_file ( ${CMAKE_CURRENT_SOURCE_DIR}/smoke_data.csv ${CMAKE_CURRENT_BINARY_DIR}/smoke_data.csv COPYONLY )
 configure_file ( ${CMAKE_CURRENT_SOURCE_DIR}/smoke_test.conf ${CMAKE_CURRENT_BINARY_DIR}/smoke_test.conf COPYONLY )
 
@@ -50,3 +55,19 @@ add_test ( NAME ${test} COMMAND ${CMAKE_COMMAND}
 		-P ${CMAKE_CURRENT_SOURCE_DIR}/smoke.cmake
 		WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} )
 SET_TESTS_PROPERTIES ( ${test} PROPERTIES LABELS API )
+
+fixup_test_name ( serialization_test "C API explicit ranker serialization" )
+add_test ( NAME ${serialization_test} COMMAND sphinxclient_serialization_test )
+SET_TESTS_PROPERTIES ( ${serialization_test} PROPERTIES LABELS API )
+
+if ( PHP_EXECUTABLE )
+	fixup_test_name ( php_serialization_test "PHP API explicit ranker serialization" )
+	add_test ( NAME ${php_serialization_test} COMMAND ${PHP_EXECUTABLE} ${CMAKE_SOURCE_DIR}/api/sphinxapi_ranker_test.php )
+	SET_TESTS_PROPERTIES ( ${php_serialization_test} PROPERTIES LABELS API )
+endif ()
+
+if ( RUBY_EXECUTABLE )
+	fixup_test_name ( ruby_serialization_test "Ruby API explicit ranker serialization" )
+	add_test ( NAME ${ruby_serialization_test} COMMAND ${RUBY_EXECUTABLE} ${CMAKE_SOURCE_DIR}/api/ruby/serialization_test.rb )
+	SET_TESTS_PROPERTIES ( ${ruby_serialization_test} PROPERTIES LABELS API )
+endif ()

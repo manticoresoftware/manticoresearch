@@ -27,6 +27,7 @@ public:
 
 	void				SetColumnar ( columnar::Columnar_i * pColumnar ) override { m_pColumnar = pColumnar; }
 	int64_t				GetTotalCount() const override { return m_iTotal; }
+	void				AddToTotalCount ( int64_t iDelta ) override { m_iTotal += iDelta; }
 	void				CloneTo ( ISphMatchSorter * pTrg ) const override;
 	bool				CanBeCloned() const override;
 	void				SetFilteredAttrs ( const sph::StringSet & hAttrs, bool bAddDocid ) override;

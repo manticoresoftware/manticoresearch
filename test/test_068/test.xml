@@ -2,6 +2,7 @@
 
 <test>
 <name>xmlpipe2 indexing</name>
+<requires><mode-specific-model/></requires>
 <skip_db/>
 <config>
 indexer

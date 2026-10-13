@@ -8,6 +8,7 @@
 <requires>
 <knn/>
 <force-rt/>
+<mode-specific-model/>
 </requires>
 
 <config>

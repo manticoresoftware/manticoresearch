@@ -25,6 +25,7 @@ const DWORD HITLESS_DOC_MASK = 0x7FFFFFFF;
 const DWORD	HITLESS_DOC_FLAG = 0x80000000;
 
 #define UnzipWordidBE UnzipOffsetBE
+#include "postings_container_reader.h"
 
 class DiskIndexQwordSetup_c;
 
@@ -38,6 +39,7 @@ public:
 	/// but this one is always a real position, used for delta coding
 	SphOffset_t		m_uHitPosition = 0;
 	CSphMatch		m_tDoc;			///< current match (partial)
+	e1::Cursor      m_tE1;
 
 	FileBlockReaderPtr_c	m_rdDoclist;	///< my doclist accessor
 	FileBlockReaderPtr_c	m_rdHitlist;	///< my hitlist accessor

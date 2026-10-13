@@ -2,6 +2,7 @@
 <test>
 
 <name>min_word_len vs queries (part 1)</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

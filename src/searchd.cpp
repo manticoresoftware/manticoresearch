@@ -128,6 +128,7 @@ static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
 static auto&			g_bOptimizeCutoffExplicit = OptimizeCutoffExplicit();
 static auto&			g_iParallelChunkMerges = ParallelChunkMergesLimit();
 static auto&			g_iMergeChunksPerJob = MergeChunksPerJob();
+static auto&			g_bMergeChunksPerJobExplicit = MergeChunksPerJobExplicit();
 static auto&			g_iKNNParallelBuild = KNNParallelBuild();
 static auto&			g_iEmbeddingsThreads = EmbeddingsThreads();
 static constexpr bool	AUTOOPTIMIZE_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
@@ -3147,6 +3148,12 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 	dStatus.MatchTupletf ( "total", "%d", tMeta.m_iMatches );
 	dStatus.MatchTupletf ( "total_found", "%l", tMeta.m_iTotalMatches );
 	dStatus.MatchTupletf ( "total_relation", "%s", tMeta.m_bTotalMatchesApprox ? "gte" : "eq" );
+	if ( tMeta.m_iAutoRankless )
+		dStatus.MatchTupletf ( "auto_rankless", "%d", tMeta.m_iAutoRankless );
+	if ( tMeta.m_iAutoIdTopK )
+		dStatus.MatchTupletf ( "auto_id_topk", "%d", tMeta.m_iAutoIdTopK );
+	if ( tMeta.m_iAutoGroupRankless )
+		dStatus.MatchTupletf ( "auto_group_rankless", "%d", tMeta.m_iAutoGroupRankless );
 
 	dStatus.MatchTupletf ( "time", "%.3F", tMeta.GetQueryTimeMs() );
 
@@ -9883,8 +9890,9 @@ static bool HandleSetGlobal ( CSphString & sError, const CSphString & sName, int
 
 	if ( sName == "merge_chunks_per_job" )
 	{
-		g_iMergeChunksPerJob = Max ( 2, iSetValue );
-		sphInfo ( "set global merge_chunks_per_job=%d", g_iMergeChunksPerJob );
+		g_iMergeChunksPerJob.store ( Max ( 2, iSetValue ), std::memory_order_relaxed );
+		g_bMergeChunksPerJobExplicit.store ( true, std::memory_order_release );
+		sphInfo ( "set global merge_chunks_per_job=%d", g_iMergeChunksPerJob.load ( std::memory_order_relaxed ) );
 		return true;
 	}
 
@@ -11110,7 +11118,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		dTable.MatchTuplet ( "autocommit", pVars->m_bAutoCommit ? "1" : "0" );
 		dTable.MatchTupletf ( "auto_optimize", "%d", g_iAutoOptimizeCutoffMultiplier );
 		dTable.MatchTupletf ( "parallel_chunk_merges", "%d", g_iParallelChunkMerges );
-		dTable.MatchTupletf ( "merge_chunks_per_job", "%d", g_iMergeChunksPerJob );
+		dTable.MatchTupletf ( "merge_chunks_per_job", "%d", g_iMergeChunksPerJob.load ( std::memory_order_relaxed ) );
 		dTable.MatchTupletf ( "knn_parallel_build", "%d", g_iKNNParallelBuild );
 		dTable.MatchTupletf ( "embeddings_threads", "%d", g_iEmbeddingsThreads );
 		dTable.MatchTupletf ( "optimize_cutoff", "%d", MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff );
@@ -15809,7 +15817,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 	SetMaxChildrenThreads ( iThreads );
 	int iDefaultParallelMerges = Max ( 1, Min ( 2, iThreads / 2 ) );
 	g_iParallelChunkMerges = Max ( 1, hSearchd.GetInt ( "parallel_chunk_merges", iDefaultParallelMerges ) );
-	g_iMergeChunksPerJob = Max ( 2, hSearchd.GetInt ( "merge_chunks_per_job", 2 ) );
+	g_iMergeChunksPerJob.store ( Max ( 2, hSearchd.GetInt ( "merge_chunks_per_job", 2 ) ), std::memory_order_relaxed );
+	g_bMergeChunksPerJobExplicit.store ( hSearchd.Exists ( "merge_chunks_per_job" ), std::memory_order_release );
 	g_iKNNParallelBuild = Max ( 1, hSearchd.GetInt ( "knn_parallel_build", GetDefaultKNNParallelBuild(iThreads) ) );
 	SetKNNRescorePrefetch ( hSearchd.GetInt ( "knn_rescore_prefetch", 1 )!=0 );
 	g_iEmbeddingsThreads = Max ( 0, hSearchd.GetInt ( "embeddings_threads", 4 ) );

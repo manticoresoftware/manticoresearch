@@ -17,7 +17,9 @@
 #include "memio.h"
 #include "tracer.h"
 #include "indexsettings.h"
+#include "rt_field_norms.h"
 
+#include <limits>
 #include <memory>
 
 RtAccum_t::~RtAccum_t()
@@ -485,6 +487,7 @@ void RtAccum_t::CleanupPart()
 {
 	ResetPreparedForCommit();
 	m_dAccumRows.Resize ( 0 );
+	m_dNorms.Resize ( 0 );
 	m_dBlobs.Resize ( 0 );
 	m_pColumnarBuilder.reset();
 	m_dPerDocHitsCount.Resize ( 0 );
@@ -507,6 +510,10 @@ void RtAccum_t::Cleanup()
 	m_dAccumKlist.Reset();
 	m_sIndexName = CSphString();
 	m_iIndexId = 0;
+	m_uSchemaHash = 0;
+	m_iIndexGeneration = 0;
+	m_bReplicationValidation = false;
+	m_eValidationDictFormat = DictFormat_e::CRC;
 
 	m_dCmd.Reset();
 	ResetUuidLeases();
@@ -668,18 +675,7 @@ void RtAccum_t::FetchEmbeddingsSrc ( InsertDocData_c & tDoc, const CSphVector<At
 }
 
 
-static DWORD * SetupFieldLengths ( const RtIndex_i * pIndex, const CSphSchema & tSchema, CSphVector<DWORD> & dFieldLengths )
-{
-	if ( !pIndex->GetSettings().m_bIndexFieldLens )
-		return nullptr;
-
-	dFieldLengths.Resize ( tSchema.GetAttrId_LastFieldLen() - tSchema.GetAttrId_FirstFieldLen() + 1 );
-	dFieldLengths.ZeroVec();
-	return dFieldLengths.Begin();
-}
-
-
-static const DocstoreBuilder_i::Doc_t * StoreFieldLengths ( CSphRowitem * pRow, std::unique_ptr<ColumnarBuilderRT_i> & pColumnarBuilder, const CSphVector<DWORD> & dFieldLengths, const CSphSchema & tSchema, DocstoreBuilder_i::Doc_t & dUpdatedStoredDoc, const DocstoreBuilder_i::Doc_t * pStoredDoc )
+static const DocstoreBuilder_i::Doc_t * StoreFieldLengths ( CSphRowitem * pRow, std::unique_ptr<ColumnarBuilderRT_i> & pColumnarBuilder, const DWORD * pFieldLengths, const CSphSchema & tSchema, DocstoreBuilder_i::Doc_t & dUpdatedStoredDoc, const DocstoreBuilder_i::Doc_t * pStoredDoc )
 {
 	const DocstoreBuilder_i::Doc_t * pUpdatedStoredDoc = pStoredDoc;
 
@@ -699,7 +695,7 @@ static const DocstoreBuilder_i::Doc_t * StoreFieldLengths ( CSphRowitem * pRow, 
 		if ( i>=iFirstFieldLen && i<=tSchema.GetAttrId_LastFieldLen() )
 		{
 			assert ( tAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT );
-			DWORD & uData = dFieldLengths[i-iFirstFieldLen];
+			const DWORD & uData = pFieldLengths[i-iFirstFieldLen];
 			if ( tAttr.IsColumnar() )
 				pColumnarBuilder->SetAttr ( iColumnar, uData );
 			else
@@ -731,7 +727,7 @@ static const DocstoreBuilder_i::Doc_t * StoreFieldLengths ( CSphRowitem * pRow, 
 }
 
 
-void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t* pStoredDoc )
+void RtAccum_t::AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t * pStoredDoc, const DWORD * pExactFieldLengths )
 {
 	MEMORY ( MEM_RT_ACCUM );
 	ResetPreparedForCommit();
@@ -834,8 +830,13 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 		sphSetRowAttr ( pRow, pBlobLoc->m_tLocator, m_pBlobWriter->Flush().first );
 	}
 
-	CSphVector<DWORD> dFieldLengths;
-	DWORD * pFieldLengths = SetupFieldLengths ( m_pIndex, tSchema, dFieldLengths );
+	DWORD * pFieldLengths = nullptr;
+	if ( !pExactFieldLengths )
+	{
+		m_dFieldLengthsScratch.Resize ( tSchema.GetFieldsCount() );
+		m_dFieldLengthsScratch.ZeroVec();
+		pFieldLengths = m_dFieldLengthsScratch.Begin();
+	}
 
 	// accumulate hits
 	int iHits = 0;
@@ -889,9 +890,21 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 		if ( pFieldLengths && uFieldLastCount )
 			pFieldLengths [ HITMAN::GetField(uFieldLastHit) ] += uFieldLastCount;
 	}
-
 	DocstoreBuilder_i::Doc_t dUpdatedStoredDoc;
-	pStoredDoc = StoreFieldLengths ( pRow, m_pColumnarBuilder, dFieldLengths, tSchema, dUpdatedStoredDoc, pStoredDoc );
+	if ( pExactFieldLengths )
+	{
+		if ( m_pIndex->GetSettings().m_bIndexFieldLens )
+			pStoredDoc = StoreFieldLengths ( pRow, m_pColumnarBuilder, pExactFieldLengths, tSchema, dUpdatedStoredDoc, pStoredDoc );
+	}
+	else
+	{
+		if ( m_pIndex->GetSettings().m_bIndexFieldLens )
+			pStoredDoc = StoreFieldLengths ( pRow, m_pColumnarBuilder, m_dFieldLengthsScratch.Begin(), tSchema, dUpdatedStoredDoc, pStoredDoc );
+	}
+	const DWORD * pSchemaNorms = pExactFieldLengths ? pExactFieldLengths : m_dFieldLengthsScratch.Begin();
+	for ( int iField=0; iField<tSchema.GetFieldsCount(); ++iField )
+		if ( tSchema.GetField(iField).m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED )
+			m_dNorms.Add ( pSchemaNorms[iField] );
 
 	// make sure to get real count without duplicated hits
 	m_dPerDocHitsCount.Add ( iHits );
@@ -1031,6 +1044,9 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 					memcpy ( &m_dAccumRows[iDstRow * iRowSize], &m_dAccumRows[i * iRowSize], iRowSize * sizeof ( CSphRowitem ) );
 
 				m_dPerDocHitsCount[iDstRow] = m_dPerDocHitsCount[i];
+				const int iNormFields = RtFieldNorms_c(tSchema).DenseFields();
+				if ( iNormFields )
+					memmove ( &m_dNorms[iDstRow*iNormFields], &m_dNorms[i*iNormFields], iNormFields*sizeof(DWORD) );
 
 				// remove duplicate docstore
 				if ( m_pDocstore )
@@ -1045,6 +1061,7 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 
 	m_dAccumRows.Resize ( iDstRow * iRowSize );
 	m_dPerDocHitsCount.Resize ( iDstRow );
+	m_dNorms.Resize ( int64_t(iDstRow)*RtFieldNorms_c(tSchema).DenseFields() );
 	m_uAccumDocs = iDstRow;
 	if ( m_pDocstore )
 		m_pDocstore->DropTail ( iDstRow );
@@ -1126,6 +1143,41 @@ void RtAccum_t::SetIndex ( RtIndex_i * pIndex )
 }
 
 
+void RtAccum_t::CaptureReplicationValidation ( const RtIndex_i & tIndex )
+{
+	CaptureReplicationValidation ( tIndex.GetName(), tIndex.GetIndexId(), tIndex.GetSchemaHash(), tIndex.GetAlterGeneration(), tIndex.GetDictFormat() );
+}
+
+
+void RtAccum_t::CaptureReplicationValidation ( const CSphString & sName, int64_t iIndexId, uint64_t uSchemaHash, int iGeneration, DictFormat_e eDictFormat )
+{
+	m_iIndexGeneration = iGeneration;
+	m_sIndexName = sName;
+	m_iIndexId = iIndexId;
+	m_uSchemaHash = uSchemaHash;
+	m_eValidationDictFormat = eDictFormat;
+	m_bReplicationValidation = true;
+}
+
+
+bool RtAccum_t::CheckReplicationValidation ( int64_t iIndexId, uint64_t uSchemaHash, int iGeneration, DictFormat_e eDictFormat, CSphString & sError ) const
+{
+	if ( !m_bReplicationValidation )
+		return true;
+	if ( m_iIndexId==iIndexId && m_uSchemaHash==uSchemaHash && m_iIndexGeneration==iGeneration && m_eValidationDictFormat==eDictFormat )
+		return true;
+	sError.SetSprintf ( "replication target table '%s' changed after RT transaction validation (id " INT64_FMT "->" INT64_FMT ", schema " UINT64_FMT "->" UINT64_FMT ", generation %d->%d, dictionary %d->%d)",
+		m_sIndexName.cstr(), m_iIndexId, iIndexId, m_uSchemaHash, uSchemaHash, m_iIndexGeneration, iGeneration, int(m_eValidationDictFormat), int(eDictFormat) );
+	return false;
+}
+
+
+bool RtAccum_t::CheckReplicationValidation ( const RtIndex_i & tIndex, CSphString & sError ) const
+{
+	return CheckReplicationValidation ( tIndex.GetIndexId(), tIndex.GetSchemaHash(), tIndex.GetAlterGeneration(), tIndex.GetDictFormat(), sError );
+}
+
+
 RowID_t RtAccum_t::GenerateRowID()
 {
 	return m_tNextRowID++;
@@ -1178,52 +1230,712 @@ void RtAccum_t::ResetUuidLeases()
 }
 
 
-void RtAccum_t::LoadRtTrx ( ByteBlob_t tTrx, DWORD uVer )
+class RtTrxPreflight_c
 {
-	ResetPreparedForCommit();
+public:
+	explicit RtTrxPreflight_c ( ByteBlob_t tData )
+		: m_pData ( tData.first )
+		, m_iLength ( tData.second )
+	{}
+
+	template<typename T>
+	bool Read ( T & tValue, const char * szWhat )
+	{
+		if ( !Skip ( sizeof(T), szWhat, &tValue ) )
+			return false;
+		return true;
+	}
+
+	bool ReadArray ( size_t iElemSize, const char * szWhat, DWORD * pCount=nullptr, const BYTE ** ppData=nullptr )
+	{
+		DWORD uCount = 0;
+		if ( !Read ( uCount, szWhat ) )
+			return false;
+		if ( pCount )
+			*pCount = uCount;
+		if ( uCount>DWORD(std::numeric_limits<int>::max()) || ( iElemSize && uCount>size_t(std::numeric_limits<int>::max())/iElemSize ) )
+			return TlsMsg::Err ( "replication RT transaction %s count is too large: %u", szWhat, uCount );
+		if ( ppData )
+			*ppData = m_pData+m_iPos;
+		return Skip ( size_t(uCount)*iElemSize, szWhat );
+	}
+
+	bool ReadZipDword ( DWORD & uValue, const char * szWhat )
+	{
+		uValue = 0;
+		for ( int i=0; i<5; ++i )
+		{
+			BYTE uByte = 0;
+			if ( !Read ( uByte, szWhat ) )
+				return false;
+			uValue |= DWORD(uByte & 0x7f) << ( 7*i );
+			if ( !( uByte & 0x80 ) )
+				return true;
+		}
+		return true; // matches the five-byte DWORD decoder used by MemoryReader_c
+	}
+
+	bool ReadZipDwordBE ( DWORD & uValue, const char * szWhat )
+	{
+		uValue = 0;
+		for ( int i=0; i<5; ++i )
+		{
+			BYTE uByte = 0;
+			if ( !Read ( uByte, szWhat ) )
+				return false;
+			uValue = ( uValue << 7 ) | ( uByte & 0x7f );
+			if ( !( uByte & 0x80 ) )
+				return true;
+		}
+		return TlsMsg::Err ( "replication RT transaction has unterminated %s", szWhat );
+	}
+
+	bool Skip ( size_t iBytes, const char * szWhat, void * pValue=nullptr )
+	{
+		if ( iBytes>size_t(std::numeric_limits<int>::max()) || iBytes>size_t(m_iLength-m_iPos) )
+			return TlsMsg::Err ( "replication RT transaction is truncated in %s", szWhat );
+		if ( pValue && iBytes )
+			memcpy ( pValue, m_pData+m_iPos, iBytes );
+		m_iPos += (int)iBytes;
+		return true;
+	}
+
+	int Remaining() const { return m_iLength-m_iPos; }
+	const BYTE * Current() const { return m_pData+m_iPos; }
+
+private:
+	const BYTE * m_pData = nullptr;
+	int m_iLength = 0;
+	int m_iPos = 0;
+};
+
+
+static int GetDocstoreFields ( const CSphSchema & tSchema )
+{
+	int iFields = 0;
+	for ( int i=0; i<tSchema.GetFieldsCount(); ++i )
+		iFields += tSchema.IsFieldStored(i);
+	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
+		iFields += tSchema.IsAttrStored(i);
+	return iFields;
+}
+
+
+static bool PreflightDocstore ( RtTrxPreflight_c & tReader, DWORD uRows, const CSphSchema & tSchema )
+{
+	DWORD uFields = 0;
+	DWORD uDocs = 0;
+	if ( !tReader.Read ( uFields, "docstore field count" ) || !tReader.ReadZipDword ( uDocs, "docstore document count" ) )
+		return false;
+	const DWORD uExpectedFields = GetDocstoreFields ( tSchema );
+	if ( uFields!=uExpectedFields )
+		return TlsMsg::Err ( "replication RT transaction docstore field count mismatch: got %u, expected %u", uFields, uExpectedFields );
+	if ( uDocs!=uRows )
+		return TlsMsg::Err ( "replication RT transaction docstore document count mismatch: got %u, expected %u", uDocs, uRows );
+	if ( uDocs>DWORD(std::numeric_limits<int>::max()) || uDocs>DWORD(tReader.Remaining()) )
+		return TlsMsg::Err ( "replication RT transaction docstore document count is too large: %u", uDocs );
+
+	for ( DWORD uDoc=0; uDoc<uDocs; ++uDoc )
+	{
+		DWORD uLength = 0;
+		if ( !tReader.ReadZipDword ( uLength, "docstore document length" ) )
+			return false;
+		if ( uLength>DWORD(tReader.Remaining()) )
+			return TlsMsg::Err ( "replication RT transaction is truncated in docstore document" );
+		const int iAfterDoc = tReader.Remaining()-uLength;
+		for ( DWORD uField=0; uField<uFields; ++uField )
+		{
+			DWORD uFieldLength = 0;
+			if ( !tReader.ReadZipDwordBE ( uFieldLength, "docstore field length" ) || uFieldLength>DWORD(tReader.Remaining()-iAfterDoc) )
+				return TlsMsg::Err ( "replication RT transaction docstore field overruns document %u", uDoc );
+			if ( !tReader.Skip ( uFieldLength, "docstore field" ) )
+				return false;
+		}
+		if ( tReader.Remaining()!=iAfterDoc )
+			return TlsMsg::Err ( "replication RT transaction docstore document %u has trailing bytes", uDoc );
+	}
+	return true;
+}
+
+
+static bool PreflightColumnarArray ( RtTrxPreflight_c & tReader, size_t iElemSize, const char * szWhat, DWORD & uCount, const BYTE ** ppData=nullptr )
+{
+	return tReader.ReadArray ( iElemSize, szWhat, &uCount, ppData );
+}
+
+
+template<typename T>
+static T ReadUnaligned ( const BYTE * pData, DWORD uIndex )
+{
+	T tValue;
+	memcpy ( &tValue, pData+size_t(uIndex)*sizeof(T), sizeof(T) );
+	return tValue;
+}
+
+
+template<typename T>
+static bool CheckColumnarOffsets ( const BYTE * pOffsets, DWORD uOffsets, DWORD uRows, DWORD uValues, const char * szWhat )
+{
+	if ( uOffsets!=uRows )
+		return TlsMsg::Err ( "replication RT transaction %s count mismatch: got %u, expected %u", szWhat, uOffsets, uRows );
+	T iPrevious = 0;
+	for ( DWORD i=0; i<uOffsets; ++i )
+	{
+		const T iOffset = ReadUnaligned<T> ( pOffsets, i );
+		if ( iOffset<iPrevious || iOffset<0 || uint64_t(iOffset)>uValues )
+			return TlsMsg::Err ( "replication RT transaction %s has invalid offset at row %u", szWhat, i );
+		iPrevious = iOffset;
+	}
+	if ( uint64_t(iPrevious)!=uValues )
+		return TlsMsg::Err ( "replication RT transaction %s terminal offset mismatch: got " INT64_FMT ", expected %u", szWhat, int64_t(iPrevious), uValues );
+	return true;
+}
+
+
+static bool PreflightColumnar ( RtTrxPreflight_c & tReader, DWORD uRows, const CSphSchema & tSchema )
+{
+	DWORD uAttrs = 0;
+	if ( !tReader.Read ( uAttrs, "columnar attribute count" ) )
+		return false;
+	if ( uAttrs!=DWORD(tSchema.GetColumnarAttrsCount()) )
+		return TlsMsg::Err ( "replication RT transaction columnar attribute count mismatch: got %u, expected %d", uAttrs, tSchema.GetColumnarAttrsCount() );
+	if ( uAttrs>DWORD(std::numeric_limits<int>::max()) || uAttrs>DWORD(tReader.Remaining()/int(sizeof(DWORD))) )
+		return TlsMsg::Err ( "replication RT transaction columnar attribute count is too large: %u", uAttrs );
+
+	int iSchemaAttr = 0;
+	for ( DWORD uAttr=0; uAttr<uAttrs; ++uAttr )
+	{
+		while ( !tSchema.GetAttr(iSchemaAttr).IsColumnar() )
+			++iSchemaAttr;
+		const CSphColumnInfo & tSchemaAttr = tSchema.GetAttr(iSchemaAttr++);
+		DWORD uType = 0;
+		if ( !tReader.Read ( uType, "columnar attribute type" ) )
+			return false;
+		if ( ESphAttr(uType)!=tSchemaAttr.m_eAttrType )
+			return TlsMsg::Err ( "replication RT transaction columnar attribute %u type mismatch: got %u, expected %u", uAttr, uType, DWORD(tSchemaAttr.m_eAttrType) );
+		DWORD uValues = 0;
+		const BYTE * pValues = nullptr;
+		switch ( (ESphAttr)uType )
+		{
+		case SPH_ATTR_INTEGER:
+		case SPH_ATTR_TIMESTAMP:
+		case SPH_ATTR_FLOAT:
+		case SPH_ATTR_TOKENCOUNT:
+		{
+			SphOffset_t uMask = 0;
+			if ( !tReader.Read ( uMask, "columnar attribute mask" ) || !PreflightColumnarArray ( tReader, sizeof(DWORD), "columnar values", uValues ) )
+				return false;
+			const int iBits = tSchemaAttr.m_tLocator.m_iBitCount;
+			const SphOffset_t uExpectedMask = iBits==64 ? SphOffset_t(-1) : ( SphOffset_t(1)<<iBits )-1;
+			if ( uMask!=uExpectedMask )
+				return TlsMsg::Err ( "replication RT transaction columnar attribute %u mask mismatch", uAttr );
+			if ( uValues!=uRows )
+				return TlsMsg::Err ( "replication RT transaction columnar values count mismatch: got %u, expected %u", uValues, uRows );
+			break;
+		}
+		case SPH_ATTR_BOOL:
+		{
+			SphOffset_t uMask = 0;
+			if ( !tReader.Read ( uMask, "columnar attribute mask" ) || !PreflightColumnarArray ( tReader, sizeof(BYTE), "columnar bool values", uValues, &pValues ) )
+				return false;
+			if ( uMask!=1 )
+				return TlsMsg::Err ( "replication RT transaction columnar bool mask mismatch" );
+			if ( uValues!=uRows )
+				return TlsMsg::Err ( "replication RT transaction columnar bool values count mismatch: got %u, expected %u", uValues, uRows );
+			for ( DWORD i=0; i<uValues; ++i )
+				if ( pValues[i]>1 )
+					return TlsMsg::Err ( "replication RT transaction columnar bool value is invalid at row %u", i );
+			break;
+		}
+		case SPH_ATTR_BIGINT:
+		{
+			SphOffset_t uMask = 0;
+			if ( !tReader.Read ( uMask, "columnar attribute mask" ) || !PreflightColumnarArray ( tReader, sizeof(int64_t), "columnar bigint values", uValues ) )
+				return false;
+			const int iBits = tSchemaAttr.m_tLocator.m_iBitCount;
+			const SphOffset_t uExpectedMask = iBits==64 ? SphOffset_t(-1) : ( SphOffset_t(1)<<iBits )-1;
+			if ( uMask!=uExpectedMask )
+				return TlsMsg::Err ( "replication RT transaction columnar bigint mask mismatch" );
+			if ( uValues!=uRows )
+				return TlsMsg::Err ( "replication RT transaction columnar bigint values count mismatch: got %u, expected %u", uValues, uRows );
+			break;
+		}
+		case SPH_ATTR_STRING:
+		{
+			DWORD uOffsets = 0;
+			const BYTE * pOffsets = nullptr;
+			if ( !PreflightColumnarArray ( tReader, sizeof(int64_t), "columnar string offsets", uOffsets, &pOffsets ) || !PreflightColumnarArray ( tReader, sizeof(BYTE), "columnar string data", uValues ) )
+				return false;
+			if ( !CheckColumnarOffsets<int64_t> ( pOffsets, uOffsets, uRows, uValues, "columnar string offsets" ) )
+				return false;
+			break;
+		}
+		case SPH_ATTR_UINT32SET:
+		case SPH_ATTR_FLOAT_VECTOR:
+		case SPH_ATTR_FLOAT_VECTOR_ARRAY:
+		{
+			DWORD uOffsets = 0;
+			const BYTE * pOffsets = nullptr;
+			if ( !PreflightColumnarArray ( tReader, sizeof(int), "columnar MVA offsets", uOffsets, &pOffsets ) || !PreflightColumnarArray ( tReader, sizeof(DWORD), "columnar MVA values", uValues ) )
+				return false;
+			if ( !CheckColumnarOffsets<int> ( pOffsets, uOffsets, uRows, uValues, "columnar MVA offsets" ) )
+				return false;
+			break;
+		}
+		case SPH_ATTR_INT64SET:
+		{
+			DWORD uOffsets = 0;
+			const BYTE * pOffsets = nullptr;
+			if ( !PreflightColumnarArray ( tReader, sizeof(int), "columnar MVA offsets", uOffsets, &pOffsets ) || !PreflightColumnarArray ( tReader, sizeof(int64_t), "columnar MVA values", uValues ) )
+				return false;
+			if ( !CheckColumnarOffsets<int> ( pOffsets, uOffsets, uRows, uValues, "columnar MVA offsets" ) )
+				return false;
+			break;
+		}
+		default:
+			return TlsMsg::Err ( "replication RT transaction has invalid columnar attribute type %u", uType );
+		}
+	}
+	return true;
+}
+
+
+static bool CheckNormCounts ( DWORD uRows, const CSphSchema * pSchema, DWORD uCount, bool bWireCount )
+{
+	if ( !pSchema && uRows )
+		return TlsMsg::Err ( "schema-less replication RT transaction has %u documents", uRows );
+
+	const uint64_t uFields = pSchema ? pSchema->GetFieldsCount() : 0;
+	if ( uFields && uint64_t(uRows)>std::numeric_limits<DWORD>::max()/uFields )
+		return TlsMsg::Err ( "replication RT transaction norms count overflow: rows=%u, fields=" UINT64_FMT, uRows, uFields );
+
+	const uint64_t uExpected = uint64_t(uRows)*uFields;
+	if ( bWireCount && uExpected!=uCount )
+		return TlsMsg::Err ( "replication RT transaction norms count mismatch: got %u, expected " UINT64_FMT " (rows=%u, fields=" UINT64_FMT ")", uCount, uExpected, uRows, uFields );
+	if ( uExpected>uint64_t(std::numeric_limits<int>::max())/sizeof(DWORD) )
+		return TlsMsg::Err ( "replication RT transaction norms size exceeds reader limit: count=" UINT64_FMT, uExpected );
+
+	RtFieldNorms_c tNorms;
+	if ( pSchema )
+		tNorms.Reset ( *pSchema );
+	const uint64_t uDenseCount = uint64_t(uRows)*tNorms.DenseFields();
+	if ( uDenseCount>uint64_t(std::numeric_limits<int>::max())/sizeof(DWORD) )
+		return TlsMsg::Err ( "replication RT transaction dense norms size exceeds reader limit: rows=%u, fields=%d", uRows, tNorms.DenseFields() );
+	return true;
+}
+
+
+static bool ValidatePackedKeyword ( const BYTE * pPacked, DWORD uPacked, SphWordID_t uWordID, DictFormat_e eDictFormat, DWORD uHit )
+{
+	if ( eDictFormat==DictFormat_e::CRC )
+		return true;
+	if ( uWordID>=uPacked )
+		return TlsMsg::Err ( "replication RT transaction hit %u has packed-keyword offset " UINT64_FMT " outside %u-byte payload", uHit, uint64_t(uWordID), uPacked );
+
+	const BYTE * pCur = pPacked+uWordID;
+	const BYTE * pEnd = pPacked+uPacked;
+	DWORD uLength = 0;
+	if ( eDictFormat==DictFormat_e::KEYWORDS )
+	{
+		uLength = *pCur++;
+		if ( !uLength || uLength>=SPH_MAX_KEYWORD_LEN )
+			return TlsMsg::Err ( "replication RT transaction hit %u has invalid legacy packed-keyword length %u", uHit, uLength );
+	}
+	else if ( eDictFormat==DictFormat_e::KEYWORDS_V2 )
+	{
+		int iShift = 0;
+		bool bDone = false;
+		for ( int i=0; i<5 && pCur<pEnd; ++i, iShift+=7 )
+		{
+			const BYTE uByte = *pCur++;
+			if ( i==4 && ( uByte & 0xf0 ) )
+				return TlsMsg::Err ( "replication RT transaction hit %u has overflowing packed-keyword length prefix", uHit );
+			uLength |= DWORD(uByte & 0x7f) << iShift;
+			if ( !( uByte & 0x80 ) )
+			{
+				bDone = true;
+				break;
+			}
+		}
+		if ( !bDone )
+			return TlsMsg::Err ( "replication RT transaction hit %u has truncated packed-keyword length prefix", uHit );
+		if ( !uLength || uLength>DWORD(GetKeywordMaxStoredBytes(DictFormat_e::KEYWORDS_V2)) )
+			return TlsMsg::Err ( "replication RT transaction hit %u has invalid keywords_32k packed-keyword length %u", uHit, uLength );
+	}
+	else
+		return TlsMsg::Err ( "replication RT transaction has unsupported dictionary format %d", int(eDictFormat) );
+
+	if ( size_t(pEnd-pCur)<uLength )
+		return TlsMsg::Err ( "replication RT transaction hit %u packed-keyword record overruns payload", uHit );
+	return true;
+}
+
+
+template<typename T>
+static bool ReadBlobLength ( const BYTE * pRow, size_t iRemaining, int iAttr, T & uValue )
+{
+	const size_t iOffset = 1+size_t(iAttr)*sizeof(T);
+	if ( iOffset+sizeof(T)>iRemaining )
+		return false;
+	memcpy ( &uValue, pRow+iOffset, sizeof(T) );
+	return true;
+}
+
+
+bool ValidateRtBlobRows ( const BYTE * pRows, DWORD uRows, const BYTE * pBlobs, DWORD uBlobs, const CSphSchema & tSchema )
+{
+	int iBlobAttrs = 0;
+	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
+		iBlobAttrs += sphIsBlobAttr ( tSchema.GetAttr(i) );
+	if ( !iBlobAttrs )
+		return !uBlobs || TlsMsg::Err ( "replication RT transaction has %u unexpected blob bytes for a schema without rowwise blob attributes", uBlobs );
+
+	const CSphColumnInfo * pBlobLocator = tSchema.GetAttr ( sphGetBlobLocatorName() );
+	if ( !pBlobLocator )
+		return TlsMsg::Err ( "replication RT target schema has rowwise blob attributes but no blob locator" );
+	if ( !uRows )
+		return !uBlobs || TlsMsg::Err ( "replication RT transaction has blob bytes without documents" );
+
+	CSphFixedVector<CSphRowitem> dRow ( tSchema.GetRowSize() );
+	auto fnRowOffset = [&] ( DWORD uRow )
+	{
+		memcpy ( dRow.Begin(), pRows+uint64_t(uRow)*tSchema.GetRowSize()*sizeof(CSphRowitem), dRow.GetLengthBytes() );
+		return uint64_t ( sphGetRowAttr ( dRow.Begin(), pBlobLocator->m_tLocator ) );
+	};
+	uint64_t uPreviousOffset = UINT64_MAX;
+	for ( DWORD uRow=0; uRow<uRows; ++uRow )
+	{
+		const uint64_t uOffset = fnRowOffset ( uRow );
+		if ( uOffset>=uBlobs )
+			return TlsMsg::Err ( "replication RT transaction row %u has invalid blob locator " UINT64_FMT " (pool %u)", uRow, uOffset, uBlobs );
+		if ( uPreviousOffset!=UINT64_MAX && uOffset<=uPreviousOffset )
+			return TlsMsg::Err ( "replication RT transaction row %u has non-increasing blob locator " UINT64_FMT, uRow, uOffset );
+		uPreviousOffset = uOffset;
+	}
+
+	// Duplicate document IDs are removed from the row array before a replicated
+	// transaction is serialized, but their blob records can remain in the pool.
+	// Validate every pool record and require each surviving row locator to point
+	// at a real record boundary. Requiring a packed one-record-per-row pool
+	// rejects valid duplicate-removal transactions.
+	DWORD uReferencedRow = 0;
+	uint64_t uPoolOffset = 0;
+	while ( uPoolOffset<uBlobs )
+	{
+		if ( uReferencedRow<uRows )
+		{
+			const uint64_t uReferencedOffset = fnRowOffset ( uReferencedRow );
+			if ( uPoolOffset==uReferencedOffset )
+				++uReferencedRow;
+			else if ( uPoolOffset>uReferencedOffset )
+				return TlsMsg::Err ( "replication RT transaction row %u blob locator " UINT64_FMT " is not a record boundary", uReferencedRow, uReferencedOffset );
+		}
+		const BYTE * pBlobRow = pBlobs+uPoolOffset;
+		const size_t iRemaining = uBlobs-size_t(uPoolOffset);
+		const BYTE uKind = pBlobRow[0];
+		const size_t iWidth = uKind==0 ? 1 : ( uKind==1 ? 2 : ( uKind==2 ? 4 : 0 ) );
+		if ( !iWidth )
+			return TlsMsg::Err ( "replication RT transaction blob record at " UINT64_FMT " has invalid length format %u", uPoolOffset, uKind );
+		const size_t iHeader = 1+size_t(iBlobAttrs)*iWidth;
+		if ( iHeader>iRemaining )
+			return TlsMsg::Err ( "replication RT transaction blob record at " UINT64_FMT " has a header that overruns the pool", uPoolOffset );
+
+		uint64_t uPrevious = 0;
+		for ( int iAttr=0; iAttr<iBlobAttrs; ++iAttr )
+		{
+			uint64_t uEnd = 0;
+			if ( iWidth==1 ) { BYTE u=0; ReadBlobLength ( pBlobRow, iRemaining, iAttr, u ); uEnd=u; }
+			else if ( iWidth==2 ) { WORD u=0; ReadBlobLength ( pBlobRow, iRemaining, iAttr, u ); uEnd=u; }
+			else { DWORD u=0; ReadBlobLength ( pBlobRow, iRemaining, iAttr, u ); uEnd=u; }
+			if ( uEnd<uPrevious || uEnd>iRemaining-iHeader )
+				return TlsMsg::Err ( "replication RT transaction blob record at " UINT64_FMT " attribute %d has invalid end offset " UINT64_FMT, uPoolOffset, iAttr, uEnd );
+			uPrevious = uEnd;
+		}
+		uPoolOffset += iHeader+uPrevious;
+	}
+	if ( uPoolOffset!=uBlobs )
+		return TlsMsg::Err ( "replication RT transaction blob record overruns pool: validated " UINT64_FMT " of %u", uPoolOffset, uBlobs );
+	if ( uReferencedRow!=uRows )
+		return TlsMsg::Err ( "replication RT transaction row %u blob locator " UINT64_FMT " is not a record boundary", uReferencedRow, fnRowOffset(uReferencedRow) );
+	return true;
+}
+
+
+static bool PreflightRtTrx ( ByteBlob_t tTrx, DWORD uVer, const CSphSchema * pSchema, DictFormat_e eDictFormat )
+{
+	if ( tTrx.second<0 )
+		return TlsMsg::Err ( "replication RT transaction has invalid length %d", tTrx.second );
+	if ( tTrx.second && !tTrx.first )
+		return TlsMsg::Err ( "replication RT transaction has no data" );
+
+	RtTrxPreflight_c tReader ( tTrx );
+	BYTE uReplace = 0;
+	DWORD uRows = 0;
+	int64_t iBytes = 0;
+	if ( !tReader.Read ( uReplace, "header" ) || !tReader.Read ( uRows, "document count" ) || ( uVer>=0x106 && !tReader.Read ( iBytes, "accumulated byte count" ) ) )
+		return false;
+	if ( uReplace>1 )
+		return TlsMsg::Err ( "replication RT transaction has invalid replace flag %u", uReplace );
+	if ( uRows && !pSchema )
+		return TlsMsg::Err ( "schema-less replication RT transaction has %u documents", uRows );
+
+	DWORD uHits = 0;
+	if ( !tReader.Read ( uHits, "hit count" ) )
+		return false;
+	constexpr size_t HIT_BYTES = sizeof(RowID_t)+sizeof(SphWordID_t)+sizeof(DWORD);
+	if ( uHits>DWORD(std::numeric_limits<int>::max()) || uHits>size_t(std::numeric_limits<int>::max())/HIT_BYTES )
+		return TlsMsg::Err ( "replication RT transaction hit count is too large or truncated: %u", uHits );
+	const BYTE * pHits = tReader.Current();
+	for ( DWORD i=0; i<uHits; ++i )
+	{
+		RowID_t tRowID = 0;
+		SphWordID_t uWordID = 0;
+		DWORD uWordPos = 0;
+		if ( !tReader.Read ( tRowID, "hit row id" ) || !tReader.Read ( uWordID, "hit word id" ) || !tReader.Read ( uWordPos, "hit word position" ) )
+			return false;
+		if ( tRowID>=uRows )
+			return TlsMsg::Err ( "replication RT transaction hit %u has invalid row id %u for %u documents", i, tRowID, uRows );
+		if ( pSchema && uWordPos!=EMPTY_HIT )
+		{
+			const int iField = HITMAN::GetField ( uWordPos );
+			if ( iField>=pSchema->GetFieldsCount() )
+				return TlsMsg::Err ( "replication RT transaction hit %u references missing field %d", i, iField );
+			if ( !( pSchema->GetField(iField).m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED ) )
+				return TlsMsg::Err ( "replication RT transaction hit %u references non-indexed field %d", i, iField );
+		}
+	}
+
+	DWORD uRowItems = 0;
+	const BYTE * pRows = nullptr;
+	if ( !tReader.ReadArray ( sizeof(CSphRowitem), "accumulator rows", &uRowItems, &pRows ) )
+		return false;
+	const uint64_t uExpectedRows = uint64_t(uRows)*( pSchema ? pSchema->GetRowSize() : 0 );
+	if ( uExpectedRows>std::numeric_limits<DWORD>::max() || uExpectedRows>uint64_t(std::numeric_limits<int>::max())/sizeof(CSphRowitem) )
+		return TlsMsg::Err ( "replication RT transaction accumulator row count overflow: rows=%u, row_size=%d", uRows, pSchema ? pSchema->GetRowSize() : 0 );
+	if ( uRowItems!=uExpectedRows )
+		return TlsMsg::Err ( "replication RT transaction accumulator row item count mismatch: got %u, expected " UINT64_FMT, uRowItems, uExpectedRows );
+	if ( uVer>=0x10C )
+	{
+		DWORD uNorms = 0;
+		if ( !tReader.Read ( uNorms, "norm count" ) || !CheckNormCounts ( uRows, pSchema, uNorms, true ) || !tReader.Skip ( size_t(uNorms)*sizeof(DWORD), "norms" ) )
+			return false;
+	}
+	else if ( !CheckNormCounts ( uRows, pSchema, 0, false ) )
+		return false;
+
+	DWORD uBlobs = 0;
+	const BYTE * pBlobs = nullptr;
+	DWORD uPerDoc = 0;
+	const BYTE * pPerDoc = nullptr;
+	DWORD uPacked = 0;
+	const BYTE * pPacked = nullptr;
+	if ( !tReader.ReadArray ( sizeof(BYTE), "blobs", &uBlobs, &pBlobs ) || !tReader.ReadArray ( sizeof(DWORD), "per-document hit counts", &uPerDoc, &pPerDoc ) || !tReader.ReadArray ( sizeof(BYTE), "packed keywords", &uPacked, &pPacked ) )
+		return false;
+	if ( pSchema && !ValidateRtBlobRows ( pRows, uRows, pBlobs, uBlobs, *pSchema ) )
+		return false;
+	for ( DWORD i=0; i<uHits; ++i )
+	{
+		SphWordID_t uWordID = 0;
+		memcpy ( &uWordID, pHits+size_t(i)*HIT_BYTES+sizeof(RowID_t), sizeof(uWordID) );
+		if ( !ValidatePackedKeyword ( pPacked, uPacked, uWordID, eDictFormat, i ) )
+			return false;
+	}
+	if ( eDictFormat==DictFormat_e::CRC && uPacked )
+		return TlsMsg::Err ( "replication RT transaction has %u packed-keyword bytes for CRC dictionary", uPacked );
+	if ( eDictFormat!=DictFormat_e::CRC && uHits && !uPacked )
+		return TlsMsg::Err ( "replication RT transaction is missing packed-keyword payload" );
+	if ( uPerDoc!=uRows )
+		return TlsMsg::Err ( "replication RT transaction per-document hit count length mismatch: got %u, expected %u", uPerDoc, uRows );
+	uint64_t uPerDocHits = 0;
+	for ( DWORD uRow=0; uRow<uRows; ++uRow )
+	{
+		const DWORD uCount = ReadUnaligned<DWORD> ( pPerDoc, uRow );
+		if ( uCount>uint64_t(uHits)-uPerDocHits )
+			return TlsMsg::Err ( "replication RT transaction per-document hit counts exceed total at row %u", uRow );
+		uPerDocHits += uCount;
+	}
+	if ( uPerDocHits!=uHits )
+		return TlsMsg::Err ( "replication RT transaction per-document hit counts total " UINT64_FMT " does not match hit count %u", uPerDocHits, uHits );
+
+	BYTE uHaveDocstore = 0;
+	if ( !tReader.Read ( uHaveDocstore, "docstore flag" ) )
+		return false;
+	if ( uHaveDocstore>1 )
+		return TlsMsg::Err ( "replication RT transaction has invalid docstore flag %u", uHaveDocstore );
+	const bool bNeedDocstore = uRows && pSchema && ( pSchema->HasStoredFields() || pSchema->HasStoredAttrs() );
+	if ( bool(uHaveDocstore)!=bNeedDocstore )
+		return TlsMsg::Err ( "replication RT transaction has %s docstore for target schema", uHaveDocstore ? "unexpected" : "missing" );
+	if ( uHaveDocstore && !PreflightDocstore ( tReader, uRows, *pSchema ) )
+		return false;
+	BYTE uHaveColumnar = 0;
+	if ( !tReader.Read ( uHaveColumnar, "columnar flag" ) )
+		return false;
+	if ( uHaveColumnar>1 )
+		return TlsMsg::Err ( "replication RT transaction has invalid columnar flag %u", uHaveColumnar );
+	const bool bNeedColumnar = pSchema && pSchema->HasColumnarAttrs();
+	if ( bool(uHaveColumnar)!=bNeedColumnar )
+		return TlsMsg::Err ( "replication RT transaction has %s columnar storage for target schema", uHaveColumnar ? "unexpected" : "missing" );
+	if ( uHaveColumnar && !PreflightColumnar ( tReader, uRows, *pSchema ) )
+		return false;
+	if ( !tReader.ReadArray ( sizeof(DocID_t), "kill list" ) )
+		return false;
+	if ( tReader.Remaining() )
+		return TlsMsg::Err ( "replication RT transaction has %d trailing bytes", tReader.Remaining() );
+	return true;
+}
+
+
+static bool LoadSchemaNorms ( MemoryReader_c & tReader, CSphTightVector<DWORD> & dNorms, DWORD uRows, const CSphSchema * pSchema )
+{
+	const DWORD uCount = tReader.GetDword();
+	if ( !CheckNormCounts ( uRows, pSchema, uCount, true ) )
+		return false;
+
+	CSphTightVector<DWORD> dSchemaNorms;
+	dSchemaNorms.Resize ( uCount );
+	if ( uCount )
+		tReader.GetBytes ( dSchemaNorms.Begin(), int64_t(uCount)*sizeof(DWORD) );
+
+	RtFieldNorms_c tNorms;
+	if ( pSchema )
+		tNorms.Reset ( *pSchema );
+	CSphTightVector<DWORD> dDense;
+	dDense.Resize ( int64_t(uRows)*tNorms.DenseFields() );
+	if ( tNorms.DenseFields() )
+		for ( DWORD uRow=0; uRow<uRows; ++uRow )
+			tNorms.Compact ( dSchemaNorms.Begin()+int64_t(uRow)*tNorms.Fields(), dDense.Begin()+int64_t(uRow)*tNorms.DenseFields() );
+	dNorms.SwapData ( dDense );
+	return true;
+}
+
+
+static bool ValidateSchemaNorms ( const CSphTightVector<DWORD> & dNorms, DWORD uRows, const CSphSchema & tSchema )
+{
+	RtFieldNorms_c tNorms ( tSchema );
+	const uint64_t uSchemaCount = uint64_t(uRows)*tNorms.Fields();
+	if ( uSchemaCount>std::numeric_limits<DWORD>::max() )
+		return TlsMsg::Err ( "replication RT transaction schema norms count overflow: rows=%u, fields=%d", uRows, tNorms.Fields() );
+	if ( uSchemaCount>uint64_t(std::numeric_limits<int>::max())/sizeof(DWORD) )
+		return TlsMsg::Err ( "replication RT transaction schema norms size exceeds project limit: count=" UINT64_FMT, uSchemaCount );
+
+	const uint64_t uDenseCount = uint64_t(uRows)*tNorms.DenseFields();
+	if ( uDenseCount!=uint64_t(dNorms.GetLength64()) )
+		return TlsMsg::Err ( "replication RT transaction dense norms count mismatch: got " INT64_FMT ", expected " UINT64_FMT " (rows=%u, fields=%d)", dNorms.GetLength64(), uDenseCount, uRows, tNorms.DenseFields() );
+
+	if ( uint64_t(tNorms.Fields())>uint64_t(std::numeric_limits<int>::max())/sizeof(DWORD) )
+		return TlsMsg::Err ( "replication RT transaction schema norm row is too large: fields=%d", tNorms.Fields() );
+	if ( uDenseCount>uint64_t(std::numeric_limits<int>::max())/sizeof(DWORD) )
+		return TlsMsg::Err ( "replication RT transaction dense norms size exceeds project limit: count=" UINT64_FMT, uDenseCount );
+	return true;
+}
+
+
+static bool SaveSchemaNorms ( const CSphTightVector<DWORD> & dNorms, DWORD uRows, const CSphSchema & tSchema, MemoryWriter_c & tWriter )
+{
+	if ( !ValidateSchemaNorms ( dNorms, uRows, tSchema ) )
+		return false;
+
+	RtFieldNorms_c tNorms ( tSchema );
+	tWriter.PutDword ( DWORD(uint64_t(uRows)*tNorms.Fields()) );
+	CSphFixedVector<DWORD> dSchemaRow ( tNorms.Fields() );
+	for ( DWORD uRow=0; uRow<uRows && tNorms.Fields(); ++uRow )
+	{
+		const DWORD * pDenseRow = tNorms.DenseFields() ? dNorms.Begin()+int64_t(uRow)*tNorms.DenseFields() : nullptr;
+		tNorms.Expand ( pDenseRow, dSchemaRow.Begin() );
+		tWriter.PutBytes ( dSchemaRow.Begin(), dSchemaRow.GetLengthBytes() );
+	}
+	return true;
+}
+
+
+bool RtAccum_t::LoadRtTrx ( ByteBlob_t tTrx, DWORD uVer, const CSphSchema * pSchema, DictFormat_e eDictFormat )
+{
 	assert ( !m_pUuidRegistry );
 	assert ( m_dUuidLeases.IsEmpty() );
-	MemoryReader_c tReader ( tTrx );
-	m_bReplace = !!tReader.GetVal<BYTE>();
-	tReader.GetVal ( m_uAccumDocs );
-	if ( uVer>=0x106 )
-		tReader.GetVal ( m_iAccumBytes );
+	if ( !PreflightRtTrx ( tTrx, uVer, pSchema, eDictFormat ) )
+		return false;
 
-	// insert and replace
-	m_dAccum.Resize ( tReader.GetDword() );
-	for ( CSphWordHit& tHit : m_dAccum )
+	bool bReplace = false;
+	DWORD uAccumDocs = 0;
+	int64_t iAccumBytes = 0;
+	CSphTightVector<CSphWordHit> dAccum;
+	CSphTightVector<CSphRowitem> dAccumRows;
+	CSphTightVector<DWORD> dNorms;
+	CSphTightVector<BYTE> dBlobs;
+	CSphVector<DWORD> dPerDocHitsCount;
+	CSphFixedVector<BYTE> dPackedKeywords ( 0 );
+	std::unique_ptr<DocstoreRT_i> pDocstore;
+	std::unique_ptr<ColumnarBuilderRT_i> pColumnarBuilder;
+	CSphVector<DocID_t> dAccumKlist;
+
+	MemoryReader_c tReader ( tTrx );
+	bReplace = !!tReader.GetVal<BYTE>();
+	tReader.GetVal ( uAccumDocs );
+	if ( uVer>=0x106 )
+		tReader.GetVal ( iAccumBytes );
+
+	dAccum.Resize ( tReader.GetDword() );
+	for ( CSphWordHit & tHit : dAccum )
 	{
-		// such manual serialization is necessary because CSphWordHit is internally aligned by 8,
-		// and it's size is 3*8, however actually we have 4+8+4 bytes in members.
-		// Sending raw unitialized bytes is not ok, since it may influent crc checking.
 		tReader.GetVal ( tHit.m_tRowID );
 		tReader.GetVal ( tHit.m_uWordID );
 		tReader.GetVal ( tHit.m_uWordPos );
 	}
-	GetArray ( m_dAccumRows, tReader );
-	GetArray ( m_dBlobs, tReader );
-	GetArray ( m_dPerDocHitsCount, tReader );
+	GetArray ( dAccumRows, tReader );
+	if ( uVer>=0x10C )
+	{
+		if ( !LoadSchemaNorms ( tReader, dNorms, uAccumDocs, pSchema ) )
+			return false;
+	}
+	GetArray ( dBlobs, tReader );
+	GetArray ( dPerDocHitsCount, tReader );
 
-	m_dPackedKeywords.Reset ( tReader.GetDword() );
-	tReader.GetBytes ( m_dPackedKeywords.Begin(), (int)m_dPackedKeywords.GetLengthBytes() );
+	dPackedKeywords.Reset ( tReader.GetDword() );
+	tReader.GetBytes ( dPackedKeywords.Begin(), (int)dPackedKeywords.GetLengthBytes() );
 
 	if ( tReader.GetVal<BYTE>() )
 	{
-		if ( !m_pDocstore )
-			m_pDocstore = CreateDocstoreRT();
-		assert ( m_pDocstore );
-		m_pDocstore->Load ( tReader );
+		pDocstore = CreateDocstoreRT();
+		pDocstore->Load ( tReader );
+	}
+	if ( tReader.GetVal<BYTE>() )
+		pColumnarBuilder = CreateColumnarBuilderRT ( tReader );
+	GetArray ( dAccumKlist, tReader );
+
+	if ( uVer<0x10C )
+	{
+		RtFieldNorms_c tNorms;
+		if ( pSchema )
+			tNorms.Reset ( *pSchema );
+		dNorms.Resize ( int64_t(uAccumDocs)*tNorms.DenseFields() );
+		dNorms.ZeroVec(); // legacy replication payloads did not carry exact lengths
 	}
 
-	if ( tReader.GetVal<BYTE>() )
-		m_pColumnarBuilder = CreateColumnarBuilderRT ( tReader );
-
-	// delete
-	GetArray ( m_dAccumKlist, tReader );
+	ResetPreparedForCommit();
+	m_bReplace = bReplace;
+	m_uAccumDocs = uAccumDocs;
+	m_iAccumBytes = iAccumBytes;
+	m_dAccum.SwapData ( dAccum );
+	m_dAccumRows.SwapData ( dAccumRows );
+	m_dNorms.SwapData ( dNorms );
+	m_dBlobs.SwapData ( dBlobs );
+	m_dPerDocHitsCount.SwapData ( dPerDocHitsCount );
+	m_dPackedKeywords.SwapData ( dPackedKeywords );
+	m_pDocstore = std::move ( pDocstore );
+	m_pColumnarBuilder = std::move ( pColumnarBuilder );
+	m_dAccumKlist.SwapData ( dAccumKlist );
+	return true;
 }
 
-void RtAccum_t::SaveRtTrx ( MemoryWriter_c& tWriter ) const
+
+bool RtAccum_t::SaveRtTrx ( MemoryWriter_c& tWriter ) const
 {
+	const CSphSchema * pSchema = m_pIndex ? &m_pIndex->GetMatchSchema() : nullptr;
+	if ( !pSchema && ( m_uAccumDocs || !m_dNorms.IsEmpty() ) )
+		return TlsMsg::Err ( "schema-less replication RT transaction has %u documents and %d norms", m_uAccumDocs, m_dNorms.GetLength() );
+	if ( pSchema && !ValidateSchemaNorms ( m_dNorms, m_uAccumDocs, *pSchema ) )
+		return false;
+
 	tWriter.PutByte ( m_bReplace ); // this need only for data sort on commit
 	tWriter.PutDword ( m_uAccumDocs );
 	tWriter.PutVal ( m_iAccumBytes );
@@ -1237,6 +1949,13 @@ void RtAccum_t::SaveRtTrx ( MemoryWriter_c& tWriter ) const
 		tWriter.PutVal ( tHit.m_uWordPos );
 	}
 	SaveArray ( m_dAccumRows, tWriter );
+	if ( pSchema )
+	{
+		if ( !SaveSchemaNorms ( m_dNorms, m_uAccumDocs, *pSchema, tWriter ) )
+			return false;
+	}
+	else
+		tWriter.PutDword ( 0 );
 	SaveArray ( m_dBlobs, tWriter );
 	SaveArray ( m_dPerDocHitsCount, tWriter );
 
@@ -1255,4 +1974,5 @@ void RtAccum_t::SaveRtTrx ( MemoryWriter_c& tWriter ) const
 
 	// delete
 	SaveArray ( m_dAccumKlist, tWriter );
+	return true;
 }

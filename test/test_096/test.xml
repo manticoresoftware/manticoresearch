@@ -2,7 +2,7 @@
 <test>
 
 <name>attribute updates</name>
-<requires><non-columnar/></requires>
+<requires><non-columnar/><mode-specific-model/></requires>
 
 <config>
 indexer

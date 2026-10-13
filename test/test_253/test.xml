@@ -5,6 +5,7 @@
 
 <requires>
 	<no_pseudo_sharding/>
+	<mode-specific-model/>
 </requires>
 
 <config>

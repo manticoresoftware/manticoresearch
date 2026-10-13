@@ -2,6 +2,7 @@
 <test>
 
 <name>sorting</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

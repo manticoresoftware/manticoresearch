@@ -13,6 +13,7 @@
 #define _searchnode_
 
 #include "sphinxquery/sphinxquery.h"
+#include "exact_bm25a_utils.h"
 
 
 enum
@@ -92,10 +93,44 @@ public:
 	virtual void				DebugDump ( int iLevel ) = 0;
 	virtual bool				TimeExceeded() const = 0;
 	virtual int64_t				GetMaxTimeout() const = 0;
+	virtual bool					EnableE1Ranked() { return false; }
+	virtual bool					EnableE1BestFirst() { return false; }
+	virtual void					ConfigureE1TopK ( int ) {}
+	virtual void					SetRankThreshold ( int, uint64_t ) {}
+	virtual uint64_t				TakeRankSkippedDocs() { return 0; }
 };
 
 class RowidIterator_i;
 std::unique_ptr<ExtNode_i> CreatePseudoFTNode ( ExtNode_i * pNode, RowidIterator_i * pIterator );
+
+#if defined(MANTICORE_TEST)
+// Test-only statistics for verifying retained E1 ranked paths and generic fallback.
+struct E1TestRankStats_t
+{
+	E1RankedBoundKind_e m_eBoundKind = E1RankedBoundKind_e::NONE;
+	uint64_t m_uSelectedBlocks = 0;
+	uint64_t m_uSkippedBlocks = 0;
+	uint64_t m_uStrictScoreSkippedBlocks = 0;
+	uint64_t m_uEqualitySkippedBlocks = 0;
+	uint64_t m_uSkippedDocs = 0;
+	uint64_t m_uScoredDocs = 0;
+	bool m_bValidatedPublicID = false;
+	int m_iHeapWorstWeight = 0;
+	uint64_t m_uHeapWorstPublicID = UINT64_MAX;
+	int m_iConfiguredK = 0;
+	uint64_t m_uFallbacks = 0;
+	uint64_t m_uDirectAnd = 0;
+	uint64_t m_uDirectOr = 0;
+	uint64_t m_uDirectPhrase = 0;
+	uint64_t m_uDirectFilter = 0;
+};
+void SetE1TestForceGenericRanked ( bool bForce );
+void ResetE1TestRankStats ();
+E1TestRankStats_t GetE1TestRankStats ();
+void RecordE1TestHeapStats ( int iWorstWeight, uint64_t uWorstPublicID, int iConfiguredK );
+void RecordE1TestConfiguredK ( int iConfiguredK );
+void RecordE1TestHeapWorst ( int iWorstWeight, uint64_t uWorstPublicID );
+#endif
 
 class NodeCacheContainer_c;
 

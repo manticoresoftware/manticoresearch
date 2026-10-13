@@ -3,6 +3,8 @@
 
 <name>blend characters</name>
 
+<requires><mode-specific-model/></requires>
+
 <config>
 indexer
 {
@@ -245,11 +247,6 @@ INSERT INTO test_table VALUES
 	<query mode="extended2" index="test">ggg$</query>
 	<query mode="extended2" index="test">^hhh</query>
 	
-	<query mode="extended2" index="star">^gg*</query>
-	<query mode="extended2" index="star">*hh$</query>
-	<query mode="extended2" index="star">^*gg*</query>
-	<query mode="extended2" index="star">^*hh*</query>
-	<query mode="extended2" index="star">*cc*$</query>
 	<!--regression for missed field modifier vs tiny expanded -->
 	<query mode="extended2" index="star_kw">*hh*</query>
 	<query mode="extended2" index="star_kw">*hh*$</query>

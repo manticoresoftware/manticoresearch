@@ -1666,6 +1666,17 @@ function IsColumnar()
 	return $g_locals['columnar_mode'];
 }
 
+function ModelFileForMode ( $test_dir, $mode_specific )
+{
+	if ( !$mode_specific || !IsRt() )
+		return $test_dir."/model.bin";
+
+	if ( IsColumnar() )
+		return $test_dir."/model.mcl.bin";
+
+	return $test_dir.( IsRtIndexer() ? "/model.rt-indexer.bin" : "/model.rt.bin" );
+}
+
 
 class SphinxConfig
 {
@@ -3201,7 +3212,7 @@ class SphinxConfig
 					if ( empty($this->_query_settings) )
 					{
 						if ( @$qinfo["mode"] )		$cl->SetMatchMode ( $qinfo["mode"] );
-						if ( @$qinfo["ranker"] )	$cl->SetRankingMode ( $qinfo["ranker"] );
+						if ( @$qinfo["ranker_s"]!="(default)" )	$cl->SetRankingMode ( $qinfo["ranker"] );
 						if ( @$qinfo["sortmode"] )	$cl->SetSortMode ( $qinfo["sortmode"], $qinfo["sortby"] );
 						if ( @$qinfo["groupattr"] )	$cl->SetGroupBy ( $qinfo["groupattr"], $qinfo["groupfunc"], $qinfo["groupsort"] );
 						if ( @$qinfo["groupdistinct"] )	$cl->SetGroupDistinct ( $qinfo["groupdistinct"] );
@@ -4975,34 +4986,40 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 
 	$res_path = resdir($test_dir);
 
-	$model_file = $test_dir."/model.bin";
 	$conf_dir 	= $res_path."/Conf";
 
 
 	$config = new SphinxConfig;
+	$config->SetTestDir ( getcwd()."/".$test_dir );
+
+	if ( !$config->Load ( $test_dir."/test.xml" ) )
+		return;
+
+	$mode_specific_model = $config->Requires("mode-specific-model");
+	$model_file = ModelFileForMode ( $test_dir, $mode_specific_model );
+	$prefix = sprintf ( "testing %s, %s...", $test_dir, $config->Name () );
+
+	if ( !CheckConfig ( $config, $test_dir ) )
+		return array ( "tests_total"=>0, "tests_failed"=>0, "tests_skipped"=>1 );
+
 	$lmodel = $config->LoadModel ( $model_file );
 	$isdemo = false;
 	$error = "";
 
 	if ( $lmodel==-1 )
 	{
+		if ( $mode_specific_model )
+		{
+			printf ( "$prefix FAILED, required model %s is missing\n", basename($model_file) );
+			return;
+		}
 		if ( $skipdemo )
 		{
-			printf ( "Skipping %s, - this is demo or bugreport (no model.bin file)\n", $test_dir );
+			printf ( "Skipping %s, - this is demo or bugreport (no %s file)\n", $test_dir, basename($model_file) );
 			return array ( "tests_total"=>0, "tests_failed"=>0, "tests_skipped"=>1 );
 		}
 		$isdemo = true;
 	}
-
-	$config->SetTestDir ( getcwd()."/".$test_dir );
-
-	if ( !$config->Load ( $test_dir."/test.xml" ) )
-		return;
-
-	$prefix = sprintf ( "testing %s, %s...", $test_dir, $config->Name () );
-
-	if ( !CheckConfig ( $config, $test_dir ) )
-		return array ( "tests_total"=>0, "tests_failed"=>0, "tests_skipped"=>1 );
 
 	if ( $lmodel==0 )
 	{

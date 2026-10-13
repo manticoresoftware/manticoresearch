@@ -81,6 +81,7 @@ public:
 
 	/// get total count of non-duplicates Push()ed through this queue
 	virtual int64_t		GetTotalCount() const = 0;
+	virtual void			AddToTotalCount ( int64_t ) {}
 
 	/// process collected entries up to length count
 	virtual void		Finalize ( MatchProcessor_i & tProcessor, bool bCallProcessInResultSetOrder, bool bFinalizeMatches ) = 0;

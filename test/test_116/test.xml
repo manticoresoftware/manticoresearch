@@ -2,6 +2,7 @@
 <test>
 
 <name>Bound cases of the proximity node</name>
+<requires><mode-specific-model/></requires>
 
 <config>
 indexer

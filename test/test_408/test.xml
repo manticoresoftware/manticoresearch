@@ -6,6 +6,7 @@
 <requires>
     <lemmatizer_base/>
     <force-rt/>
+    <mode-specific-model/>
 </requires>
 <skip_indexer/>
 

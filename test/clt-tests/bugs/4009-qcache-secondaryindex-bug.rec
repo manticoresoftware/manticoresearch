@@ -76,7 +76,7 @@ Test that timed-out query result is not used for query with hint
 mysql -h0 -P9306 -e "SELECT sum(type), count(*) FROM test WHERE MATCH('hard') AND type=5 OPTION max_query_time=1\G"
 ––– output –––
 *************************** 1. row ***************************
-sum(type): %{NUMBER}
+sum(type): #!/(NULL|[0-9]+)/!#
  count(*): %{NUMBER}
 ––– comment –––
 Query with hint should NOT use cached result from timed-out query

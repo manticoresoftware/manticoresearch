@@ -2,6 +2,7 @@
 
 <test>
 <name>xmlpipe2 indexing vs prefix search</name>
+<requires><mode-specific-model/></requires>
 <skip_db/>
 <config>
 indexer

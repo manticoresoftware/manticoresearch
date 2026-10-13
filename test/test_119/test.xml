@@ -2,7 +2,7 @@
 <test>
 <name>select expressions vs eval stages</name>
 
-<requires> <variant_match /> </requires>
+<requires> <variant_match /> <mode-specific-model/></requires>
 
 <config>
 indexer

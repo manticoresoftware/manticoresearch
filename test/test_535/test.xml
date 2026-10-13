@@ -2,7 +2,7 @@
 <test>
 <name>JSON highlight query_string escaping (issues #4905, #4906)</name>
 <skip_indexer/>
-<requires><http/><force-rt/></requires>
+<requires><http/><force-rt/><mode-specific-model/></requires>
 <config>
 searchd
 {

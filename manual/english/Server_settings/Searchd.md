@@ -242,7 +242,7 @@ This setting controls how many RT disk chunks are merged in a single OPTIMIZE jo
 
 Lower values allow more jobs to be scheduled in parallel; higher values reduce the number of jobs but increase the size of each merge.
 
-Default is `2`.
+Default is `2`. When this setting is not specified and every disk chunk uses the experimental postings format at the start of `OPTIMIZE`, Manticore automatically merges up to 6 chunks per job to avoid repeatedly rebuilding the postings container.
 
 This value can be changed at runtime using `SET GLOBAL merge_chunks_per_job = N` and inspected via `SHOW VARIABLES`.
 

@@ -119,7 +119,6 @@ private:
 
 // the docstore layout of a table is a pure function of its schema: stored fields, then stored attributes,
 // then one DOCSTORE_KNN_CHUNK_SPANS entry per vector attribute whose chunks are generated from text.
-// Chunks written before that last group existed (RAM chunks of meta version<25) use bWithChunkSpans=false
 struct DocstoreFieldDesc_t
 {
 	CSphString			m_sName;

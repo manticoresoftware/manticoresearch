@@ -339,9 +339,6 @@ bool AttrMerger_c::Impl_c::AnalyzeMixedAttributes ( const CSphIndex & tIndex, co
 		if ( m_tMonitor.NeedStop() )
 			return false;
 
-		// Training and storage must address the same destination row. Each input
-		// chunk has its own row map; a per-input compact counter aliases rows from
-		// later chunks and makes multi-vector counts disagree during OPTIMIZE.
 		BuildTrainKNN ( tRowID, tResultRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder );
 	}
 

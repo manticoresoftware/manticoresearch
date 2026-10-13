@@ -130,15 +130,10 @@ int64_t MysqlReadPackedInt ( InputBuffer_c& tIn )
 		}
 	case 0xFE:
 		{
-			iRes = tIn.GetByte();
-			iRes += tIn.GetByte() << 8;
-			iRes += tIn.GetByte() << 16;
-			iRes += tIn.GetByte() << 24;
-			iRes += int64_t ( tIn.GetByte() ) << 32;
-			iRes += int64_t ( tIn.GetByte() ) << 40;
-			iRes += int64_t ( tIn.GetByte() ) << 48;
-			iRes += int64_t ( tIn.GetByte() ) << 56;
-			return iRes;
+			if ( tIn.HasBytes()<8 )
+				return -1;
+			uint64_t uRes = tIn.GetLSBUint64();
+			return uRes>INT64_MAX ? -1 : int64_t ( uRes );
 		}
 	default:
 		return int64_t (uVal);
@@ -1808,8 +1803,10 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 		}
 		case MYSQL_COM_FIELD_LIST:
 		{
+			// Restrict the terminator search to this command, not following packets.
+			InputBuffer_c tPacket { tIn.GetBufferPtr(), iPacketLen-1 };
 			CSphString sTable;
-			if ( !MysqlReadSzStr ( tIn, sTable ) )
+			if ( !MysqlReadSzStr ( tPacket, sTable ) )
 			{
 				SendMysqlErrorPacket ( tOut, uPacketID, FROMS ( "malformed field list request" ), EMYSQL_ERR::UNKNOWN_COM_ERROR );
 				break;
@@ -2101,8 +2098,8 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			tSess.SetTaskState ( TaskState_e::HANDSHAKE );
 			HandshakeResponse41 tResponse ( *pIn, iPacketLen );
 
-			// A 32-byte SSLRequest is valid only before TLS is established.
-			if ( !tResponse.IsValid() || ( tSess.GetSsl() && iPacketLen==32 ) )
+			// SSLRequest is the only valid way to start TLS.
+			if ( !tResponse.IsValid() || ( tResponse.WantSSL() && !tSess.GetSsl() && iPacketLen!=32 ) || ( tSess.GetSsl() && iPacketLen==32 ) )
 			{
 				SendMysqlErrorPacket ( *pOut, uPacketID, FROMS ( "malformed MySQL handshake response" ), EMYSQL_ERR::UNKNOWN_COM_ERROR );
 				pOut->Flush ();

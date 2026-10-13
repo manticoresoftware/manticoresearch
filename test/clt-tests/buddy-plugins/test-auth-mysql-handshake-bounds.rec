@@ -58,6 +58,7 @@ cases = [
     ('no-protocol41', fixed_header(0) + b'admin\x00\x00'),
     ('unterminated-username', fixed_header() + b'admin-not-terminated'),
     ('unterminated-ssl-username', fixed_header(PROTOCOL_41 | SSL) + b'admin-not-terminated'),
+    ('unexpected-ssl-full-response', fixed_header(PROTOCOL_41 | SSL) + b'admin\x00\x00'),
     ('unterminated-database', fixed_header(PROTOCOL_41 | CONNECT_WITH_DB) + b'admin\x00\x00' + b'bad_db'),
     ('unterminated-plugin', fixed_header(PROTOCOL_41 | PLUGIN_AUTH) + b'admin\x00\x00' + b'bad_plugin'),
     ('short-auth-data', fixed_header() + b'admin\x00\x14abc'),
@@ -65,6 +66,8 @@ cases = [
     ('oversized-attributes', fixed_header(PROTOCOL_41 | CONNECT_ATTRS) + b'admin\x00\x00\x05abc'),
     ('bad-attribute-value', fixed_header(PROTOCOL_41 | CONNECT_ATTRS) + b'admin\x00\x00\x03\x01a\x05'),
     ('huge-attribute-value', fixed_header(PROTOCOL_41 | CONNECT_ATTRS) + b'admin\x00\x00\x0b\x01x\xfe' + struct.pack('<Q', 1 << 32)),
+    ('signed-overflow-attribute-value', fixed_header(PROTOCOL_41 | CONNECT_ATTRS) + b'admin\x00\x00\x0b\x01x\xfe' + struct.pack('<Q', 1 << 63)),
+    ('truncated-lenenc64-auth', fixed_header(PROTOCOL_41 | LENENC_AUTH) + b'admin\x00\xfe\x01\x00'),
 ]
 for name, payload in cases:
     check(name, payload)
@@ -74,6 +77,7 @@ short-fixed-header: rejected
 no-protocol41: rejected
 unterminated-username: rejected
 unterminated-ssl-username: rejected
+unexpected-ssl-full-response: rejected
 unterminated-database: rejected
 unterminated-plugin: rejected
 short-auth-data: rejected
@@ -81,6 +85,8 @@ oversized-lenenc-auth: rejected
 oversized-attributes: rejected
 bad-attribute-value: rejected
 huge-attribute-value: rejected
+signed-overflow-attribute-value: rejected
+truncated-lenenc64-auth: rejected
 ––– comment –––
 Ordinary authenticated MySQL clients must still connect and execute a query.
 ––– input –––

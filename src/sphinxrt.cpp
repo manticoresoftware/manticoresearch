@@ -26,6 +26,8 @@
 #include "killlist.h"
 #include "histogram.h"
 #include "accumulator.h"
+#include "sphinxexcerpt.h"
+#include "stripper/html_stripper.h"
 #include "indexcheck.h"
 #include "indexsettings.h"
 #include "indexformat.h"
@@ -2685,6 +2687,22 @@ bool RtIndex_c::AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphS
 
 	m_tSchema.CloneWholeMatch ( tSrc.m_tDocInfo, tDoc.m_tDoc );
 
+	// before the source strips the fields in place: the model gets the text prepared explicitly (field filter, then
+	// the index HTML stripper), the same way it is prepared for highlighting, so chunk offsets match the stored text
+	if ( m_pEmbeddings )
+	{
+		std::unique_ptr<CSphHTMLStripper> pEmbeddingsStripper;
+		if ( m_tSettings.m_bHtmlStrip )
+		{
+			pEmbeddingsStripper = CreateIndexHtmlStripper ( m_tSettings, sError );
+			if ( !pEmbeddingsStripper )
+				return false;
+		}
+
+		std::unique_ptr<ISphFieldFilter> pEmbeddingsFilter = m_pFieldFilter ? m_pFieldFilter->Clone() : nullptr;
+		pAcc->FetchEmbeddingsSrc ( tDoc, m_dAttrsWithModels, pEmbeddingsFilter.get(), pEmbeddingsStripper.get() );
+	}
+
 	bool bEOF = false;
 	if ( !tSrc.IterateStart ( sError ) || !tSrc.IterateDocument ( bEOF, sError ) )
 		return false;
@@ -2693,9 +2711,6 @@ bool RtIndex_c::AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphS
 	pAcc->GrabLastWarning ( sWarning );
 	if ( !tSrc.GetLastWarning().IsEmpty() )
 		sWarning = tSrc.GetLastWarning();
-
-	if ( m_pEmbeddings )
-		pAcc->FetchEmbeddingsSrc ( tDoc, m_dAttrsWithModels );
 
 	if ( !VerifyKNN ( tDoc, sError ) )
 		return false;

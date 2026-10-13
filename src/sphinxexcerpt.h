@@ -30,11 +30,17 @@ public:
 	virtual						~TextSource_i() {}
 
 	virtual bool				PrepareText ( ISphFieldFilter * pFilter, const CSphHTMLStripper * pStripper, bool bFilterCJK, CSphString & sError ) = 0;
+	virtual bool				IsPrepared() const { return false; }
 	virtual VecTraits_T<BYTE>	GetText ( int iField ) const = 0;
 	virtual int					GetNumFields() const = 0;
 	virtual const char *		GetFieldName ( int iField ) const = 0;
 	virtual bool				TextFromIndex() const = 0;
 	virtual const VecTraits_T<int> & GetSpaces ( int iField ) const = 0;
+
+	// narrow a field to a byte range of its PREPARED text (after the field filter and the stripper); applied by
+	// PrepareText, so it must be set before. A range that does not fit the prepared text leaves the field whole
+	virtual void				SetFieldRange ( int iField, int iStart, int iEnd ) {}
+	virtual bool				IsFieldRanged ( int iField ) const { return false; }
 };
 
 
@@ -120,6 +126,7 @@ public:
 						~SnippetBuilder_c();
 	void				Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery );
 	bool				SetQuery ( const CSphString & sQuery, bool bIgnoreFields, CSphString & sError );
+	bool				PrepareSource ( TextSource_i & tSource, CSphString & sError );	///< what Build() does to the text before highlighting it
 	bool				Build ( std::unique_ptr<TextSource_i>& pSource, SnippetResult_t & tRes );
 	CSphVector<BYTE>	PackResult ( SnippetResult_t & tRes, const VecTraits_T<int> & dRequestedFields ) const;
 	SnippetBuilder_c*	MakeClone() const;
@@ -141,6 +148,12 @@ struct FieldSource_t
 
 std::unique_ptr<TextSource_i>		CreateSnippetSource ( DWORD uFilesMode, const BYTE * pSource, int iLen );
 std::unique_ptr<TextSource_i>		CreateHighlightSource ( const CSphVector<FieldSource_t> & dAllFields );
+
+// the text a stored field turns into before it is highlighted in html_strip_mode=index: the field filter, then the
+// HTML stripper of the table (without the paragraph and zone markers indexing adds). Embeddings are generated from
+// the same text, which is what makes their chunk byte offsets usable for highlighting
+std::unique_ptr<CSphHTMLStripper>	CreateIndexHtmlStripper ( const CSphIndexSettings & tSettings, CSphString & sError );
+void								PrepareFieldText ( const VecTraits_T<const BYTE> & dSource, CSphVector<BYTE> & dPrepared, ISphFieldFilter * pFilter, const CSphHTMLStripper * pStripper );
 
 extern CSphString g_sSnippetsFilePrefix;
 

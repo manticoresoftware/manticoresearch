@@ -17,6 +17,7 @@
 #include "memio.h"
 #include "tracer.h"
 #include "indexsettings.h"
+#include "sphinxexcerpt.h"
 
 #include <memory>
 
@@ -650,16 +651,28 @@ static const char * FetchStringFromDoc ( int iAttr, const InsertDocData_c & tDoc
 }
 
 
-static CSphVector<char> ConcatFromFields ( const InsertDocData_c & tDoc, const AttrWithModel_t & tAttr, const ISphSchema & tSchema )
+// full-text fields feed the model as they are indexed and highlighted: after the field filter and the HTML stripper.
+// That keeps the chunk byte offsets the model reports usable against the stored text (see PrepareFieldText)
+static CSphVector<char> ConcatFromFields ( const InsertDocData_c & tDoc, const AttrWithModel_t & tAttr, const ISphSchema & tSchema, ISphFieldFilter * pFieldFilter, const CSphHTMLStripper * pStripper )
 {
 	CSphVector<char> dTmp;
+	CSphVector<BYTE> dPrepared;
 	ARRAY_FOREACH ( i, tAttr.m_dFrom )
 	{
 		auto tFrom = tAttr.m_dFrom[i];
 		int iAttrFieldId = tFrom.first;
 		VecTraits_T<const char> dSrc;
 		if ( tFrom.second )
-			dSrc = { tDoc.m_dFields[iAttrFieldId].Begin(), tDoc.m_dFields[iAttrFieldId].GetLength() };
+		{
+			const VecTraits_T<const char> & dField = tDoc.m_dFields[iAttrFieldId];
+			if ( pFieldFilter || pStripper )
+			{
+				PrepareFieldText ( { (const BYTE*)dField.Begin(), dField.GetLength() }, dPrepared, pFieldFilter, pStripper );
+				dSrc = { (const char*)dPrepared.Begin(), dPrepared.GetLength() };
+			}
+			else
+				dSrc = dField;
+		}
 		else
 		{
 			const char * szString = FetchStringFromDoc ( iAttrFieldId, tDoc, tSchema );
@@ -695,7 +708,7 @@ static bool IsDefaultEmbedding ( const InsertDocData_c & tDoc, const CSphColumnI
 }
 
 
-void RtAccum_t::FetchEmbeddingsSrc ( InsertDocData_c & tDoc, const CSphVector<AttrWithModel_t> & dAttrsWithModels )
+void RtAccum_t::FetchEmbeddingsSrc ( InsertDocData_c & tDoc, const CSphVector<AttrWithModel_t> & dAttrsWithModels, ISphFieldFilter * pFieldFilter, const CSphHTMLStripper * pStripper )
 {
 	if ( !m_pEmbeddingsSrc )
 	{
@@ -716,7 +729,7 @@ void RtAccum_t::FetchEmbeddingsSrc ( InsertDocData_c & tDoc, const CSphVector<At
 		if ( !tAttrWithModel.m_pModel )
 			continue;
 
-		auto dConcat = ConcatFromFields ( tDoc, tAttrWithModel, tSchema );
+		auto dConcat = ConcatFromFields ( tDoc, tAttrWithModel, tSchema, pFieldFilter, pStripper );
 		m_pEmbeddingsSrc->Add ( iAttrWithModel, dConcat, bDefault );
 		iAttrWithModel++;
 	}

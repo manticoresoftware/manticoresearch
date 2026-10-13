@@ -142,7 +142,8 @@ public:
 	void			SetupDict ( const RtIndex_i * pIndex, const DictRefPtr_c& pDict, DictFormat_e eDictFormat );
 	void			Sort();
 	bool			FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVector<AttrWithModel_t> & dAttrsWithModels, CSphString & sError );
-	void			FetchEmbeddingsSrc ( InsertDocData_c & tDoc, const CSphVector<AttrWithModel_t> & dAttrsWithModels );
+	// full-text sources are prepared like indexed text (field filter, then stripper) before they reach the model
+	void			FetchEmbeddingsSrc ( InsertDocData_c & tDoc, const CSphVector<AttrWithModel_t> & dAttrsWithModels, ISphFieldFilter * pFieldFilter, const CSphHTMLStripper * pStripper );
 
 	void			CleanupPart();
 	void			Cleanup();

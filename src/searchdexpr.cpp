@@ -481,6 +481,7 @@ protected:
 	// the fields were fetched from the docstore and arranged as in the index schema; highlight them.
 	// a subclass may narrow them down first (e.g. to the chunk that matched a KNN query)
 	virtual int	HighlightDocstoreFields ( const CSphMatch & tMatch, const DocstoreDoc_t & tFetchedDoc, CSphVector<FieldSource_t> & dFields, const BYTE ** ppStr ) const;
+	int			HighlightSource ( std::unique_ptr<TextSource_i> & pSource, const BYTE ** ppStr ) const;
 	virtual bool MarkRequestedFields ( CSphString & sError );
 
 private:
@@ -582,7 +583,12 @@ int	Expr_Highlight_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr
 int Expr_Highlight_c::HighlightDocstoreFields ( const CSphMatch & tMatch, const DocstoreDoc_t & tFetchedDoc, CSphVector<FieldSource_t> & dFields, const BYTE ** ppStr ) const
 {
 	std::unique_ptr<TextSource_i> pSource = CreateHighlightSource ( dFields );
+	return HighlightSource ( pSource, ppStr );
+}
 
+
+int Expr_Highlight_c::HighlightSource ( std::unique_ptr<TextSource_i> & pSource, const BYTE ** ppStr ) const
+{
 	SnippetResult_t tRes;
 	if ( !m_pSnippetBuilder->Build ( pSource, tRes ) )
 		return 0;
@@ -798,7 +804,7 @@ private:
 				Expr_KNNChunkHighlight_c ( const Expr_KNNChunkHighlight_c & rhs ) = default;
 
 	bool		Setup ( const ISphSchema * pRsetSchema, bool bExplicitFields, CSphString & sError );
-	int			PackVerbatim ( const CSphVector<FieldSource_t> & dFields, const BYTE ** ppStr ) const;
+	int			PackVerbatim ( const TextSource_i & tSource, const BYTE ** ppStr ) const;
 };
 
 
@@ -824,6 +830,20 @@ bool Expr_KNNChunkHighlight_c::Setup ( const ISphSchema * pRsetSchema, bool bExp
 	if ( !bExplicitFields || m_bFetchAllFields || m_dRequestedFieldIds.GetLength()!=1 )
 	{
 		sError = "KNN chunk highlighting requires exactly one explicit full-text field";
+		return false;
+	}
+
+	// chunk offsets refer to the field text as prepared for indexing (field filter, index HTML stripper);
+	// other strip modes and passage boundary markers would shift them
+	if ( m_tSnippetQuery.m_sStripMode!="index" )
+	{
+		sError = "KNN chunk highlighting requires html_strip_mode=index";
+		return false;
+	}
+
+	if ( m_tSnippetQuery.m_ePassageSPZ!=SPH_SPZ_NONE )
+	{
+		sError = "KNN chunk highlighting does not support passage_boundary";
 		return false;
 	}
 
@@ -922,39 +942,39 @@ bool Expr_KNNChunkHighlight_c::MarkRequestedFields ( CSphString & sError )
 
 int Expr_KNNChunkHighlight_c::HighlightDocstoreFields ( const CSphMatch & tMatch, const DocstoreDoc_t & tFetchedDoc, CSphVector<FieldSource_t> & dFields, const BYTE ** ppStr ) const
 {
-	bool bRestricted = false;
+	std::unique_ptr<TextSource_i> pSource = CreateHighlightSource ( dFields );
+
+	// the chunk range applies to the prepared text (field filter, HTML stripper), the same text the embeddings
+	// were generated from, not to the raw stored bytes
 	if ( m_bActive && m_iSpansFetchIdx>=0 && m_iSpansFetchIdx<tFetchedDoc.m_dFields.GetLength() && m_iChunkField<dFields.GetLength() )
 	{
 		const CSphVector<BYTE> & dSpans = tFetchedDoc.m_dFields[m_iSpansFetchIdx];
 		int64_t iStart = 0, iEnd = 0;
-		if ( UnpackKnnChunkSpan ( { dSpans.Begin(), dSpans.GetLength() }, (int64_t)tMatch.GetAttr(m_tSlotLoc), iStart, iEnd ) )
-		{
-			VecTraits_T<BYTE> & dText = dFields[m_iChunkField].m_dData;
-			if ( iStart<iEnd && iEnd<=dText.GetLength() )
-			{
-				dText = { dText.Begin()+iStart, (int)(iEnd-iStart) };
-				bRestricted = true;
-			}
-		}
+		if ( UnpackKnnChunkSpan ( { dSpans.Begin(), dSpans.GetLength() }, (int64_t)tMatch.GetAttr(m_tSlotLoc), iStart, iEnd ) && iEnd<=INT_MAX )
+			pSource->SetFieldRange ( m_iChunkField, (int)iStart, (int)iEnd );
 	}
 
-	// a semantic-only query has nothing to mark up; the chunk itself is the answer
-	if ( bRestricted && GetQuery().IsEmpty() )
-		return PackVerbatim ( dFields, ppStr );
+	CSphString sError;
+	if ( !m_pSnippetBuilder->PrepareSource ( *pSource, sError ) )
+		return 0;
 
-	return Expr_Highlight_c::HighlightDocstoreFields ( tMatch, tFetchedDoc, dFields, ppStr );
+	// a semantic-only query has nothing to mark up; the chunk itself is the answer
+	if ( pSource->IsFieldRanged(m_iChunkField) && GetQuery().IsEmpty() )
+		return PackVerbatim ( *pSource, ppStr );
+
+	return HighlightSource ( pSource, ppStr );
 }
 
 
-int Expr_KNNChunkHighlight_c::PackVerbatim ( const CSphVector<FieldSource_t> & dFields, const BYTE ** ppStr ) const
+int Expr_KNNChunkHighlight_c::PackVerbatim ( const TextSource_i & tSource, const BYTE ** ppStr ) const
 {
 	SnippetResult_t tRes;
-	tRes.m_dFields.Resize ( dFields.GetLength() );
-	ARRAY_FOREACH ( i, dFields )
-		tRes.m_dFields[i].m_sName = dFields[i].m_sName;
+	tRes.m_dFields.Resize ( tSource.GetNumFields() );
+	ARRAY_FOREACH ( i, tRes.m_dFields )
+		tRes.m_dFields[i].m_sName = tSource.GetFieldName(i);
 
 	PassageResult_t & tPassage = tRes.m_dFields[m_iChunkField].m_dPassages.Add();
-	tPassage.m_dText.Append ( dFields[m_iChunkField].m_dData );
+	tPassage.m_dText.Append ( tSource.GetText(m_iChunkField) );
 	return PackFields ( tRes, ppStr );
 }
 

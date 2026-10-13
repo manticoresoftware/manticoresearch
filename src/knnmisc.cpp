@@ -155,18 +155,13 @@ bool QueryUsesKnnChunkHighlight ( const CSphQuery & tQuery )
 }
 
 
-static const char g_szKnnChunkSpansMagic[4] = { 'C', 'S', 'P', '1' };
-static const DWORD KNN_CHUNK_SPANS_VERSION = 1;
-static const int KNN_CHUNK_SPANS_HEADER = 12;
-static const int KNN_CHUNK_SPAN_SIZE = 8;
+// a DOCSTORE_KNN_CHUNK_SPANS entry is just the (start,end) 32-bit byte offsets of the row's chunks, one pair per vector
+static const int KNN_CHUNK_SPAN_SIZE = 2*sizeof(DWORD);
 
 bool PackKnnChunkSpans ( const knn::TextEmbeddingSpan_t * pSpans, size_t uCount, CSphVector<BYTE> & dPacked, CSphString & sError )
 {
 	dPacked.Resize(0);
-	if ( !uCount )
-		return true;
-
-	if ( uCount>(size_t)( INT_MAX-KNN_CHUNK_SPANS_HEADER )/KNN_CHUNK_SPAN_SIZE )
+	if ( uCount>(size_t)INT_MAX/KNN_CHUNK_SPAN_SIZE )
 	{
 		sError = "too many embedding chunk spans to persist";
 		return false;
@@ -179,15 +174,12 @@ bool PackKnnChunkSpans ( const knn::TextEmbeddingSpan_t * pSpans, size_t uCount,
 			return false;
 		}
 
-	dPacked.Resize ( KNN_CHUNK_SPANS_HEADER + (int)uCount*KNN_CHUNK_SPAN_SIZE );
-	memcpy ( dPacked.Begin(), g_szKnnChunkSpansMagic, sizeof(g_szKnnChunkSpansMagic) );
-	sphUnalignedWrite ( dPacked.Begin()+4, KNN_CHUNK_SPANS_VERSION );
-	sphUnalignedWrite ( dPacked.Begin()+8, (DWORD)uCount );
-	BYTE * pOut = dPacked.Begin()+KNN_CHUNK_SPANS_HEADER;
+	dPacked.Resize ( (int)uCount*KNN_CHUNK_SPAN_SIZE );
+	BYTE * pOut = dPacked.Begin();
 	for ( size_t i = 0; i < uCount; i++, pOut += KNN_CHUNK_SPAN_SIZE )
 	{
 		sphUnalignedWrite ( pOut, (DWORD)pSpans[i].m_uStart );
-		sphUnalignedWrite ( pOut+4, (DWORD)pSpans[i].m_uEnd );
+		sphUnalignedWrite ( pOut+sizeof(DWORD), (DWORD)pSpans[i].m_uEnd );
 	}
 
 	return true;
@@ -196,20 +188,12 @@ bool PackKnnChunkSpans ( const knn::TextEmbeddingSpan_t * pSpans, size_t uCount,
 
 bool UnpackKnnChunkSpan ( ByteBlob_t tPacked, int64_t iSlot, int64_t & iStart, int64_t & iEnd )
 {
-	if ( iSlot<0 || !tPacked.first || tPacked.second<KNN_CHUNK_SPANS_HEADER )
+	if ( iSlot<0 || !tPacked.first || tPacked.second%KNN_CHUNK_SPAN_SIZE || iSlot>=tPacked.second/KNN_CHUNK_SPAN_SIZE )
 		return false;
 
-	if ( memcmp ( tPacked.first, g_szKnnChunkSpansMagic, sizeof(g_szKnnChunkSpansMagic) ) || sphUnalignedRead ( *(const DWORD*)( tPacked.first+4 ) )!=KNN_CHUNK_SPANS_VERSION )
-		return false;
-
-	const DWORD uCount = sphUnalignedRead ( *(const DWORD*)( tPacked.first+8 ) );
-	const size_t uPayload = (size_t)tPacked.second-KNN_CHUNK_SPANS_HEADER;
-	if ( uPayload%KNN_CHUNK_SPAN_SIZE || (size_t)uCount!=uPayload/KNN_CHUNK_SPAN_SIZE || (uint64_t)iSlot>=uCount )
-		return false;
-
-	const BYTE * pSpan = tPacked.first + KNN_CHUNK_SPANS_HEADER + (size_t)iSlot*KNN_CHUNK_SPAN_SIZE;
+	const BYTE * pSpan = tPacked.first + (size_t)iSlot*KNN_CHUNK_SPAN_SIZE;
 	iStart = sphUnalignedRead ( *(const DWORD*)pSpan );
-	iEnd = sphUnalignedRead ( *(const DWORD*)( pSpan+4 ) );
+	iEnd = sphUnalignedRead ( *(const DWORD*)( pSpan+sizeof(DWORD) ) );
 	return iStart<=iEnd;
 }
 

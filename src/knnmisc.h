@@ -65,7 +65,7 @@ bool							IsKnnChunkSlotAttr ( const CSphString & sAttr );
 bool							QueryUsesKnnChunkHighlight ( const CSphQuery & tQuery );
 void							SetupKNNLimit ( CSphQuery & tQuery );
 
-// packed chunk spans of one row as stored in the docstore: "CSP1", version, count, then (start,end) byte offsets per chunk
+// chunk spans of one row as stored in its DOCSTORE_KNN_CHUNK_SPANS entry: one (start,end) pair of 32-bit byte offsets per vector
 bool							PackKnnChunkSpans ( const knn::TextEmbeddingSpan_t * pSpans, size_t uCount, CSphVector<BYTE> & dPacked, CSphString & sError );
 bool							UnpackKnnChunkSpan ( ByteBlob_t tPacked, int64_t iSlot, int64_t & iStart, int64_t & iEnd );
 

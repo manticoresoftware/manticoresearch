@@ -135,6 +135,9 @@ int64_t MysqlReadPackedInt ( InputBuffer_c& tIn )
 			uint64_t uRes = tIn.GetLSBUint64();
 			return uRes>INT64_MAX ? -1 : int64_t ( uRes );
 		}
+	case 0xFB: // NULL and 0xFF are not valid length prefixes
+	case 0xFF:
+		return -1;
 	default:
 		return int64_t (uVal);
 	}
@@ -1170,19 +1173,20 @@ public:
 		// attributes
 		if ( m_uCapabilities & CLIENT::CONNECT_ATTRS )
 		{
-			auto iWatermark = MysqlReadPackedInt ( tIn );
-			if ( tIn.GetError() || iWatermark<0 || iWatermark>tIn.HasBytes() )
+			auto iAttrsLen = MysqlReadPackedInt ( tIn );
+			if ( tIn.GetError() || iAttrsLen<0 || iAttrsLen>tIn.HasBytes() )
 				return;
-			sphLogDebug ( "%d bytes of attrs", (int) iWatermark );
-			iWatermark = tIn.HasBytes() - iWatermark;
-			while ( iWatermark < tIn.HasBytes() )
+			sphLogDebug ( "%d bytes of attrs", (int) iAttrsLen );
+			InputBuffer_c tAttrs { tIn.GetBufferPtr(), int ( iAttrsLen ) };
+			while ( tAttrs.HasBytes()>0 )
 			{
 				CSphString sKey, sVal;
-				if ( !MysqlReadVlStr ( tIn, sKey ) || !MysqlReadVlStr ( tIn, sVal ) || tIn.HasBytes()<iWatermark )
+				if ( !MysqlReadVlStr ( tAttrs, sKey ) || !MysqlReadVlStr ( tAttrs, sVal ) )
 					return;
 				sphLogDebug ( "%s: %s", sKey.cstr(), sVal.cstr() );
 				m_hAttributes.Add ( std::move ( sVal ), sKey );
 			}
+			tIn.SetBufferPos ( tIn.GetBufferPos() + int ( iAttrsLen ) );
 		}
 
 		// compression level

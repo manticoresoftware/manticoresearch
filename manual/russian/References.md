@@ -487,6 +487,7 @@ index_converter {--config /path/to/config|--path}
   * [join_cache_size](Searching/Joining.md#Join-caching) - Определяет размер кэша для повторного использования результатов запросов JOIN
   * [kibana_version_string](Server_settings/Searchd.md#kibana_version_string) – Строка версии сервера, отправляемая в ответ на запросы Kibana
   * [knn_parallel_build](Server_settings/Searchd.md#knn_parallel_build) - Количество рабочих потоков, используемых для построения графа HNSW во время сохранения RT-чанков, слияний `OPTIMIZE` / автооптимизации чанков и перестроек KNN через `ALTER TABLE`
+  * [knn_rescore_prefetch](Server_settings/Searchd.md#knn_rescore_prefetch) - Считывает с диска векторы всех кандидатов KNN сразу перед повторной оценкой, а не по одному
   * [listen](Server_settings/Searchd.md#listen) - Определяет IP-адрес и порт или путь к Unix-доменному сокету для прослушивания searchd
   * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - Размер очереди прослушивания TCP
   * [listen_tfo](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Включает флаг TCP_FASTOPEN для всех слушателей

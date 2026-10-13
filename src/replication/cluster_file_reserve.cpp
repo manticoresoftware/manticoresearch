@@ -154,7 +154,11 @@ bool IsReplicationFileName ( const CSphString & sName )
 	if ( sName.IsEmpty() || sName=="." || sName==".." )
 		return false;
 
-	return sName==GetBaseName ( sName );
+	for ( const char * p = sName.cstr(); *p; ++p )
+		if ( *p=='/' || *p=='\\' )
+			return false;
+
+	return true;
 }
 
 

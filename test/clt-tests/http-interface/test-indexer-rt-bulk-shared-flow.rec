@@ -1,0 +1,147 @@
+––– comment –––
+Shared bulk_import (/bulk?bulk_import=<table>&shared or &shared=N): data requests from any
+connection feed one pool of N indexer children per table; nothing is visible until a request
+without documents commits with an empty NDJSON line, which publishes one disk chunk per slot
+that got data and removes the pool. Replies are one JSON object with shared_state; the helpers
+print it with the HTTP code.
+––– block: ../base/start-searchd –––
+––– input –––
+cat > /tmp/shared.sh <<'EOF'
+gen() { for ((i=$2; i<=$3; i++)); do printf '{"insert":{"table":"%s","id":%d,"doc":{"title":"doc %d","gid":%d}}}\n' "$1" "$i" "$i" "$((i % 7))"; done; }
+post() { curl -sS -X POST "http://localhost:9308/bulk?bulk_import=$1&shared$2" -H 'Content-Type: application/x-ndjson' --data-binary @"$3" -w ' HTTP %{http_code}\n'; }
+commit() { printf '\n' > /tmp/commit.ndjson; post "$1" "$2" /tmp/commit.ndjson; }
+sql() { mysql -h0 -P9306 --skip-table --batch --raw --skip-column-names -e "$1"; }
+leftovers() { echo "staging=$(ls /var/lib/manticore/$1 | grep -c indexer-rt-bulk) children=$(ps -eo args | grep -c '[i]ndexer_rt_bulk_chunk')"; }
+EOF
+––– output –––
+––– comment –––
+Two data requests in parallel, N=2: both are staged into the same pool, nothing is visible yet.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_flow (title TEXT, gid INT)"; gen s_flow 1 3000 > /tmp/a.ndjson; gen s_flow 3001 6000 > /tmp/b.ndjson
+––– output –––
+––– input –––
+source /tmp/shared.sh; post s_flow '=2' /tmp/a.ndjson > /tmp/a.reply & post s_flow '=2' /tmp/b.ndjson > /tmp/b.reply & wait; cat /tmp/a.reply /tmp/b.reply
+––– output –––
+{"items":[],"current_line":3000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":3000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+––– input –––
+source /tmp/shared.sh; sql "SELECT COUNT(*) FROM s_flow"
+––– output –––
+0
+––– comment –––
+The blank line publishes exactly N=2 chunks with every document, then children, staging and
+the table reservation are gone: a plain INSERT works again.
+––– input –––
+source /tmp/shared.sh; commit s_flow ''
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+––– input –––
+source /tmp/shared.sh; sql "SELECT COUNT(*), MIN(id), MAX(id), SUM(id) FROM s_flow; SHOW TABLE s_flow STATUS LIKE 'disk_chunks'; SELECT id, title, gid FROM s_flow WHERE id IN (1, 3000, 3001, 6000) ORDER BY id ASC"
+––– output –––
+6000	1	6000	18003000
+disk_chunks	2
+1	doc 1	1
+3000	doc 3000	4
+3001	doc 3001	5
+6000	doc 6000	1
+––– input –––
+source /tmp/shared.sh; leftovers s_flow; sql "INSERT INTO s_flow (id, title, gid) VALUES (6001, 'direct insert', 0); SELECT COUNT(*) FROM s_flow"
+––– output –––
+staging=0 children=0
+6001
+––– comment –––
+A commit without an open pool is refused; a commit request never creates a pool.
+––– input –––
+source /tmp/shared.sh; commit s_flow ''
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"no shared bulk_import into table 's_flow' to commit","error_code":"shared_no_pool","shared_state":"no_pool"} HTTP 409
+––– comment –––
+LF and CRLF both end a line, and empty lines, also lines of spaces, among documents mean nothing:
+a data request never publishes. A request without documents and with an empty line, LF or CRLF,
+commits.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_lines (title TEXT, gid INT)"; printf '%s\r\n' '{"insert":{"table":"s_lines","id":1,"doc":{"title":"crlf one","gid":1}}}' '' '{"insert":{"table":"s_lines","id":2,"doc":{"title":"crlf two","gid":2}}}' '  ' > /tmp/lines.ndjson; printf '%s\n' '' '{"insert":{"table":"s_lines","id":3,"doc":{"title":"lf three","gid":3}}}' '' >> /tmp/lines.ndjson; post s_lines '' /tmp/lines.ndjson; sql "SELECT COUNT(*) FROM s_lines"
+––– output –––
+{"items":[],"current_line":3,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+0
+––– input –––
+source /tmp/shared.sh; printf '\r\n' > /tmp/crlf-commit.ndjson; post s_lines '' /tmp/crlf-commit.ndjson; sql "SELECT id, title FROM s_lines ORDER BY id ASC; SHOW TABLE s_lines STATUS LIKE 'disk_chunks'"
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+1	crlf one
+2	crlf two
+3	lf three
+disk_chunks	1
+––– comment –––
+More slots than batches: N=4 with one small request publishes one chunk; the three empty
+slots are closed without a build, and nothing is left behind.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_empty_slots (title TEXT, gid INT)"; gen s_empty_slots 1 100 > /tmp/small.ndjson; post s_empty_slots '=4' /tmp/small.ndjson; commit s_empty_slots ''
+––– output –––
+{"items":[],"current_line":100,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+––– input –––
+source /tmp/shared.sh; sql "SELECT COUNT(*), SUM(id) FROM s_empty_slots; SHOW TABLE s_empty_slots STATUS LIKE 'disk_chunks'"; leftovers s_empty_slots
+––– output –––
+100	5050
+disk_chunks	1
+staging=0 children=0
+––– comment –––
+A chunked request body, the way the Fluent Bit output sends every data request, is staged like
+any other data request.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_chunked (title TEXT, gid INT)"; gen s_chunked 1 3000 > /tmp/chunked.ndjson; curl -sS -X POST 'http://localhost:9308/bulk?bulk_import=s_chunked&shared' -H 'Content-Type: application/x-ndjson' -H 'Transfer-Encoding: chunked' --data-binary @/tmp/chunked.ndjson -w ' HTTP %{http_code}\n'; commit s_chunked ''; sql "SELECT COUNT(*), SUM(id) FROM s_chunked"
+––– output –––
+{"items":[],"current_line":3000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+3000	4501500
+––– comment –––
+Two tables have two independent pools: a commit publishes only the pool of its own table.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_two_a (title TEXT, gid INT); CREATE TABLE s_two_b (title TEXT, gid INT)"; gen s_two_a 1 100 > /tmp/ta.ndjson; gen s_two_b 1 3000 > /tmp/tb.ndjson; post s_two_a '' /tmp/ta.ndjson; post s_two_b '=2' /tmp/tb.ndjson; commit s_two_a ''; sql "SELECT COUNT(*) FROM s_two_a; SELECT COUNT(*) FROM s_two_b"
+––– output –––
+{"items":[],"current_line":100,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":3000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+100
+0
+––– input –––
+source /tmp/shared.sh; commit s_two_b ''; sql "SELECT COUNT(*) FROM s_two_b; SHOW TABLE s_two_b STATUS LIKE 'disk_chunks'"
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+3000
+disk_chunks	2
+––– comment –––
+Without shared the request takes the private bulk_import path: its reply has no shared_state
+and its documents are visible right after the request.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_not_shared (title TEXT, gid INT)"; gen s_not_shared 1 10 > /tmp/ns.ndjson; curl -sS -X POST 'http://localhost:9308/bulk?bulk_import=s_not_shared' -H 'Content-Type: application/x-ndjson' --data-binary @/tmp/ns.ndjson > /tmp/ns.reply; grep -o '"errors":false' /tmp/ns.reply; echo "shared_state=$(grep -c shared_state /tmp/ns.reply)"; sql "SELECT COUNT(*) FROM s_not_shared"
+––– output –––
+"errors":false
+shared_state=0
+10
+––– comment –––
+The table of a document matches bulk_import=<table> whatever its letter case.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_case (title TEXT, gid INT)"; gen S_CASE 1 10 > /tmp/case.ndjson; post s_case '' /tmp/case.ndjson; commit s_case ''; sql "SELECT COUNT(*) FROM s_case"
+––– output –––
+{"items":[],"current_line":10,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+10
+––– comment –––
+A line can also be a bare document {"id":1,...} for the table of bulk_import=<table>. Here the
+two forms alternate, with the id of the bare documents last, and load like one form.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_short (title TEXT, gid INT)"; for ((i=1; i<=2000; i++)); do if ((i % 2)); then printf '{"insert":{"table":"s_short","id":%d,"doc":{"title":"doc %d","gid":%d}}}\n' "$i" "$i" "$((i % 7))"; else printf '{"title":"doc %d","gid":%d,"id":%d}\n' "$i" "$((i % 7))" "$i"; fi; done > /tmp/short.ndjson; post s_short '' /tmp/short.ndjson; commit s_short ''; sql "SELECT COUNT(*), SUM(id) FROM s_short; SELECT id, title, gid FROM s_short WHERE id IN (1, 2) ORDER BY id ASC"
+––– output –––
+{"items":[],"current_line":2000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+2000	2001000
+1	doc 1	1
+2	doc 2	2
+––– comment –––
+Without MANTICORE_LOG_BULK_IMPORT the searchd log has no BULK_IMPORT_SHARED lines.
+––– input –––
+grep -c 'BULK_IMPORT_SHARED' /var/log/manticore/searchd.log || true
+––– output –––
+0

@@ -51,6 +51,7 @@ class AttrMerger_c::Impl_c
 	int64_t									m_iTotalDocs;
 	bool									m_bUuidLinked = false;
 	BuildBufferSettings_t					m_tBufferSettings;
+	CSphFixedVector<int64_t> m_dFieldLens { SPH_MAX_FIELDS };
 
 	CSphVector<PlainOrColumnar_t>	m_dSiAttrs;
 	std::unique_ptr<SI::Builder_i>	m_pSIdxBuilder;
@@ -93,6 +94,7 @@ public:
 		, m_pPublicIDs ( pPublicIDs )
 	{}
 
+	const int64_t * GetFieldLengths() const { return m_dFieldLens.Begin(); }
 	bool Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex );
 	bool AnalyzeAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
 	bool CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
@@ -101,6 +103,7 @@ public:
 
 bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex )
 {
+	m_dFieldLens.ZeroVec();
 	auto sSPA = GetTmpFilename ( pDstIndex, SPH_EXT_SPA );
 	const CSphSchema & tDstSchema = pDstIndex->GetMatchSchema();
 	if ( tDstSchema.HasNonColumnarAttrs() && !m_tWriterSPA.OpenFile ( sSPA, m_sError ) )
@@ -195,6 +198,10 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 
 	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
 	CSphVector<int64_t> dTmp;
+	const auto & tSchema = tIndex.GetMatchSchema();
+	CSphVector<PlainOrColumnar_t> dFieldAttrs;
+	for ( int i=tSchema.GetAttrId_FirstFieldLen(); i>=0 && i<=tSchema.GetAttrId_LastFieldLen(); ++i )
+		dFieldAttrs.Add ( CreatePlainOrColumnar ( tSchema, tSchema.GetAttr(i) ) );
 
 	int iColumnarIdLoc = PURE_COLUMNAR ? 0 : ( tIndex.GetMatchSchema ().GetAttr ( 0 ).IsColumnar () ? 0 : -1 );
 	int iStride = tIndex.GetMatchSchema().GetRowSize();
@@ -221,6 +228,9 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 
 		const CSphRowitem * pRow = PURE_COLUMNAR ? nullptr : tIndex.GetRawAttrs() + (int64_t)tRowID * iStride;
 		const BYTE * pRawBlobAttrs = PURE_COLUMNAR ? nullptr : tIndex.GetRawBlobAttrs();
+
+		ARRAY_FOREACH ( iField, dFieldAttrs )
+			m_dFieldLens[iField] += dFieldAttrs[iField].Get ( tRowID, pRow, dColumnarIterators );
 
 		// limit granted by caller code
 		assert ( m_tResultRowID != INVALID_ROWID );
@@ -615,6 +625,11 @@ bool AttrMerger_c::AnalyzeAttributes ( const CSphIndex& tIndex, const VecTraits_
 {
 	TRACE_CORO ( "sph", "AttrMerger_c::AnalyzeAttributes" );
 	return m_pImpl->AnalyzeAttributes ( tIndex, dRowMap, uAlive );
+}
+
+const int64_t * AttrMerger_c::GetFieldLengths() const
+{
+	return m_pImpl->GetFieldLengths();
 }
 
 bool AttrMerger_c::CopyAttributes ( const CSphIndex& tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive )

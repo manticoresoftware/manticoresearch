@@ -7765,6 +7765,8 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	StrVec_t dDeleteOnInterrupt;
 	std::vector<uint32_t> dMergedTotalDL;
 	std::vector<uint64_t> dMergedPublicIDs;
+	CSphFixedVector<int64_t> dMergedFieldLens { SPH_MAX_FIELDS };
+	dMergedFieldLens.ZeroVec();
 	// unlink prepared attribute files on exit, if any
 	AT_SCOPE_EXIT ( [&dDeleteOnInterrupt]
 	{
@@ -7836,6 +7838,8 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 		if ( !tAttrMerger.FinishMergeAttributes ( pDstIndex, tBuildHeader ) )
 			return false;
+		ARRAY_FOREACH ( iField, dMergedFieldLens )
+			dMergedFieldLens[iField] = tAttrMerger.GetFieldLengths()[iField];
 	}
 
 	const CSphIndex_VLN* pSettings = ( bSrcSettings ? pSrcIndex : pDstIndex );
@@ -7900,7 +7904,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	tWriteHeader.m_pTokenizer = pSettings->m_pTokenizer;
 	tWriteHeader.m_pDict = pSettings->m_pDict;
 	tWriteHeader.m_pFieldFilter = pSettings->m_pFieldFilter.get();
-	tWriteHeader.m_pFieldLens = pSettings->m_dFieldLens.Begin();
+	tWriteHeader.m_pFieldLens = dMergedFieldLens.Begin();
 
 	IndexBuildDone ( tBuildHeader, tWriteHeader, pDstIndex->GetTmpFilename ( SPH_EXT_SPH ), sError );
 
@@ -7992,6 +7996,8 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 	StrVec_t dDeleteOnInterrupt;
 	std::vector<uint32_t> dMergedTotalDL;
 	std::vector<uint64_t> dMergedPublicIDs;
+	CSphFixedVector<int64_t> dMergedFieldLens { SPH_MAX_FIELDS };
+	dMergedFieldLens.ZeroVec();
 	AT_SCOPE_EXIT ( [&dDeleteOnInterrupt]
 	{
 		DeleteTmpFilesWithPrefix ( dDeleteOnInterrupt );
@@ -8056,6 +8062,8 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 
 		if ( !tAttrMerger.FinishMergeAttributes ( pDstIndex, tBuildHeader ) )
 			return false;
+		ARRAY_FOREACH ( iField, dMergedFieldLens )
+			dMergedFieldLens[iField] = tAttrMerger.GetFieldLengths()[iField];
 		if ( pTimings )
 			pTimings->m_tmAttrs = sphMicroTimer() - tmAttrsStart;
 	}
@@ -8118,7 +8126,7 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 	tWriteHeader.m_pTokenizer = pSettings->m_pTokenizer;
 	tWriteHeader.m_pDict = pSettings->m_pDict;
 	tWriteHeader.m_pFieldFilter = pSettings->m_pFieldFilter.get();
-	tWriteHeader.m_pFieldLens = pSettings->m_dFieldLens.Begin();
+	tWriteHeader.m_pFieldLens = dMergedFieldLens.Begin();
 
 	IndexBuildDone ( tBuildHeader, tWriteHeader, pDstIndex->GetTmpFilename ( SPH_EXT_SPH ), sError );
 	if ( pTimings )
@@ -8262,6 +8270,36 @@ bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHe
 	int iHitBufferSize = 8 * 1024 * 1024;
 	CSphVector<SphWordID_t> dDummy;
 	CSphHitBuilder tHitBuilder ( m_tSettings, dDummy, true, iHitBufferSize, pDict, &sError, nullptr );
+	// ALTER emits new postings just like merge: bind their real row identities
+	// and lengths rather than leaving the writer with unknown pruning bounds.
+	std::vector<uint64_t> dPublicIDs;
+	std::vector<uint32_t> dTotalDL;
+	if ( m_bE1 )
+	{
+		const auto * pId = m_tSchema.GetAttr ( sphGetDocidName() );
+		auto tId = CreatePlainOrColumnar ( m_tSchema, *pId );
+		auto dIterators = CreateAllColumnarIterators ( m_pColumnar.get(), m_tSchema );
+		for ( RowID_t tRowID=0; tRowID<RowID_t(m_iDocinfo); ++tRowID )
+		{
+			dPublicIDs.push_back ( uint64_t(tId.Get ( tRowID, GetDocinfoByRowID(tRowID), dIterators )) );
+			uint64_t uTotal = 0;
+			for ( int iField=0; iField<m_tSchema.GetFieldsCount()+1; ++iField )
+			{
+				if ( iField==iFieldId )
+					continue;
+				uint32_t uLength = 0;
+				if ( !m_tNormStore.Get ( iField, tRowID, uLength ) )
+				{
+					sError = "norms: ALTER length binding failed";
+					return false;
+				}
+				uTotal += uLength;
+			}
+			dTotalDL.push_back ( uint32_t ( Min ( uTotal, uint64_t(UINT32_MAX) ) ) );
+		}
+		tHitBuilder.BindTotalDL ( dTotalDL.data(), uint32_t(dTotalDL.size()), true );
+		tHitBuilder.BindPublicIDs ( dPublicIDs.data(), uint32_t(dPublicIDs.size()), !pId->IsUuidLinkedDocid() );
+	}
 
 	// FIXME? is this magic dict block constant any good?..
 
@@ -8501,6 +8539,34 @@ bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldNa
 	if ( !Alter_AddRemoveFieldFromSchema ( bAddField, tNewSchema, sFieldName, uFieldFlags, sError ) )
 		return false;
 
+	if ( m_tSettings.m_bIndexFieldLens )
+	{
+		AttrAddRemoveCtx_t tLengthCtx {};
+		tLengthCtx.m_sName.SetSprintf ( "%s_len", sFieldName.cstr() );
+		tLengthCtx.m_eType = SPH_ATTR_TOKENCOUNT;
+		tLengthCtx.m_iBits = 32;
+		tLengthCtx.m_eEngine = m_tSettings.m_eEngine;
+		if ( bAddField && tOldSchema.GetAttr ( tLengthCtx.m_sName.cstr() ) )
+		{
+			sError.SetSprintf ( "generated field length attribute '%s' already exists", tLengthCtx.m_sName.cstr() );
+			return false;
+		}
+		if ( !AddRemoveAttribute ( bAddField, tLengthCtx, sError ) )
+			return false;
+		tNewSchema = m_tSchema;
+		if ( !Alter_AddRemoveFieldFromSchema ( bAddField, tNewSchema, sFieldName, uFieldFlags, sError ) )
+			return false;
+	}
+
+	CSphFixedVector<int64_t> dNewFieldLens { SPH_MAX_FIELDS };
+	dNewFieldLens.ZeroVec();
+	for ( int i=0; i<tNewSchema.GetFieldsCount(); ++i )
+	{
+		int iOld = tOldSchema.GetFieldIndex ( tNewSchema.GetFieldName(i) );
+		if ( iOld>=0 )
+			dNewFieldLens[i] = m_dFieldLens[iOld];
+	}
+
 	auto iRemoveIdx = m_tSchema.GetFieldIndex ( sFieldName.cstr () );
 	if ( m_bE1 )
 	{
@@ -8549,6 +8615,7 @@ bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldNa
 		return false;
 
 	tWriteHeader.m_pSchema = &tNewSchema;
+	tWriteHeader.m_pFieldLens = dNewFieldLens.Begin();
 
 	// save the header
 	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, GetTmpFilename ( SPH_EXT_SPH ), sError ) )
@@ -8573,6 +8640,7 @@ bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldNa
 		}
 	}
 
+	m_dFieldLens.SwapData ( dNewFieldLens );
 	return true;
 }
 

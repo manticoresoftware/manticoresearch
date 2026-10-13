@@ -93,7 +93,7 @@ void AddToSchema ( CSphSchema & tSchema, const AttrAddRemoveCtx_t & tCtx, CSphSt
 		bRebuild = true;
 		tSchema.RemoveAttr ( tCtx.m_sName.cstr(), false );
 		tSchema.InsertAttr ( iIdxExisting, tInfo, false );
-	} else if ( tSchema.GetAttrId_FirstFieldLen()!=-1 )
+	} else if ( tSchema.GetAttrId_FirstFieldLen()!=-1 && tCtx.m_eType!=SPH_ATTR_TOKENCOUNT )
 	{
 		bRebuild = true;
 		tSchema.InsertAttr ( tSchema.GetAttrId_FirstFieldLen(), tInfo, false );

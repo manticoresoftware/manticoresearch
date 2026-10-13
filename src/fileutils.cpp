@@ -826,6 +826,99 @@ bool CopyFile ( const CSphString & sSource, const CSphString & sDest, CSphString
 }
 
 
+bool sphFsyncFile ( const CSphString & sFile, CSphString & sError )
+{
+#if _WIN32
+	HANDLE hFile = CreateFile ( sFile.cstr(), GENERIC_READ | GENERIC_WRITE,
+		FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr );
+	if ( hFile==INVALID_HANDLE_VALUE )
+	{
+		sError.SetSprintf ( "failed to open '%s' for sync: error %u", sFile.cstr(), (unsigned)GetLastError() );
+		return false;
+	}
+
+	if ( !FlushFileBuffers ( hFile ) )
+	{
+		DWORD uError = GetLastError();
+		CloseHandle ( hFile );
+		sError.SetSprintf ( "failed to sync '%s': error %u", sFile.cstr(), (unsigned)uError );
+		return false;
+	}
+	CloseHandle ( hFile );
+#else
+	int iFD = ::open ( sFile.cstr(), O_RDONLY );
+	if ( iFD<0 )
+	{
+		sError.SetSprintf ( "failed to open '%s' for sync: %s", sFile.cstr(), strerrorm(errno) );
+		return false;
+	}
+
+	if ( ::fsync(iFD)!=0 )
+	{
+		int iErrno = errno;
+		::close(iFD);
+		sError.SetSprintf ( "failed to sync '%s': %s", sFile.cstr(), strerrorm(iErrno) );
+		return false;
+	}
+	::close(iFD);
+#endif
+	return true;
+}
+
+
+#if _WIN32
+bool sphMakeFileNameDurable ( const CSphString & sFile, CSphString & sError )
+{
+	// FlushFileBuffers requires a write-capable file handle and is not a
+	// supported directory-handle barrier. Publish this already-synced private
+	// component through the documented write-through move path instead.
+	CSphString sStaging = SphSprintf ( "%s.publish", sFile.cstr() );
+	::unlink ( sStaging.cstr() );
+	if ( sph::rename ( sFile.cstr(), sStaging.cstr() ) )
+	{
+		sError.SetSprintf ( "failed to stage '%s' for durable publication: error %u", sFile.cstr(), (unsigned)GetLastError() );
+		return false;
+	}
+
+	if ( sph::rename ( sStaging.cstr(), sFile.cstr(), true ) )
+	{
+		DWORD uError = GetLastError();
+		// Best-effort rollback keeps an ordinary error from stranding an owned
+		// staging name. If rollback also fails, remove the unreferenced copy.
+		if ( sph::rename ( sStaging.cstr(), sFile.cstr(), true ) )
+			::unlink ( sStaging.cstr() );
+		sError.SetSprintf ( "failed to durably publish '%s': error %u", sFile.cstr(), (unsigned)uError );
+		return false;
+	}
+	return true;
+}
+#else
+bool sphFsyncDirectory ( const CSphString & sDir, CSphString & sError )
+{
+	int iFlags = O_RDONLY;
+#ifdef O_DIRECTORY
+	iFlags |= O_DIRECTORY;
+#endif
+	int iFD = ::open ( sDir.cstr(), iFlags );
+	if ( iFD<0 )
+	{
+		sError.SetSprintf ( "failed to open directory '%s' for sync: %s", sDir.cstr(), strerrorm(errno) );
+		return false;
+	}
+
+	if ( ::fsync(iFD)!=0 )
+	{
+		int iErrno = errno;
+		::close(iFD);
+		sError.SetSprintf ( "failed to sync directory '%s': %s", sDir.cstr(), strerrorm(iErrno) );
+		return false;
+	}
+	::close(iFD);
+	return true;
+}
+#endif
+
+
 bool RenameFiles ( const StrVec_t & dSrc, const StrVec_t & dDst, CSphString & sError )
 {
 	bool bError = false;
@@ -877,14 +970,16 @@ bool RenameWithRollback ( const StrVec_t & dSrc, const StrVec_t & dDst, CSphStri
 
 namespace sph
 {
-	int rename ( const char * sOld, const char * sNew )
+	int rename ( const char * sOld, const char * sNew, bool bWriteThrough )
 	{
 #if _WIN32
-		if ( MoveFileEx ( sOld, sNew, MOVEFILE_REPLACE_EXISTING ) )
+		DWORD uFlags = MOVEFILE_REPLACE_EXISTING | ( bWriteThrough ? MOVEFILE_WRITE_THROUGH : 0 );
+		if ( MoveFileEx ( sOld, sNew, uFlags ) )
 			return 0;
 		errno = GetLastError();
 		return -1;
 #else
+		(void)bWriteThrough;
 		return ::rename ( sOld, sNew );
 #endif
 	}

@@ -151,6 +151,12 @@ bool			sphWrite ( int iFD, const Str_t& dBuf );
 StrVec_t		FindFiles ( const char * szPath, bool bNeedDirs=false );
 bool			MkDir ( const char * szDir );
 bool			CopyFile ( const CSphString & sSource, const CSphString & sDest, CSphString & sError, int iMode=SPH_O_NEW );
+bool			sphFsyncFile ( const CSphString & sFile, CSphString & sError );
+#if _WIN32
+bool			sphMakeFileNameDurable ( const CSphString & sFile, CSphString & sError );
+#else
+bool			sphFsyncDirectory ( const CSphString & sDir, CSphString & sError );
+#endif
 bool			RenameFiles ( const StrVec_t & dSrc, const StrVec_t & dDst, CSphString & sError );
 bool			RenameWithRollback ( const StrVec_t & dSrc, const StrVec_t & dDst, CSphString & sError );
 
@@ -181,7 +187,7 @@ void			SeekAndPutOffset ( CSphWriter & tWriter, SphOffset_t tOffset, SphOffset_t
 // FIXME! unify this weird zoo of file function naming
 namespace sph
 {
-	int rename ( const char * sOld, const char * sNew );
+	int rename ( const char * sOld, const char * sNew, bool bWriteThrough=false );
 }
 
 

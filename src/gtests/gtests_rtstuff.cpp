@@ -1609,6 +1609,149 @@ TEST_F ( RT, E1Post07RatioBoundsDriveExactCanonicalBM25A )
 	} );
 }
 
+TEST_F ( RT, FieldTokenOwnershipAcrossFlushAndRestart )
+{
+	static constexpr const char * PATH = "test_field_token_ownership";
+	for ( int i=0; i<3; ++i )
+		DeleteAttachTestFiles ( SphSprintf ( "%s.%d", PATH, i ).cstr() );
+	DeleteAttachTestFiles ( PATH );
+	Threads::CallCoroutine ( [&] {
+		CSphSchema tSchema;
+		for ( const char * sName : { "title", "content" } )
+		{
+			CSphColumnInfo tField ( sName );
+			tField.m_uFieldFlags = CSphColumnInfo::FIELD_INDEXED;
+			tSchema.AddField ( tField );
+		}
+		tSchema.AddAttr ( CSphColumnInfo ( "id", SPH_ATTR_BIGINT ), false );
+		tSchema.AddAttr ( CSphColumnInfo ( "title_len", SPH_ATTR_TOKENCOUNT ), false );
+		tSchema.AddAttr ( CSphColumnInfo ( "content_len", SPH_ATTR_TOKENCOUNT ), false );
+		auto pDict = sphCreateDictionaryCRC ( tDictSettings, nullptr, pTok, "tokens", false, 32, nullptr, sError );
+		ASSERT_TRUE ( pDict );
+		auto fnCreate = [&] {
+			auto pIndex = sphCreateIndexRT ( "tokens", PATH, tSchema, 32*1024*1024 );
+			CSphIndexSettings tSettings;
+			tSettings.m_bIndexFieldLens = true;
+			pIndex->Setup ( tSettings );
+			pIndex->SetTokenizer ( pTok->Clone ( SPH_CLONE_INDEX ) );
+			pIndex->SetDictionary ( pDict->Clone() );
+			return pIndex;
+		};
+		auto pIndex = fnCreate();
+		StrVec_t dWarnings;
+		ASSERT_TRUE ( pIndex->Prealloc ( false, nullptr, dWarnings ) );
+		pIndex->PostSetup();
+		for ( int i=0; i<3; ++i )
+		{
+			RtAccum_t tAcc;
+			InsertDocData_c tDoc ( pIndex->GetMatchSchema() );
+			tDoc.SetID ( i+1 );
+			tDoc.m_dFields[0] = { "title", 5 };
+			tDoc.m_dFields[1] = { "needle word word", 16 };
+			CSphString sFilter;
+			ASSERT_TRUE ( pIndex->AddDocument ( tDoc, false, sFilter, sError, sWarning, &tAcc ) );
+			ASSERT_TRUE ( pIndex->Commit ( nullptr, &tAcc, &sError ) );
+			ASSERT_TRUE ( pIndex->ForceDiskChunk() );
+			EXPECT_EQ ( pIndex->GetFieldLens()[0], i+1 );
+			EXPECT_EQ ( pIndex->GetFieldLens()[1], 3*(i+1) );
+			// Read the actual chunk, not just the table-wide counter that can hide cancellation.
+			auto pChunk = sphCreateIndexPhrase ( "chunk", SphSprintf ( "%s.%d", PATH, i ) );
+			ASSERT_TRUE ( pChunk->Prealloc ( false, nullptr, dWarnings ) );
+			ASSERT_NE ( pChunk->GetFieldLens(), nullptr );
+			EXPECT_EQ ( pChunk->GetFieldLens()[0], 1 );
+			EXPECT_EQ ( pChunk->GetFieldLens()[1], 3 );
+		}
+		pIndex.reset();
+		pIndex = fnCreate();
+		ASSERT_TRUE ( pIndex->Prealloc ( false, nullptr, dWarnings ) );
+		pIndex->PostSetup();
+		ASSERT_NE ( pIndex->GetFieldLens(), nullptr );
+		EXPECT_EQ ( pIndex->GetFieldLens()[0], 3 );
+		EXPECT_EQ ( pIndex->GetFieldLens()[1], 9 );
+	} );
+	for ( int i=0; i<3; ++i )
+		DeleteAttachTestFiles ( SphSprintf ( "%s.%d", PATH, i ).cstr() );
+	DeleteAttachTestFiles ( PATH );
+}
+
+TEST_F ( RT, FieldTokenSchemaAcrossAlterAndRestart )
+{
+	static constexpr const char * PATH = "test_field_token_alter";
+	for ( bool bDisk : { false, true } )
+	{
+		for ( int i=0; i<16; ++i )
+			DeleteAttachTestFiles ( SphSprintf ( "%s.%d", PATH, i ).cstr() );
+		DeleteAttachTestFiles ( PATH );
+		Threads::CallCoroutine ( [&] {
+			CSphSchema tSchema;
+			for ( const char * sName : { "a", "b", "c" } )
+			{
+				CSphColumnInfo tField ( sName );
+				tField.m_uFieldFlags = CSphColumnInfo::FIELD_INDEXED;
+				tSchema.AddField ( tField );
+			}
+			tSchema.AddAttr ( CSphColumnInfo ( "id", SPH_ATTR_BIGINT ), false );
+			for ( const char * sName : { "a_len", "b_len", "c_len" } )
+				tSchema.AddAttr ( CSphColumnInfo ( sName, SPH_ATTR_TOKENCOUNT ), false );
+			auto pDict = sphCreateDictionaryCRC ( tDictSettings, nullptr, pTok, "tokens", false, 32, nullptr, sError );
+			ASSERT_TRUE ( pDict );
+			auto fnCreate = [&] {
+				auto pIndex = sphCreateIndexRT ( "tokens", PATH, tSchema, 32*1024*1024 );
+				CSphIndexSettings tSettings;
+				tSettings.m_bIndexFieldLens = true;
+				pIndex->Setup ( tSettings );
+				pIndex->SetTokenizer ( pTok->Clone ( SPH_CLONE_INDEX ) );
+				pIndex->SetDictionary ( pDict->Clone() );
+				return pIndex;
+			};
+			auto pIndex = fnCreate();
+			StrVec_t dWarnings;
+			ASSERT_TRUE ( pIndex->Prealloc ( false, nullptr, dWarnings ) );
+			pIndex->PostSetup();
+			auto fnInsert = [&] ( int iId, std::initializer_list<const char *> dFields ) {
+				RtAccum_t tAcc;
+				InsertDocData_c tDoc ( pIndex->GetMatchSchema() );
+				tDoc.SetID ( iId );
+				int i=0;
+				for ( const char * sField : dFields )
+					tDoc.m_dFields[i++] = { sField, int(strlen(sField)) };
+				CSphString sFilter;
+				ASSERT_TRUE ( pIndex->AddDocument ( tDoc, false, sFilter, sError, sWarning, &tAcc ) ) << sError.cstr();
+				ASSERT_TRUE ( pIndex->Commit ( nullptr, &tAcc, &sError ) );
+			};
+			auto fnLengths = [&] ( std::initializer_list<int64_t> dLengths ) {
+				ASSERT_NE ( pIndex->GetFieldLens(), nullptr );
+				ASSERT_EQ ( pIndex->GetMatchSchema().GetFieldsCount(), dLengths.size() );
+				int i=0;
+				for ( auto iLength : dLengths )
+					EXPECT_EQ ( pIndex->GetFieldLens()[i++], iLength );
+			};
+			fnInsert ( 1, { "needle a a", "needle b", "needle c c c" } );
+			if ( bDisk ) ASSERT_TRUE ( pIndex->ForceDiskChunk() );
+			ASSERT_TRUE ( pIndex->AddRemoveField ( true, "d", CSphColumnInfo::FIELD_INDEXED, sError ) ) << sError.cstr();
+			fnInsert ( 2, { "needle a", "needle b b", "needle c", "needle d d d d" } );
+			fnLengths ( { 5, 5, 6, 5 } );
+			ASSERT_TRUE ( pIndex->AddRemoveField ( false, "b", 0, sError ) ) << sError.cstr();
+			fnLengths ( { 5, 6, 5 } );
+			ASSERT_TRUE ( pIndex->AddRemoveField ( false, "a", 0, sError ) ) << sError.cstr();
+			fnLengths ( { 6, 5 } );
+			ASSERT_TRUE ( pIndex->AddRemoveField ( false, "d", 0, sError ) ) << sError.cstr();
+			fnLengths ( { 6 } );
+			pIndex->ForceRamFlush ( "field token schema test" );
+			pIndex.reset();
+			pIndex = fnCreate();
+			ASSERT_TRUE ( pIndex->Prealloc ( false, nullptr, dWarnings ) ) << pIndex->GetLastError().cstr();
+			pIndex->PostSetup();
+			fnLengths ( { 6 } );
+			ASSERT_TRUE ( pIndex->ForceDiskChunk() );
+			fnLengths ( { 6 } );
+		} );
+	}
+	for ( int i=0; i<16; ++i )
+		DeleteAttachTestFiles ( SphSprintf ( "%s.%d", PATH, i ).cstr() );
+	DeleteAttachTestFiles ( PATH );
+}
+
 TEST_F ( RT, AttachReportsMetadataFailure )
 {
 	static constexpr const char * SOURCE_PATH = "test_attach_source";

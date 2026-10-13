@@ -349,6 +349,8 @@ public:
 	CSphTightVector<BYTE>			m_dDocs;
 	CSphTightVector<BYTE>			m_dHits;
 
+	// Physical-row token ownership; rebuilt on adoption, never persisted separately.
+	CSphVector<int64_t>			m_dFieldLens;
 	DWORD							m_uRows = 0;			///< number of actually allocated rows
 	std::atomic<int64_t>			m_tAliveRows { 0 };		///< number of alive (non-killed) rows
 	CSphTightVector<CSphRowitem>	m_dRows GUARDED_BY ( m_tLock );				///< row data storage

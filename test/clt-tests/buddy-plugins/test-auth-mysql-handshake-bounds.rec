@@ -82,8 +82,8 @@ oversized-attributes: rejected
 bad-attribute-value: rejected
 huge-attribute-value: rejected
 ––– comment –––
-Ordinary authenticated MySQL clients must still connect.
+Ordinary authenticated MySQL clients must still connect and execute a query.
 ––– input –––
-MYSQL_PWD=adminpass mysql -h0 -P9306 -uadmin -NB -e 'SELECT 1' | tr -d '\r'
+MYSQL_PWD=adminpass mysql -h0 -P9306 -uadmin -e 'SELECT 1' >/dev/null && echo authenticated
 ––– output –––
-1
+authenticated

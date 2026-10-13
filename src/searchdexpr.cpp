@@ -959,7 +959,7 @@ int Expr_KNNChunkHighlight_c::HighlightDocstoreFields ( const CSphMatch & tMatch
 		return 0;
 
 	// a semantic-only query has nothing to mark up; the chunk itself is the answer
-	if ( pSource->IsFieldRanged(m_iChunkField) && GetQuery().IsEmpty() )
+	if ( m_bActive && pSource->IsFieldRanged(m_iChunkField) && GetQuery().IsEmpty() )
 		return PackVerbatim ( *pSource, ppStr );
 
 	return HighlightSource ( pSource, ppStr );

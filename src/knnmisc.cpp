@@ -143,29 +143,44 @@ static bool IsIdentChar ( char c )
 }
 
 
-// whether the expression text enables the knn_chunk highlight option: a 'knn_chunk' identifier followed by '=' and
-// a non-zero value (or by no value at all). Only the select list text is available here, the expressions get parsed later
+// whether the expression text enables the knn_chunk highlight option: a knn_chunk identifier outside string
+// literals, followed by '=' and a non-zero number. Only the select list text is available here, the expressions
+// get parsed later; a quoted 'knn_chunk' (e.g. a before_match value) is not an option
 static bool ExprEnablesKnnChunk ( const CSphString & sExpr )
 {
 	static const char szOption[] = "knn_chunk";
 	const int iOptionLen = sizeof(szOption)-1;
 	const char * szExpr = sExpr.cstr();
 	const int iLen = sExpr.Length();
-	for ( int i = 0; i+iOptionLen<=iLen; i++ )
+	char cQuote = 0;
+	for ( int i = 0; i<iLen; i++ )
 	{
-		if ( strncasecmp ( szExpr+i, szOption, iOptionLen ) || ( i>0 && IsIdentChar ( szExpr[i-1] ) ) || ( i+iOptionLen<iLen && IsIdentChar ( szExpr[i+iOptionLen] ) ) )
+		const char c = szExpr[i];
+		if ( cQuote )
+		{
+			if ( c=='\\' )
+				i++;
+			else if ( c==cQuote )
+				cQuote = 0;
+			continue;
+		}
+
+		if ( c=='\'' || c=='"' || c=='`' )
+		{
+			cQuote = c;
+			continue;
+		}
+
+		if ( i+iOptionLen>iLen || strncasecmp ( szExpr+i, szOption, iOptionLen ) || ( i>0 && IsIdentChar ( szExpr[i-1] ) ) || ( i+iOptionLen<iLen && IsIdentChar ( szExpr[i+iOptionLen] ) ) )
 			continue;
 
 		const char * p = szExpr+i+iOptionLen;
 		while ( sphIsSpace(*p) ) p++;
 		if ( *p!='=' )
-			return true;
+			continue;
 
 		p++;
 		while ( sphIsSpace(*p) || *p=='\'' || *p=='"' ) p++;
-		if ( !sphIsDigital(*p) )
-			return true;
-
 		while ( *p=='0' ) p++;
 		if ( sphIsDigital(*p) )
 			return true;

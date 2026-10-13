@@ -84,6 +84,6 @@ huge-attribute-value: rejected
 ––– comment –––
 Ordinary authenticated MySQL clients must still connect.
 ––– input –––
-MYSQL_PWD=adminpass mysql -h0 -P9306 -uadmin -N -e 'SELECT 1' | tr -d '\r'
+MYSQL_PWD=adminpass mysql -h0 -P9306 -uadmin -NB -e 'SELECT 1' | tr -d '\r'
 ––– output –––
 1

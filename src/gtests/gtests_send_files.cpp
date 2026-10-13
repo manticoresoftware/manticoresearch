@@ -128,7 +128,7 @@ TEST ( SstFileNames, AcceptsBasenames )
 
 TEST ( SstFileNames, RejectsPaths )
 {
-	for ( const char * szName : { "", ".", "..", "../products", "dir/products", "/tmp/products", "..\\products", "dir\\products" } )
+	for ( const char * szName : { "", ".", "..", "/", "\\", "../", "..\\", "./", ".\\", "../products", "dir/products", "/tmp/products", "products/", "..\\products", "dir\\products", "products\\" } )
 	{
 		SCOPED_TRACE ( szName );
 		EXPECT_FALSE ( IsReplicationFileName ( szName ) );

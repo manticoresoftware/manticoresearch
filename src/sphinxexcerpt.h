@@ -149,11 +149,6 @@ struct FieldSource_t
 std::unique_ptr<TextSource_i>		CreateSnippetSource ( DWORD uFilesMode, const BYTE * pSource, int iLen );
 std::unique_ptr<TextSource_i>		CreateHighlightSource ( const CSphVector<FieldSource_t> & dAllFields );
 
-// the text a stored field turns into before it is highlighted in html_strip_mode=index: the field filter, then the
-// HTML stripper of the table (without the paragraph and zone markers indexing adds)
-std::unique_ptr<CSphHTMLStripper>	CreateIndexHtmlStripper ( const CSphIndexSettings & tSettings, CSphString & sError );
-void								PrepareFieldText ( const VecTraits_T<const BYTE> & dSource, CSphVector<BYTE> & dPrepared, ISphFieldFilter * pFilter, const CSphHTMLStripper * pStripper );
-
 extern CSphString g_sSnippetsFilePrefix;
 
 #endif // _sphinxexcerpt_

@@ -17,7 +17,7 @@
 #include "memio.h"
 #include "tracer.h"
 #include "indexsettings.h"
-#include "sphinxexcerpt.h"
+#include "fieldtext.h"
 
 #include <memory>
 

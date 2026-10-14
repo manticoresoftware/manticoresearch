@@ -26,7 +26,7 @@
 #include "killlist.h"
 #include "histogram.h"
 #include "accumulator.h"
-#include "sphinxexcerpt.h"
+#include "fieldtext.h"
 #include "stripper/html_stripper.h"
 #include "indexcheck.h"
 #include "indexsettings.h"

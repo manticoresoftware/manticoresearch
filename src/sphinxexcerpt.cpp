@@ -24,6 +24,7 @@
 #include "snippetpassage.h"
 
 #include "stripper/html_stripper.h"
+#include "fieldtext.h"
 #include "tokenizer/tokenizer.h"
 #include "dict/dict_base.h"
 
@@ -854,46 +855,7 @@ void StringSourceTraits_c::PrepareText ( const VecTraits_T<BYTE> & dSourceText, 
 	if ( !pFilter && !pStripper )
 		return;
 
-	bool bFilterApplied = false;
-	if ( pFilter )
-	{
-		int iGot;
-		if ( bUseOriginal )
-			iGot = pFilter->Apply ( dSourceText, dDestText, false );
-		else
-		{
-			CSphVector<BYTE> dTmp;
-			dTmp.Append ( dSourceText );
-			iGot = pFilter->Apply ( dTmp, dDestText, false );
-		}
-
-		if ( iGot )
-		{
-			dDestText.Resize(iGot);
-			bFilterApplied = true;
-			bUseOriginal = false;
-		}
-	}
-
-	if ( pStripper )
-	{
-		if ( bUseOriginal )
-		{
-			dDestText.Resize(0);
-			dDestText.Append ( dSourceText );
-			bUseOriginal = false;
-		}
-
-		if ( !( dDestText.IsEmpty () || dDestText.Last ()=='\0' ) )
-			dDestText.Add('\0');
-
-		if ( !dDestText.IsEmpty() )
-		{
-			pStripper->Strip ( dDestText.Begin() );
-			dDestText.Resize ( (int) strlen ( (const char*)dDestText.Begin() ) );
-		}
-	}
-
+	bool bFilterApplied = FilterAndStripText ( dSourceText, dDestText, pFilter, pStripper, bUseOriginal );
 	if ( bFilterApplied && bFilterCJK )
 		BuildSpaces ( dSourceText, dDestText, dExtraSpaces );
 }
@@ -1721,33 +1683,6 @@ bool SnippetBuilder_c::PrepareSource ( TextSource_i & tSource, CSphString & sErr
 	return m_pImpl->PrepareSource ( tSource, sError );
 }
 
-
-std::unique_ptr<CSphHTMLStripper> CreateIndexHtmlStripper ( const CSphIndexSettings & tSettings, CSphString & sError )
-{
-	auto pStripper = std::make_unique<CSphHTMLStripper> ( true, true );
-	if ( !pStripper->SetIndexedAttrs ( tSettings.m_sHtmlIndexAttrs.cstr(), sError ) || !pStripper->SetRemovedElements ( tSettings.m_sHtmlRemoveElements.cstr(), sError ) )
-	{
-		sError.SetSprintf ( "HTML stripper config error: %s", sError.cstr() );
-		return nullptr;
-	}
-
-	return pStripper;
-}
-
-
-void PrepareFieldText ( const VecTraits_T<const BYTE> & dSource, CSphVector<BYTE> & dPrepared, ISphFieldFilter * pFilter, const CSphHTMLStripper * pStripper )
-{
-	dPrepared.Resize(0);
-	bool bUseOriginal = true;
-	CSphVector<int> dSpaces;
-	VecTraits_T<BYTE> dSourceText ( const_cast<BYTE*> ( dSource.Begin() ), dSource.GetLength() ); // read only, the traits take a non-const view
-	StringSourceTraits_c().PrepareText ( dSourceText, dPrepared, pFilter, pStripper, false, bUseOriginal, dSpaces );
-	if ( bUseOriginal )
-	{
-		dPrepared.Resize(0);
-		dPrepared.Append ( dSource );
-	}
-}
 
 CSphVector<BYTE> SnippetBuilder_c::PackResult ( SnippetResult_t & tRes, const VecTraits_T<int> & dRequestedFields ) const
 {

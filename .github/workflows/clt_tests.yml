@@ -295,6 +295,9 @@ jobs:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.ref }}
 
+      - name: Verify report calculations
+        run: python3 -m unittest discover -s .github/scripts/tests -p 'test_clt_reliability.py' -v
+
       - name: Download shard reports
         uses: actions/download-artifact@v7
         with:

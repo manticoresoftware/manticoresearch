@@ -198,6 +198,7 @@ Each row shows the table type, its name, the kind of lock it has, and a counter 
 **Lock Type** can be:
 - `read` — the table is protected by a read lock. Modifying statements will fail until the lock is released.
 - `freeze` — the table is frozen. This stops any operation that would write data to disk until the table is unfrozen.
+- `write_allow_readers` — the table is reserved by a [bulk import](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import), either a private session or a Shared pool. Searches work, while ordinary writes and another bulk import of the table fail until the import ends. A Shared pool keeps the table reserved even when its clients are gone; cancel it with [`PURGE BULK_IMPORT … OPTION clear_sessions=1`](../Node_info_and_management/PURGE.md#PURGE-BULK_IMPORT).
 
 <!-- request Example -->
 

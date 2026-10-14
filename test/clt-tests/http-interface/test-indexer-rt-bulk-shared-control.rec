@@ -1,0 +1,118 @@
+––– comment –––
+Shared bulk_import control paths: PURGE refuses while a pool is open and OPTION
+clear_sessions=1 cancels it; DROP TABLE cancels the pool of the table; the pool size N is
+read only by the request that creates the pool; private bulk_import on another table works
+next to an open pool, while the same table stays reserved by the pool. The pool size is
+clamped to searchd threads - 2, so the daemon gets threads = 8 for any CPU count of the runner.
+––– input –––
+sed -i '/^searchd *{/a threads = 8' /etc/manticoresearch/manticore.conf
+––– output –––
+––– block: ../base/start-searchd –––
+––– input –––
+cat > /tmp/shared.sh <<'EOF'
+gen() { for ((i=$2; i<=$3; i++)); do printf '{"insert":{"table":"%s","id":%d,"doc":{"title":"doc %d","gid":%d}}}\n' "$1" "$i" "$i" "$((i % 7))"; done; }
+post() { curl -sS -X POST "http://localhost:9308/bulk?bulk_import=$1&shared$2" -H 'Content-Type: application/x-ndjson' --data-binary @"$3" -w ' HTTP %{http_code}\n'; }
+commit() { printf '\n' > /tmp/commit.ndjson; post "$1" "$2" /tmp/commit.ndjson; }
+slow() { curl -sS --limit-rate "$3" -X POST "http://localhost:9308/bulk?bulk_import=$1&shared" -H 'Content-Type: application/x-ndjson' $4 --data-binary @"$2" -w ' HTTP %{http_code}\n' > /tmp/slow.reply 2>&1 & echo $! > /tmp/slow.pid; }
+sql() { mysql -h0 -P9306 --skip-table --batch --raw --skip-column-names -e "$1"; }
+leftovers() { echo "staging=$(ls /var/lib/manticore/$1 | grep -c indexer-rt-bulk) children=$(ps -eo args | grep -c '[i]ndexer_rt_bulk_chunk')"; }
+EOF
+––– output –––
+––– comment –––
+PURGE without the option refuses while the pool is open; clear_sessions=1 cancels the pool,
+its children and staging files, and the table is free again.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_purge (title TEXT, gid INT)"; gen s_purge 1 100 > /tmp/p1.ndjson; post s_purge '' /tmp/p1.ndjson; sql "PURGE BULK_IMPORT FROM TABLE s_purge"
+––– output –––
+{"items":[],"current_line":100,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+ERROR 1064 (42000) at line 1: shared bulk_import into table 's_purge' is open or failed; commit it or use OPTION clear_sessions=1 to cancel it
+––– input –––
+source /tmp/shared.sh; sql "PURGE BULK_IMPORT FROM TABLE s_purge OPTION clear_sessions=1"; commit s_purge ''; leftovers s_purge; sql "INSERT INTO s_purge (id, title, gid) VALUES (1, 'direct insert', 0); SELECT COUNT(*) FROM s_purge"
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"no shared bulk_import into table 's_purge' to commit","error_code":"shared_no_pool","shared_state":"no_pool"} HTTP 409
+staging=0 children=0
+1
+––– input –––
+source /tmp/shared.sh; sql "PURGE BULK_IMPORT FROM TABLE s_purge OPTION clear_sessions=2"
+––– output –––
+ERROR 1064 (42000) at line 1: clear_sessions must be 0 or 1
+––– comment –––
+PURGE clear_sessions=1 while an admitted data request is still sending: the children of the pool
+are killed and the table is released at once, so a plain INSERT works while that request still
+runs; a new load into the table then publishes alone and nothing is left behind.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_purge_live (title TEXT, gid INT)"; gen s_purge_live 1 3000 > /tmp/l1.ndjson; gen s_purge_live 5001 5100 > /tmp/l2.ndjson; slow s_purge_live /tmp/l1.ndjson 4k; sleep 2; sql "PURGE BULK_IMPORT FROM TABLE s_purge_live OPTION clear_sessions=1"; for i in $(seq 1 30); do ps -eo args | grep -q '[i]ndexer_rt_bulk_chunk' || break; sleep 0.1; done; echo "children=$(ps -eo args | grep -c '[i]ndexer_rt_bulk_chunk')"; sql "INSERT INTO s_purge_live (id, title, gid) VALUES (1, 'direct insert', 0); SELECT COUNT(*) FROM s_purge_live"; kill -0 $(cat /tmp/slow.pid) && echo "data request still running"
+––– output –––
+children=0
+1
+data request still running
+––– input –––
+source /tmp/shared.sh; kill $(cat /tmp/slow.pid); while kill -0 $(cat /tmp/slow.pid) 2>/dev/null; do sleep 0.1; done; sleep 0.5; post s_purge_live '' /tmp/l2.ndjson; commit s_purge_live ''; sql "SELECT COUNT(*), MIN(id), MAX(id) FROM s_purge_live"; leftovers s_purge_live
+––– output –––
+{"items":[],"current_line":100,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+101	1	5100
+staging=0 children=0
+––– comment –––
+DROP TABLE cancels the open pool. Data for the dropped table is refused, and a recreated table
+takes a new load from scratch.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_drop (title TEXT, gid INT)"; gen s_drop 1 100 > /tmp/d1.ndjson; gen s_drop 201 250 > /tmp/d2.ndjson; post s_drop '' /tmp/d1.ndjson; sql "DROP TABLE s_drop"; ps -eo args | grep -c '[i]ndexer_rt_bulk_chunk'; post s_drop '' /tmp/d2.ndjson
+––– output –––
+{"items":[],"current_line":100,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+0
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"bulk_import requires an existing local RT table; table 's_drop' is absent or distributed","error_code":"shared_precondition","shared_state":"rejected"} HTTP 400
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_drop (title TEXT, gid INT)"; post s_drop '' /tmp/d2.ndjson; commit s_drop ''; sql "SELECT COUNT(*), MIN(id), MAX(id) FROM s_drop"
+––– output –––
+{"items":[],"current_line":50,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+50	201	250
+––– comment –––
+Pool size N: shared=N sets it in the request that creates the pool. N is read as an integer, a
+value that is not a number as 0, and clamped to 1..searchd threads - 2, so no N refuses a
+document. A request that joins the open pool or commits it ignores its N.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_chunks (title TEXT, gid INT)"; gen s_chunks 1 3000 > /tmp/c1.ndjson; gen s_chunks 3001 6000 > /tmp/c2.ndjson; gen s_chunks 6001 9000 > /tmp/c3.ndjson; gen s_n 1 10 > /tmp/c0.ndjson; for n in 0 -1 abc 2x 100000; do sql "CREATE TABLE s_n (title TEXT, gid INT)"; post s_n "=$n" /tmp/c0.ndjson; leftovers s_n; commit s_n '' > /dev/null; sql "DROP TABLE s_n"; done
+––– output –––
+{"items":[],"current_line":10,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+staging=1 children=1
+{"items":[],"current_line":10,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+staging=1 children=1
+{"items":[],"current_line":10,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+staging=1 children=1
+{"items":[],"current_line":10,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+staging=1 children=2
+{"items":[],"current_line":10,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+staging=1 children=%{NUMBER}
+––– input –––
+source /tmp/shared.sh; post s_chunks '=2' /tmp/c1.ndjson; post s_chunks '=1' /tmp/c2.ndjson; post s_chunks '=abc' /tmp/c3.ndjson; commit s_chunks '=3'
+––– output –––
+{"items":[],"current_line":3000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":3000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":3000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+––– input –––
+source /tmp/shared.sh; sql "SELECT COUNT(*), SUM(id) FROM s_chunks; SHOW TABLE s_chunks STATUS LIKE 'disk_chunks'"
+––– output –––
+9000	40504500
+disk_chunks	2
+––– comment –––
+Private bulk_import next to an open shared pool: another table imports through HTTP and SQL
+as usual, the pool's own table is reserved, and the pool still publishes.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_mix (title TEXT, gid INT); CREATE TABLE p_http (title TEXT, gid INT); CREATE TABLE p_sql (title TEXT, gid INT)"; gen s_mix 1 100 > /tmp/m1.ndjson; gen p_http 1 2 > /tmp/m2.ndjson; gen s_mix 1001 1002 > /tmp/m3.ndjson; post s_mix '' /tmp/m1.ndjson
+––– output –––
+{"items":[],"current_line":100,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+––– input –––
+curl -sS -X POST 'http://localhost:9308/bulk?bulk_import=p_http' -H 'Content-Type: application/x-ndjson' --data-binary @/tmp/m2.ndjson | grep -o '"errors":[a-z]*'; mysql -h0 -P9306 -e "SET bulk_import=p_sql; INSERT INTO p_sql (id, title, gid) VALUES (1, 'sql one', 1), (2, 'sql two', 2); COMMIT; SET bulk_import=0"; curl -sS -X POST 'http://localhost:9308/bulk?bulk_import=s_mix' -H 'Content-Type: application/x-ndjson' --data-binary @/tmp/m3.ndjson | grep -o '"error":"[^"]*"'
+––– output –––
+"errors":false
+"error":"table 's_mix' is locked"
+––– input –––
+source /tmp/shared.sh; commit s_mix ''; sql "SELECT COUNT(*) FROM s_mix; SELECT COUNT(*) FROM p_http; SELECT COUNT(*) FROM p_sql"
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+100
+2
+2

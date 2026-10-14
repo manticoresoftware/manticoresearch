@@ -1,0 +1,109 @@
+––– comment –––
+Shared bulk_import commit and error semantics: a commit while another data request is
+active is refused and keeps the pool; an invalid document fails the pool for everybody until
+a commit reports and removes it; a broken request body drops only its own unwritten tail; a
+shared_join request never creates a pool.
+––– block: ../base/start-searchd –––
+––– input –––
+cat > /tmp/shared.sh <<'EOF'
+gen() { for ((i=$2; i<=$3; i++)); do printf '{"insert":{"table":"%s","id":%d,"doc":{"title":"doc %d","gid":%d}}}\n' "$1" "$i" "$i" "$((i % 7))"; done; }
+post() { curl -sS -X POST "http://localhost:9308/bulk?bulk_import=$1&shared$2" -H 'Content-Type: application/x-ndjson' --data-binary @"$3" -w ' HTTP %{http_code}\n'; }
+slow() { curl -sS --limit-rate "$3" -X POST "http://localhost:9308/bulk?bulk_import=$1&shared" -H 'Content-Type: application/x-ndjson' $4 --data-binary @"$2" -w ' HTTP %{http_code}\n' > /tmp/slow.reply 2>&1 & echo $! > /tmp/slow.pid; }
+commit() { printf '\n' > /tmp/commit.ndjson; post "$1" "$2" /tmp/commit.ndjson; }
+sql() { mysql -h0 -P9306 --skip-table --batch --raw --skip-column-names -e "$1"; }
+leftovers() { echo "staging=$(ls /var/lib/manticore/$1 | grep -c indexer-rt-bulk) children=$(ps -eo args | grep -c '[i]ndexer_rt_bulk_chunk')"; }
+EOF
+––– output –––
+––– comment –––
+Busy: a slow data request (about 6 s for 2000 documents) is admitted before its body is read,
+so a commit sent meanwhile gets 409 shared_busy and the pool stays open. After the slow
+request is staged the commit publishes both requests.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_busy (title TEXT, gid INT)"; gen s_busy 1 100 > /tmp/b1.ndjson; gen s_busy 101 2100 > /tmp/b2.ndjson; post s_busy '' /tmp/b1.ndjson
+––– output –––
+{"items":[],"current_line":100,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+––– input –––
+source /tmp/shared.sh; slow s_busy /tmp/b2.ndjson 20k; sleep 1; commit s_busy ''
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"shared bulk_import into table 's_busy' has other active requests","error_code":"shared_busy","shared_state":"busy"} HTTP 409
+––– input –––
+source /tmp/shared.sh; while kill -0 $(cat /tmp/slow.pid) 2>/dev/null; do sleep 0.2; done; cat /tmp/slow.reply; commit s_busy ''; sql "SELECT COUNT(*), SUM(id) FROM s_busy"
+––– output –––
+{"items":[],"current_line":2000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+2100	2206050
+––– comment –––
+Invalid document: the request that sent it gets 400, the pool keeps the first error and later
+requests get 409 with that text; its children are killed and the table is released at once. The
+commit returns the error with 500 and removes the failed pool and its staging files.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_fail (title TEXT, gid INT)"; gen s_fail 1 100 > /tmp/f1.ndjson; printf '%s\n' '{"insert":{"table":"s_fail","id":101,"doc":{"title":"bad","nosuch":1}}}' > /tmp/f2.ndjson; post s_fail '' /tmp/f1.ndjson; post s_fail '' /tmp/f2.ndjson; post s_fail '' /tmp/f1.ndjson
+––– output –––
+{"items":[],"current_line":100,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"unknown column: 'nosuch'","error_code":"shared_failed","shared_state":"failed"} HTTP 400
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"unknown column: 'nosuch'","error_code":"shared_failed","shared_state":"failed"} HTTP 409
+––– input –––
+source /tmp/shared.sh; commit s_fail ''; commit s_fail ''
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"unknown column: 'nosuch'","error_code":"shared_failed","shared_state":"failed"} HTTP 500
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"no shared bulk_import into table 's_fail' to commit","error_code":"shared_no_pool","shared_state":"no_pool"} HTTP 409
+––– input –––
+source /tmp/shared.sh; leftovers s_fail; sql "INSERT INTO s_fail (id, title, gid) VALUES (1, 'direct insert', 0); SELECT COUNT(*) FROM s_fail"
+––– output –––
+staging=0 children=0
+1
+––– comment –––
+Broken body: a request is killed after a few KB, less than one 32 KiB batch. Its tail is
+dropped, the pool and its children stay, the next request is staged and the commit publishes
+exactly the data of the complete requests.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_break (title TEXT, gid INT)"; gen s_break 1 100 > /tmp/k1.ndjson; gen s_break 101 3100 > /tmp/k2.ndjson; gen s_break 3101 3200 > /tmp/k3.ndjson; post s_break '' /tmp/k1.ndjson
+––– output –––
+{"items":[],"current_line":100,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+––– input –––
+source /tmp/shared.sh; slow s_break /tmp/k2.ndjson 4k; sleep 2; kill $(cat /tmp/slow.pid); sleep 0.5; echo "children=$(ps -eo args | grep -c '[i]ndexer_rt_bulk_chunk')"
+––– output –––
+children=1
+––– input –––
+source /tmp/shared.sh; post s_break '' /tmp/k3.ndjson; commit s_break ''; sql "SELECT COUNT(*), MIN(id), MAX(id), SUM(id) FROM s_break; SELECT COUNT(*) FROM s_break WHERE id>100 AND id<=3100"
+––– output –––
+{"items":[],"current_line":100,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+200	1	3200	320100
+0
+––– comment –––
+The same with a chunked body, as the Fluent Bit plugin sends it: a connection lost before the
+last chunk fails only that request, not the pool.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_break_chunked (title TEXT, gid INT)"; gen s_break_chunked 1 100 > /tmp/c1.ndjson; gen s_break_chunked 101 3100 > /tmp/c2.ndjson; gen s_break_chunked 3101 3200 > /tmp/c3.ndjson; post s_break_chunked '' /tmp/c1.ndjson; slow s_break_chunked /tmp/c2.ndjson 4k '-H Transfer-Encoding:chunked'; sleep 2; kill $(cat /tmp/slow.pid); sleep 0.5; post s_break_chunked '' /tmp/c3.ndjson; commit s_break_chunked ''; sql "SELECT COUNT(*), SUM(id) FROM s_break_chunked"
+––– output –––
+{"items":[],"current_line":100,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":100,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+200	320100
+––– comment –––
+A pool that never received a batch (the only data request broke before 32 KiB) still commits:
+its empty slot is closed without a build, the reply is published, no chunk is added and nothing
+is left behind.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_nothing (title TEXT, gid INT)"; gen s_nothing 1 3000 > /tmp/n1.ndjson; slow s_nothing /tmp/n1.ndjson 4k; sleep 2; kill $(cat /tmp/slow.pid); sleep 0.5; commit s_nothing ''
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+––– input –––
+source /tmp/shared.sh; sql "SELECT COUNT(*) FROM s_nothing; SHOW TABLE s_nothing STATUS LIKE 'disk_chunks'"; leftovers s_nothing
+––– output –––
+0
+disk_chunks	0
+staging=0 children=0
+––– comment –––
+A request with shared_join only joins an open pool: without one it answers no_pool and creates
+nothing, as the commit after it shows; with an open pool it is staged like any other request.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_join (title TEXT, gid INT)"; gen s_join 1 3000 > /tmp/j1.ndjson; gen s_join 3001 6000 > /tmp/j2.ndjson; post s_join '&shared_join' /tmp/j1.ndjson; commit s_join ''; post s_join '' /tmp/j1.ndjson; post s_join '&shared_join' /tmp/j2.ndjson; commit s_join ''; sql "SELECT COUNT(*), SUM(id) FROM s_join"
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"no shared bulk_import into table 's_join' to join","error_code":"shared_no_pool","shared_state":"no_pool"} HTTP 409
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"no shared bulk_import into table 's_join' to commit","error_code":"shared_no_pool","shared_state":"no_pool"} HTTP 409
+{"items":[],"current_line":3000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":3000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+6000	18003000

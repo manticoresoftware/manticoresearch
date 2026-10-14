@@ -998,11 +998,8 @@ static bool ParseIndex ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, CSphString 
 }
 
 
-static bool ParseIndexId ( const JsonObj_c & tRoot, bool bArrayIds, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
+static bool ParseDocId ( const JsonObj_c & tRoot, bool bArrayIds, DocID_t & tDocId, CSphString & sError )
 {
-	if ( !ParseIndex ( tRoot, tStmt, sError ) )
-		return false;
-
 	JsonObj_c tId = tRoot.GetItem ( "id" );
 	if ( tId )
 	{
@@ -1060,6 +1057,14 @@ static bool ParseIndexId ( const JsonObj_c & tRoot, bool bArrayIds, SqlStmt_t & 
 		tDocId = 0; 	// enable auto-id
 
 	return true;
+}
+
+static bool ParseIndexId ( const JsonObj_c & tRoot, bool bArrayIds, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
+{
+	if ( !ParseIndex ( tRoot, tStmt, sError ) )
+		return false;
+
+	return ParseDocId ( tRoot, bArrayIds, tDocId, sError );
 }
 
 static bool ParseCluster ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, CSphString & sError )
@@ -2103,7 +2108,27 @@ bool sphParseJsonDelete ( Str_t sDelete, SqlStmt_t & tStmt, DocID_t & tDocId, CS
 }
 
 
-bool sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString & sStmt, CSphString & sQuery, DocID_t & tDocId, CSphString & sError )
+// a bulk_import line without an operation, {"id":1,"title":...}: an insert into sTable with every member as a column;
+// the id follows the rules of an insert id, since the generic value would turn an id above INT64_MAX negative
+static bool ParseJsonBulkImportDoc ( const JsonObj_c & tRoot, const CSphString & sTable, SqlStmt_t & tStmt, CSphString & sStmt, DocID_t & tDocId, CSphString & sError )
+{
+	tStmt.m_sIndex = sTable;
+	tStmt.m_tQuery.m_sIndexes = sTable;
+	sStmt = "insert";
+	if ( !ParseDocId ( tRoot, false, tDocId, sError ) )
+		return false;
+
+	if ( !ParseJsonInsertSource ( tRoot, tStmt, false, sError ) )
+		return false;
+
+	for ( int i=0; i<tStmt.m_dInsertSchema.GetLength(); ++i )
+		if ( tStmt.m_dInsertSchema[i]==sphGetDocidName() && tStmt.m_dInsertValues[i].m_iType==SqlInsert_t::CONST_INT )
+			tStmt.m_dInsertValues[i].SetValueInt ( (uint64_t)tDocId, false );
+	return true;
+}
+
+
+bool sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString & sStmt, CSphString & sQuery, DocID_t & tDocId, CSphString & sError, const CSphString * pBulkImportTable )
 {
 	JsonObj_c tRoot ( szStmt );
 	if ( !tRoot )
@@ -2118,6 +2143,11 @@ bool sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString 
 		sError = "no statement found";
 		return false;
 	}
+
+	// bulk_import: one member with an object value is an operation, any other object is a document {"id":1,...};
+	// a document always has an id, so it never has that shape
+	if ( pBulkImportTable && tRoot.IsObj() && ( tRoot[1] || !tJsonStmt.IsObj() ) )
+		return ParseJsonBulkImportDoc ( tRoot, *pBulkImportTable, tStmt, sStmt, tDocId, sError );
 
 	sStmt = tJsonStmt.Name();
 

@@ -522,8 +522,8 @@ POST /insert
 * `query_vector`：（旧参数）作为数字数组的搜索向量。为向后兼容仍然支持。
   **注意：** 同一请求中只能使用 `query` 或 `query_vector` 其中之一，不能同时使用。
 * `ef`：搜索过程中使用的动态列表大小，可选。`ef` 越大，搜索越准确，但速度越慢。默认值为 10。
-* `rescore`：启用 KNN 重新评分（默认启用）。在 SQL 中设为 `0` 或在 JSON 中设为 `false` 可禁用重新评分。KNN 搜索在使用量化向量完成后（可能伴随过采样），会使用原始（全精度）向量重新计算距离并重新排序结果，以提高排序准确性。
-* `oversampling`：设置一个因子（浮点值），在执行 KNN 搜索时将 `k` 乘以该因子，从而使用量化向量检索出比所需更多的候选结果。默认应用 `oversampling=3.0`。如果启用了重新评分，这些候选结果之后可以重新评估。过采样也适用于非量化向量。由于它会增大 `k`，进而影响 HNSW 索引的工作方式，因此可能会使结果精度略有变化。
+* `rescore`: 启用 KNN 重评分（默认启用）。在 SQL 中设置为 `0` 或在 JSON 中设置为 `false` 可禁用重评分。使用量化向量完成 KNN 搜索后（可能带有过采样），会用原始（全精度）向量重新计算距离，并对结果重新排序，以提高排序准确性。当这些向量不在内存中时，请参阅 [knn_rescore_prefetch](../Server_settings/Searchd.md#knn_rescore_prefetch) 了解它们如何从磁盘读取。
+* `oversampling`: 设置一个系数（浮点值），执行 KNN 搜索时会用它乘以 `k`，从而使用量化向量检索出多于所需数量的候选项。默认应用 `oversampling=3.0`。启用重评分后，会对按量化距离最近的 `k` × `oversampling` 个候选项重新计算精确距离。无论表有多少个磁盘块，这个预算都按每个表计算一次，即使每个块都会检索自己的 `k` × `oversampling` 个候选项。过采样也适用于非量化向量。由于它会增大 `k`，而 `k` 会影响 HNSW 索引的工作方式，因此可能会导致结果准确性出现小幅变化。
 * `early_termination`：启用或禁用 HNSW 图遍历期间的自适应提前终止。默认启用。设为 SQL 中的 `0` 或 JSON 中的 `false` 可禁用。详情参见[提前终止](../Searching/KNN.md#Early-termination)。
 
 当提供的是文本查询时（因此 Manticore 会在搜索前对字符串进行嵌入），可以在 SQL 中通过 `OPTION embeddings_threads = N` 按查询覆盖嵌入库使用的线程数。该值只会限制此查询的嵌入调用，覆盖全局 [embeddings_threads](../Server_settings/Searchd.md#embeddings_threads) 设置；`0` 表示不设上限。当查询以向量数组形式提供时，此选项不起作用。
@@ -612,6 +612,8 @@ POST /search
 ### KNN 候选集
 
 KNN 搜索返回的是候选集，而不是精确的行数。实时表的每个磁盘块最多会贡献 `LIMIT` × `oversampling` 个最近文档（如果使用已弃用的 `k`，则为 `k` × `oversampling`），并且 `oversampling` 默认为 3。`LIMIT` 仍然控制你收到的行数，但 [SHOW META](../Node_info_and_management/SHOW_META.md) 中的 `total_found` 以及所有 [FACET](../Searching/Faceted_search.md) 计数都会覆盖整个候选集。例如，在一个包含 4 个磁盘块的表上，`SELECT id FROM t WHERE knn(vec, 'quiet flat') LIMIT 5` 会返回 5 行，`total_found` 为 60（5 × 3 × 4）；在 [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md) 将该表合并为一个块后，同一查询会报告 15。因此，KNN 查询的 `total_found` 并不是相关文档的数量。若要让搜索考虑每个文档，例如按相似度对所有通过属性过滤器的文档进行排序，请将 `LIMIT`（以及需要时的 `max_matches`）设置为至少等于表中的文档数量。
+
+启用重评分后，只会对按量化距离最近的 `LIMIT` × `oversampling` 个候选项重新计算精确距离（如果 `LIMIT` + `OFFSET` 更大，则按该数量计算），并且按每个表计算一次，而不是按每个磁盘块计算。其余候选项仍保留在候选集中，因此 `total_found` 和 FACET 计数仍会覆盖整个候选集，但它们的排名会排在所有已重评分行之后。
 
 ### 排序 KNN 结果
 

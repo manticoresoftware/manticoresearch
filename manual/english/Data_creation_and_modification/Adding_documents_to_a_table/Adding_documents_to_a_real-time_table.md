@@ -918,11 +918,77 @@ curl -sS -X POST \
   'http://localhost:9308/bulk?bulk_import=products'
 ```
 
+A line can also be a bare document: the table comes from `bulk_import=<table>`, and `id` is one of the fields:
+
+```bash
+printf '%s\n' \
+  '{"id":101,"title":"Crossbody Bag with Tassel","price":19.85}' \
+  '{"id":102,"title":"Microfiber Sheet Set","price":19.99}' |
+curl -sS -X POST \
+  -H 'Content-Type: application/x-ndjson' \
+  --data-binary @- \
+  'http://localhost:9308/bulk?bulk_import=products'
+```
+
+Every field of a bare document is a column, including a field named `doc`, and `id` is required. A line is an operation when it has exactly one field whose value is an object, such as `insert`; any other line is a bare document. Both forms can be mixed in one request. A `/bulk` request without `bulk_import` still requires the operation form.
+
 In a request body, an empty line ends and publishes the current batch; the end of the request publishes the final batch. Manticore sends the HTTP response after processing all batches in that request. If a later batch fails, batches published earlier in the same request remain searchable. To publish the entire request atomically as one disk chunk, do not include empty lines. The response contains one aggregate `bulk` result for each published batch rather than one result per document.
 
 For a typical import, send the complete NDJSON body in one request as shown above. Close the HTTP connection when the import is complete to release the table for other writes.
 
 The endpoint supports chunked transfer encoding, so it can process bodies larger than `max_packet_size` without buffering the whole request.
+
+#### Shared HTTP bulk import
+
+Add `shared` next to `bulk_import=<table>` when many concurrent requests, for example a log shipper that sends every flush over a new connection, load one table. All such requests feed one table-wide pool of indexers. The pool does not belong to a connection: it lives across requests, connections and reconnects until it is committed, cancelled with `PURGE`, the table is dropped, or the daemon stops.
+
+```bash
+curl -sS -X POST -H 'Content-Type: application/x-ndjson' --data-binary @part1.ndjson \
+  'http://localhost:9308/bulk?bulk_import=products&shared=4'
+```
+
+Each line must be an `insert` or `create` for the target table, or a bare document as described above. The first document creates the pool and starts its indexers. A successful data response (`"shared_state":"staged"`) means the documents are staged, not searchable: neither the end of a request, nor a closed connection, nor HTTP chunk boundaries publish anything.
+
+From the first document until the pool is committed, fails or is cancelled, the pool reserves the table, as a private bulk import does: searches keep working, while ordinary writes (`INSERT`, `REPLACE`, `UPDATE`, `DELETE`) and another bulk import of the same table fail with an error saying that the table is locked. Closing connections does not release the table. [`SHOW LOCKS`](../../Securing_and_compacting_a_table/Freezing_and_locking_a_table.md#SHOW-LOCKS) lists a reserved table with the lock type `write_allow_readers`. The first document of a new pool is rejected with `shared_precondition` and the same error while another bulk import holds the table, while the table is locked with `LOCK TABLES … READ`, or while an ordinary write to it is running.
+
+A request without documents that contains an empty line commits the pool:
+
+```bash
+printf '\n' | curl -sS -X POST -H 'Content-Type: application/x-ndjson' --data-binary @- \
+  'http://localhost:9308/bulk?bulk_import=products&shared'
+```
+
+The commit closes the pool to new data, stops the indexers that received no data, waits until every other indexer has built its part, attaches one disk chunk per such indexer, removes the pool and answers `"shared_state":"published"`. If other data requests are still running, the commit answers HTTP `409` with `shared_busy` and the pool stays open; repeat the commit after the writers finish. A commit without a pool answers `409` with `shared_no_pool`, because a commit never creates a pool; a pool that received no data publishes no chunk. Empty lines in a request with documents, including lines of only spaces, are ignored, so a data request never publishes. LF and CRLF both end a line.
+
+The number of indexers, and so of new disk chunks, is set by `shared=N` in the request that creates the pool. With a bare `shared`, the daemon uses the `INDEXER_RT_BULK_SHARED_POOL_SIZE` environment variable of `searchd`, otherwise one indexer. N is limited to the range from 1 to the number of worker [threads](../../Server_settings/Searchd.md#threads) minus 2 (at least 1): a smaller value, or one that is not a number, gives one indexer, and a larger value gives the maximum. Only the request that creates the pool reads N; requests that join the open pool, and the commit, ignore it. Data is spread over the indexers in batches of about 32 KiB, in turn. More indexers shorten the build after the commit but use more CPU and memory while loading. A good starting point is about two thirds of the worker threads, for example 8 indexers with 12 threads; with more, the indexers compete with the incoming requests for CPU and disk, and the load gets slower. Each indexer needs roughly 200 MB of RAM while loading.
+
+Every response is one JSON object with `errors`, `error`, `error_code` and `shared_state`:
+
+| `shared_state` | HTTP | `error_code` | Meaning |
+| --- | --- | --- | --- |
+| `staged` | 200 | | data is in the pool |
+| `published` | 200 | | the pool was committed |
+| `busy` | 409 | `shared_busy` | commit while other data requests are active |
+| `closing` | 409 | `shared_closing` | the pool is being published |
+| `no_pool` | 409 | `shared_no_pool` | commit, or a data request with `shared_join`, without a pool |
+| `rejected` | 400, or 403 without write permission | `shared_precondition` | invalid request, e.g. no write permission or a table that is locked when the pool is created |
+| `failed` | 400, 409 or 500 | `shared_failed` | the load failed, see below |
+
+`current_line` counts the documents of the request; a commit reports `1`. On an error `skipped_lines` equals `current_line`, although the batches of the request already handed to the indexers stay in the pool.
+
+If a connection breaks or times out in the middle of a request body, or the request is killed with `KILL`, only that request fails: its last unwritten part (less than 32 KiB) is dropped, data already handed to the indexers stays, and the pool remains open, so the client can resend the request. An invalid document (malformed JSON, unknown column, another table, an operation other than `insert`/`create`) or a failed write to an indexer fails the whole load: its indexers are stopped and the table is released at once, that request gets `400` for an invalid document or `500` for a failed write, every later request gets `409` with the first error, and the next commit returns this error with `500` and removes the failed pool and its staging files; `PURGE … OPTION clear_sessions=1` removes it as well. Only then can a new load start.
+
+A failed request and a failed load get the same answer, `failed` with `shared_failed` (`400`, or `500` for a killed request), so the response alone does not tell them apart. The next request does: `staged` means the pool is still open, while `409` with `shared_failed` means the load failed.
+
+A pool lives only in the memory of `searchd`. If the daemon stops or crashes during a load, or the pool is cancelled, its staged documents are gone, and the next data request would start a new pool that holds only the later documents. To notice this, add `shared_join` to every data request after the first `staged` reply: such a request only joins the open pool and never creates one, so without a pool it answers `409` with `shared_no_pool`, and the load can be repeated from the start.
+
+The pool does not end when its clients do. If they are gone before the commit, for example because a log shipper was stopped or crashed, the pool stays open and keeps the table reserved, so ordinary writes keep failing. Release the table in one of two ways: commit the pool as shown above, which publishes the documents staged so far, or cancel it, which discards them:
+
+```sql
+PURGE BULK_IMPORT FROM TABLE products OPTION clear_sessions=1;
+```
+
+The cancel stops the indexers, releases the table and removes the staging files; chunks published earlier stay in the table. A commit answers `409` with `shared_busy` while a data request of a vanished client still counts as running, until that request times out; the cancel does not wait for it. Once the table is released, `SHOW LOCKS` no longer lists it, and a new Shared load can start. See [`PURGE BULK_IMPORT`](../../Node_info_and_management/PURGE.md#PURGE-BULK_IMPORT) for details.
 
 #### Elasticsearch `/_bulk`
 
@@ -930,7 +996,7 @@ The Elasticsearch-compatible `/_bulk` endpoint does not support direct-to-disk `
 
 #### Duplicate document IDs
 
-Within one direct-to-disk batch, the first row for a numeric document ID remains visible and later rows with the same ID are logically removed. For SQL, a batch consists of the rows staged before `COMMIT` or `ROLLBACK`. For Manticore `/bulk`, each group published at an empty line, table change, or request EOF is a separate batch.
+Within one direct-to-disk batch, the first row for a numeric document ID remains visible and later rows with the same ID are logically removed. For SQL, a batch consists of the rows staged before `COMMIT` or `ROLLBACK`. For Manticore `/bulk`, each group published at an empty line, table change, or request EOF is a separate batch. In a Shared load, the data of each indexer is a separate batch, and its chunks are attached one after another when the pool is committed. If attaching one of them fails, the chunks attached before it stay in the table and the commit answers `500`; loading the same documents again is safe, because a published row replaces any row with the same ID.
 
 When Manticore publishes a disk chunk to the target table, a row in that chunk replaces any existing row with the same ID. This also applies to IDs published by an earlier HTTP batch. As a result, retrying a previously published batch replaces its rows, while duplicates within the retried batch still keep the first row. In a Manticore `/bulk` request, the `create` operation, for example:
 
@@ -942,7 +1008,7 @@ behaves like `insert`; it does not fail merely because the ID already exists.
 
 #### Staging files and cleanup
 
-Manticore removes the current staging directory after a normal `COMMIT`, `ROLLBACK`, mode disable, or session close. A daemon or host crash can leave an abandoned staging directory behind. A later direct-to-disk load creates a new uniquely named directory and does not reuse or attach files left by the crashed load.
+Manticore removes the current staging directory after a normal `COMMIT`, `ROLLBACK`, mode disable, or session close. A Shared pool keeps its staging directories until it is committed or cancelled; closing connections does not remove them. A daemon or host crash can leave an abandoned staging directory behind. A later direct-to-disk load creates a new uniquely named directory and does not reuse or attach files left by the crashed load.
 
 Use the following query to inspect all direct-to-disk staging entries for a table:
 
@@ -960,12 +1026,14 @@ After confirming that no direct-to-disk load is active for the table, remove its
 PURGE BULK_IMPORT FROM TABLE products;
 ```
 
-`PURGE` requires an existing local real-time table that is not in a replication cluster. It removes only direct-to-disk staging state and does not change the table schema or indexed rows. It succeeds as a no-op when the staging root is absent. In configless mode, `DROP TABLE` also removes the table's direct-to-disk staging root.
+While the table has an open Shared pool, `PURGE` is refused; `PURGE BULK_IMPORT FROM TABLE products OPTION clear_sessions=1` cancels the pool first, stops its indexers, releases the table and then removes the staging root. While the pool is attaching its chunks, `PURGE` is refused; repeat it after the commit finishes. On Windows, `PURGE … OPTION clear_sessions=1` or `DROP TABLE` while a data request is still writing to the pool can answer `failed to remove bulk staging root`: the pool is already cancelled, but its stopped indexers keep their files open for a moment; repeat the statement.
+
+`PURGE` requires an existing local real-time table that is not in a replication cluster. It removes only direct-to-disk staging state and does not change the table schema or indexed rows. It succeeds as a no-op when the staging root is absent. In configless mode, `DROP TABLE` also removes the table's direct-to-disk staging root and cancels its Shared pool; a daemon shutdown cancels every Shared pool. Chunks published earlier stay in the table.
 
 #### Current limitations
 
 * The target must be one existing, unfrozen local real-time table that is not a replication-cluster member. Distributed, sharded, replicated, percolate, and plain tables are not supported.
-* SQL supports only `INSERT`. Manticore `/bulk` accepts `insert` and `create`; `index`, `replace`, `update`, and `delete` are rejected.
+* SQL supports only `INSERT`. Manticore `/bulk` accepts `insert`, `create` and bare documents; `index`, `replace`, `update`, and `delete` are rejected.
 * Every row must provide an explicit numeric, non-zero document ID. Auto-generated and UUID document IDs are not supported.
 * Static builds are not supported.
 * The platform-specific executable (`indexer` on Linux, `indexer.exe` on Windows) must be in the same directory as the running `searchd` executable. Manticore Search resolves only that sibling path and does not search `PATH`. Use the executable from the same installation as `searchd` to ensure compatibility. If it is absent, unreadable, or cannot be started, only bulk import fails; normal startup and regular insertion remain available.

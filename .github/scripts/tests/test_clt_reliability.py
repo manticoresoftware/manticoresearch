@@ -49,7 +49,7 @@ class CLTReportsTest(unittest.TestCase):
                 {"id": 1, "tests": ["a"]},
                 {"id": 2, "tests": ["b", "c"]},
             ])
-            self.assertEqual([r["status"] for r in report["tests"]], ["passed", "not_run", "not_run"])
+            self.assertEqual([r["status"] for r in report["tests"]], ["passed", "unknown", "unknown"])
             self.assertEqual(report["shards"][1]["reported"], 0)
 
     def test_retries_only_count_tests_that_actually_reran(self):

@@ -309,6 +309,7 @@ jobs:
           CLT_EVENT: ${{ github.event_name }}
           CLT_REF: ${{ github.ref }}
           CLT_SHA: ${{ github.sha }}
+          CLT_MATRIX_JSON: ${{ needs.discover.outputs.matrix }}
         run: |
           python3 .github/scripts/clt_reliability.py merge \
             --input "$RUNNER_TEMP/clt-shard-reports" \

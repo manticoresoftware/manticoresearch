@@ -52,6 +52,7 @@ With html_strip the chunk is taken from the stripped text, the same text the emb
 ––– input –––
 TEXT='<p class="intro">alpha beta gamma delta epsilon zeta eta theta</p><p>iota kappa lambda <b>stripped</b> target phrase here</p>'; mysql -h0 -P9306 -e "DROP TABLE IF EXISTS strip_hl; CREATE TABLE strip_hl (body TEXT, chunks FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body' CHUNK_STRATEGY='fixed' MAX_TOKENS='8') html_strip='1'; INSERT INTO strip_hl(id,body) VALUES(1,'$TEXT')" || exit 1; CHUNK=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT HIGHLIGHT({knn_chunk=1},'body') FROM strip_hl WHERE KNN(chunks,1,'target phrase',{rescore=1}) LIMIT 1") || exit 1; python3 test/clt-tests/mcl/check-chunk-provenance.py chunk ' alpha beta gamma delta epsilon zeta eta theta iota kappa lambda stripped target phrase here ' "$CHUNK" || exit 1; case "$CHUNK" in *'<'*) exit 1;; esac; ERR=$(mysql -h0 -P9306 -e "SELECT HIGHLIGHT({knn_chunk=1,html_strip_mode='none'},'body') FROM strip_hl WHERE KNN(chunks,1,'target phrase')" 2>&1) && exit 1; case "$ERR" in *'KNN chunk highlighting requires html_strip_mode=index'*) ;; *) exit 1;; esac; echo CHUNK_HTML_STRIP_OK
 ––– output –––
+CHUNK_OK
 CHUNK_HTML_STRIP_OK
 ––– comment –––
 A two-row group selects a representative and highlights that row's own chunk.

@@ -188,8 +188,8 @@ tests that always pass. The report only considers push runs on `main`
 to avoid mixing intentionally broken PR code into the stability baseline.
 
 Failure rate is **failed / (passed + failed)** for each test, with at least five
-executions required for the summary ranking. Interrupted, missing, and
-not-run tests are reported separately, not counted as successes. When failed
+executions required for the summary ranking. Interrupted, missing, not-run, and unknown outcomes are reported separately,
+not counted as successes. An unknown outcome means a whole shard report is missing. When failed
 matrix jobs are rerun, a prior successful shard is counted only once.
 Historical statistics start with the first run that uploads these artifacts.
 

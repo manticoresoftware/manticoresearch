@@ -83,7 +83,7 @@ def merge_shards(root, metadata, planned_shards=None):
                 result = json.loads(line)
                 test = normalize_test(result["test"])
                 status = result["status"]
-                if status not in STATUSES - {"not_run"}:
+                if status not in STATUSES - {"not_run", "unknown"}:
                     raise ValueError(f"Unexpected CLT status {status!r} in {outcomes_path}:{line_no}")
                 if test in reported:
                     raise ValueError(f"Duplicate outcome for {test} in {outcomes_path}")
@@ -127,7 +127,7 @@ def run_summary(report):
         f'[Workflow run]({url}) · Detailed per-test JSON is attached as a workflow artifact.',
         "",
     ]
-    bad = [r for r in report["tests"] if r["status"] not in ("passed", "not_run")]
+    bad = [r for r in report["tests"] if r["status"] in ("failed", "interrupted", "missing")]
     if bad:
         lines += ["| CLT test | Result | Shard |", "| --- | --- | --- |"]
         for result in bad[:50]:

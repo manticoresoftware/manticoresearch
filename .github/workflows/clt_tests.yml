@@ -300,6 +300,8 @@ jobs:
 
       - name: Download shard reports
         uses: actions/download-artifact@v7
+        # A complete worker failure may mean that no shard artifacts were uploaded.
+        continue-on-error: true
         with:
           pattern: clt-test-results-*
           path: ${{ runner.temp }}/clt-shard-reports

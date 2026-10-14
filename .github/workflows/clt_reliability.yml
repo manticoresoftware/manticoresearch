@@ -22,7 +22,7 @@ jobs:
 
       - name: Build report from main-branch test runs
         env:
-          GITHUB_TOKEN: \${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           python3 .github/scripts/clt_reliability.py report \
             --repository "$GITHUB_REPOSITORY" \
@@ -35,6 +35,6 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: clt-failure-rates-30d
-          path: \${{ runner.temp }}/clt-reliability/
+          path: ${{ runner.temp }}/clt-reliability/
           retention-days: 90
           if-no-files-found: error

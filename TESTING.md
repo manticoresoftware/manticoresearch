@@ -170,6 +170,29 @@ The easiest way to run CLT tests is through GitHub Actions:
 
 CLT tests are organized into test suites defined in `.github/workflows/clt_tests.yml`.
 
+
+### Finding unstable CLT tests
+
+Each [Test workflow](https://github.com/manticoresoftware/manticoresearch/actions/workflows/test.yml)
+stores **all individual CLT outcomes** (passed, failed, interrupted, missing, or not run)
+with test paths, durations, exit codes, shard IDs, and workflow attempt IDs. Each CLT
+matrix shard uploads a report even when some of its tests fail. The workflow also
+combines the shard reports into one `clt-results-merged-<attempt>` JSON artifact
+(kept for 90 days).
+
+The [CLT per-test reliability workflow](https://github.com/manticoresoftware/manticoresearch/actions/workflows/clt_reliability.yml)
+runs daily or on demand. Open its latest run's **Summary** to see the
+highest per-test failure rates for the last 30 days; download the
+`clt-failure-rates-30d` artifact for a complete CSV and JSON, including
+tests that always pass. The report only considers push runs on `main`
+to avoid mixing intentionally broken PR code into the stability baseline.
+
+Failure rate is **failed / (passed + failed)** for each test, with at least five
+executions required for the summary ranking. Interrupted, missing, and
+not-run tests are reported separately, not counted as successes. When failed
+matrix jobs are rerun, a prior successful shard is counted only once.
+Historical statistics start with the first run that uploads these artifacts.
+
 ### Running Locally
 
 CLT tests run inside Docker containers to ensure consistent environment. There are two main scenarios for local testing:

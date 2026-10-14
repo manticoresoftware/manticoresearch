@@ -17,7 +17,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-STATUSES = frozenset({"passed", "failed", "interrupted", "missing", "not_run"})
+STATUSES = frozenset({"passed", "failed", "interrupted", "missing", "not_run", "unknown"})
 
 
 def utc_now():
@@ -96,7 +96,7 @@ def merge_shards(root, metadata, planned_shards=None):
             if test in seen_tests:
                 raise ValueError(f"Test {test} scheduled more than once")
             seen_tests.add(test)
-            result = reported.get(test, {"status": "not_run", "exit_code": None, "duration_ms": None})
+            result = reported.get(test, {"status": "not_run" if path else "unknown", "exit_code": None, "duration_ms": None})
             tests.append({
                 "test": test,
                 "status": result["status"],
@@ -122,7 +122,7 @@ def run_summary(report):
         f'**{len(report["tests"])} scheduled** · '
         f'{counts["passed"]} passed · {counts["failed"]} failed · '
         f'{counts["interrupted"]} interrupted · {counts["missing"]} missing · '
-        f'{counts["not_run"]} not run',
+        f'{counts["not_run"]} not run · {counts["unknown"]} unknown',
         "",
         f'[Workflow run]({url}) · Detailed per-test JSON is attached as a workflow artifact.',
         "",
@@ -135,8 +135,8 @@ def run_summary(report):
             lines.append(f'| `{name}` | {result["status"]} | {result["shard"]} |')
         if len(bad) > 50:
             lines.append(f"\n{len(bad) - 50} additional failures are in the artifact.")
-    if counts["not_run"]:
-        lines.append("\nNot-run tests are excluded from failure rates (e.g. a shard stopped early).")
+    if counts["not_run"] or counts["unknown"]:
+        lines.append("\nUnobserved tests are excluded from failure rates. An unknown result means the entire shard report is missing.")
     return "\n".join(lines) + "\n"
 
 
@@ -253,6 +253,7 @@ def compute_statistics(reports, repository):
             "interrupted": counts["interrupted"],
             "missing": counts["missing"],
             "not_run": counts["not_run"],
+            "unknown": counts["unknown"],
             "flaky": passed > 0 and failed > 0,
             "last_failure": latest_failure[name][0].isoformat() if name in latest_failure else "",
             "last_failure_url": latest_failure[name][1] if name in latest_failure else "",
@@ -272,7 +273,7 @@ def failure_summary(rows, days, run_count, report_count, errors):
         f"**{len(observed)}** distinct tests with executions.",
         "",
         "Failure rate = failed / (passed + failed). Interrupted, missing, and not-run "
-        "tests are tracked separately and are **not** counted as successful runs. "
+        "and unknown results are tracked separately and are **not** counted as successful runs. "
         "Only actual shard executions are counted when failed jobs are rerun.",
         "",
     ]
@@ -336,7 +337,7 @@ def main(argv=None):
     with (output / "clt-failure-rates.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=[
             "test", "executed", "passed", "failed", "failure_rate", "interrupted", "missing",
-            "not_run", "flaky", "last_failure", "last_failure_url",
+            "not_run", "unknown", "flaky", "last_failure", "last_failure_url",
         ])
         writer.writeheader()
         writer.writerows(rows)

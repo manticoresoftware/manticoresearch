@@ -415,17 +415,15 @@ static const int KNN_PREFETCH_PROBES = 8;
 // prefetch is skipped with probability p^8, so a cold table practically always prefetches, a fully cached one never
 // does, and a half-warm one skips once in several hundred queries.
 // The gate keeps no state: every query decides for its own vectors, so there is nothing to key by table, attribute
-// or chunk. fnAddr(i) gives the i-th candidate's address (nullptr: nothing to read for it); only the probed ones are
-// resolved, so on a warm table the gate is 8 address lookups and 8 mincore() calls.
-template <typename FN>
-static bool AreVectorsResident ( int iCount, size_t uVecBytes, FN && fnAddr )
+// or chunk. The addresses are the ones the rescore has already resolved, so a probe is one mincore() call.
+static bool AreVectorsResident ( const VecTraits_T<const void*> & dVectors, size_t uVecBytes )
 {
+	const int iCount = dVectors.GetLength();
 	const int iProbes = Min ( iCount, KNN_PREFETCH_PROBES );
 	for ( int i = 0; i < iProbes; i++ )
 	{
 		int iIdx = iProbes>1 ? int ( (int64_t)i*( iCount-1 ) / ( iProbes-1 ) ) : 0;
-		const void * pAddr = fnAddr(iIdx);
-		if ( pAddr && !mmresident ( pAddr, uVecBytes ) )
+		if ( !mmresident ( dVectors[iIdx], uVecBytes ) )
 			return false;
 	}
 
@@ -435,7 +433,7 @@ static bool AreVectorsResident ( int iCount, size_t uVecBytes, FN && fnAddr )
 
 static void PrefetchVectors ( const VecTraits_T<const void*> & dVectors, size_t uVecBytes )
 {
-	if ( dVectors.IsEmpty() || AreVectorsResident ( dVectors.GetLength(), uVecBytes, [&dVectors] ( int i ) { return dVectors[i]; } ) )
+	if ( dVectors.IsEmpty() || AreVectorsResident ( dVectors, uVecBytes ) )
 		return;
 
 	CSphVector<MemRange_t> dRanges ( dVectors.GetLength() );
@@ -543,43 +541,30 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 	// The vectors live in the blob pool, and where a vector sits inside its blob row is known only after reading the
 	// row header, which shares the (cold) page with the vector itself. So the prefetch is issued by row address, which
 	// the match row provides without touching the pool, and covers the header plus one vector. Rows whose other blob
-	// attributes precede the vector get the uncovered tail read on demand. Same residency gate as the columnar prefetch;
-	// the gate resolves only the rows it probes, and the full list of rows is built only when they are not in memory.
-	if ( KNNRescorePrefetchRowwise() && iCount )
+	// attributes precede the vector get the uncovered tail read on demand. Same residency gate as the columnar prefetch.
+	if ( KNNRescorePrefetchRowwise() )
 	{
 		const size_t uRowBytes = 1 + sizeof(DWORD)*m_tAttr.m_tLocator.m_nBlobAttrs + iVecBytes;
-		const CSphAttrLocator & tLoc = m_tAttr.m_tLocator;
+		CSphVector<const void*> dRows;
+		dRows.Reserve(iCount);
 
-		auto fnRowAddr = [&dMatches, &fnBlobPool, &tLoc] ( int i ) -> const void *
+		int iPrefetchTag = 0;
+		bool bPrefetchPoolInitialized = false;
+		const BYTE * pPrefetchPool = nullptr;
+		for ( const CSphMatch * pMatch : dMatches )
 		{
-			const CSphMatch * pMatch = dMatches[i];
-			const BYTE * pPool = fnBlobPool(pMatch);
-			return pPool ? sphGetBlobRow ( *pMatch, tLoc, pPool ) : nullptr;
-		};
-
-		if ( !AreVectorsResident ( iCount, uRowBytes, fnRowAddr ) )
-		{
-			CSphVector<MemRange_t> dRanges;
-			dRanges.Reserve(iCount);
-
-			int iPrefetchTag = 0;
-			bool bPrefetchPoolInitialized = false;
-			const BYTE * pPrefetchPool = nullptr;
-			for ( const CSphMatch * pMatch : dMatches )
+			if ( !bPrefetchPoolInitialized || pMatch->m_iTag!=iPrefetchTag )
 			{
-				if ( !bPrefetchPoolInitialized || pMatch->m_iTag!=iPrefetchTag )
-				{
-					iPrefetchTag = pMatch->m_iTag;
-					pPrefetchPool = fnBlobPool(pMatch);
-					bPrefetchPoolInitialized = true;
-				}
-
-				if ( pPrefetchPool )
-					dRanges.Add ( { sphGetBlobRow ( *pMatch, tLoc, pPrefetchPool ), uRowBytes } );
+				iPrefetchTag = pMatch->m_iTag;
+				pPrefetchPool = fnBlobPool(pMatch);
+				bPrefetchPoolInitialized = true;
 			}
 
-			mmprefetch ( dRanges.Begin(), dRanges.GetLength() );
+			if ( pPrefetchPool )
+				dRows.Add ( sphGetBlobRow ( *pMatch, m_tAttr.m_tLocator, pPrefetchPool ) );
 		}
+
+		PrefetchVectors ( dRows, uRowBytes );
 	}
 
 	const void * dPtrs[CHUNK];

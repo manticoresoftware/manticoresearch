@@ -2128,6 +2128,27 @@ static bool ParseJsonBulkImportDoc ( const JsonObj_c & tRoot, const CSphString &
 }
 
 
+static const Str_t g_sNameIns ( FROMS ( "insert" ) );
+static const Str_t g_sNameCreate ( FROMS ( "create" ) );
+static const Str_t g_sNameIndex ( FROMS ( "index" ) );
+static const Str_t g_sNameReplace ( FROMS ( "replace" ) );
+static const Str_t g_sNameUpdate ( FROMS ( "update" ) );
+static const Str_t g_sNameDelete ( FROMS ( "delete" ) );
+
+// bulk_import: a line is an operation when its only member is named as a /bulk operation and holds an object with
+// the table, as every operation does; any other object is a document, which may lack an id
+static bool IsBulkImportOperation ( const JsonObj_c & tRoot )
+{
+	JsonObj_c tOp = tRoot[0];
+	if ( tRoot[1] || !tOp.IsObj() || !( tOp.HasItem ( "table" ) || tOp.HasItem ( "index" ) ) )
+		return false;
+
+	Str_t sName = FromSz ( tOp.Name() );
+	return StrEq ( sName, g_sNameIns ) || StrEq ( sName, g_sNameCreate ) || StrEq ( sName, g_sNameIndex )
+		|| StrEq ( sName, g_sNameReplace ) || StrEq ( sName, g_sNameUpdate ) || StrEq ( sName, g_sNameDelete );
+}
+
+
 bool sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString & sStmt, CSphString & sQuery, DocID_t & tDocId, CSphString & sError, const CSphString * pBulkImportTable )
 {
 	JsonObj_c tRoot ( szStmt );
@@ -2144,9 +2165,7 @@ bool sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString 
 		return false;
 	}
 
-	// bulk_import: one member with an object value is an operation, any other object is a document {"id":1,...};
-	// a document always has an id, so it never has that shape
-	if ( pBulkImportTable && tRoot.IsObj() && ( tRoot[1] || !tJsonStmt.IsObj() ) )
+	if ( pBulkImportTable && tRoot.IsObj() && !IsBulkImportOperation ( tRoot ) )
 		return ParseJsonBulkImportDoc ( tRoot, *pBulkImportTable, tStmt, sStmt, tDocId, sError );
 
 	sStmt = tJsonStmt.Name();

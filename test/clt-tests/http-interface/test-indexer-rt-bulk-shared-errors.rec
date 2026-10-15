@@ -53,6 +53,25 @@ source /tmp/shared.sh; leftovers s_fail; sql "INSERT INTO s_fail (id, title, gid
 staging=0 children=0
 1
 ––– comment –––
+Ids are converted as by an ordinary insert: "12abc" is 12, " 7" is 7, "-5" is 2^64-5 and an
+overflow is 2^64-1, where the indexer read the raw string and lost the row of "abc", "-5" or an
+overflow without an error. A missing id or one that converts to 0 ("abc", "0") gets an auto-id;
+an id error of an ordinary insert fails the pool like an invalid document.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_ids (title TEXT, gid INT)"; printf '%s\n' '{"insert":{"table":"s_ids","doc":{"id":-5,"title":"negative"}}}' > /tmp/i1.ndjson; post s_ids '' /tmp/i1.ndjson | grep -o '"error":"[^"]*"\|HTTP [0-9]*' | tr '\n' ' '; commit s_ids '' | grep -o 'HTTP [0-9]*'; printf '%s\n' '{"id":"12abc","title":"tail","gid":1}' '{"id":" 7","title":"space","gid":2}' '{"id":"-5","title":"minus string","gid":3}' '{"id":"18446744073709551616","title":"overflow","gid":4}' '{"id":"52","title":"digits","gid":5}' '{"id":"abc","title":"letters","gid":6}' '{"id":"0","title":"zero string","gid":7}' '{"title":"no id","gid":8}' > /tmp/i2.ndjson; post s_ids '' /tmp/i2.ndjson; commit s_ids ''; sql "SELECT id, title FROM s_ids WHERE gid<=5 ORDER BY gid ASC; SELECT title FROM s_ids WHERE gid>5 AND id!=0 ORDER BY gid ASC"
+––– output –––
+"error":"Negative document ids are not allowed" HTTP 400 HTTP 500
+{"items":[],"current_line":8,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+12	tail
+7	space
+-5	minus string
+-1	overflow
+52	digits
+letters
+zero string
+no id
+––– comment –––
 Broken body: a request is killed after a few KB, less than one 32 KiB batch. Its tail is
 dropped, the pool and its children stay, the next request is staged and the commit publishes
 exactly the data of the complete requests.

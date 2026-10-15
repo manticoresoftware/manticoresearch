@@ -930,7 +930,7 @@ curl -sS -X POST \
   'http://localhost:9308/bulk?bulk_import=products'
 ```
 
-Every field of a bare document is a column, including a field named `doc`, and `id` is required. A line is an operation when it has exactly one field whose value is an object, such as `insert`; any other line is a bare document. Both forms can be mixed in one request. A `/bulk` request without `bulk_import` still requires the operation form.
+Every field of a bare document is a column, including a field named `doc`; a document without `id` gets an [auto-generated ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID). A line is an operation when its only field is named as a `/bulk` operation (`insert`, `create`, `index`, `replace`, `update` or `delete`) and holds an object with `table` or `index`; any other line is a bare document. Both forms can be mixed in one request. A `/bulk` request without `bulk_import` still requires the operation form.
 
 In a request body, an empty line ends and publishes the current batch; the end of the request publishes the final batch. Manticore sends the HTTP response after processing all batches in that request. If a later batch fails, batches published earlier in the same request remain searchable. To publish the entire request atomically as one disk chunk, do not include empty lines. The response contains one aggregate `bulk` result for each published batch rather than one result per document.
 
@@ -996,7 +996,7 @@ The Elasticsearch-compatible `/_bulk` endpoint does not support direct-to-disk `
 
 #### Duplicate document IDs
 
-Within one direct-to-disk batch, the first row for a numeric document ID remains visible and later rows with the same ID are logically removed. For SQL, a batch consists of the rows staged before `COMMIT` or `ROLLBACK`. For Manticore `/bulk`, each group published at an empty line, table change, or request EOF is a separate batch. In a Shared load, the data of each indexer is a separate batch, and its chunks are attached one after another when the pool is committed. If attaching one of them fails, the chunks attached before it stay in the table and the commit answers `500`; loading the same documents again is safe, because a published row replaces any row with the same ID.
+Within one direct-to-disk batch, the first row for a numeric document ID remains visible and later rows with the same ID are logically removed. For SQL, a batch consists of the rows staged before `COMMIT` or `ROLLBACK`. For Manticore `/bulk`, each group published at an empty line, table change, or request EOF is a separate batch. In a Shared load, the data of each indexer is a separate batch, and its chunks are attached one after another when the pool is committed. If attaching one of them fails, the chunks attached before it stay in the table and the commit answers `500`; loading the same documents again is safe for explicit IDs, because a published row replaces any row with the same ID, while documents with auto-generated IDs are added again.
 
 When Manticore publishes a disk chunk to the target table, a row in that chunk replaces any existing row with the same ID. This also applies to IDs published by an earlier HTTP batch. As a result, retrying a previously published batch replaces its rows, while duplicates within the retried batch still keep the first row. In a Manticore `/bulk` request, the `create` operation, for example:
 
@@ -1034,7 +1034,7 @@ While the table has an open Shared pool, `PURGE` is refused; `PURGE BULK_IMPORT 
 
 * The target must be one existing, unfrozen local real-time table that is not a replication-cluster member. Distributed, sharded, replicated, percolate, and plain tables are not supported.
 * SQL supports only `INSERT`. Manticore `/bulk` accepts `insert`, `create` and bare documents; `index`, `replace`, `update`, and `delete` are rejected.
-* Every row must provide an explicit numeric, non-zero document ID. Auto-generated and UUID document IDs are not supported.
+* A document ID is converted as in a regular `INSERT`, including [attr_autoconv_strict](../../Server_settings/Searchd.md#attr_autoconv_strict). A row without an ID, or with an ID that converts to 0, gets an [auto-generated ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID); the response does not return generated IDs, and a repeated load adds such rows again. UUID document IDs are not supported.
 * Static builds are not supported.
 * The platform-specific executable (`indexer` on Linux, `indexer.exe` on Windows) must be in the same directory as the running `searchd` executable. Manticore Search resolves only that sibling path and does not search `PATH`. Use the executable from the same installation as `searchd` to ensure compatibility. If it is absent, unreadable, or cannot be started, only bulk import fails; normal startup and regular insertion remain available.
 

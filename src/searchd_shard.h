@@ -161,8 +161,10 @@ private:
 	bool		CheckJson ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal );
 	bool		CheckMVA ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iCol, int iRow );
 	bool		ConvertFloatVecArray ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, const AttrValueVec_t & tAddVals, int iCol, int iRow );
-	bool		CheckInsertTypes ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx );
 };
+
+// the document id of an INSERT value as AttributeConverter_c::SetAttrValue takes it; 0 asks for an auto-id there
+bool ConvertInsertDocId ( const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx, uint64_t & uDocID, CSphString & sError );
 
 ResultAndIndex_t AddShardIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bLoadMeta, CSphString & sError, StrVec_t * pWarnings=nullptr );
 

@@ -752,7 +752,21 @@ static void AppendCsvQuoted ( StringBuilder_c & sOut, const char * szValue )
 }
 
 
-static void AppendInsertValueToCsv ( StringBuilder_c & sOut, const SqlInsert_t & tValue, ESphAttr eType, bool bDocid )
+// The id as an ordinary insert takes it, never the raw value (the indexer would read a string loosely or drop its
+// row): a missing id or one that converts to 0 gets an auto-id, as there. ValidateIndexerRtBulkInputValues has
+// refused a failed conversion.
+static void AppendIdToCsv ( StringBuilder_c & sOut, const SqlInsert_t * pValue )
+{
+	uint64_t uId = 0;
+	CSphString sError;
+	if ( pValue )
+		ConvertInsertDocId ( *pValue, 0, 0, uId, sError );
+
+	sOut << '"' << ( uId ? uId : (uint64_t)UidShort() ) << '"';
+}
+
+
+static void AppendInsertValueToCsv ( StringBuilder_c & sOut, const SqlInsert_t & tValue, ESphAttr eType )
 {
 	sOut << '"';
 	switch ( tValue.m_iType )
@@ -766,10 +780,7 @@ static void AppendInsertValueToCsv ( StringBuilder_c & sOut, const SqlInsert_t &
 		break;
 
 	case SqlInsert_t::CONST_INT:
-		if ( bDocid )
-			sOut << tValue.GetValueUint();
-		else
-			sOut << tValue.GetValueInt();
+		sOut << tValue.GetValueInt();
 		break;
 
 	case SqlInsert_t::CONST_MVA:
@@ -1216,12 +1227,7 @@ static bool PrepareIndexerRtBulkInputMap ( const CSphSchema & tSchema, const Sql
 		return false;
 	}
 
-	tMap.m_iId = iDocidAttr>=0 ? tMap.m_dAttrs[iDocidAttr] : -1;
-	if ( tMap.m_iId<0 )
-	{
-		sError = "bulk_import requires an explicit id";
-		return false;
-	}
+	tMap.m_iId = iDocidAttr>=0 ? tMap.m_dAttrs[iDocidAttr] : -1; // without an id column every row gets an auto-id
 	return ValidateIndexerRtBulkInputValues ( tSchema, tStmt, tMap, sError );
 }
 
@@ -1231,14 +1237,12 @@ static bool ValidateIndexerRtBulkInputValues ( const CSphSchema & tSchema, const
 {
 	const int iColumns = tStmt.m_iSchemaSz;
 	const int iIdColumn = tMap.m_iId;
-	for ( int iRow=0; iRow<tStmt.m_iRowsAffected; ++iRow )
+	for ( int iRow=0; iIdColumn>=0 && iRow<tStmt.m_iRowsAffected; ++iRow )
 	{
-		const SqlInsert_t & tId = tStmt.m_dInsertValues[iRow*iColumns+iIdColumn];
-		if ( tId.m_iType==SqlInsert_t::CONST_INT && ( tId.IsNegativeInt() || !tId.GetValueUint() ) )
-		{
-			sError.SetSprintf ( "row %d: bulk_import requires an explicit non-zero id", iRow+1 );
+		// the id is converted as by an ordinary insert, with its errors; its 0 gets an auto-id, as there
+		uint64_t uId = 0;
+		if ( !ConvertInsertDocId ( tStmt.m_dInsertValues[iRow*iColumns+iIdColumn], iRow, iIdColumn, uId, sError ) )
 			return false;
-		}
 	}
 
 	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
@@ -1281,10 +1285,12 @@ static void AppendIndexerRtBulkCsv ( StringBuilder_c & sBatch, const CSphVector<
 			if ( !bFirst )
 				sBatch << ',';
 			bFirst = false;
-			if ( tColumn.m_iColumn<0 )
+			if ( tColumn.m_bDocid )
+				AppendIdToCsv ( sBatch, tColumn.m_iColumn<0 ? nullptr : &tStmt.m_dInsertValues[iRow*iColumns+tColumn.m_iColumn] );
+			else if ( tColumn.m_iColumn<0 )
 				AppendCsvQuoted ( sBatch, "" );
 			else
-				AppendInsertValueToCsv ( sBatch, tStmt.m_dInsertValues[iRow*iColumns+tColumn.m_iColumn], tColumn.m_eType, tColumn.m_bDocid );
+				AppendInsertValueToCsv ( sBatch, tStmt.m_dInsertValues[iRow*iColumns+tColumn.m_iColumn], tColumn.m_eType );
 		}
 		sBatch << '\n';
 	}

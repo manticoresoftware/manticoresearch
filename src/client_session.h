@@ -37,22 +37,20 @@ public:
 	void RemoveStatement (DWORD uStmtID);
 };
 
+class RtBulkIndexer_c;
+
 struct IndexerRtBulkState_t
 {
-	class Impl_c;
-
 	int64_t m_iIndexId = -1;
 	int m_iAlterGeneration = -1;
 	CSphString m_sTable;
-	CSphString m_sDir;
-	CSphVector<int> m_dCsvAttrOrder;
 	ServedIndexWriteReservation_c m_tReservation;
-	std::unique_ptr<Impl_c> m_pImpl;
+	std::unique_ptr<RtBulkIndexer_c> m_pIndexer;
 
 	IndexerRtBulkState_t();
 	~IndexerRtBulkState_t();
 	bool IsEnabled() const { return m_tReservation.IsActive(); }
-	bool HasPendingData() const { return !!m_pImpl; }
+	bool HasPendingData() const { return !!m_pIndexer; }
 };
 
 class ClientSession_c final

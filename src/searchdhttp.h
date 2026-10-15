@@ -104,6 +104,7 @@ public:
 	virtual Str_t ReadAll() = 0;
 
 	inline bool Eof() const noexcept { return m_bDone; }
+	virtual bool BodyComplete() const { return true; } // false when a chunked body ended before its last chunk
 
 	bool GetError() const;
 	const CSphString & GetErrorMessage() const;

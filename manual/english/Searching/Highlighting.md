@@ -347,6 +347,12 @@ Highlighting is performed during the so-called `post limit` stage, which means t
 
 ## Highlighting options
 
+#### knn_chunk
+
+Set `knn_chunk=1` in SQL or `"knn_chunk": true` in JSON to restrict highlighting to the chunk of the source text whose vector matched the [KNN query](../Searching/KNN.md#Chunking-strategies). This is opt-in; ordinary highlighting is unchanged. The option works with a single KNN clause on a `float_vector_array` column that Manticore chunks automatically from exactly one full-text `FROM` field, and that same field must be requested explicitly as a quoted stored-field list (for example, `HIGHLIGHT({knn_chunk=1},'body')` or `"highlight":{"knn_chunk":true,"fields":["body"]}`). SQL expression forms such as `HIGHLIGHT({knn_chunk=1},body)`, empty/all-field requests, multiple fields, multiple KNN clauses, and string-attribute embedding sources return an error. The chunk boundaries refer to the field text as it is prepared for indexing (after the field filter and the table's HTML stripper), so the option works only with the default `html_strip_mode=index` and without `passage_boundary`. `knn_chunk` is a `HIGHLIGHT()` option and is not accepted by `SNIPPET()`.
+
+Literal full-text query matches inside the chunk use the normal highlight tags. A semantic-only KNN query returns the chunk itself, without adding tags, so the option can also be used simply to fetch the piece of text that matched. When the query has no KNN clause, or the table has no chunk provenance for the row (manually supplied vectors, `truncate`/`mean` chunking, or rows written before this feature existed), highlighting falls back to the ordinary whole-field behavior.
+
 <!-- example highlighting options -->
 
 There are several optional highlighting options that can be used to fine-tune snippet generation, which are common to SQL, HTTP, and PHP clients.

@@ -260,7 +260,7 @@ merge_chunks_per_job = 4
 
 <!-- example conf knn_parallel_build -->
 Эта настройка управляет тем, сколько рабочих потоков используется для построения графа HNSW во время операций, интенсивных по HNSW, на таблицах, содержащих атрибут `float_vector` с KNN-индексом. Несколько путей используют этот регулятор:
-* **Проход сохранения чанка (chunk-save store pass)**: когда RAM-чанк сбрасывается на диск, рабочие разделяют RAM-сегменты чанка между собой и добавляют векторы в целевой граф HNSW параллельно.
+* **Проход сохранения чанка**: когда RAM-чанк сбрасывается на диск (автоматически или через `FLUSH RAMCHUNK`), строки всех RAM-сегментов разбиваются на диапазоны фиксированного размера, которые рабочие потоки по очереди берут и параллельно добавляют в целевой HNSW-граф. Степень параллелизма не зависит от того, сколько RAM-сегментов в чанке и насколько неравномерны их размеры.
 * **Проход слияния чанков (chunk-merge store pass)**: `OPTIMIZE TABLE` и авто-оптимизация строят граф HNSW целевого чанка параллельно, разделяя диапазон живых строк из всех входных чанков между рабочими.
 * **Перестройка ALTER KNN**: `ALTER TABLE ... ADD COLUMN`/`DROP COLUMN` для атрибута `float_vector` и `ALTER TABLE ... REBUILD KNN` перестраивают граф HNSW параллельно для дисковых чанков.
 
@@ -287,6 +287,32 @@ knn_parallel_build = 1
 <!-- request Increase -->
 ```ini
 knn_parallel_build = 4
+```
+
+<!-- end -->
+
+### knn_rescore_prefetch
+
+<!-- example conf knn_rescore_prefetch -->
+Эта настройка управляет тем, будет ли Manticore заранее просить операционную систему прочитать полноточные векторы всех кандидатов KNN сразу перед их [повторной оценкой](../Searching/KNN.md). Она применяется к векторным атрибутам, хранящимся в [колоночном хранилище](../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) и читаемым через memory mapping, что является стандартным [режимом доступа](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) для колоночных атрибутов (`access_columnar_attrs = mmap`).
+
+Без предварительной загрузки вектор кандидата, которого нет в памяти, читается с диска только тогда, когда до него доходит расчет расстояния. Векторы читаются один за другим, и при каждом чтении также подгружаются соседние данные, которые запросу не нужны. При предварительной загрузке чтение всех кандидатов запрашивается вместе до расчета каких-либо расстояний, поэтому операции выполняются параллельно, а читаются только данные, содержащие векторы кандидатов. Это ускоряет KNN-запросы в несколько раз, когда векторы нужно читать с диска: после перезапуска, а также на таблицах, векторы которых не помещаются в доступную память.
+
+Перед предварительной загрузкой Manticore проверяет, находится ли выборка векторов кандидатов уже в памяти. Если да, предварительная загрузка пропускается, поэтому запросы по полностью закэшированным данным выполняются с той же скоростью независимо от того, включена настройка или нет. Настройка не меняет результаты поиска.
+
+Ограничения:
+* Не влияет на векторные атрибуты в построчном хранилище и на колоночные атрибуты с `access_columnar_attrs = file`.
+* Не влияет на Windows.
+* В Linux проверка закэшированных векторов опирается на данные операционной системы о том, какие части файла находятся в памяти, а система сообщает это только для файлов, которыми владеет пользователь `searchd` или в которые ему разрешена запись. Если файлы таблицы принадлежат другому пользователю и доступны `searchd` только для чтения (например, plain-таблицы, построенные `indexer`, запущенным под другой учетной записью), векторы всегда считаются закэшированными, и предварительная загрузка никогда не выполняется.
+
+Включено по умолчанию. Установите `0`, чтобы отключить.
+
+<!-- intro -->
+##### Пример:
+
+<!-- request Disable -->
+```ini
+knn_rescore_prefetch = 0
 ```
 
 <!-- end -->
@@ -934,15 +960,15 @@ listen = ( address ":" port | port | path | address ":" port start - port end ) 
 ```ini
 listen = localhost
 listen = localhost:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at localhost
-listen = 192.168.0.1:5000 # слушать удаленных агентов (binary API) и запросы http/https на порту 5000 на 192.168.0.1; оставьте это внутри сети
+listen = 192.168.0.1:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at 192.168.0.1; keep this internal
 listen = /var/run/manticore/manticore.s # listen for binary API requests on unix socket
 listen = /var/run/manticore/manticore.s:mysql # listen for mysql requests on unix socket
-listen = 9312 # слушать удаленных агентов (binary API) и запросы http/https на порту 9312 на любом интерфейсе; только внутренние сети
+listen = 9312 # listen for remote agents (binary API) and http/https requests on port 9312 on any interface; internal networks only
 listen = localhost:9306:mysql # listen for mysql requests on port 9306 at localhost
 listen = localhost:9307:mysql_readonly # listen for mysql requests on port 9307 at localhost and accept only read queries
 listen = 127.0.0.1:9308:http # listen for http requests as well as connections from remote agents (and binary API) on port 9308 at localhost
-listen = 192.168.0.1:9320-9328:replication # слушать подключения replication на портах 9320-9328 на 192.168.0.1; оставьте это внутри сети
-listen = 127.0.0.1:9443:https # слушать запросы https (не http) на порту 9443 на 127.0.0.1; используйте этот тип listener для доступа из публичного Интернета с ssl_cert и ssl_key
+listen = 192.168.0.1:9320-9328:replication # listen for replication connections on ports 9320-9328 at 192.168.0.1; keep this internal
+listen = 127.0.0.1:9443:https # listen for https requests (not http) on port 9443 at 127.0.0.1; use this listener type for public Internet access with ssl_cert and ssl_key
 listen = 127.0.0.1:9312:sphinx # listen for legacy Sphinx requests (e.g. from SphinxSE) on port 9312 at 127.0.0.1
 ```
 <!-- end -->

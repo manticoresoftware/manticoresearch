@@ -1149,7 +1149,7 @@ Commands are:
 -v				display version information
 --check <TABLE>			perform table consistency check
 --fix-docid-lookup <TABLE>	fix a v.71/v.72 table whose header was rewritten by ALTER without converting the docid lookup (manticoresearch#4852): converts the .spt and stamps the fixed header version, offline
---check-disk-chunk <CHUNK_ID>	perform single disk chunk consistency check (to be used together with --check)
+--check-disk-chunk <CHUNK_ID>	perform single disk chunk consistency check (to be used together with --check or --docstore-bad-ids)
 --check-id-dups <CHUNK_ID>	check if there are duplicate ids (to be used together with --check)
 --rotate			rotate table after --check in case it's valid
 --checkconfig			perform config consistency check
@@ -1165,6 +1165,9 @@ Commands are:
 				dump hits for a given keyword
 --dumpkilllist <SPK-FILE>	dump killlist by file name
 --dumpkilllist <TABLE>		dump killlist by table name
+--docstore-bad-ids <SPDS-FILE>|<TABLE>
+				check docstore and print ids of alive documents
+				with damaged stored fields, one per line
 --docextract TBL DOCID		runs usual table check pass of whole dictionary/docs/hits,
 				and collects all the words and hits belonging to requested document.
 				Then all of the words are placed in the order according to their fields
@@ -1207,11 +1210,12 @@ enum class IndextoolCmd_e
 	CHECKCONFIG,
 	FOLD,
 	APPLYKLISTS,
-	FIXDOCIDLOOKUP
+	FIXDOCIDLOOKUP,
+	DOCSTOREBADIDS
 };
 
 static IndextoolCmd_e g_eCommand = IndextoolCmd_e::NOTHING;
-static const char * g_sCommands[] = {"", "dumpheader", "dumpconfig", "dumpdocids", "dumphitlist", "dumpdict", "dumpkilllist", "check", "htmlstrip", "morph", "buildidf", "mergeidf", "checkconfig", "fold", "apply-killlists", "fix-docid-lookup" };
+static const char * g_sCommands[] = {"", "dumpheader", "dumpconfig", "dumpdocids", "dumphitlist", "dumpdict", "dumpkilllist", "check", "docextract", "htmlstrip", "morph", "buildidf", "mergeidf", "checkconfig", "fold", "apply-killlists", "fix-docid-lookup", "docstore-bad-ids" };
 
 
 static void SetCmd ( IndextoolCmd_e eCmd )
@@ -1412,7 +1416,7 @@ int main ( int argc, char ** argv )
 	CSphString sOut;
 	bool bStats = false;
 	bool bSkipUnique = false;
-	CSphString sDumpDict, sDumpKlist;
+	CSphString sDumpDict, sDumpKlist, sDocstoreBadIds;
 	bool bTraceToStdout = true;
 	bool bRotate = false;
 	bool bCheckIdDups = false;
@@ -1505,6 +1509,11 @@ int main ( int argc, char ** argv )
 			SetCmd ( IndextoolCmd_e::DUMPKLIST );
 			sDumpKlist = argv[++i];
 		}
+		OPT1 ( "--docstore-bad-ids" )
+		{
+			SetCmd ( IndextoolCmd_e::DOCSTOREBADIDS );
+			sDocstoreBadIds = argv[++i];
+		}
 
 		// options with 2 args
 		else if ( ( i + 2 ) >= argc ) // NOLINT
@@ -1591,6 +1600,12 @@ int main ( int argc, char ** argv )
 	case IndextoolCmd_e::DUMPDICT:
 		if ( !sDumpDict.Ends ( ".spi" ) )
 			sIndex = sDumpDict;
+
+		break;
+
+	case IndextoolCmd_e::DOCSTOREBADIDS:
+		if ( !sDocstoreBadIds.Ends ( ".spds" ) )
+			sIndex = sDocstoreBadIds;
 
 		break;
 
@@ -1701,7 +1716,7 @@ int main ( int argc, char ** argv )
 		if ( g_eCommand==IndextoolCmd_e::MORPH )
 			return;
 
-		if ( !(g_eCommand==IndextoolCmd_e::CHECK || g_eCommand==IndextoolCmd_e::EXTRACT ))
+		if ( !(g_eCommand==IndextoolCmd_e::CHECK || g_eCommand==IndextoolCmd_e::EXTRACT || g_eCommand==IndextoolCmd_e::DOCSTOREBADIDS ))
 			pIndex->Preread();
 
 		if ( hConf["index"][sIndex]("hitless_words") )
@@ -1830,6 +1845,31 @@ int main ( int argc, char ** argv )
 					sphDie ( "table '%s': rotate failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
 			}
 			return 0;
+
+		case IndextoolCmd_e::DOCSTOREBADIDS:
+			if ( sDocstoreBadIds.Ends ( ".spds" ) )
+			{
+				fprintf ( stdout, "checking docstore file '%s'...\n", sDocstoreBadIds.cstr() );
+
+				sIndex = sDocstoreBadIds.SubString ( 0, sDocstoreBadIds.Length()-5 );
+				pIndex = sphCreateIndexPhrase ( sIndex, sIndex );
+
+				if ( !pIndex )
+					sphDie ( "table '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
+
+				StrVec_t dWarnings;
+				if ( !pIndex->Prealloc ( bStripPath, nullptr, dWarnings ) )
+					sphDie ( "table '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
+
+				for ( const auto & sWarning : dWarnings )
+					fprintf ( stdout, "WARNING: table %s: %s\n", sIndex.cstr(), sWarning.cstr() );
+			} else
+				fprintf ( stdout, "checking docstore of table '%s'...\n", sIndex.cstr() );
+			{
+				std::unique_ptr<DebugCheckError_i> pReporter { MakeDebugCheckError ( stdout, nullptr, true ) };
+				iCheckErrno = pIndex->DebugCheck ( *pReporter, nullptr );
+			}
+			return iCheckErrno;
 
 		case IndextoolCmd_e::STRIP:
 			{

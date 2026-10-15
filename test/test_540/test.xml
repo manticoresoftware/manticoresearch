@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>knn chunk highlighting</name>
+
+<requires>
+	<knn/>
+	<embeddings/>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	create table t (body text, chunks float_vector_array knn_type='hnsw' hnsw_similarity='cosine' model_name='sentence-transformers/all-MiniLM-L6-v2' from='body' chunk_strategy='fixed' max_tokens='8' overlap_tokens='2');
+	insert into t (id, body) values (1, 'Hello world. alpha beta gamma delta epsilon zeta eta theta. omega target phrase.');
+	insert into t (id, body) values (2, 'unrelated text for a second row');
+
+	<!-- a semantic-only query returns the chunk whose vector matched, verbatim -->
+	select id, highlight({knn_chunk=1},'body') from t where knn(chunks, 2, 'target phrase') order by id asc;
+	<!-- a full-text query highlights inside that chunk only -->
+	select id, highlight({knn_chunk=1},'body') from t where match('target phrase') and knn(chunks, 2, 'target phrase') order by id asc;
+	<!-- exact rescore keeps the chunk in sync with the distance -->
+	select id, highlight({knn_chunk=1},'body') from t where knn(chunks, 2, 'target phrase', {rescore=1}) order by id asc;
+	<!-- fullscan computes the chunk from the stored vectors -->
+	select id, highlight({knn_chunk=1},'body') from t where knn(chunks, 2, 'target phrase', {fullscan=1, rescore=0}) order by id asc;
+	<!-- the option is a no-op without a KNN clause: ordinary whole-field highlighting -->
+	select id, highlight({knn_chunk=1},'body','target phrase') from t order by id asc;
+	<!-- knn_chunk=0 is ordinary highlighting too -->
+	select id, highlight({knn_chunk=0},'body','target phrase') from t where knn(chunks, 2, 'target phrase') order by id asc;
+	<!-- and so is a quoted knn_chunk that is not the option -->
+	select id, highlight({before_match='knn_chunk'},'body','target phrase') from t where knn(chunks, 2, 'target phrase') order by id asc;
+
+	<!-- validation -->
+	select highlight({knn_chunk=1},'wrong') from t where knn(chunks, 1, 'target phrase');
+	select highlight({knn_chunk=1},body) from t where knn(chunks, 1, 'target phrase');
+	select highlight({knn_chunk=1}) from t where knn(chunks, 1, 'target phrase');
+	select highlight({knn_chunk=1, html_strip_mode='none'},'body') from t where knn(chunks, 1, 'target phrase');
+	select highlight({knn_chunk=1, passage_boundary='sentence'},'body') from t where knn(chunks, 1, 'target phrase');
+	select snippet(body, 'target phrase', 'knn_chunk=1') from t;
+
+	<!-- the chunk survives a flush and a merge -->
+	flush ramchunk t;
+	select id, highlight({knn_chunk=1},'body') from t where knn(chunks, 2, 'target phrase', {rescore=1}) order by id asc;
+	insert into t (id, body) values (3, 'alpha beta gamma delta epsilon zeta eta theta iota kappa lambda third row target phrase three');
+	flush ramchunk t;
+	optimize table t option sync=1, cutoff=1;
+	select id, highlight({knn_chunk=1},'body') from t where knn(chunks, 3, 'target phrase', {rescore=1}) order by id asc;
+	<!-- and a ram row next to disk rows -->
+	insert into t (id, body) values (4, 'alpha beta gamma delta epsilon zeta eta theta iota kappa lambda ram row target phrase four');
+	select id, highlight({knn_chunk=1},'body') from t where knn(chunks, 4, 'target phrase') order by id asc;
+</sphinxql>
+
+<sphinxql system="restart-daemon-no-warnings"/>
+
+<sphinxql>
+	select id, highlight({knn_chunk=1},'body') from t where knn(chunks, 4, 'target phrase') order by id asc;
+	drop table t;
+
+	<!-- html_strip: the chunk is taken from the stripped text, the text the embeddings were generated from -->
+	create table t (body text, chunks float_vector_array knn_type='hnsw' hnsw_similarity='cosine' model_name='sentence-transformers/all-MiniLM-L6-v2' from='body' chunk_strategy='fixed' max_tokens='8') html_strip='1';
+	insert into t (id, body) values (1, '&lt;p class="intro"&gt;alpha beta gamma delta epsilon zeta eta theta&lt;/p&gt;&lt;p&gt;iota kappa lambda &lt;b&gt;stripped&lt;/b&gt; target phrase here&lt;/p&gt;');
+	select id, highlight({knn_chunk=1},'body') from t where knn(chunks, 1, 'target phrase');
+	select id, highlight({knn_chunk=1},'body') from t where match('target phrase') and knn(chunks, 1, 'target phrase');
+	flush ramchunk t;
+	select id, highlight({knn_chunk=1},'body') from t where knn(chunks, 1, 'target phrase');
+	drop table t;
+
+	<!-- manually supplied arrays and single-vector strategies have no chunk to point at: whole-field highlighting -->
+	create table t (body text, v float_vector_array knn_type='hnsw' knn_dims='2' hnsw_similarity='l2');
+	insert into t values (1, 'manual target phrase text', [[1,0],[0,1]]);
+	select highlight({knn_chunk=1},'body','target phrase') from t where knn(v, 1, (1,0));
+	drop table t;
+	create table t (body text, v float_vector knn_type='hnsw' hnsw_similarity='cosine' model_name='sentence-transformers/all-MiniLM-L6-v2' from='body' chunk_strategy='mean' max_tokens='8');
+	insert into t (id, body) values (1, 'alpha beta gamma delta epsilon zeta eta theta target phrase omega');
+	select highlight({knn_chunk=1},'body','target phrase') from t where knn(v, 1, 'target phrase');
+	drop table t;
+
+	<!-- the source field must be the one requested; a string attribute source is not supported -->
+	create table t (body1 text, body2 text, s string, chunks float_vector_array knn_type='hnsw' hnsw_similarity='cosine' model_name='sentence-transformers/all-MiniLM-L6-v2' from='body1,body2' chunk_strategy='fixed' max_tokens='8');
+	insert into t (id, body1, body2, s) values (1, 'target phrase', 'other', 'x');
+	select highlight({knn_chunk=1},'body1') from t where knn(chunks, 1, 'target phrase');
+	drop table t;
+	create table t (body text, s string, chunks float_vector_array knn_type='hnsw' hnsw_similarity='cosine' model_name='sentence-transformers/all-MiniLM-L6-v2' from='s' chunk_strategy='fixed' max_tokens='8');
+	insert into t (id, body, s) values (1, 'stored body', 'target phrase');
+	select highlight({knn_chunk=1},'body') from t where knn(chunks, 1, 'target phrase');
+	drop table t;
+</sphinxql>
+</queries>
+
+</test>

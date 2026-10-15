@@ -711,6 +711,7 @@ enum class Option_e : BYTE
 	TOPOLOGY,
 	FACET_FILTER_MODE,
 	EMBEDDINGS_THREADS,
+	CLEAR_SESSIONS,
 
 	INVALID_OPTION
 };
@@ -727,7 +728,7 @@ void InitParserOption()
 		"not_terms_only_allowed", "store", "accurate_aggregation", "max_matches_increase_threshold", "distinct_precision_threshold",
 		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size", "force", "output_words", "expand_blended",
 		"fusion_method", "rank_constant", "window_size", "fusion_weights", "topology", "facet_filter_mode",
-		"embeddings_threads" };
+		"embeddings_threads", "clear_sessions" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -780,6 +781,8 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 
 	switch ( eStmt )
 	{
+	case STMT_PURGE:
+		return eOption==Option_e::CLEAR_SESSIONS;
 	case STMT_DELETE:
 		return CHKOPT( dDeleteOptions, eOption );
 	case STMT_UPDATE:
@@ -1200,6 +1203,15 @@ bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & 
 	// OPTIMIZE? hash possible sOpt choices?
 	switch ( eOpt )
 	{
+	case Option_e::CLEAR_SESSIONS: // for PURGE BULK_IMPORT
+		if ( sVal!="0" && sVal!="1" )
+		{
+			*m_pParseError = "clear_sessions must be 0 or 1";
+			return false;
+		}
+		m_pStmt->m_iIntParam = sVal=="1";
+		break;
+
 	case Option_e::COLUMNS: //} else if ( sOpt=="columns" ) // for SHOW THREADS
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;

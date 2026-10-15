@@ -918,11 +918,77 @@ curl -sS -X POST \
   'http://localhost:9308/bulk?bulk_import=products'
 ```
 
+一行也可以是裸文档：表来自 `bulk_import=<table>`，而 `id` 是其中一个字段：
+
+```bash
+printf '%s\n' \
+  '{"id":101,"title":"Crossbody Bag with Tassel","price":19.85}' \
+  '{"id":102,"title":"Microfiber Sheet Set","price":19.99}' |
+curl -sS -X POST \
+  -H 'Content-Type: application/x-ndjson' \
+  --data-binary @- \
+  'http://localhost:9308/bulk?bulk_import=products'
+```
+
+裸文档的每个字段都是一列，包括名为 `doc` 的字段，并且必须包含 `id`。当一行正好只有一个字段且其值是对象时，它就是一个操作，例如 `insert`；其他任何行都是裸文档。两种形式可以在同一个请求中混用。没有 `bulk_import` 的 `/bulk` 请求仍然必须使用操作形式。
+
 在请求体中，空行会结束并发布当前批次；请求结束会发布最终批次。Manticore 会在处理完该请求中的所有批次后发送 HTTP 响应。如果后续批次失败，同一请求中较早发布的批次仍然可搜索。若要将整个请求作为一个磁盘块原子发布，请不要包含空行。响应中每个已发布批次包含一个聚合的 `bulk` 结果，而不是每个文档一个结果。
 
 对于典型导入，请按上面所示在一个请求中发送完整的 NDJSON 正文。导入完成后关闭 HTTP 连接，以便释放表供其他写入使用。
 
 该端点支持分块传输编码，因此无需缓冲整个请求即可处理大于 `max_packet_size` 的请求体。
+
+#### 共享 HTTP 批量导入
+
+当许多并发请求加载同一张表时，例如日志发送器每次刷新都通过新连接发送数据，请在 `bulk_import=<table>` 旁边加上 `shared`。所有这类请求都会写入一个表级索引器池。该池不属于某个连接：它会跨请求、连接和重连一直存在，直到被提交、用 `PURGE` 取消、表被删除，或守护进程停止。
+
+```bash
+curl -sS -X POST -H 'Content-Type: application/x-ndjson' --data-binary @part1.ndjson \
+  'http://localhost:9308/bulk?bulk_import=products&shared=4'
+```
+
+每一行都必须是目标表的 `insert` 或 `create`，或者是上文所述的裸文档。第一个文档会创建池并启动其索引器。成功的数据响应（`"shared_state":"staged"`）表示文档已暂存，但还不可搜索：请求结束、连接关闭或 HTTP 分块边界都不会发布任何内容。
+
+从第一个文档开始，直到池被提交、失败或取消之前，该池会像私有批量导入一样保留这张表：搜索仍可继续工作，而普通写入（`INSERT`、`REPLACE`、`UPDATE`、`DELETE`）以及对同一张表发起的另一个批量导入都会失败，并报错说明该表已锁定。关闭连接不会释放表。[`SHOW LOCKS`](../../Securing_and_compacting_a_table/Freezing_and_locking_a_table.md#SHOW-LOCKS) 会以锁类型 `write_allow_readers` 列出被保留的表。当另一个批量导入正占用该表、表被 `LOCK TABLES … READ` 锁定，或对该表的普通写入正在运行时，新池的第一个文档会被拒绝，返回 `shared_precondition` 和相同错误。
+
+一个不含文档但包含空行的请求会提交该池：
+
+```bash
+printf '\n' | curl -sS -X POST -H 'Content-Type: application/x-ndjson' --data-binary @- \
+  'http://localhost:9308/bulk?bulk_import=products&shared'
+```
+
+提交会关闭池，使其不再接收新数据，停止未收到数据的索引器，等待所有其他索引器构建完各自部分，为每个这样的索引器附加一个磁盘块，移除该池，并返回 `"shared_state":"published"`。如果仍有其他数据请求在运行，提交会返回 HTTP `409` 和 `shared_busy`，池保持打开；等写入方完成后再次提交。没有池时提交会返回 `409` 和 `shared_no_pool`，因为提交永远不会创建池；未接收任何数据的池不会发布块。在包含文档的请求中，空行（包括只有空格的行）会被忽略，因此数据请求绝不会发布。LF 和 CRLF 都会结束一行。
+
+索引器数量，也就是新磁盘块数量，由创建池的请求中的 `shared=N` 设置。如果只写 `shared`，守护进程会使用 `searchd` 的 `INDEXER_RT_BULK_SHARED_POOL_SIZE` 环境变量，否则使用一个索引器。N 被限制在 1 到工作 [threads](../../Server_settings/Searchd.md#threads) 数量减 2（至少为 1）的范围内：更小的值或非数字会得到一个索引器，更大的值会得到最大值。只有创建池的请求会读取 N；加入已打开池的请求以及提交请求都会忽略它。数据会按约 32 KiB 的批次轮流分发到各个索引器。更多索引器可以缩短提交后的构建时间，但加载时会使用更多 CPU 和内存。一个不错的起点是工作线程数的大约三分之二，例如 12 个线程配 8 个索引器；再多的话，索引器会与传入请求争抢 CPU 和磁盘，加载反而变慢。每个索引器在加载时大约需要 200 MB 内存。
+
+每个响应都是一个 JSON 对象，包含 `errors`、`error`、`error_code` 和 `shared_state`：
+
+| `shared_state` | HTTP | `error_code` | 含义 |
+| --- | --- | --- | --- |
+| `staged` | 200 | | 数据已在池中 |
+| `published` | 200 | | 池已提交 |
+| `busy` | 409 | `shared_busy` | 其他数据请求仍处于活动状态时提交 |
+| `closing` | 409 | `shared_closing` | 池正在发布 |
+| `no_pool` | 409 | `shared_no_pool` | 没有池时提交，或带 `shared_join` 的数据请求没有池可加入 |
+| `rejected` | 400，或无写入权限时为 403 | `shared_precondition` | 无效请求，例如没有写入权限，或创建池时表已锁定 |
+| `failed` | 400、409 或 500 | `shared_failed` | 加载失败，见下文 |
+
+`current_line` 统计请求中的文档数量；提交会报告 `1`。出错时，`skipped_lines` 等于 `current_line`，不过请求中已经交给索引器的批次会保留在池中。
+
+如果连接在请求体中途断开或超时，或者请求被 `KILL` 终止，只有该请求会失败：它最后尚未写入的部分（小于 32 KiB）会被丢弃，已经交给索引器的数据会保留，池也会保持打开，因此客户端可以重新发送该请求。无效文档（格式错误的 JSON、未知列、其他表、`insert`/`create` 之外的操作）或写入索引器失败会导致整个加载失败：其索引器会停止，表会立即释放，该请求会因无效文档得到 `400`，或因写入失败得到 `500`，之后的每个请求都会得到 `409` 和首次错误，下一次提交会以 `500` 返回这个错误，并移除失败的池及其暂存文件；`PURGE … OPTION clear_sessions=1` 也会移除它。只有在这之后，新的加载才能开始。
+
+失败的请求和失败的加载会得到相同响应，即带 `shared_failed` 的 `failed`（`400`，被终止的请求则为 `500`），因此仅凭响应无法区分两者。下一个请求可以区分：`staged` 表示池仍然打开，而带 `shared_failed` 的 `409` 表示加载已经失败。
+
+池只存在于 `searchd` 的内存中。如果守护进程在加载期间停止或崩溃，或者池被取消，其暂存文档都会丢失，下一次数据请求会启动一个新池，其中只包含后续文档。要发现这种情况，请在第一次收到 `staged` 回复后的每个数据请求中加入 `shared_join`：这样的请求只会加入已打开的池，绝不会创建新池，因此没有池时会返回 `409` 和 `shared_no_pool`，加载即可从头重试。
+
+池不会随着客户端结束而结束。如果客户端在提交前消失，例如日志发送器被停止或崩溃，池会保持打开并继续保留该表，因此普通写入会继续失败。可通过以下两种方式之一释放表：按上文所示提交池，发布目前已暂存的文档；或取消池，丢弃这些文档：
+
+```sql
+PURGE BULK_IMPORT FROM TABLE products OPTION clear_sessions=1;
+```
+
+取消会停止索引器、释放表并移除暂存文件；之前已发布的块会保留在表中。当已消失客户端的数据请求仍被计为运行中时，提交会返回 `409` 和 `shared_busy`，直到该请求超时；取消不会等待它。一旦表被释放，`SHOW LOCKS` 不再列出该表，新的共享加载即可开始。详情请参见 [`PURGE BULK_IMPORT`](../../Node_info_and_management/PURGE.md#PURGE-BULK_IMPORT)。
 
 #### Elasticsearch `/_bulk`
 
@@ -930,7 +996,7 @@ curl -sS -X POST \
 
 #### 重复的文档 ID
 
-在一个直接写盘批次内，对于某个数值文档 ID，第一行保持可见，之后具有相同 ID 的行会被逻辑删除。对于 SQL，一个批次由 `COMMIT` 或 `ROLLBACK` 之前暂存的行组成。对于 Manticore `/bulk`，在空行、表切换或请求 EOF 处发布的每个分组都是一个单独批次。
+在一个直写磁盘批次内，某个数字文档 ID 的第一行保持可见，后续具有相同 ID 的行会被逻辑移除。对于 SQL，一个批次由 `COMMIT` 或 `ROLLBACK` 之前暂存的行组成。对于 Manticore `/bulk`，在空行、表变更或请求 EOF 处发布的每个组都是单独批次。在共享加载中，每个索引器的数据都是单独批次，其块会在池提交时逐个附加。如果其中一个块附加失败，之前已附加的块会保留在表中，提交返回 `500`；再次加载相同文档是安全的，因为已发布的行会替换任何具有相同 ID 的行。
 
 当 Manticore 将磁盘块发布到目标表时，该块中的某一行会替换任何具有相同 ID 的现有行。这同样适用于较早 HTTP 批次发布的 ID。因此，重试先前已发布的批次会替换其行，而重试批次内部的重复项仍然保留第一行。在 Manticore `/bulk` 请求中，`create` 操作例如：
 
@@ -942,7 +1008,7 @@ curl -sS -X POST \
 
 #### 暂存文件和清理
 
-Manticore 会在正常 `COMMIT`、`ROLLBACK`、禁用模式或关闭会话后移除当前暂存目录。守护进程或主机崩溃可能会留下废弃的暂存目录。之后的直接写盘加载会创建新的唯一命名目录，不会复用或附加崩溃加载留下的文件。
+Manticore 会在正常 `COMMIT`、`ROLLBACK`、禁用模式或会话关闭后移除当前暂存目录。共享池会一直保留其暂存目录，直到被提交或取消；关闭连接不会移除它们。守护进程或主机崩溃可能会留下废弃的暂存目录。之后的直写磁盘加载会创建一个新的唯一命名目录，不会复用或附加崩溃加载留下的文件。
 
 使用以下查询检查某个表的所有直接写盘暂存条目：
 
@@ -960,12 +1026,14 @@ OPTION format='bulk_import';
 PURGE BULK_IMPORT FROM TABLE products;
 ```
 
-`PURGE` 要求存在一个本地实时表，且该表不在复制集群中。它只移除直接写盘暂存状态，不会更改表结构或已索引的行。当暂存根目录不存在时，它会以空操作成功完成。在无配置模式下，`DROP TABLE` 也会移除该表的直接写盘暂存根目录。
+当表有打开的共享池时，`PURGE` 会被拒绝；`PURGE BULK_IMPORT FROM TABLE products OPTION clear_sessions=1` 会先取消该池，停止其索引器，释放表，然后移除暂存根目录。当池正在附加其块时，`PURGE` 会被拒绝；请在提交完成后重试。在 Windows 上，如果数据请求仍在写入池时执行 `PURGE … OPTION clear_sessions=1` 或 `DROP TABLE`，可能会返回 `failed to remove bulk staging root`：池已经取消，但其已停止的索引器会短暂保持文件打开；请重复执行该语句。
+
+`PURGE` 要求存在一个本地实时表，且该表不在复制集群中。它只移除直写磁盘的暂存状态，不会改变表结构或已索引的行。暂存根目录不存在时，它会作为无操作成功返回。在无配置模式下，`DROP TABLE` 也会移除表的直写磁盘暂存根目录并取消其共享池；守护进程关闭会取消所有共享池。之前已发布的块会保留在表中。
 
 #### 当前限制
 
 * 目标必须是一个现有的、未冻结的本地实时表，且不是复制集群成员。不支持分布式表、分片表、复制表、渗滤表和普通表。
-* SQL 仅支持 `INSERT`。Manticore `/bulk` 接受 `insert` 和 `create`；`index`、`replace`、`update` 和 `delete` 会被拒绝。
+* SQL 仅支持 `INSERT`。Manticore `/bulk` 接受 `insert`、`create` 和裸文档；`index`、`replace`、`update` 和 `delete` 会被拒绝。
 * 每一行都必须提供显式的数值型非零文档 ID。不支持自动生成和 UUID 文档 ID。
 * 不支持静态构建。
 * 平台特定的可执行文件（Linux 上为 `indexer`，Windows 上为 `indexer.exe`）必须与正在运行的 `searchd` 可执行文件位于同一目录。Manticore Search 只解析这个同级路径，不会搜索 `PATH`。请使用与 `searchd` 来自同一安装的可执行文件以确保兼容性。如果该文件不存在、不可读或无法启动，则只有批量导入会失败；正常启动和常规插入仍然可用。

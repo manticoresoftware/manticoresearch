@@ -1,0 +1,116 @@
+––– comment –––
+Shared bulk_import pool size of a bare shared comes from the daemon environment
+INDEXER_RT_BULK_SHARED_POOL_SIZE (else 1); shared=N wins over it. MANTICORE_LOG_BULK_IMPORT
+there turns on the BULK_IMPORT_SHARED lines of searchd.log. A daemon shutdown cancels open
+pools: no indexer child and no staging directory survive it. The pool size is clamped to
+searchd threads - 2, so the daemon gets threads = 8 for any CPU count of the runner.
+––– input –––
+sed -i '/^searchd *{/a threads = 8' /etc/manticoresearch/manticore.conf
+––– output –––
+––– block: ../base/start-searchd –––
+––– input –––
+cat > /tmp/shared.sh <<'EOF'
+gen() { for ((i=$2; i<=$3; i++)); do printf '{"insert":{"table":"%s","id":%d,"doc":{"title":"doc %d","gid":%d}}}\n' "$1" "$i" "$i" "$((i % 7))"; done; }
+post() { curl -sS -X POST "http://localhost:9308/bulk?bulk_import=$1&shared$2" -H 'Content-Type: application/x-ndjson' --data-binary @"$3" -w ' HTTP %{http_code}\n'; }
+commit() { printf '\n' > /tmp/commit.ndjson; post "$1" "$2" /tmp/commit.ndjson; }
+sql() { mysql -h0 -P9306 --skip-table --batch --raw --skip-column-names -e "$1"; }
+restart() { stdbuf -oL searchd --stopwait > /dev/null; rm -f /var/log/manticore/searchd.log; env "$@" stdbuf -oL searchd > /dev/null; if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo restarted; else echo 'restart failed'; fi; }
+EOF
+––– output –––
+––– input –––
+source /tmp/shared.sh; restart INDEXER_RT_BULK_SHARED_POOL_SIZE=3 MANTICORE_LOG_BULK_IMPORT=1
+––– output –––
+restarted
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_env (title TEXT, gid INT); CREATE TABLE s_opt (title TEXT, gid INT)"; gen s_env 1 6000 > /tmp/e1.ndjson; gen s_opt 1 6000 > /tmp/e2.ndjson; post s_env '' /tmp/e1.ndjson; commit s_env ''; post s_opt '=2' /tmp/e2.ndjson; commit s_opt ''
+––– output –––
+{"items":[],"current_line":6000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+{"items":[],"current_line":6000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+––– input –––
+source /tmp/shared.sh; sql "SELECT COUNT(*) FROM s_env; SHOW TABLE s_env STATUS LIKE 'disk_chunks'; SELECT COUNT(*) FROM s_opt; SHOW TABLE s_opt STATUS LIKE 'disk_chunks'"
+––– output –––
+6000
+disk_chunks	3
+6000
+disk_chunks	2
+––– comment –––
+With MANTICORE_LOG_BULK_IMPORT the searchd log has the BULK_IMPORT_SHARED lines parsed by the
+load harness, with the pool size taken from the environment or from shared=N.
+––– input –––
+grep -o 'BULK_IMPORT_SHARED \(created\|finished\) table=s_\(env\|opt\) [a-z_]*=[0-9]*' /var/log/manticore/searchd.log
+––– output –––
+BULK_IMPORT_SHARED created table=s_env pool_size=3
+BULK_IMPORT_SHARED finished table=s_env rows=6000
+BULK_IMPORT_SHARED created table=s_opt pool_size=2
+BULK_IMPORT_SHARED finished table=s_opt rows=6000
+––– comment –––
+shared is a parameter without a value anywhere in the query, and shared= is the same: both
+create a pool of the environment size.
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_bare (title TEXT, gid INT)"; gen s_bare 1 6000 > /tmp/e5.ndjson; gen s_bare 6001 12000 > /tmp/e6.ndjson; curl -sS -X POST 'http://localhost:9308/bulk?shared&bulk_import=s_bare' -H 'Content-Type: application/x-ndjson' --data-binary @/tmp/e5.ndjson -w ' HTTP %{http_code}\n'; commit s_bare ''; post s_bare '=' /tmp/e6.ndjson; commit s_bare '='; sql "SELECT COUNT(*) FROM s_bare; SHOW TABLE s_bare STATUS LIKE 'disk_chunks'"
+––– output –––
+{"items":[],"current_line":6000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+{"items":[],"current_line":6000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+12000
+disk_chunks	6
+––– comment –––
+An environment value that is not a pool size, here 'many' read as 0, is clamped to 1: a bare
+shared creates a pool of one indexer, and MANTICORE_LOG_BULK_IMPORT shows the clamp. A request
+that joins the pool ignores its shared=N, and a commit needs no pool size.
+––– input –––
+source /tmp/shared.sh; restart INDEXER_RT_BULK_SHARED_POOL_SIZE=many MANTICORE_LOG_BULK_IMPORT=1
+––– output –––
+restarted
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_bad_env (title TEXT, gid INT)"; gen s_bad_env 1 10 > /tmp/e3.ndjson; post s_bad_env '' /tmp/e3.ndjson; post s_bad_env '=1' /tmp/e3.ndjson; commit s_bad_env ''; sql "SELECT COUNT(*) FROM s_bad_env; SHOW TABLE s_bad_env STATUS LIKE 'disk_chunks'"; grep -o 'BULK_IMPORT_SHARED pool_size_clamped table=s_bad_env .*' /var/log/manticore/searchd.log
+––– output –––
+{"items":[],"current_line":10,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":10,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+10
+disk_chunks	1
+BULK_IMPORT_SHARED pool_size_clamped table=s_bad_env requested=0 pool_size=1
+––– comment –––
+An indexer that dies during a load fails the pool with its own error: its csvpipe command exits
+at once, the write into its input breaks, and the first error, which the commit returns, carries
+the indexer output.
+––– input –––
+source /tmp/shared.sh; restart INDEXER_RT_BULK_CSV_PIPE_COMMAND=/bin/false
+––– output –––
+restarted
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_dead (title TEXT, gid INT)"; gen s_dead 1 30000 > /tmp/e4.ndjson; post s_dead '' /tmp/e4.ndjson > /dev/null 2>&1; commit s_dead '' > /tmp/e4.reply; grep -o '"error":"failed streaming bulk CSV to indexer' /tmp/e4.reply; grep -o "source 'indexer_rt_bulk_source': read error" /tmp/e4.reply; grep -o '"shared_state":"[a-z]*"} HTTP [0-9]*' /tmp/e4.reply; echo "children=$(ps -eo args | grep -c '[i]ndexer_rt_bulk_chunk') staging=$(ls /var/lib/manticore/s_dead | grep -c indexer-rt-bulk)"
+––– output –––
+"error":"failed streaming bulk CSV to indexer
+source 'indexer_rt_bulk_source': read error
+"shared_state":"failed"} HTTP 500
+children=0 staging=0
+––– comment –––
+Shutdown with an open pool: the pool is cancelled, its child is gone and its staging
+directory removed; after a restart a shared_join request of the cut load answers no_pool
+instead of starting a new pool, and the table takes a new load.
+––– input –––
+source /tmp/shared.sh; restart
+––– output –––
+restarted
+––– input –––
+source /tmp/shared.sh; sql "CREATE TABLE s_shutdown (title TEXT, gid INT)"; gen s_shutdown 1 100 > /tmp/s1.ndjson; post s_shutdown '' /tmp/s1.ndjson; ps -eo args | grep -c '[i]ndexer_rt_bulk_chunk'
+––– output –––
+{"items":[],"current_line":100,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+1
+––– input –––
+source /tmp/shared.sh; stdbuf -oL searchd --stopwait > /dev/null; for i in $(seq 1 50); do ps -eo args | grep -q '[i]ndexer_rt_bulk_chunk' || break; sleep 0.1; done; echo "children=$(ps -eo args | grep -c '[i]ndexer_rt_bulk_chunk') staging=$(ls /var/lib/manticore/s_shutdown | grep -c indexer-rt-bulk)"
+––– output –––
+children=0 staging=0
+––– input –––
+source /tmp/shared.sh; restart; post s_shutdown '&shared_join' /tmp/s1.ndjson; post s_shutdown '' /tmp/s1.ndjson; commit s_shutdown ''; sql "SELECT COUNT(*) FROM s_shutdown"
+––– output –––
+restarted
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"no shared bulk_import into table 's_shutdown' to join","error_code":"shared_no_pool","shared_state":"no_pool"} HTTP 409
+{"items":[],"current_line":100,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+100

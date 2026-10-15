@@ -11,6 +11,17 @@ export INSTANCE=1
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
 ––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– input –––
 mysql -h0 -P1306 -e "create table t8(title text, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2') shards='2' rf='1';"; echo $?
 ––– output –––
 0
@@ -31,3 +42,23 @@ mysql -h0 -P1306 -N -B -e "select id from t8 where knn(vector, 2, (0.1,0.2,0.3,0
 sleep 1; mysql -h0 -P1306 -e "show status like 'uptime';" | grep uptime | awk '{print ($2 > 0) ? "uptime_positive" : "uptime_zero"}'
 ––– output –––
 uptime_positive
+––– comment –––
+Chunk highlighting is evaluated on the agents; the distributed head merges the highlighted chunks.
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE t9(body TEXT, chunks FLOAT_VECTOR_ARRAY KNN_TYPE='hnsw' HNSW_SIMILARITY='cosine' MODEL_NAME='sentence-transformers/all-MiniLM-L6-v2' FROM='body' CHUNK_STRATEGY='fixed' MAX_TOKENS='8') SHARDS='2' RF='1';"; echo $?
+––– output –––
+0
+––– input –––
+ready=0; for i in $(seq 1 30); do s=$(mysql -h0 -P1306 -N -B -e "SHOW SHARDING STATUS t9" 2>/dev/null); if [ "$(printf '%s
+' "$s" | grep -ci active)" -eq 2 ] && ! printf '%s
+' "$s" | grep -Eqi 'pending|error|initializing'; then ready=1; break; fi; sleep 1; done; echo "ready=$ready"
+––– output –––
+ready=1
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO t9(id,body) VALUES (1,'short target phrase end'),(2,'alpha beta gamma delta epsilon zeta eta theta target phrase end'),(3,'alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu target phrase end'),(4,'prefix words before target phrase and tail'),(5,'one two three four five six seven eight nine ten target phrase end'),(6,'target phrase starts this document'),(7,'long prefix alpha beta gamma delta epsilon zeta eta theta iota target phrase end'),(8,'different prefix target phrase different tail');"; echo $?
+––– output –––
+0
+––– input –––
+mysql --skip-table --batch --raw --skip-column-names -h0 -P1306 -e "SELECT id,HIGHLIGHT({knn_chunk=1},'body') FROM t9 WHERE KNN(chunks,8,'target phrase') ORDER BY id" > /tmp/distributed-highlight.tsv && python3 test/clt-tests/mcl/check-chunk-provenance.py distributed-highlight plain 1 'short target phrase end' 2 'alpha beta gamma delta epsilon zeta eta theta target phrase end' 3 'alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu target phrase end' 4 'prefix words before target phrase and tail' 5 'one two three four five six seven eight nine ten target phrase end' 6 'target phrase starts this document' 7 'long prefix alpha beta gamma delta epsilon zeta eta theta iota target phrase end' 8 'different prefix target phrase different tail' < /tmp/distributed-highlight.tsv
+––– output –––
+DISTRIBUTED_CHUNK_HIGHLIGHT_OK

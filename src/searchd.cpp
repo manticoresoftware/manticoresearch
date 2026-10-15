@@ -10445,7 +10445,13 @@ static void HandleMysqlPurge ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	pServed = nullptr;
 
 	CSphString sError;
-	if ( !RemoveIndexerRtBulkRoot ( sRoot, sError ) )
+	if ( !PurgeSharedBulkImport ( tStmt.m_sIndex, tStmt.m_iIntParam!=0, sError ) )
+	{
+		tOut.Error ( sError.cstr() );
+		return;
+	}
+
+	if ( !RemoveIndexerRtBulkRoot ( tStmt.m_sIndex, sRoot, sError ) )
 	{
 		tOut.Error ( sError.cstr() );
 		return;
@@ -17330,6 +17336,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	searchd::AddShutdownCb ( ReplicationServiceShutdown );
 	ReplicationServiceStart ( eBs );
 	searchd::AddShutdownCb ( BuddyShutdown );
+	searchd::AddShutdownCb ( ShutdownSharedBulkImport );
 	// --test should not guess buddy path
 	// otherwise daemon generates warning message that counts as bad daemon restart by ubertest
 	if ( bWithBuddy.value_or (!bTestMode) )

@@ -317,6 +317,7 @@ private:
 	bool	AddExpressionsForUpdates();
 	bool	MaybeAddGroupbyMagic ( bool bGotDistinct );
 	bool	AddKNNDistColumn();
+	bool	AddKNNChunkSlotColumn();
 	bool	AddKNNRescoreColumn();
 	bool	CanRescoreKNN() const;
 	bool	AddHybridScoreColumn();
@@ -662,6 +663,11 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 	}
 
 	int iGroupBy = GetGroupbyAttrIndex();
+	// A merge sorter consumes pre-grouped matches whose @groupby key is already computed.
+	// The source MVA may have been dropped from their schema to save memory.
+	if ( iGroupBy<0 && m_tSettings.m_bGrouped && m_tQuery.m_eGroupFunc==SPH_GROUPBY_ATTR )
+		iGroupBy = tSchema.GetAttrIndex ( "@groupby" );
+
 	bool bJoined = iGroupBy>=0 && m_pSorterSchema->GetAttr(iGroupBy).IsJoined();
 	if ( ( iGroupBy<0 || bJoined ) && sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr(), m_tQuery.m_sJoinIdx.cstr(), &sJsonColumn ) )
 	{
@@ -1786,12 +1792,55 @@ bool QueueCreator_c::AddKNNDistColumn()
 	}
 
 	CSphColumnInfo tKNNDist ( GetKnnDistAttrName(), SPH_ATTR_FLOAT );
-	tKNNDist.m_eStage = SPH_EVAL_PRESORT;
+	// a predicate on the distance (knn_dist()<x, or an alias of it) needs the value before the filters run;
+	// otherwise it is only needed for sorting, after the filters have rejected what they can
+	tKNNDist.m_eStage = HasKNNDistFilter(m_tQuery) ? SPH_EVAL_PREFILTER : SPH_EVAL_PRESORT;
 	tKNNDist.m_pExpr = CreateExpr_KNNDist ( tKNN.m_dVec, *pAttr );
 
 	m_pSorterSchema->AddAttr ( tKNNDist, true );
 	m_hQueryColumns.Add ( tKNNDist.m_sName );
 
+	return true;
+}
+
+
+// HIGHLIGHT({knn_chunk=1}) needs to know which vector of a multi-vector row won the search. The slot travels as an
+// internal presort attribute: the KNN iterator fills it on the ANN path, fullscan and exact rescore recompute it
+bool QueueCreator_c::AddKNNChunkSlotColumn()
+{
+	// merge queues receive matches from agents that already evaluated the highlight; nothing to compute here
+	if ( !m_tQuery.HasKnn() || !m_tSettings.m_bComputeItems || !QueryUsesKnnChunkHighlight(m_tQuery) )
+		return true;
+
+	if ( m_pSorterSchema->GetAttrIndex ( GetKnnChunkSlotAttrName() )>=0 )
+		return true;
+
+	if ( m_tQuery.m_dKnnSettings.GetLength()!=1 )
+		return Err ( "KNN chunk highlighting does not support multiple KNN clauses" );
+
+	const auto & tKNN = m_tQuery.SingleKnnSettings();
+	const CSphColumnInfo * pVector = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
+	if ( !pVector || !pVector->HasKnnChunkSpans() )
+		return true; // no chunk provenance for this attribute; highlighting falls back to the whole field
+
+	// the column has no expression of its own: the knn_dist() expression writes the slot along with the distance
+	// (one scan of the row's vectors for both), the rescore sorter updates it, and the hybrid executor copies it
+	// from the winning KNN sub-result
+	CSphColumnInfo tSlot ( GetKnnChunkSlotAttrName(), SPH_ATTR_BIGINT );
+	tSlot.m_sKNNFrom = pVector->m_sName; // names the vector attribute the slot belongs to; the highlight resolves its FROM field from the index schema
+	tSlot.m_eStage = SPH_EVAL_SORTER;
+	m_pSorterSchema->AddAttr ( tSlot, true );
+	m_hQueryColumns.Add ( tSlot.m_sName );
+
+	if ( m_tQuery.m_bHybridSearch )
+		return true;
+
+	const CSphColumnInfo * pSlot = m_pSorterSchema->GetAttr ( GetKnnChunkSlotAttrName() );
+	const CSphColumnInfo * pDist = m_pSorterSchema->GetAttr ( GetKnnDistAttrName() );
+	if ( !pSlot || !pDist || !pDist->m_pExpr )
+		return Err ( "unable to bind the KNN chunk slot to knn_dist()" );
+
+	BindKNNChunkSlot ( pDist->m_pExpr, pSlot->m_tLocator );
 	return true;
 }
 
@@ -2893,6 +2942,7 @@ bool QueueCreator_c::SetupComputeQueue ()
 		&& AddJoinFilterAttrs()
 		&& MaybeAddGeodistColumn ()
 		&& AddKNNDistColumn()
+		&& AddKNNChunkSlotColumn()
 		&& AddHybridScoreColumn()
 		&& MaybeAddExprColumn ()
 		&& MaybeAddExpressionsFromSelectList ()

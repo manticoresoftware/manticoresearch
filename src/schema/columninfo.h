@@ -105,6 +105,7 @@ struct CSphColumnInfo
 	bool IsIndexedSI() const;
 	bool IsStored() const;
 	bool IsUuidLinkedDocid() const;
+	bool HasKnnChunkSpans() const;	///< the docstore keeps the source byte span of every auto-generated chunk vector of this attribute
 };
 
 

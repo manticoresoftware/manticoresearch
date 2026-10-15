@@ -968,19 +968,55 @@ void WaitQueue_c::SuspendAndWait ( sph::Spinlock_lock& tLock, Worker_c* pActive 
 	assert ( !w.is_linked() );
 }
 
+// Timeout side of a timed wait. A notifier may resume the waiter as soon as the queue is unlocked, and MiniTimer
+// may already have copied a due callback when the waiter removes the timer. The guard orders timer registration,
+// the queue unlock, the raw wake and the waiter's cancellation; shared ownership keeps it alive for the callback.
+class TimedWaker_c
+{
+	sph::Spinlock_c m_tGuard;
+	Waker_c m_tWaker;
+	bool m_bCancelled = false;
+
+public:
+	explicit TimedWaker_c ( const Waker_c & tWaker )
+		: m_tWaker ( tWaker )
+	{}
+
+	void Arm ( MiniTimer_c & tTimer, int64_t iTimestamp, sph::Spinlock_lock & tQueueLock ) NO_THREAD_SAFETY_ANALYSIS
+	{
+		sph::Spinlock_lock tGuard { m_tGuard };
+		tTimer.EngageAt ( iTimestamp );
+		tQueueLock.unlock();
+	}
+
+	void Wake()
+	{
+		sph::Spinlock_lock tGuard { m_tGuard };
+		if ( !m_bCancelled )
+			m_tWaker.Wake();
+	}
+
+	// after this returns, no timeout callback touches the waiter or its stack
+	void Cancel()
+	{
+		sph::Spinlock_lock tGuard { m_tGuard };
+		m_bCancelled = true;
+	}
+};
+
 // returns true if signalled, false if timed-out
 bool WaitQueue_c::SuspendAndWaitUntil ( sph::Spinlock_lock& tLock, Worker_c* pActive, int64_t iTimestamp ) NO_THREAD_SAFETY_ANALYSIS
 {
 	WakerInQueue_c w { pActive->CreateWaker() };
+	auto pTimedWaker = std::make_shared<TimedWaker_c> ( w );
+	MiniTimer_c tWait ( "SuspendAndWait", [pTimedWaker] { pTimedWaker->Wake(); } );
 	m_Slist.push_back ( w );
 
-	MiniTimer_c tWait ( "SuspendAndWait", [&w] { w.Wake(); } );
-
 	// suspend this fiber
-	pActive->YieldWith ( [&tLock, &tWait, iTimestamp]() NO_THREAD_SAFETY_ANALYSIS {
-		tLock.unlock();
-		tWait.EngageAt ( iTimestamp );
+	pActive->YieldWith ( [&tLock, &tWait, iTimestamp, pTimedWaker]() NO_THREAD_SAFETY_ANALYSIS {
+		pTimedWaker->Arm ( tWait, iTimestamp, tLock );
 	});
+	pTimedWaker->Cancel();
 
 	// resumed. Check if deadline is reached
 	if ( sph::TimeExceeded ( iTimestamp ) || sphInterrupted () )

@@ -41,7 +41,7 @@ static inline int GetDictDocsForCheck ( int iRawDocs, bool bLegacyLayout )
 class DebugCheckError_c final : public DebugCheckError_i
 {
 public:
-	DebugCheckError_c ( FILE* pFile, const DocID_t* pExtract );
+	DebugCheckError_c ( FILE* pFile, const DocID_t* pExtract, bool bDocstoreBadIds );
 
 	bool Fail ( const char* szFmt, ... ) final;
 	void Msg ( const char* szFmt, ... ) final;
@@ -50,6 +50,7 @@ public:
 
 	int64_t GetNumFails() const final;
 	const DocID_t* GetExtractDocs() const final { return m_pExtract; };
+	bool IsDocstoreBadIds() const final { return m_bDocstoreBadIds; };
 
 	void CheckDocidDup ( DocID_t tDocid, DWORD uRowid ) final;
 	void FinishDiskChunk ( int64_t iNumRows ) final;
@@ -61,13 +62,15 @@ private:
 	int64_t m_nFails { 0 };
 	int64_t m_nFailsPrinted { 0 };
 	const DocID_t* m_pExtract;
+	bool m_bDocstoreBadIds;
 
 	roaring::Roaring64Map m_tDocids;
 };
 
-DebugCheckError_c::DebugCheckError_c ( FILE * pFile, const DocID_t* pExtract )
+DebugCheckError_c::DebugCheckError_c ( FILE * pFile, const DocID_t* pExtract, bool bDocstoreBadIds )
 	: m_pFile ( pFile )
 	, m_pExtract { pExtract }
+	, m_bDocstoreBadIds { bDocstoreBadIds }
 {
 	assert ( pFile );
 	m_bProgress = isatty ( fileno ( pFile ) )!=0;
@@ -89,7 +92,8 @@ void DebugCheckError_c::Msg ( const char * szFmt, ... )
 bool DebugCheckError_c::Fail ( const char * szFmt, ... )
 {
 	assert ( m_pFile );
-	if ( ++m_nFails>=FAILS_THRESH )
+	// docstore bad ids mode reports every damaged block
+	if ( ++m_nFails>=FAILS_THRESH && !m_bDocstoreBadIds )
 		return false;
 
 	va_list ap;
@@ -101,7 +105,7 @@ bool DebugCheckError_c::Fail ( const char * szFmt, ... )
 	va_end ( ap );
 
 	m_nFailsPrinted++;
-	if ( m_nFailsPrinted==FAILS_THRESH )
+	if ( m_nFailsPrinted==FAILS_THRESH && !m_bDocstoreBadIds )
 		fprintf ( m_pFile, "(threshold reached; suppressing further output)\n" );
 
 	return false;
@@ -160,9 +164,9 @@ void DebugCheckError_c::FinishDiskChunk ( int64_t iNumRows )
 }
 
 
-DebugCheckError_i* MakeDebugCheckError ( FILE* fp, DocID_t* pExtract )
+DebugCheckError_i* MakeDebugCheckError ( FILE* fp, DocID_t* pExtract, bool bDocstoreBadIds )
 {
-	return new DebugCheckError_c ( fp, pExtract );
+	return new DebugCheckError_c ( fp, pExtract, bDocstoreBadIds );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -524,6 +528,7 @@ public:
 
 	void	Check();
 	void	ExtractDocs ();
+	void	DumpDocstoreBadIds();
 
 	bool	ReadHeader ( const CSphString& sHeader );
 	DWORD	GetVersion() const noexcept { return m_uVersion; };
@@ -926,6 +931,8 @@ void DiskIndexChecker_c::Impl_c::Check()
 {
 	if ( m_tReporter.GetExtractDocs() )
 		return ExtractDocs();
+	if ( m_tReporter.IsDocstoreBadIds() )
+		return DumpDocstoreBadIds();
 	CheckSchema();
 	CheckDictionary();
 	CheckDocs();
@@ -1838,6 +1845,49 @@ void DiskIndexChecker_c::Impl_c::CheckDocstore()
 	m_tReporter.Msg ( "checking docstore..." );
 
 	::CheckDocstore ( m_tDocstoreReader, m_tReporter, m_iNumRows );
+}
+
+
+void DiskIndexChecker_c::Impl_c::DumpDocstoreBadIds()
+{
+	if ( !m_bHasDocstore )
+		return;
+
+	const CSphColumnInfo * pId = m_tSchema.GetAttr ( sphGetDocidName() );
+	if ( !pId || pId->IsColumnar() )
+	{
+		m_tReporter.Fail ( "docstore bad ids are not supported for columnar document ids" );
+		return;
+	}
+
+	m_tReporter.Msg ( "checking docstore..." );
+
+	CSphVector<std::pair<RowID_t,RowID_t>> dBadRows;
+	::CheckDocstore ( m_tDocstoreReader, m_tReporter, m_iNumRows, &dBadRows );
+	dBadRows.Sort();
+
+	CSphFixedVector<CSphRowitem> dRow ( m_tSchema.GetRowSize() );
+	int64_t iBadIds = 0;
+	RowID_t tNextRowID = 0;
+	for ( const auto & tRange : dBadRows )
+	{
+		for ( RowID_t tRowID = Max ( tRange.first, tNextRowID ); tRowID<tRange.second; ++tRowID )
+		{
+			// killed rows are not served, so they need no fix
+			m_tDeadRowReader.SeekTo ( sizeof(DWORD) * ( tRowID>>5 ), sizeof(DWORD) );
+			if ( m_tDeadRowReader.GetDword() & ( 1UL<<( tRowID&31 ) ) )
+				continue;
+
+			m_tAttrReader.SeekTo ( dRow.GetLengthBytes() * tRowID, sizeof(DocID_t) );
+			m_tAttrReader.GetBytes ( dRow.Begin(), sizeof(DocID_t) );
+			m_tReporter.Msg ( INT64_FMT, sphGetDocID ( dRow.Begin() ) );
+			iBadIds++;
+		}
+
+		tNextRowID = Max ( tNextRowID, tRange.second );
+	}
+
+	m_tReporter.Msg ( "docstore bad ids: " INT64_FMT, iBadIds );
 }
 
 

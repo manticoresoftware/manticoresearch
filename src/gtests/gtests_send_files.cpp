@@ -12,6 +12,7 @@
 
 #include <gtest/gtest.h>
 #include "replication/send_files.h"
+#include "replication/cluster_file_reserve.h"
 
 TEST ( SstHashLayout, PreferredLayoutFits )
 {
@@ -114,4 +115,22 @@ TEST ( SstHashLayout, OneHashOverBudgetKeepsMixedOffsets )
 	EXPECT_EQ ( dFiles[0].m_iHashStartItem, 3 );
 	EXPECT_EQ ( dFiles[1].m_iHashStartItem, 3 );
 	EXPECT_EQ ( dFiles[2].m_iHashStartItem, 4 );
+}
+
+
+TEST ( SstFileNames, AcceptsBasenames )
+{
+	EXPECT_TRUE ( IsReplicationFileName ( "products" ) );
+	EXPECT_TRUE ( IsReplicationFileName ( "products.meta" ) );
+	EXPECT_TRUE ( IsReplicationFileName ( "products.0.spa" ) );
+}
+
+
+TEST ( SstFileNames, RejectsPaths )
+{
+	for ( const char * szName : { "", ".", "..", "/", "\\", "../", "..\\", "./", ".\\", "../products", "dir/products", "/tmp/products", "products/", "..\\products", "dir\\products", "products\\" } )
+	{
+		SCOPED_TRACE ( szName );
+		EXPECT_FALSE ( IsReplicationFileName ( szName ) );
+	}
 }

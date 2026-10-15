@@ -149,6 +149,19 @@ void operator>> ( InputBuffer_c& tIn, FileReserveReply_t& tReq )
 }
 
 
+bool IsReplicationFileName ( const CSphString & sName )
+{
+	if ( sName.IsEmpty() || sName=="." || sName==".." )
+		return false;
+
+	for ( const char * p = sName.cstr(); *p; ++p )
+		if ( *p=='/' || *p=='\\' )
+			return false;
+
+	return true;
+}
+
+
 struct ScopedFilesRemoval_t: public ISphNoncopyable
 {
 	explicit ScopedFilesRemoval_t ( VecTraits_T<CSphString>* pFiles )
@@ -178,6 +191,14 @@ bool ClusterFileReserve ( const FileReserveRequest_t & tCmd, FileReserveReply_t 
 	if ( !CanReplaceIndex ( tCmd.m_sCluster, tCmd.m_sIndex ) )
 		return false;
 
+	if ( !IsReplicationFileName ( tCmd.m_sIndexFileName ) )
+		return TlsMsg::Err ( "invalid replication table file name" );
+
+	assert ( tCmd.m_pChunks );
+	for ( const CSphString & sFile : tCmd.m_pChunks->m_dBaseNames )
+		if ( !IsReplicationFileName ( sFile ) )
+			return TlsMsg::Err ( "invalid replication file name" );
+
 	CSphString sLocalIndexPath;
 
 	auto pProgressSst = GetClusterProgress ( tCmd.m_sCluster );
@@ -185,7 +206,6 @@ bool ClusterFileReserve ( const FileReserveRequest_t & tCmd, FileReserveReply_t 
 		pProgressSst->StartLocalStage ( tCmd.m_tProgressCtx, SstStage_e::RESERVE_FILES );
 	AT_SCOPE_EXIT ( [&pProgressSst] { if ( pProgressSst ) pProgressSst->FinishLocalStage(); } );
 
-	assert ( tCmd.m_pChunks );
 	// use index path first
 	{
 		cServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );

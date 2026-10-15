@@ -47,6 +47,7 @@ StringBuilder_c& operator<< ( StringBuilder_c& tOut, const FileReserveReply_t& t
 // API command to remote node prior to file send
 using ClusterFileReserve_c = ClusterCommand_T<E_CLUSTER::FILE_RESERVE, FileReserveRequest_t, FileReserveReply_t>;
 
+bool IsReplicationFileName ( const CSphString & sName );
 bool SendClusterFileReserve ( VecRefPtrs_t<AgentConn_t*>& dAgents );
 
 

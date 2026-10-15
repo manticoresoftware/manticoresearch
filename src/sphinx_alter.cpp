@@ -503,28 +503,23 @@ void IndexAlterHelper_c::Alter_AddRemoveFromDocstore ( DocstoreBuilder_i & tBuil
 {
 	struct Field_t
 	{
-		CSphString	m_sName;
-		bool		m_bField = true;
-		int			m_iOldId = -1;
-		int			m_iRsetId = -1;
+		CSphString			m_sName;
+		DocstoreDataType_e	m_eType = DOCSTORE_TEXT;
+		int					m_iOldId = -1;
+		int					m_iRsetId = -1;
 	};
 
-	CSphVector<Field_t> dStoredFields;
-	for ( int i = 0; i < tNewSchema.GetFieldsCount(); i++ )
-		if ( tNewSchema.IsFieldStored(i) )
-		{
-			const CSphString & sName = tNewSchema.GetFieldName(i);
-			int iFieldId = pDocstore ? pDocstore->GetFieldId ( sName, DOCSTORE_TEXT ) : -1;
-			dStoredFields.Add ( { sName, true, iFieldId, -1 } );
-		}
+	CSphVector<DocstoreFieldDesc_t> dNewFields;
+	CollectDocstoreFields ( tNewSchema, dNewFields );
 
-	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
-		if ( tNewSchema.IsAttrStored(i) )
-		{
-			const CSphString & sName = tNewSchema.GetAttr(i).m_sName;
-			int iFieldId = pDocstore ? pDocstore->GetFieldId ( sName, DOCSTORE_ATTR ) : -1;
-			dStoredFields.Add ( { sName, false, iFieldId, -1 } );
-		}
+	// entries are matched by name and type; whatever the old docstore lacks (e.g. chunk spans in a chunk
+	// written before they existed) is stored empty
+	CSphVector<Field_t> dStoredFields;
+	for ( const auto & i : dNewFields )
+	{
+		int iFieldId = pDocstore ? pDocstore->GetFieldId ( i.m_sName, i.m_eType ) : -1;
+		dStoredFields.Add ( { i.m_sName, i.m_eType, iFieldId, -1 } );
+	}
 
 	IntVec_t dStoredFieldIds;
 	for ( auto & i : dStoredFields )
@@ -535,7 +530,7 @@ void IndexAlterHelper_c::Alter_AddRemoveFromDocstore ( DocstoreBuilder_i & tBuil
 			dStoredFieldIds.Add ( i.m_iOldId );
 		}
 
-		tBuilder.AddField ( i.m_sName, i.m_bField ? DOCSTORE_TEXT : DOCSTORE_ATTR );
+		tBuilder.AddField ( i.m_sName, i.m_eType );
 	}
 
 	DocstoreDoc_t tOldDoc;

@@ -2401,6 +2401,7 @@ static bool NeedToSkipAttr ( const CSphString & sName, const CSphQuery & tQuery 
 	if ( sName.Begins ( GetFilterAttrPrefix() ) ) return true;
 	if ( sName.Begins ( g_szOrder ) ) return true;
 	if ( sName.Begins ( GetKnnDistAttrName() ) ) return true;
+	if ( IsKnnChunkSlotAttr(sName) ) return true;
 	if ( sName.Begins ( GetHybridScoreAttrName() ) ) return true;
 	if ( IsJoinedWeight ( sName, tQuery ) ) return true;
 
@@ -3936,6 +3937,7 @@ static bool ParseSnippetOptsSphinx ( const JsonObj_c & tSnip, SnippetQuerySettin
 
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bPackFields, "pack_fields", sError, true ) )			return false;
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bLimitsPerField, "limits_per_field", sError, true ) )return false;
+	if ( !tSnip.FetchBoolItem ( tOpt.m_bKNNChunk, "knn_chunk", sError, true ) )			return false;
 
 	JsonObj_c tBoundary = tSnip.GetStrItem ( "passage_boundary", "snippet_boundary", sError );
 	if ( tBoundary )

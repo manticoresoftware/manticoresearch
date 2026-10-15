@@ -117,6 +117,21 @@ private:
 };
 
 
+// the docstore layout of a table is a pure function of its schema: stored fields, then stored attributes,
+// then one DOCSTORE_KNN_CHUNK_SPANS entry per vector attribute whose chunks are generated from text.
+struct DocstoreFieldDesc_t
+{
+	CSphString			m_sName;
+	DocstoreDataType_e	m_eType;
+};
+
+void								CollectDocstoreFields ( const CSphSchema & tSchema, CSphVector<DocstoreFieldDesc_t> & dFields, bool bWithChunkSpans = true );
+void								SetupDocstoreFields ( DocstoreAddField_i & tFields, const CSphSchema & tSchema, bool bWithChunkSpans = true );
+int									GetNumKnnChunkSpansDocstoreFields ( const CSphSchema & tSchema );
+
+// spans of auto-generated chunk vectors are filled in when the embeddings get generated; every other writer stores them empty
+void								AddEmptyKnnChunkSpansToDoc ( DocstoreBuilder_i::Doc_t & tDoc, const CSphSchema & tSchema );
+
 std::unique_ptr<Docstore_i>			CreateDocstore ( int64_t iIndexId, const CSphString & sFilename, CSphString & sError );
 std::unique_ptr<DocstoreBuilder_i>	CreateDocstoreBuilder ( const CSphString & sFilename, const DocstoreSettings_t & tSettings, int iBufferSize, CSphString & sError );
 std::unique_ptr<DocstoreRT_i>		CreateDocstoreRT();

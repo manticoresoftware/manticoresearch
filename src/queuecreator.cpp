@@ -317,6 +317,7 @@ private:
 	bool	AddExpressionsForUpdates();
 	bool	MaybeAddGroupbyMagic ( bool bGotDistinct );
 	bool	AddKNNDistColumn();
+	bool	AddKNNChunkSlotColumn();
 	bool	AddKNNRescoreColumn();
 	bool	CanRescoreKNN() const;
 	bool	AddHybridScoreColumn();
@@ -1803,6 +1804,47 @@ bool QueueCreator_c::AddKNNDistColumn()
 }
 
 
+// HIGHLIGHT({knn_chunk=1}) needs to know which vector of a multi-vector row won the search. The slot travels as an
+// internal presort attribute: the KNN iterator fills it on the ANN path, fullscan and exact rescore recompute it
+bool QueueCreator_c::AddKNNChunkSlotColumn()
+{
+	// merge queues receive matches from agents that already evaluated the highlight; nothing to compute here
+	if ( !m_tQuery.HasKnn() || !m_tSettings.m_bComputeItems || !QueryUsesKnnChunkHighlight(m_tQuery) )
+		return true;
+
+	if ( m_pSorterSchema->GetAttrIndex ( GetKnnChunkSlotAttrName() )>=0 )
+		return true;
+
+	if ( m_tQuery.m_dKnnSettings.GetLength()!=1 )
+		return Err ( "KNN chunk highlighting does not support multiple KNN clauses" );
+
+	const auto & tKNN = m_tQuery.SingleKnnSettings();
+	const CSphColumnInfo * pVector = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
+	if ( !pVector || !pVector->HasKnnChunkSpans() )
+		return true; // no chunk provenance for this attribute; highlighting falls back to the whole field
+
+	// the column has no expression of its own: the knn_dist() expression writes the slot along with the distance
+	// (one scan of the row's vectors for both), the rescore sorter updates it, and the hybrid executor copies it
+	// from the winning KNN sub-result
+	CSphColumnInfo tSlot ( GetKnnChunkSlotAttrName(), SPH_ATTR_BIGINT );
+	tSlot.m_sKNNFrom = pVector->m_sName; // names the vector attribute the slot belongs to; the highlight resolves its FROM field from the index schema
+	tSlot.m_eStage = SPH_EVAL_SORTER;
+	m_pSorterSchema->AddAttr ( tSlot, true );
+	m_hQueryColumns.Add ( tSlot.m_sName );
+
+	if ( m_tQuery.m_bHybridSearch )
+		return true;
+
+	const CSphColumnInfo * pSlot = m_pSorterSchema->GetAttr ( GetKnnChunkSlotAttrName() );
+	const CSphColumnInfo * pDist = m_pSorterSchema->GetAttr ( GetKnnDistAttrName() );
+	if ( !pSlot || !pDist || !pDist->m_pExpr )
+		return Err ( "unable to bind the KNN chunk slot to knn_dist()" );
+
+	BindKNNChunkSlot ( pDist->m_pExpr, pSlot->m_tLocator );
+	return true;
+}
+
+
 // Whether an exact KNN rescore can run against this sorter schema.
 // Rescore recomputes exact distances from the stored vectors, which needs the
 // attribute's own KNN index settings (m_tKNN). On a distributed/sharded head the
@@ -2900,6 +2942,7 @@ bool QueueCreator_c::SetupComputeQueue ()
 		&& AddJoinFilterAttrs()
 		&& MaybeAddGeodistColumn ()
 		&& AddKNNDistColumn()
+		&& AddKNNChunkSlotColumn()
 		&& AddHybridScoreColumn()
 		&& MaybeAddExprColumn ()
 		&& MaybeAddExpressionsFromSelectList ()

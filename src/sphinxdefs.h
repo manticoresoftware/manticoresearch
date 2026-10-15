@@ -307,6 +307,7 @@ enum DocstoreDataType_e
 	DOCSTORE_TEXT,
 	DOCSTORE_BIN,
 	DOCSTORE_ATTR,
+	DOCSTORE_KNN_CHUNK_SPANS,	///< source byte spans of the auto-generated chunk vectors of one vector attribute
 	DOCSTORE_TOTAL
 };
 

@@ -24,6 +24,7 @@
 #include "snippetpassage.h"
 
 #include "stripper/html_stripper.h"
+#include "fieldtext.h"
 #include "tokenizer/tokenizer.h"
 #include "dict/dict_base.h"
 
@@ -107,6 +108,7 @@ CSphString SnippetQuerySettings_t::AsString() const
 	if ( m_ePassageSPZ!=tDefault.m_ePassageSPZ )			tOut.Appendf ( "snippet_boundary='%s'",	PassageBoundarySz(m_ePassageSPZ) );
 	if ( m_bPackFields!=tDefault.m_bPackFields )			tOut.Appendf ( "pack_fields=%d",		m_bPackFields ? 1 : 0 );
 	if ( m_bLimitsPerField!=tDefault.m_bLimitsPerField )	tOut.Appendf ( "limits_per_field=%d",	m_bLimitsPerField ? 1 : 0 );
+	if ( m_bKNNChunk!=tDefault.m_bKNNChunk )				tOut.Appendf ( "knn_chunk=%d",			m_bKNNChunk ? 1 : 0 );
 
 	for ( const auto& tPerFieldLimit: m_hPerFieldLimits )
 	{
@@ -378,6 +380,7 @@ public:
 	void				Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery );
 	bool				SetQuery ( const CSphString & sQuery, bool bIgnoreFields, CSphString & sError );
 	bool				Build ( std::unique_ptr<TextSource_i>& pSource, SnippetResult_t & tRes );
+	bool				PrepareSource ( TextSource_i & tSource, CSphString & sError );
 	CSphVector<BYTE>	PackResult ( SnippetResult_t & tRes, const VecTraits_T<int> & dRequestedFields ) const;
 
 private:
@@ -852,46 +855,7 @@ void StringSourceTraits_c::PrepareText ( const VecTraits_T<BYTE> & dSourceText, 
 	if ( !pFilter && !pStripper )
 		return;
 
-	bool bFilterApplied = false;
-	if ( pFilter )
-	{
-		int iGot;
-		if ( bUseOriginal )
-			iGot = pFilter->Apply ( dSourceText, dDestText, false );
-		else
-		{
-			CSphVector<BYTE> dTmp;
-			dTmp.Append ( dSourceText );
-			iGot = pFilter->Apply ( dTmp, dDestText, false );
-		}
-
-		if ( iGot )
-		{
-			dDestText.Resize(iGot);
-			bFilterApplied = true;
-			bUseOriginal = false;
-		}
-	}
-
-	if ( pStripper )
-	{
-		if ( bUseOriginal )
-		{
-			dDestText.Resize(0);
-			dDestText.Append ( dSourceText );
-			bUseOriginal = false;
-		}
-
-		if ( !( dDestText.IsEmpty () || dDestText.Last ()=='\0' ) )
-			dDestText.Add('\0');
-
-		if ( !dDestText.IsEmpty() )
-		{
-			pStripper->Strip ( dDestText.Begin() );
-			dDestText.Resize ( (int) strlen ( (const char*)dDestText.Begin() ) );
-		}
-	}
-
+	bool bFilterApplied = FilterAndStripText ( dSourceText, dDestText, pFilter, pStripper, bUseOriginal );
 	if ( bFilterApplied && bFilterCJK )
 		BuildSpaces ( dSourceText, dDestText, dExtraSpaces );
 }
@@ -1036,17 +1000,26 @@ public:
 						TextSourceFields_c ( const CSphVector<FieldSource_t> & dAllFields );
 
 	bool				PrepareText ( ISphFieldFilter * pFilter, const CSphHTMLStripper * pStripper, bool bFilterCJK, CSphString & sError ) final;
+	bool				IsPrepared() const final { return m_bPrepared; }
 	VecTraits_T<BYTE>	GetText ( int iField ) const final;
 	int					GetNumFields() const final { return m_dFields.GetLength(); }
 	const char *		GetFieldName ( int iField ) const final { return m_dFields[iField].m_sName.cstr(); }
 	bool				TextFromIndex() const final { return true; }
 	const CSphVector<int> &	GetSpaces ( int iField ) const final { return m_dSpaces[iField]; }
+	void				SetFieldRange ( int iField, int iStart, int iEnd ) final { m_dRanges[iField] = { iStart, iEnd }; }
+	bool				IsFieldRanged ( int iField ) const final { return m_tRanged.BitGet(iField); }
 
 private:
 	const CSphVector<FieldSource_t> &	m_dFields;
 	CSphVector<CSphVector<BYTE>>		m_dModifiedFields;
 	CSphBitvec							m_tUseOriginal;
 	CSphVector<CSphVector<int>>			m_dSpaces;
+	CSphVector<std::pair<int,int>>		m_dRanges;		// requested [start,end) of the prepared text per field, {-1,-1} for none
+	CSphVector<VecTraits_T<BYTE>>		m_dRangedText;	// the narrowed view of a ranged field
+	CSphBitvec							m_tRanged;
+	bool								m_bPrepared = false;
+
+	void				ApplyRange ( int iField );
 };
 
 
@@ -1055,27 +1028,62 @@ TextSourceFields_c::TextSourceFields_c ( const CSphVector<FieldSource_t> & dAllF
 	, m_dModifiedFields ( dAllFields.GetLength() )
 	, m_tUseOriginal ( dAllFields.GetLength() )
 	, m_dSpaces ( dAllFields.GetLength() )
+	, m_dRanges ( dAllFields.GetLength() )
+	, m_dRangedText ( dAllFields.GetLength() )
+	, m_tRanged ( dAllFields.GetLength() )
 {
 	m_tUseOriginal.Set();
+	for ( auto & i : m_dRanges )
+		i = { -1, -1 };
 }
 
 
 bool TextSourceFields_c::PrepareText ( ISphFieldFilter * pFilter, const CSphHTMLStripper * pStripper, bool bFilterCJK, CSphString & sError )
 {
+	if ( m_bPrepared )
+		return true;
+
 	ARRAY_FOREACH ( i, m_dFields )
 	{
 		bool bUseOriginal = true;
 		StringSourceTraits_c::PrepareText ( m_dFields[i].m_dData, m_dModifiedFields[i], pFilter, pStripper, bFilterCJK, bUseOriginal, m_dSpaces[i] );
 		if ( !bUseOriginal )
 			m_tUseOriginal.BitClear(i);
+
+		ApplyRange(i);
 	}
 
+	m_bPrepared = true;
 	return true;
+}
+
+
+void TextSourceFields_c::ApplyRange ( int iField )
+{
+	const auto & tRange = m_dRanges[iField];
+	VecTraits_T<BYTE> dWhole = m_tUseOriginal.BitGet(iField) ? m_dFields[iField].m_dData : VecTraits_T<BYTE> ( m_dModifiedFields[iField] );
+	if ( tRange.first<0 || tRange.second<=tRange.first || tRange.second>dWhole.GetLength() )
+		return;
+
+	m_dRangedText[iField] = { dWhole.Begin()+tRange.first, tRange.second-tRange.first };
+	m_tRanged.BitSet(iField);
+
+	// the extra-space positions are relative to the prepared text; keep the ones inside the range, rebased
+	CSphVector<int> & dSpaces = m_dSpaces[iField];
+	int iKept = 0;
+	for ( int iPos : dSpaces )
+		if ( iPos>=tRange.first && iPos<tRange.second )
+			dSpaces[iKept++] = iPos-tRange.first;
+
+	dSpaces.Resize(iKept);
 }
 
 
 VecTraits_T<BYTE> TextSourceFields_c::GetText ( int iField ) const
 {
+	if ( m_tRanged.BitGet(iField) )
+		return m_dRangedText[iField];
+
 	if ( m_tUseOriginal.BitGet(iField) )
 		return m_dFields[iField].m_dData;
 
@@ -1215,12 +1223,19 @@ bool SnippetBuilder_c::Impl_c::Build ( std::unique_ptr<TextSource_i>& pSource, S
 		return false;
 
 	assert ( pSource );
-	const bool bFilterCJK = m_pState->m_pIndex->GetSettings().m_ePreprocessor!=Preprocessor_e::NONE;
-	if ( !pSource->PrepareText ( m_pFieldFilter.get(), GetStripperForText(), bFilterCJK, tRes.m_sError ) )
+	if ( !pSource->IsPrepared() && !PrepareSource ( *pSource, tRes.m_sError ) )
 		return false;
- 
+
 	DoHighlighting ( *pSource, tRes );
 	return true;
+}
+
+
+bool SnippetBuilder_c::Impl_c::PrepareSource ( TextSource_i & tSource, CSphString & sError )
+{
+	assert ( m_pState->m_pIndex && m_pState->m_pQuerySettings );
+	const bool bFilterCJK = m_pState->m_pIndex->GetSettings().m_ePreprocessor!=Preprocessor_e::NONE;
+	return tSource.PrepareText ( m_pFieldFilter.get(), GetStripperForText(), bFilterCJK, sError );
 }
 
 
@@ -1660,6 +1675,14 @@ bool SnippetBuilder_c::Build ( std::unique_ptr<TextSource_i>& pSource, SnippetRe
 	assert ( m_pImpl );
 	return m_pImpl->Build ( pSource, tRes );
 }
+
+
+bool SnippetBuilder_c::PrepareSource ( TextSource_i & tSource, CSphString & sError )
+{
+	assert ( m_pImpl );
+	return m_pImpl->PrepareSource ( tSource, sError );
+}
+
 
 CSphVector<BYTE> SnippetBuilder_c::PackResult ( SnippetResult_t & tRes, const VecTraits_T<int> & dRequestedFields ) const
 {

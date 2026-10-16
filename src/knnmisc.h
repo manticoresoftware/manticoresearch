@@ -71,8 +71,6 @@ bool							UnpackKnnChunkSpan ( ByteBlob_t tPacked, int64_t iSlot, int64_t & iSt
 
 void							SetKNNRescorePrefetch ( bool bEnable );
 bool							KNNRescorePrefetch();
-void							SetKNNRescorePrefetchRowwise ( bool bEnable );
-bool							KNNRescorePrefetchRowwise();
 
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
 ISphExpr *						CreateExpr_KNNHasVec ( ISphExpr * pKNNDistExpr );

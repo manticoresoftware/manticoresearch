@@ -332,7 +332,6 @@ struct KNNDistanceSlot_t
 };
 
 static bool g_bKNNRescorePrefetch = true;
-static bool g_bKNNRescorePrefetchRowwise = false;
 
 void SetKNNRescorePrefetch ( bool bEnable )
 {
@@ -346,16 +345,6 @@ bool KNNRescorePrefetch()
 }
 
 
-void SetKNNRescorePrefetchRowwise ( bool bEnable )
-{
-	g_bKNNRescorePrefetchRowwise = bEnable;
-}
-
-
-bool KNNRescorePrefetchRowwise()
-{
-	return g_bKNNRescorePrefetchRowwise;
-}
 
 
 class KNNVecDistCalc_c
@@ -714,7 +703,7 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 	// The vectors live in the blob pool, and where a vector sits inside its blob row is known only after reading the
 	// row header. On a cold table the header and the vector are both on disk, so the prefetch takes two rounds: the
 	// row headers first (their addresses come from the match rows, without touching the pool), then the vectors.
-	if ( KNNRescorePrefetchRowwise() && !m_bBlobLocked && iCount )
+	if ( KNNRescorePrefetch() && !m_bBlobLocked && iCount )
 	{
 		const CSphAttrLocator & tLoc = m_tAttr.m_tLocator;
 		const size_t uHeaderBytes = 1 + sizeof(DWORD)*tLoc.m_nBlobAttrs;

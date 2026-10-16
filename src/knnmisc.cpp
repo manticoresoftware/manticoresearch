@@ -239,6 +239,7 @@ public:
 
 	void		SetAnchor ( const CSphVector<float> & dAnchor );
 	void		SetBlobPool ( const BYTE * pPool )									{ m_pBlobPool = pPool; }
+	void		SetBlobLocked ( bool bLocked )										{ m_bBlobLocked = bLocked; }
 	void		SetColumnar ( columnar::Columnar_i * pColumnar );
 	void		FixupLocator ( const ISphSchema * pOld, const ISphSchema * pNew )	{ sphFixupLocator ( m_tAttr.m_tLocator, pOld, pNew ); }
 
@@ -260,6 +261,7 @@ private:
 	knn::Distance_i::DistFunc_fn		m_fnDistFunc = nullptr;
 	void *								m_pDistFuncParam = nullptr;
 	bool								m_bMulti = false; // true when one row holds N vectors instead of one, so every distance is a min over them
+	bool								m_bBlobLocked = false; // access_blob_attrs=mlock: the pool never leaves memory, so the rowwise rescore prefetch is skipped
 
 	ByteBlob_t	FetchVecData ( const CSphMatch & tMatch ) const;
 	float		CalcDistData ( ByteBlob_t tData ) const;
@@ -540,17 +542,8 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 
 	// The vectors live in the blob pool, and where a vector sits inside its blob row is known only after reading the
 	// row header. On a cold table the header and the vector are both on disk, so the prefetch takes two rounds: the
-	// row headers first (their addresses come from the match rows, without touching the pool), then the vectors,
-	// resolved through those headers. Resolving waits for the header reads already in flight instead of faulting
-	// row by row, and the vector round reads exactly the vector bytes, whatever other blob attributes precede them
-	// in the row. Same residency gate as the columnar prefetch, but it probes the row headers, not the vectors, and
-	// touches nothing: resolving a vector means reading its header, and on a cold row that fault reads around and
-	// drags the vector in before mincore() gets asked, so a gate on resolved vectors saw every cold row as resident.
-	// Header and vector pages of a row are always touched together (by queries and by these two rounds), so they are
-	// cached and evicted together, and the header's residency stands for the row.
-	// When the vector is the row's first blob attribute it starts right after the header, so one round from the row
-	// start covers header and vector exactly and the second round is skipped. That is a property of the schema.
-	if ( KNNRescorePrefetchRowwise() && iCount )
+	// row headers first (their addresses come from the match rows, without touching the pool), then the vectors.
+	if ( KNNRescorePrefetchRowwise() && !m_bBlobLocked && iCount )
 	{
 		const CSphAttrLocator & tLoc = m_tAttr.m_tLocator;
 		const size_t uHeaderBytes = 1 + sizeof(DWORD)*tLoc.m_nBlobAttrs;
@@ -1610,7 +1603,7 @@ static KNNVecDistCalc_c * GetKnnDistCalc ( const ISphSchema * pSchema )
 class RescoreSorter_c : public ISphMatchSorter
 {
 public:
-			RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, int64_t iRescoreLimit );
+			RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, int64_t iRescoreLimit, bool bBlobLocked );
 
 	bool	Push ( const CSphMatch & tEntry ) final							{ return m_pSorter->Push(tEntry); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) override	{ for ( auto & i : dMatches ) m_pSorter->Push(i); }
@@ -1651,16 +1644,18 @@ private:
 	std::unique_ptr<ISphMatchSorter> m_pSorter;
 	CSphRefcountedPtr<ISphMatchComparator> m_pComp;
 	int64_t							m_iRescoreLimit = 0;	// max ( k*oversampling, limit+offset )
+	bool							m_bBlobLocked = false;	// access_blob_attrs=mlock: nothing to prefetch for the rowwise rescore
 	bool							m_bRescored = false;
 
 	const CSphAttrLocator *			GetRescoreLocator() const;
 };
 
 
-RescoreSorter_c::RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, int64_t iRescoreLimit )
+RescoreSorter_c::RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, int64_t iRescoreLimit, bool bBlobLocked )
 	: m_pSorter ( pSorter )
 	, m_pComp ( std::move ( pComp ) )
 	, m_iRescoreLimit ( iRescoreLimit )
+	, m_bBlobLocked ( bBlobLocked )
 {}
 
 
@@ -1749,6 +1744,7 @@ int RescoreSorter_c::Flatten ( CSphMatch * pTo )
 
 			TakeExactRows ( dPtrs, *m_pSorter->GetSchema(), pKNNDistRescore->m_tLocator );
 			KeepClosestForRescore ( dPtrs, *m_pSorter->GetSchema(), pKNNDistRescore->m_tLocator, m_iRescoreLimit );
+			pCalc->SetBlobLocked ( m_bBlobLocked );
 			pCalc->RescoreBatchLocal ( dPtrs, pKNNDistRescore->m_tLocator );
 		}
 		m_bRescored = true;
@@ -1793,6 +1789,7 @@ void RescoreSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn f
 			m_pSorter->Finalize ( tCollector, false, false );
 			TakeExactRows ( tCollector.m_dMatches, *m_pSorter->GetSchema(), *pRescoreLoc );
 			KeepClosestForRescore ( tCollector.m_dMatches, *m_pSorter->GetSchema(), *pRescoreLoc, m_iRescoreLimit );
+			pCalc->SetBlobLocked ( m_bBlobLocked );
 			pCalc->RescoreBatch ( tCollector.m_dMatches, *pRescoreLoc, fnBlobPoolFromMatch, fnGetColumnarFromMatch );
 		}
 		m_bRescored = true;
@@ -1804,7 +1801,7 @@ void RescoreSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn f
 
 ISphMatchSorter * RescoreSorter_c::Clone() const
 {
-	auto pClone = new RescoreSorter_c ( m_pSorter->Clone(), m_pComp, m_iRescoreLimit );
+	auto pClone = new RescoreSorter_c ( m_pSorter->Clone(), m_pComp, m_iRescoreLimit, m_bBlobLocked );
 	CloneTo(pClone);
 	return pClone;
 }
@@ -1818,7 +1815,7 @@ void RescoreSorter_c::CloneTo ( ISphMatchSorter * pTrg ) const
 }
 
 
-ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings, ESphSortFunc eMatchFunc, int64_t iResultWindow )
+ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings, ESphSortFunc eMatchFunc, int64_t iResultWindow, bool bBlobLocked )
 {
 	if ( tSettings.m_sAttr.IsEmpty() || !tSettings.m_bRescore )
 		return pSorter;
@@ -1827,7 +1824,7 @@ ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnS
 	if ( !pComp )
 		return nullptr;
 
-	return new RescoreSorter_c ( pSorter, std::move ( pComp ), Max ( tSettings.GetRequestedDocs(), iResultWindow ) );
+	return new RescoreSorter_c ( pSorter, std::move ( pComp ), Max ( tSettings.GetRequestedDocs(), iResultWindow ), bBlobLocked );
 }
 
 

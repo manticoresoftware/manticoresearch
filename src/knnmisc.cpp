@@ -548,10 +548,14 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 	// drags the vector in before mincore() gets asked, so a gate on resolved vectors saw every cold row as resident.
 	// Header and vector pages of a row are always touched together (by queries and by these two rounds), so they are
 	// cached and evicted together, and the header's residency stands for the row.
+	// When the vector is the row's first blob attribute it starts right after the header, so one round from the row
+	// start covers header and vector exactly and the second round is skipped. That is a property of the schema.
 	if ( KNNRescorePrefetchRowwise() && iCount )
 	{
 		const CSphAttrLocator & tLoc = m_tAttr.m_tLocator;
 		const size_t uHeaderBytes = 1 + sizeof(DWORD)*tLoc.m_nBlobAttrs;
+		const bool bSingleRound = tLoc.m_iBlobAttrId==0 && !m_bMulti;
+		const size_t uRound1Bytes = bSingleRound ? uHeaderBytes + iVecBytes : uHeaderBytes;
 
 		int iPrefetchTag = 0;
 		bool bPrefetchPoolInitialized = false;
@@ -580,32 +584,35 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 
 		if ( !dProbes.IsEmpty() && !AreVectorsResident ( dProbes, uHeaderBytes ) )
 		{
-			// round 1: the row headers
+			// round 1: the row headers (plus the vector, when it is known to follow the header)
 			CSphVector<MemRange_t> dRanges;
 			dRanges.Reserve(iCount);
 			for ( const CSphMatch * pMatch : dMatches )
 			{
 				const BYTE * pPool = fnPool(pMatch);
 				if ( pPool )
-					dRanges.Add ( { sphGetBlobRow ( *pMatch, tLoc, pPool ), uHeaderBytes } );
+					dRanges.Add ( { sphGetBlobRow ( *pMatch, tLoc, pPool ), uRound1Bytes } );
 			}
 
 			mmprefetch ( dRanges.Begin(), dRanges.GetLength() );
 
 			// round 2: the vectors, at their real addresses and lengths
-			dRanges.Resize(0);
-			for ( const CSphMatch * pMatch : dMatches )
+			if ( !bSingleRound )
 			{
-				const BYTE * pPool = fnPool(pMatch);
-				if ( !pPool )
-					continue;
+				dRanges.Resize(0);
+				for ( const CSphMatch * pMatch : dMatches )
+				{
+					const BYTE * pPool = fnPool(pMatch);
+					if ( !pPool )
+						continue;
 
-				ByteBlob_t tRes = pMatch->FetchAttrData ( tLoc, pPool );
-				if ( tRes.first && tRes.second )
-					dRanges.Add ( { tRes.first, (size_t)tRes.second } );
+					ByteBlob_t tRes = pMatch->FetchAttrData ( tLoc, pPool );
+					if ( tRes.first && tRes.second )
+						dRanges.Add ( { tRes.first, (size_t)tRes.second } );
+				}
+
+				mmprefetch ( dRanges.Begin(), dRanges.GetLength() );
 			}
-
-			mmprefetch ( dRanges.Begin(), dRanges.GetLength() );
 		}
 	}
 

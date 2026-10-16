@@ -710,6 +710,13 @@ Important points:
 * **`MAX_CHUNKS` discards text.** On overflow the remainder is merged into the last kept chunk, which then exceeds `MAX_TOKENS` and is truncated to the model's input window when embedded. Nothing is left as a visible gap, but the tail is gone.
 * **Local and remote models chunk differently.** Local models split on the model's real tokens. Remote API models (OpenAI, Voyage, Jina) have no local tokenizer and use a conservative byte estimate instead, so the same text and settings will produce a different number of chunks than a local model would.
 
+For the `fixed`, `recursive` and `sentence` strategies Manticore also remembers which part of the source text each chunk vector came from, so a KNN match can show the exact piece of text that matched. Use the `knn_chunk` option of [HIGHLIGHT()](../Searching/Highlighting.md#knn_chunk) for that: with a full-text query it highlights inside the matching chunk only, and without one it returns the chunk itself. The chunk is tracked through flushes, merges and restarts, and exact rescoring updates the distance and the chunk together. Chunk tracking requires the source field to be stored (it is by default). Rows written before this feature existed carry no chunk information, so highlighting them falls back to the whole field; rows inserted or replaced after upgrading are tracked.
+
+```sql
+SELECT id, knn_dist(), HIGHLIGHT({knn_chunk=1},'body')
+FROM articles WHERE knn(chunks, 5, 'certificate rotation');
+```
+
 `ALTER TABLE ... ADD COLUMN` with a model-backed `float_vector_array`, and `ALTER TABLE ... REBUILD EMBEDDINGS` on one, are not supported yet; existing rows can not be backfilled, so the column would stay empty. Declare such a column when creating the table. Both work normally for a `float_vector` column, including with `mean`.
 
 <!-- example chunking -->

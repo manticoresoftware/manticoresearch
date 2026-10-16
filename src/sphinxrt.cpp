@@ -26,6 +26,8 @@
 #include "killlist.h"
 #include "histogram.h"
 #include "accumulator.h"
+#include "fieldtext.h"
+#include "stripper/html_stripper.h"
 #include "indexcheck.h"
 #include "indexsettings.h"
 #include "indexformat.h"
@@ -1762,7 +1764,7 @@ private:
 	// v22: keywords_v2 dictionary layout versioning.
 	// v23: UUID primary ID linked-schema semantics.
 	// v24: float_vector_array attribute type
-	static constexpr DWORD		META_VERSION		= 24; // next should be 25
+	static constexpr DWORD		META_VERSION		= 25; // next should be 26
 	// Since v20, RT meta is JSON. indextool.cpp's separate v18 constant only handles legacy binary meta.
 
 	int							m_iStride;
@@ -1837,6 +1839,7 @@ private:
 	void						AddFieldToRamchunk ( const CSphString & sFieldName, DWORD uFieldFlags, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema );
 	void						RemoveFieldFromRamchunk ( const CSphString & sFieldName, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema );
 	void						AddRemoveFromRamDocstore ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema );
+	void						RebuildDocstoreFields ( const CSphSchema & tSchema );
 
 	bool						LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
 	bool						LoadMetaImpl ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings );
@@ -2557,6 +2560,7 @@ DocstoreBuilder_i::Doc_t * RtIndex_c::FetchDocFields ( DocstoreBuilder_i::Doc_t 
 	}
 
 	ProcessStoredAttrs ( tStoredDoc, tDoc, m_tSchema, dTmpAttrStorage );
+	AddEmptyKnnChunkSpansToDoc ( tStoredDoc, m_tSchema );
 
 	return &tStoredDoc;
 }
@@ -2683,6 +2687,22 @@ bool RtIndex_c::AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphS
 
 	m_tSchema.CloneWholeMatch ( tSrc.m_tDocInfo, tDoc.m_tDoc );
 
+	// before the source strips the fields in place: the model gets the text prepared explicitly (field filter, then
+	// the index HTML stripper), the same way it is prepared for highlighting, so chunk offsets match the stored text
+	if ( m_pEmbeddings )
+	{
+		std::unique_ptr<CSphHTMLStripper> pEmbeddingsStripper;
+		if ( m_tSettings.m_bHtmlStrip )
+		{
+			pEmbeddingsStripper = CreateIndexHtmlStripper ( m_tSettings, sError );
+			if ( !pEmbeddingsStripper )
+				return false;
+		}
+
+		std::unique_ptr<ISphFieldFilter> pEmbeddingsFilter = m_pFieldFilter ? m_pFieldFilter->Clone() : nullptr;
+		pAcc->FetchEmbeddingsSrc ( tDoc, m_dAttrsWithModels, pEmbeddingsFilter.get(), pEmbeddingsStripper.get() );
+	}
+
 	bool bEOF = false;
 	if ( !tSrc.IterateStart ( sError ) || !tSrc.IterateDocument ( bEOF, sError ) )
 		return false;
@@ -2691,9 +2711,6 @@ bool RtIndex_c::AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphS
 	pAcc->GrabLastWarning ( sWarning );
 	if ( !tSrc.GetLastWarning().IsEmpty() )
 		sWarning = tSrc.GetLastWarning();
-
-	if ( m_pEmbeddings )
-		pAcc->FetchEmbeddingsSrc ( tDoc, m_dAttrsWithModels );
 
 	if ( !VerifyKNN ( tDoc, sError ) )
 		return false;
@@ -6440,11 +6457,21 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup
 
 		if ( uVersion>=15 && ( m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() ) )
 		{
+			// the RAM docstore layout is not stored in the file; v25 appended the chunk spans entries to it,
+			// so an older chunk is read with the layout it was written with and then migrated
+			const bool bLegacyLayout = uVersion<25;
 			pSeg->m_pDocstore = CreateDocstoreRT();
-			SetupDocstoreFields ( *pSeg->m_pDocstore, m_tSchema );
+			SetupDocstoreFields ( *pSeg->m_pDocstore, m_tSchema, !bLegacyLayout );
 			assert ( pSeg->m_pDocstore );
 			if ( !pSeg->m_pDocstore->Load ( rdChunk ) )
 				return false;
+
+			if ( bLegacyLayout && GetNumKnnChunkSpansDocstoreFields(m_tSchema) )
+			{
+				auto pMigrated = CreateDocstoreRT();
+				Alter_AddRemoveFromDocstore ( *pMigrated, pSeg->m_pDocstore.get(), pSeg->m_uRows, m_tSchema );
+				pSeg->m_pDocstore = std::move(pMigrated);
+			}
 		}
 
 		if ( uVersion>=19 && rdChunk.GetByte() )
@@ -9847,9 +9874,6 @@ bool RtIndex_c::AddRemoveColumnarAttr ( RtGuard_t & tGuard, bool bAdd, const CSp
 		if ( !Alter_AddRemoveColumnar ( bAdd, tOldSchema, tNewSchema, pSeg->m_pColumnar.get(), pBuilder.get(), pSeg->m_uRows, GetFilebase(), sError ) )
 			return false;
 
-		if ( m_pDocstoreFields && m_pDocstoreFields->GetFieldId ( sAttrName, DOCSTORE_ATTR )!=-1 )
-			m_pDocstoreFields->RemoveField ( sAttrName, DOCSTORE_ATTR );
-
 		pSeg->m_pColumnar = CreateColumnarRT ( tNewSchema, pBuilder.get() );
 		pSeg->UpdateUsedRam();
 	}
@@ -9904,27 +9928,29 @@ void RtIndex_c::AddFieldToRamchunk ( const CSphString & sFieldName, DWORD uField
 	if ( !(uFieldFlags & CSphColumnInfo::FIELD_STORED) )
 		return;
 
-	if ( !m_pDocstoreFields )
-		m_pDocstoreFields = CreateDocstoreFields();
-
-	assert ( m_pDocstoreFields );
-	m_pDocstoreFields->AddField ( sFieldName, DOCSTORE_TEXT );
+	RebuildDocstoreFields(tNewSchema);
 	AddRemoveFromRamDocstore ( tOldSchema, tNewSchema );
+}
+
+
+// the index-level field list must use the same canonical layout as the rebuilt segment docstores
+// (stored fields, stored attributes, chunk spans); appending or removing single entries would break that order
+void RtIndex_c::RebuildDocstoreFields ( const CSphSchema & tSchema )
+{
+	m_pDocstoreFields.reset();
+	if ( !tSchema.HasStoredFields() && !tSchema.HasStoredAttrs() )
+		return;
+
+	m_pDocstoreFields = CreateDocstoreFields();
+	SetupDocstoreFields ( *m_pDocstoreFields, tSchema );
 }
 
 
 static int GetNumStored ( const CSphSchema & tSchema )
 {
-	int iStored = 0;
-	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
-		if ( tSchema.IsFieldStored(i) )
-			iStored++;
-
-	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
-		if ( tSchema.IsAttrStored(i) )
-			iStored++;
-
-	return iStored;
+	CSphVector<DocstoreFieldDesc_t> dFields;
+	CollectDocstoreFields ( tSchema, dFields );
+	return dFields.GetLength();
 }
 
 
@@ -9959,8 +9985,7 @@ void RtIndex_c::AddRemoveFromRamDocstore ( const CSphSchema & tOldSchema, const 
 
 void RtIndex_c::RemoveFieldFromRamchunk ( const CSphString & sFieldName, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema )
 {
-	if ( m_pDocstoreFields && m_pDocstoreFields->GetFieldId ( sFieldName, DOCSTORE_TEXT )!=-1 )
-		m_pDocstoreFields->RemoveField ( sFieldName, DOCSTORE_TEXT );
+	RebuildDocstoreFields(tNewSchema);
 
 	int iFieldId = tOldSchema.GetFieldIndex ( sFieldName.cstr () );
 	auto pSegs = m_tRtChunks.RamSegs();
@@ -10128,6 +10153,7 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 		AddRemoveRowwiseAttr ( tGuard, bAdd, tNewCtx.m_sName, tNewCtx.m_eType, tOldSchema, tNewSchema, sError );
 
 	AddRemoveFromRamDocstore ( tOldSchema, tNewSchema );
+	RebuildDocstoreFields(tNewSchema); // a dropped vector attribute takes its chunk spans docstore entry with it
 
 	if ( bModelBackedEmbedding )
 	{

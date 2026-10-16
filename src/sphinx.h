@@ -1270,8 +1270,6 @@ struct UpdateContext_t
 	CSphRowitem* GetDocinfo ( RowID_t tRowID ) const;
 };
 
-class DocstoreAddField_i;
-void SetupDocstoreFields ( DocstoreAddField_i & tFields, const CSphSchema & tSchema );
 bool CheckStoredFields ( const CSphSchema & tSchema, const CSphIndexSettings & tSettings, CSphString & sError );
 
 class DiskIndexQwordTraits_c;

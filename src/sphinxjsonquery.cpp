@@ -998,11 +998,8 @@ static bool ParseIndex ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, CSphString 
 }
 
 
-static bool ParseIndexId ( const JsonObj_c & tRoot, bool bArrayIds, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
+static bool ParseDocId ( const JsonObj_c & tRoot, bool bArrayIds, DocID_t & tDocId, CSphString & sError )
 {
-	if ( !ParseIndex ( tRoot, tStmt, sError ) )
-		return false;
-
 	JsonObj_c tId = tRoot.GetItem ( "id" );
 	if ( tId )
 	{
@@ -1060,6 +1057,14 @@ static bool ParseIndexId ( const JsonObj_c & tRoot, bool bArrayIds, SqlStmt_t & 
 		tDocId = 0; 	// enable auto-id
 
 	return true;
+}
+
+static bool ParseIndexId ( const JsonObj_c & tRoot, bool bArrayIds, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
+{
+	if ( !ParseIndex ( tRoot, tStmt, sError ) )
+		return false;
+
+	return ParseDocId ( tRoot, bArrayIds, tDocId, sError );
 }
 
 static bool ParseCluster ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, CSphString & sError )
@@ -2103,7 +2108,48 @@ bool sphParseJsonDelete ( Str_t sDelete, SqlStmt_t & tStmt, DocID_t & tDocId, CS
 }
 
 
-bool sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString & sStmt, CSphString & sQuery, DocID_t & tDocId, CSphString & sError )
+// a bulk_import line without an operation, {"id":1,"title":...}: an insert into sTable with every member as a column;
+// the id follows the rules of an insert id, since the generic value would turn an id above INT64_MAX negative
+static bool ParseJsonBulkImportDoc ( const JsonObj_c & tRoot, const CSphString & sTable, SqlStmt_t & tStmt, CSphString & sStmt, DocID_t & tDocId, CSphString & sError )
+{
+	tStmt.m_sIndex = sTable;
+	tStmt.m_tQuery.m_sIndexes = sTable;
+	sStmt = "insert";
+	if ( !ParseDocId ( tRoot, false, tDocId, sError ) )
+		return false;
+
+	if ( !ParseJsonInsertSource ( tRoot, tStmt, false, sError ) )
+		return false;
+
+	for ( int i=0; i<tStmt.m_dInsertSchema.GetLength(); ++i )
+		if ( tStmt.m_dInsertSchema[i]==sphGetDocidName() && tStmt.m_dInsertValues[i].m_iType==SqlInsert_t::CONST_INT )
+			tStmt.m_dInsertValues[i].SetValueInt ( (uint64_t)tDocId, false );
+	return true;
+}
+
+
+static const Str_t g_sNameIns ( FROMS ( "insert" ) );
+static const Str_t g_sNameCreate ( FROMS ( "create" ) );
+static const Str_t g_sNameIndex ( FROMS ( "index" ) );
+static const Str_t g_sNameReplace ( FROMS ( "replace" ) );
+static const Str_t g_sNameUpdate ( FROMS ( "update" ) );
+static const Str_t g_sNameDelete ( FROMS ( "delete" ) );
+
+// bulk_import: a line is an operation when its only member is named as a /bulk operation and holds an object with
+// the table, as every operation does; any other object is a document, which may lack an id
+static bool IsBulkImportOperation ( const JsonObj_c & tRoot )
+{
+	JsonObj_c tOp = tRoot[0];
+	if ( tRoot[1] || !tOp.IsObj() || !( tOp.HasItem ( "table" ) || tOp.HasItem ( "index" ) ) )
+		return false;
+
+	Str_t sName = FromSz ( tOp.Name() );
+	return StrEq ( sName, g_sNameIns ) || StrEq ( sName, g_sNameCreate ) || StrEq ( sName, g_sNameIndex )
+		|| StrEq ( sName, g_sNameReplace ) || StrEq ( sName, g_sNameUpdate ) || StrEq ( sName, g_sNameDelete );
+}
+
+
+bool sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString & sStmt, CSphString & sQuery, DocID_t & tDocId, CSphString & sError, const CSphString * pBulkImportTable )
 {
 	JsonObj_c tRoot ( szStmt );
 	if ( !tRoot )
@@ -2118,6 +2164,9 @@ bool sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString 
 		sError = "no statement found";
 		return false;
 	}
+
+	if ( pBulkImportTable && tRoot.IsObj() && !IsBulkImportOperation ( tRoot ) )
+		return ParseJsonBulkImportDoc ( tRoot, *pBulkImportTable, tStmt, sStmt, tDocId, sError );
 
 	sStmt = tJsonStmt.Name();
 
@@ -2371,6 +2420,7 @@ static bool NeedToSkipAttr ( const CSphString & sName, const CSphQuery & tQuery 
 	if ( sName.Begins ( GetFilterAttrPrefix() ) ) return true;
 	if ( sName.Begins ( g_szOrder ) ) return true;
 	if ( sName.Begins ( GetKnnDistAttrName() ) ) return true;
+	if ( IsKnnChunkSlotAttr(sName) ) return true;
 	if ( sName.Begins ( GetHybridScoreAttrName() ) ) return true;
 	if ( IsJoinedWeight ( sName, tQuery ) ) return true;
 
@@ -3906,6 +3956,7 @@ static bool ParseSnippetOptsSphinx ( const JsonObj_c & tSnip, SnippetQuerySettin
 
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bPackFields, "pack_fields", sError, true ) )			return false;
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bLimitsPerField, "limits_per_field", sError, true ) )return false;
+	if ( !tSnip.FetchBoolItem ( tOpt.m_bKNNChunk, "knn_chunk", sError, true ) )			return false;
 
 	JsonObj_c tBoundary = tSnip.GetStrItem ( "passage_boundary", "snippet_boundary", sError );
 	if ( tBoundary )

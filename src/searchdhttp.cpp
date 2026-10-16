@@ -410,6 +410,8 @@ public:
 		DiscardLast();
 	}
 
+	bool BodyComplete() const final { return m_bBodyDone; }
+
 	Str_t Read() final
 	{
 		if ( m_bDone )
@@ -667,6 +669,7 @@ void HttpRequestParser_c::ParseList ( Str_t sData, OptionsHash_t & hOptions )
 	const char * sEnd = sCur + sData.second;
 
 	Str_t sName = dEmptyStr;
+	bool bName = false; // a parameter without '=', as in ?shared, is a name with an empty value
 	for ( ; sCur<sEnd; ++sCur )
 	{
 		switch (*sCur)
@@ -676,16 +679,20 @@ void HttpRequestParser_c::ParseList ( Str_t sData, OptionsHash_t & hOptions )
 				sName = { sLast, int ( sCur - sLast ) };
 				UriPercentReplace ( sName, Replace_e::NoPlus );
 				sLast = sCur + 1;
+				bName = true;
 				break;
 			}
 		case '&':
 			{
 				Str_t sVal { sLast, int ( sCur - sLast ) };
 				UriPercentReplace ( sVal, Replace_e::NoPlus );
+				if ( !bName )
+					std::swap ( sName, sVal );
 				ToLower ( sName );
 				hOptions.Add ( sVal, sName );
 				sLast = sCur + 1;
 				sName = dEmptyStr;
+				bName = false;
 				break;
 			}
 		default:
@@ -693,11 +700,13 @@ void HttpRequestParser_c::ParseList ( Str_t sData, OptionsHash_t & hOptions )
 		}
 	}
 
+	Str_t sVal { sLast, int ( sCur - sLast ) };
+	UriPercentReplace ( sVal, Replace_e::NoPlus );
+	if ( !bName )
+		std::swap ( sName, sVal );
 	if ( IsEmpty ( sName ) )
 		return;
 
-	Str_t sVal { sLast, int ( sCur - sLast ) };
-	UriPercentReplace ( sVal, Replace_e::NoPlus );
 	ToLower ( sName );
 	hOptions.Add ( sVal, sName );
 }
@@ -2168,6 +2177,7 @@ public:
 	{}
 
 	inline bool Eof() const { return m_bDone;}
+	bool BodyComplete() const { return m_tIn.BodyComplete(); }
 
 	Str_t ReadLine()
 	{
@@ -2281,6 +2291,9 @@ public:
 	{
 		TRACE_CONN ( "conn", "HttpHandler_JsonBulk_c::Process" );
 
+		if ( IsShared ( m_tOptions ) )
+			return ProcessShared();
+
 		if ( !CheckNDJson() )
 			return false;
 
@@ -2354,7 +2367,8 @@ public:
 			tStmt.m_tQuery.m_eQueryType = QUERY_JSON;
 
 			CSphString sQuery;
-			if ( !sphParseJsonStatement ( szStmt, tStmt, sStmt, sQuery, tDocId, m_sError ) )
+			const CSphString * pBulkImportTable = !sActivateIndexerRtBulk.IsEmpty() ? &sActivateIndexerRtBulk : ( tIndexerState.IsEnabled() ? &tIndexerState.m_sTable : nullptr );
+			if ( !sphParseJsonStatement ( szStmt, tStmt, sStmt, sQuery, tDocId, m_sError, pBulkImportTable ) )
 			{
 				HTTPINFO << "inserted " << iCurLine << ", error: " << m_sError;
 				RollbackBulkTxn ( tTxnState );
@@ -2490,6 +2504,90 @@ public:
 	}
 
 private:
+	// Shared bulk_import: INSERT lines feed the table's pool, and a request without documents commits it with an empty line;
+	// empty lines among documents mean nothing. A broken body fails only this request.
+	bool ProcessShared()
+	{
+		const CSphString * pTable = m_tOptions ( "bulk_import" );
+		CSphString sTable = pTable ? *pTable : CSphString();
+		sTable.ToLower();
+		if ( !CheckNDJson() )
+			return FinishShared ( SharedBulkResult_e::PRECONDITION, 0 );
+		if ( sTable.IsEmpty() || sTable=="0" )
+		{
+			m_sError = "shared bulk_import requires bulk_import=<table>";
+			return FinishShared ( SharedBulkResult_e::PRECONDITION, 0 );
+		}
+		if ( !HttpCheckPerms ( session::GetUser(), AuthAction_e::WRITE, sTable, m_eHttpCode, m_sError, m_dData ) )
+			return FinishShared ( SharedBulkResult_e::PRECONDITION, 0, m_eHttpCode );
+
+		const CSphString * pShared = m_tOptions ( "shared" );
+		SharedBulkRequest_c tRequest ( sTable, pShared ? *pShared : CSphString(), m_tOptions.Exists ( "shared_join" ) );
+		tRequest.Begin();
+		auto eResult = SharedBulkResult_e::STAGED;
+		int iCurLine = 0;
+		bool bEmptyLine = false;
+		while ( eResult==SharedBulkResult_e::STAGED && !m_tSource.Eof() )
+		{
+			auto tLine = TrimHeadSpace ( m_tSource.ReadLine() );
+			if ( m_tSource.GetError() || ( m_tSource.Eof() && !m_tSource.BodyComplete() ) )
+			{
+				m_sError = m_tSource.GetError() ? m_tSource.GetErrorMessage() : "HTTP request body ended before its last chunk";
+				return FinishShared ( SharedBulkResult_e::FAILED_INPUT, iCurLine );
+			}
+			if ( IsEmpty ( tLine ) )
+			{
+				bEmptyLine |= !m_tSource.Eof(); // what follows the last line break is not a line
+				continue;
+			}
+
+			++iCurLine;
+			eResult = tRequest.StageLine ( tLine, m_sError );
+		}
+
+		if ( eResult==SharedBulkResult_e::STAGED )
+			eResult = iCurLine || !bEmptyLine ? tRequest.End ( m_sError ) : tRequest.Commit ( m_sError );
+		return FinishShared ( eResult, iCurLine ? iCurLine : (int)bEmptyLine );
+	}
+
+	// Exactly one JSON object; the client reads errors, shared_state, error_code and error.
+	bool FinishShared ( SharedBulkResult_e eResult, int iCurLine, EHTTP_STATUS eRejected = EHTTP_STATUS::_400 )
+	{
+		const bool bResult = eResult==SharedBulkResult_e::STAGED || eResult==SharedBulkResult_e::PUBLISHED;
+		const char * szState = "failed";
+		const char * szCode = "shared_failed";
+		EHTTP_STATUS eStatus = EHTTP_STATUS::_500;
+		switch ( eResult )
+		{
+		case SharedBulkResult_e::STAGED: szState = "staged"; break;
+		case SharedBulkResult_e::PUBLISHED: szState = "published"; break;
+		case SharedBulkResult_e::BUSY: szState = "busy"; szCode = "shared_busy"; eStatus = EHTTP_STATUS::_409; break;
+		case SharedBulkResult_e::CLOSING: szState = "closing"; szCode = "shared_closing"; eStatus = EHTTP_STATUS::_409; break;
+		case SharedBulkResult_e::NO_POOL: szState = "no_pool"; szCode = "shared_no_pool"; eStatus = EHTTP_STATUS::_409; break;
+		case SharedBulkResult_e::PRECONDITION: szState = "rejected"; szCode = "shared_precondition"; eStatus = eRejected; break;
+		case SharedBulkResult_e::FAILED_INPUT: eStatus = EHTTP_STATUS::_400; break;
+		case SharedBulkResult_e::FAILED_ALREADY: eStatus = EHTTP_STATUS::_409; break;
+		case SharedBulkResult_e::FAILED: break;
+		}
+
+		JsonObj_c tRoot;
+		JsonObj_c tItems ( true );
+		tRoot.AddItem ( "items", tItems );
+		tRoot.AddInt ( "current_line", iCurLine );
+		tRoot.AddInt ( "skipped_lines", bResult ? 0 : iCurLine );
+		tRoot.AddBool ( "errors", !bResult );
+		tRoot.AddStr ( "error", bResult ? "" : m_sError.cstr() );
+		tRoot.AddStr ( "error_code", bResult ? "" : szCode );
+		tRoot.AddStr ( "shared_state", szState );
+		BuildReply ( tRoot.AsString(), bResult ? EHTTP_STATUS::_200 : eStatus );
+		return bResult;
+	}
+
+	static bool IsShared ( const OptionsHash_t & tOptions )
+	{
+		return tOptions.Exists ( "shared" ) || tOptions.Exists ( "shared_join" );
+	}
+
 	static bool IsGroupOpen ( const BulkTxnState_t & tTxnState )
 	{
 		return tTxnState.HasIndex()

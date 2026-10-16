@@ -5675,27 +5675,6 @@ bool CSphIndex_VLN::Build_SetupInplace ( SphOffset_t & iHitsGap, int iHitsMax, i
 }
 
 
-void SetupDocstoreFields ( DocstoreAddField_i & tFields, const CSphSchema & tSchema )
-{
-	int iStored = 0;
-	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
-		if ( tSchema.IsFieldStored(i) )
-		{
-			tFields.AddField ( tSchema.GetFieldName(i), DOCSTORE_TEXT );
-			iStored++;
-		}
-
-	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
-		if ( tSchema.IsAttrStored(i) )
-		{
-			tFields.AddField ( tSchema.GetAttr(i).m_sName, DOCSTORE_ATTR );
-			iStored++;
-		}
-
-	assert(iStored);
-}
-
-
 bool CheckStoredFields ( const CSphSchema & tSchema, const CSphIndexSettings & tSettings, CSphString & sError )
 {
 	for ( const auto & i : tSettings.m_dStoredFields )
@@ -5930,6 +5909,7 @@ void CSphIndex_VLN::Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, 
 		if ( dStoredAttrs.BitGet(i) )
 			pAddedAttrs[iAttr++] = GetAttrForDocstore ( tDocID, i, m_tSchema, tMvaContainer, tSource, dTmpDocstoreAttrStorage[i] );
 
+	AddEmptyKnnChunkSpansToDoc ( tDoc, m_tSchema );
 	pDocstoreBuilder->AddDoc ( tSource.m_tDocInfo.m_tRowID, tDoc );
 }
 
@@ -8004,23 +7984,11 @@ bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHe
 
 bool CSphIndex_VLN::AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError )
 {
-	int iOldNumStored = 0;
-	for ( int i = 0; i < tOldSchema.GetFieldsCount(); i++ )
-		if ( tOldSchema.IsFieldStored(i) )
-			iOldNumStored++;
-
-	for ( int i = 0; i < tOldSchema.GetAttrsCount(); i++ )
-		if ( tOldSchema.IsAttrStored(i) )
-			iOldNumStored++;
-
-	int iNewNumStored = 0;
-	for ( int i = 0; i < tNewSchema.GetFieldsCount(); i++ )
-		if ( tNewSchema.IsFieldStored(i) )
-			iNewNumStored++;
-
-	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
-		if ( tNewSchema.IsAttrStored(i) )
-			iNewNumStored++;
+	CSphVector<DocstoreFieldDesc_t> dOldFields, dNewFields;
+	CollectDocstoreFields ( tOldSchema, dOldFields );
+	CollectDocstoreFields ( tNewSchema, dNewFields );
+	int iOldNumStored = dOldFields.GetLength();
+	int iNewNumStored = dNewFields.GetLength();
 
 	if ( iOldNumStored==iNewNumStored )
 		return true;

@@ -198,6 +198,7 @@ UNLOCK TABLES;
 **锁类型** 可以是：
 - `read` — 表受读锁保护。修改语句会失败，直到锁被释放。
 - `freeze` — 表处于冻结状态。这会阻止任何会将数据写入磁盘的操作，直到表被解冻。
+- `write_allow_readers` — 该表已由[批量导入](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import)预留，可能是私有会话，也可能是共享池。搜索可以正常执行，但普通写入以及对该表发起的另一项批量导入都会失败，直到导入结束。即使客户端已退出，共享池也会继续保留该表；可使用 [`PURGE BULK_IMPORT … OPTION clear_sessions=1`](../Node_info_and_management/PURGE.md#PURGE-BULK_IMPORT) 取消。
 
 <!-- request Example -->
 

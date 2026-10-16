@@ -17,6 +17,7 @@
 #include "memio.h"
 #include "tracer.h"
 #include "indexsettings.h"
+#include "fieldtext.h"
 
 #include <memory>
 
@@ -222,7 +223,32 @@ static bool StoreEmbeddings ( const CSphSchema & tSchema, int iAttr, int iBlobAt
 }
 
 
-bool RtAccum_t::RebuildStoragesForEmbeddings ( RowID_t tRowID, CSphRowitem * pRow, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::unique_ptr<BlobRowBuilder_i> & pNewBlobBuilder, std::unique_ptr<ColumnarBuilderRT_i> & pNewColumnarBuilder, std::unique_ptr<DocstoreRT_i> & pNewDocstoreBuilder, CSphVector<ScopedTypedIterator_t> & dAllIterators, const IntVec_t & dDocstoreRemap, const CSphColumnInfo * pBlobLoc, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, std::vector<std::vector<size_t>> & dAllOffsets, CSphVector<int64_t> & dTmp, CSphString & sError )
+// the byte ranges of the chunks that produced a row's vectors go into the row's docstore entry, next to the
+// stored source text they point into. A row that supplied its own vectors has no provenance and stores nothing
+static bool StoreChunkSpans ( const CSphColumnInfo & tAttr, int iDocstoreField, DocstoreDoc_t & tDoc, const std::vector<knn::TextEmbeddingSpan_t> & dSpans, size_t iFrom, size_t iTo, CSphVector<BYTE> & dPacked, CSphString & sError )
+{
+	if ( iFrom>iTo || iTo>dSpans.size() )
+	{
+		sError.SetSprintf ( "attribute '%s': invalid chunk provenance offsets", tAttr.m_sName.cstr() );
+		return false;
+	}
+
+	CSphString sPackError;
+	if ( !PackKnnChunkSpans ( dSpans.data()+iFrom, iTo-iFrom, dPacked, sPackError ) )
+	{
+		sError.SetSprintf ( "attribute '%s': %s", tAttr.m_sName.cstr(), sPackError.cstr() );
+		return false;
+	}
+
+	tDoc.m_dFields[iDocstoreField].Resize ( dPacked.GetLength() );
+	if ( dPacked.GetLength() )
+		memcpy ( tDoc.m_dFields[iDocstoreField].Begin(), dPacked.Begin(), dPacked.GetLength() );
+
+	return true;
+}
+
+
+bool RtAccum_t::RebuildStoragesForEmbeddings ( RowID_t tRowID, CSphRowitem * pRow, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::unique_ptr<BlobRowBuilder_i> & pNewBlobBuilder, std::unique_ptr<ColumnarBuilderRT_i> & pNewColumnarBuilder, std::unique_ptr<DocstoreRT_i> & pNewDocstoreBuilder, CSphVector<ScopedTypedIterator_t> & dAllIterators, const IntVec_t & dDocstoreRemap, const IntVec_t & dSpansRemap, const CSphColumnInfo * pBlobLoc, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, std::vector<std::vector<knn::TextEmbeddingSpan_t>> & dAllSpans, std::vector<std::vector<size_t>> & dAllOffsets, CSphVector<int64_t> & dTmp, CSphVector<BYTE> & dPackedSpans, CSphString & sError )
 {
 	int iBlobAttr = 0;
 	int iColumnarAttr = 0;
@@ -254,9 +280,15 @@ bool RtAccum_t::RebuildStoragesForEmbeddings ( RowID_t tRowID, CSphRowitem * pRo
 			assert ( (size_t)tRowID+1 < dOffsets.size() );
 			if ( !StoreEmbeddings ( tSchema, i, iBlobAttr, iColumnarAttr, tDoc, pNewBlobBuilder, pNewColumnarBuilder, dDocstoreRemap, dAllEmbeddings[i], dOffsets[tRowID], dOffsets[tRowID+1], dTmp, sError ) )
 				return false;
+
+			if ( dSpansRemap[i]!=-1 && !StoreChunkSpans ( tAttr, dSpansRemap[i], tDoc, dAllSpans[i], dOffsets[tRowID], dOffsets[tRowID+1], dPackedSpans, sError ) )
+				return false;
 		}
 		else
 		{
+			if ( dSpansRemap[i]!=-1 )
+				tDoc.m_dFields[dSpansRemap[i]].Resize(0);
+
 			if ( pNewBlobBuilder && !tAttr.IsColumnar() && sphIsBlobAttr(tAttr) )
 			{
 				assert(pBlobLoc);
@@ -294,7 +326,7 @@ bool RtAccum_t::RebuildStoragesForEmbeddings ( RowID_t tRowID, CSphRowitem * pRo
 }
 
 
-bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, std::vector<std::vector<size_t>> & dAllOffsets, CSphString & sError )
+bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, std::vector<std::vector<knn::TextEmbeddingSpan_t>> & dAllSpans, std::vector<std::vector<size_t>> & dAllOffsets, CSphString & sError )
 {
 	const AttrWithModel_t & tAttrWithModel = dAttrsWithModels[iAttr];
 	if ( !tAttrWithModel.m_pModel )
@@ -334,6 +366,8 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 	std::string sErrorSTL;
 	std::vector<std::vector<float>> dTmpEmbeddings;
 	std::vector<size_t> dTmpOffsets;
+	std::vector<knn::TextEmbeddingSpan_t> dTmpSpans;
+	const bool bExpectSpans = knn::IsMultiVectorStrategy ( tAttr.m_tKNNChunk.m_eStrategy );
 	bool bConverted = true;
 	if ( uNumSkipped!=m_uAccumDocs )
 	{
@@ -341,7 +375,7 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 		// offsets, they are just the identity. Asking for them always keeps one code path here
 		auto fnConvert = [&]
 		{
-			return tAttrWithModel.m_pModel->Convert ( dTexts, dTmpEmbeddings, sErrorSTL, GetEmbeddingsThreadsToUse(), &tAttr.m_tKNNChunk, &dTmpOffsets );
+			return tAttrWithModel.m_pModel->Convert ( dTexts, dTmpEmbeddings, sErrorSTL, GetEmbeddingsThreadsToUse(), &tAttr.m_tKNNChunk, &dTmpOffsets, &dTmpSpans );
 		};
 
 		if ( Threads::IsInsideCoroutine() )
@@ -358,9 +392,12 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 
 	if ( !dTexts.empty() )
 	{
-		bool bOk = dTmpOffsets.size()==dTexts.size()+1 && dTmpOffsets.front()==0 && dTmpOffsets.back()==dTmpEmbeddings.size();
+		bool bOk = dTmpOffsets.size()==dTexts.size()+1 && dTmpOffsets.front()==0 && dTmpOffsets.back()==dTmpEmbeddings.size() && ( bExpectSpans ? dTmpSpans.size()==dTmpEmbeddings.size() : dTmpSpans.empty() );
 		for ( size_t i = 1; bOk && i < dTmpOffsets.size(); i++ )
 			bOk = dTmpOffsets[i]>=dTmpOffsets[i-1];
+		for ( size_t i=0; bOk && bExpectSpans && i<dTexts.size(); ++i )
+			for ( size_t v=dTmpOffsets[i]; bOk && v<dTmpOffsets[i+1]; ++v )
+				bOk = dTmpSpans[v].m_uStart<=dTmpSpans[v].m_uEnd && dTmpSpans[v].m_uEnd<=dTexts[i].size();
 
 		if ( !bOk )
 		{
@@ -372,6 +409,8 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 	// flatten into row order: row r owns dEmbeddingsForAttr[ dOffsetsForAttr[r] .. dOffsetsForAttr[r+1] ).
 	// a row that supplied its own vector keeps an empty range
 	dEmbeddingsForAttr.clear();
+	auto & dSpansForAttr = dAllSpans[iAttr];
+	dSpansForAttr.clear();
 	dOffsetsForAttr.resize ( (size_t)m_uAccumDocs+1 );
 	dOffsetsForAttr[0] = 0;
 	ARRAY_FOREACH ( i, dResultIds )
@@ -379,7 +418,11 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 		int iResultId = dResultIds[i];
 		if ( iResultId!=-1 )
 			for ( size_t v = dTmpOffsets[iResultId]; v < dTmpOffsets[iResultId+1]; v++ )
+			{
 				dEmbeddingsForAttr.push_back ( std::move ( dTmpEmbeddings[v] ) );
+				if ( bExpectSpans )
+					dSpansForAttr.push_back ( dTmpSpans[v] );
+			}
 
 		dOffsetsForAttr[i+1] = dEmbeddingsForAttr.size();
 	}
@@ -404,8 +447,11 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 	bool bRebuildBlobs = false;
 	bool bRebuildDocstore = false;
 	IntVec_t dDocstoreRemap;
+	IntVec_t dSpansRemap;
 	dDocstoreRemap.Resize ( dAttrsWithModels.GetLength() );
 	dDocstoreRemap.Fill(-1);
+	dSpansRemap.Resize ( dAttrsWithModels.GetLength() );
+	dSpansRemap.Fill(-1);
 	int iNumColumnarAttrs = 0;
 	ARRAY_FOREACH ( i, dAttrsWithModels )
 	{
@@ -422,6 +468,13 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 		bRebuildDocstore |= tAttr.IsStored();
 
 		dDocstoreRemap[i] = m_pDocstore ? ((DocstoreBuilder_i*)m_pDocstore.get())->GetFieldId ( tAttr.m_sName, DOCSTORE_ATTR ) : -1;
+
+		// chunk spans live in the docstore; a table without one has no stored source text to point into anyway
+		if ( tAttr.HasKnnChunkSpans() && m_pDocstore )
+		{
+			dSpansRemap[i] = ((DocstoreBuilder_i*)m_pDocstore.get())->GetFieldId ( tAttr.m_sName, DOCSTORE_KNN_CHUNK_SPANS );
+			bRebuildDocstore |= dSpansRemap[i]!=-1;
+		}
 	}
 
 	CSphTightVector<BYTE> dNewBlobPool;
@@ -445,12 +498,14 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 	int iRowSize = tSchema.GetRowSize();
 	int iAttrWithModel = 0;
 	std::vector<std::vector<std::vector<float>>> dAllEmbeddings;
+	std::vector<std::vector<knn::TextEmbeddingSpan_t>> dAllSpans;
 	std::vector<std::vector<size_t>> dAllOffsets;
 	dAllEmbeddings.resize ( dAttrsWithModels.GetLength() );
+	dAllSpans.resize ( dAttrsWithModels.GetLength() );
 	dAllOffsets.resize ( dAttrsWithModels.GetLength() );
 	ARRAY_FOREACH ( i, dAttrsWithModels )
 	{
-		if ( !GenerateEmbeddings( i, iAttrWithModel, dAttrsWithModels, dAllEmbeddings, dAllOffsets, sError ) )
+		if ( !GenerateEmbeddings( i, iAttrWithModel, dAttrsWithModels, dAllEmbeddings, dAllSpans, dAllOffsets, sError ) )
 			return false;
 
 		if ( dAttrsWithModels[i].m_pModel )
@@ -460,9 +515,10 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 	// 2nd pass - rebuild attribute storages
 	std::vector<float> dEmbedding;
 	CSphVector<int64_t> dTmp;
+	CSphVector<BYTE> dPackedSpans;
 	CSphRowitem * pRow = m_dAccumRows.Begin();
 	for ( RowID_t tRowID = 0; tRowID < m_uAccumDocs; ++tRowID, pRow += iRowSize )
-		if ( !RebuildStoragesForEmbeddings ( tRowID, pRow, dAttrsWithModels, pNewBlobBuilder, pNewColumnarBuilder, pNewDocstoreBuilder, dAllIterators, dDocstoreRemap, pBlobLoc, dAllEmbeddings, dAllOffsets, dTmp, sError ) )
+		if ( !RebuildStoragesForEmbeddings ( tRowID, pRow, dAttrsWithModels, pNewBlobBuilder, pNewColumnarBuilder, pNewDocstoreBuilder, dAllIterators, dDocstoreRemap, dSpansRemap, pBlobLoc, dAllEmbeddings, dAllSpans, dAllOffsets, dTmp, dPackedSpans, sError ) )
 			return false;
 
 	if ( bRebuildBlobs )
@@ -595,16 +651,28 @@ static const char * FetchStringFromDoc ( int iAttr, const InsertDocData_c & tDoc
 }
 
 
-static CSphVector<char> ConcatFromFields ( const InsertDocData_c & tDoc, const AttrWithModel_t & tAttr, const ISphSchema & tSchema )
+// full-text fields feed the model as they are indexed and highlighted: after the field filter and the HTML stripper.
+// That keeps the chunk byte offsets the model reports usable against the stored text (see PrepareFieldText)
+static CSphVector<char> ConcatFromFields ( const InsertDocData_c & tDoc, const AttrWithModel_t & tAttr, const ISphSchema & tSchema, ISphFieldFilter * pFieldFilter, const CSphHTMLStripper * pStripper )
 {
 	CSphVector<char> dTmp;
+	CSphVector<BYTE> dPrepared;
 	ARRAY_FOREACH ( i, tAttr.m_dFrom )
 	{
 		auto tFrom = tAttr.m_dFrom[i];
 		int iAttrFieldId = tFrom.first;
 		VecTraits_T<const char> dSrc;
 		if ( tFrom.second )
-			dSrc = { tDoc.m_dFields[iAttrFieldId].Begin(), tDoc.m_dFields[iAttrFieldId].GetLength() };
+		{
+			const VecTraits_T<const char> & dField = tDoc.m_dFields[iAttrFieldId];
+			if ( pFieldFilter || pStripper )
+			{
+				PrepareFieldText ( { (const BYTE*)dField.Begin(), dField.GetLength() }, dPrepared, pFieldFilter, pStripper );
+				dSrc = { (const char*)dPrepared.Begin(), dPrepared.GetLength() };
+			}
+			else
+				dSrc = dField;
+		}
 		else
 		{
 			const char * szString = FetchStringFromDoc ( iAttrFieldId, tDoc, tSchema );
@@ -640,7 +708,7 @@ static bool IsDefaultEmbedding ( const InsertDocData_c & tDoc, const CSphColumnI
 }
 
 
-void RtAccum_t::FetchEmbeddingsSrc ( InsertDocData_c & tDoc, const CSphVector<AttrWithModel_t> & dAttrsWithModels )
+void RtAccum_t::FetchEmbeddingsSrc ( InsertDocData_c & tDoc, const CSphVector<AttrWithModel_t> & dAttrsWithModels, ISphFieldFilter * pFieldFilter, const CSphHTMLStripper * pStripper )
 {
 	if ( !m_pEmbeddingsSrc )
 	{
@@ -661,7 +729,7 @@ void RtAccum_t::FetchEmbeddingsSrc ( InsertDocData_c & tDoc, const CSphVector<At
 		if ( !tAttrWithModel.m_pModel )
 			continue;
 
-		auto dConcat = ConcatFromFields ( tDoc, tAttrWithModel, tSchema );
+		auto dConcat = ConcatFromFields ( tDoc, tAttrWithModel, tSchema, pFieldFilter, pStripper );
 		m_pEmbeddingsSrc->Add ( iAttrWithModel, dConcat, bDefault );
 		iAttrWithModel++;
 	}

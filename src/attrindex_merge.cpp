@@ -42,6 +42,7 @@ class AttrMerger_c::Impl_c
 	CSphWriter								m_tWriterSPA;
 	std::unique_ptr<BlobRowBuilder_i>		m_pBlobRowBuilder;
 	std::unique_ptr<DocstoreBuilder_i>		m_pDocstoreBuilder;
+	CSphVector<DocstoreFieldDesc_t>			m_dDocstoreFields;	///< destination docstore layout
 	std::unique_ptr<columnar::Builder_i>	m_pColumnarBuilder;
 	RowID_t									m_tResultRowID = 0;
 	int64_t									m_iTotalBytes = 0;
@@ -117,13 +118,8 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 		if ( !m_pDocstoreBuilder )
 			return false;
 
-		for ( int i = 0; i < tDstSchema.GetFieldsCount(); ++i )
-			if ( tDstSchema.IsFieldStored(i) )
-				m_pDocstoreBuilder->AddField ( tDstSchema.GetFieldName(i), DOCSTORE_TEXT );
-
-		for ( int i = 0; i < tDstSchema.GetAttrsCount(); ++i )
-			if ( tDstSchema.IsAttrStored(i) )
-				m_pDocstoreBuilder->AddField ( tDstSchema.GetAttr(i).m_sName, DOCSTORE_ATTR );
+		SetupDocstoreFields ( *m_pDocstoreBuilder, tDstSchema );
+		CollectDocstoreFields ( tDstSchema, m_dDocstoreFields );
 	}
 
 	if ( tDstSchema.HasColumnarAttrs() )
@@ -185,6 +181,27 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 
 	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
 	CSphVector<int64_t> dTmp;
+
+	// docstore entries are copied by name and type, so a source chunk written before an entry existed
+	// (e.g. the chunk spans) contributes an empty value for it instead of shifting the whole layout
+	IntVec_t dSrcDocstoreIds;	// sorted ids to fetch from the source docstore
+	IntVec_t dDstFromFetched;	// destination entry -> position in the fetched document, -1 when the source lacks it
+	if constexpr ( WITH_DOCSTORE )
+	{
+		const Docstore_i * pSrcDocstore = tIndex.GetDocstore();
+		assert ( pSrcDocstore );
+		IntVec_t dDstToSrc;
+		for ( const auto & i : m_dDocstoreFields )
+			dDstToSrc.Add ( pSrcDocstore->GetFieldId ( i.m_sName, i.m_eType ) );
+
+		for ( int iSrcId : dDstToSrc )
+			if ( iSrcId>=0 )
+				dSrcDocstoreIds.Add(iSrcId);
+
+		dSrcDocstoreIds.Uniq();
+		for ( int iSrcId : dDstToSrc )
+			dDstFromFetched.Add ( iSrcId>=0 ? dSrcDocstoreIds.Idx ( dSrcDocstoreIds.BinarySearch(iSrcId) ) : -1 );
+	}
 
 	int iColumnarIdLoc = PURE_COLUMNAR ? 0 : ( tIndex.GetMatchSchema ().GetAttr ( 0 ).IsColumnar () ? 0 : -1 );
 	int iStride = tIndex.GetMatchSchema().GetRowSize();
@@ -265,7 +282,21 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 		BuildStoreHistograms ( tRowID, pRow, pRawBlobAttrs, dColumnarIterators, m_dAttrsForHistogram, m_tHistograms );
 
 		if constexpr ( WITH_DOCSTORE )
-			m_pDocstoreBuilder->AddDoc ( m_tResultRowID, tIndex.GetDocstore()->GetDoc ( tRowID, nullptr, -1, false ) );
+		{
+			DocstoreDoc_t tSrcDoc = tIndex.GetDocstore()->GetDoc ( tRowID, &dSrcDocstoreIds, -1, false );
+			DocstoreBuilder_i::Doc_t tDstDoc;
+			tDstDoc.m_dFields.Resize ( dDstFromFetched.GetLength() );
+			ARRAY_FOREACH ( i, dDstFromFetched )
+			{
+				int iFetched = dDstFromFetched[i];
+				if ( iFetched>=0 )
+					tDstDoc.m_dFields[i] = VecTraits_T<BYTE> ( tSrcDoc.m_dFields[iFetched].Begin(), tSrcDoc.m_dFields[iFetched].GetLength() );
+				else
+					tDstDoc.m_dFields[i] = VecTraits_T<BYTE> ( nullptr, 0 );
+			}
+
+			m_pDocstoreBuilder->AddDoc ( m_tResultRowID, tDstDoc );
+		}
 
 		if constexpr ( WITH_SI )
 		{
@@ -298,17 +329,17 @@ bool AttrMerger_c::Impl_c::AnalyzeMixedAttributes ( const CSphIndex & tIndex, co
 
 	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
 	AT_SCOPE_EXIT ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
-	RowID_t tResultRowID = 0;
 	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID, pRow += iStride )
 	{
-		if ( dRowMap[tRowID]==INVALID_ROWID )
+		RowID_t tResultRowID = dRowMap[tRowID];
+		if ( tResultRowID==INVALID_ROWID )
 			continue;
 
 		m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_PULSE, iChunk );
 		if ( m_tMonitor.NeedStop() )
 			return false;
 
-		BuildTrainKNN ( tRowID, tResultRowID++, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder );
+		BuildTrainKNN ( tRowID, tResultRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder );
 	}
 
 	return true;

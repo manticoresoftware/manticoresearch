@@ -17,6 +17,9 @@
 #include "sphinxint.h"
 #include "attribute.h"
 #include "docstore.h"
+#include "columnarmisc.h"
+#include "embeddingutils.h"
+#include "knnmisc.h"
 
 
 enum HookType_e
@@ -24,7 +27,6 @@ enum HookType_e
 	HOOK_SNIPPET,
 	HOOK_HIGHLIGHT
 };
-
 
 static int StringBinary2Number ( const char * sStr, int iLen )
 {
@@ -53,7 +55,7 @@ static bool ParseSnippetLimit ( const CSphString & sName, int iVal, SnippetLimit
 }
 
 
-static bool ParseSnippetOption ( const CSphNamedVariant & tVariant, SnippetQuerySettings_t & tOpt, CSphString & sError )
+static bool ParseSnippetOption ( const CSphNamedVariant & tVariant, SnippetQuerySettings_t & tOpt, CSphString & sError, bool bHighlight )
 {
 	CSphString sName = tVariant.m_sKey;
 	sName.ToLower();
@@ -108,6 +110,7 @@ static bool ParseSnippetOption ( const CSphNamedVariant & tVariant, SnippetQuery
 	else if ( sName=="json_query" )			tOpt.m_bJsonQuery = bVal;
 	else if ( sName=="pack_fields" )		tOpt.m_bPackFields = bVal;
 	else if ( sName=="limits_per_field" )	tOpt.m_bLimitsPerField = bVal;
+	else if ( sName=="knn_chunk" && bHighlight ) tOpt.m_bKNNChunk = bVal;
 	else if ( sName=="exact_phrase" )
 	{
 		sError.SetSprintf ( "exact_phrase option is deprecated" );
@@ -390,7 +393,7 @@ Expr_Snippet_c::Expr_Snippet_c ( ISphExpr * pArglist, const CSphIndex * pIndex, 
 		tVariant.m_sKey = szOption;
 		tVariant.m_sValue.SetBinary ( sValue, iStrValLen );
 		tVariant.m_iValue = StringBinary2Number ( sValue, iStrValLen );
-		if ( !ParseSnippetOption ( tVariant, m_tSnippetQuery, sError ) )
+		if ( !ParseSnippetOption ( tVariant, m_tSnippetQuery, sError, false ) )
 			return;
 	}
 
@@ -454,17 +457,17 @@ ISphExpr * Expr_Snippet_c::Clone () const
 
 //////////////////////////////////////////////////////////////////////////
 
-class Expr_Highlight_c final : public Expr_HighlightTraits_c
+class Expr_Highlight_c : public Expr_HighlightTraits_c
 {
 public:
 				Expr_Highlight_c ( ISphExpr * pArglist, const CSphIndex * pIndex, const ISphSchema * pRsetSchema, QueryProfile_c * pProfiler, QueryType_e eQueryType, CSphString & sError );
 
-	int			StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final;
-	void		Command ( ESphExprCommand eCmd, void * pArg ) final;
-	ISphExpr *	Clone() const final;
+	int			StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const override;
+	void		Command ( ESphExprCommand eCmd, void * pArg ) override;
+	ISphExpr *	Clone() const override;
 	uint64_t	GetHash ( const ISphSchema & tSchema, uint64_t uPrevHash, bool & bDisable ) override;
 
-private:
+protected:
 	DocstoreSession_c::InfoDocID_t	m_tSession;
 	CSphVector<int>					m_dFieldsToFetch;
 	bool							m_bFetchAllFields = false;
@@ -473,9 +476,17 @@ private:
 
 	bool		FetchFieldsFromDocstore ( DocstoreDoc_t & tFetchedDoc, DocID_t & tDocID ) const;
 	CSphVector<FieldSource_t> RearrangeFetchedFields ( const DocstoreDoc_t & tFetchedDoc ) const;
+	int			PackFields ( SnippetResult_t & tRes, const BYTE ** ppStr ) const;
+
+	// the fields were fetched from the docstore and arranged as in the index schema; highlight them.
+	// a subclass may narrow them down first (e.g. to the chunk that matched a KNN query)
+	virtual int	HighlightDocstoreFields ( const CSphMatch & tMatch, const DocstoreDoc_t & tFetchedDoc, CSphVector<FieldSource_t> & dFields, const BYTE ** ppStr ) const;
+	int			HighlightSource ( std::unique_ptr<TextSource_i> & pSource, const BYTE ** ppStr ) const;
+	virtual bool MarkRequestedFields ( CSphString & sError );
+
+private:
 	void		ParseFields ( ISphExpr * pExpr );
 	bool		ParseOptions ( const VecTraits_T<CSphNamedVariant> & dMap, CSphString & sError );
-	bool		MarkRequestedFields ( CSphString & sError );
 	void		MarkAllFields();
 };
 
@@ -540,36 +551,54 @@ int	Expr_Highlight_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr
 			return 0;
 	}
 
-	DocstoreDoc_t tFetchedDoc;
-	CSphVector<FieldSource_t> dAllFields;
-	std::unique_ptr<TextSource_i> pSource;
-	CSphFixedVector<BYTE> tScoped {0}; // scoped array ptr
-
 	if ( m_pText )
 	{
 		// highlight an expression
 		const BYTE * szSource = nullptr;
 		int iLen = m_pText->StringEval ( tMatch, &szSource );
 
+		CSphFixedVector<BYTE> tScoped {0}; // scoped array ptr
 		if ( m_pText->IsDataPtrAttr() )
 			tScoped.Set ( (BYTE *)szSource, iLen );
 
-		pSource = CreateSnippetSource ( m_tSnippetQuery.m_uFilesMode, szSource, iLen );
-	}
-	else
-	{
-		// fetch fields and highlight
-		if ( !FetchFieldsFromDocstore ( tFetchedDoc, tDocID ) )
+		std::unique_ptr<TextSource_i> pSource = CreateSnippetSource ( m_tSnippetQuery.m_uFilesMode, szSource, iLen );
+
+		SnippetResult_t tRes;
+		if ( !m_pSnippetBuilder->Build ( pSource, tRes ) )
 			return 0;
 
-		dAllFields = RearrangeFetchedFields ( tFetchedDoc );
-		pSource = CreateHighlightSource ( dAllFields );
+		return PackFields ( tRes, ppStr );
 	}
 
+	// fetch fields and highlight
+	DocstoreDoc_t tFetchedDoc;
+	if ( !FetchFieldsFromDocstore ( tFetchedDoc, tDocID ) )
+		return 0;
+
+	CSphVector<FieldSource_t> dAllFields = RearrangeFetchedFields ( tFetchedDoc );
+	return HighlightDocstoreFields ( tMatch, tFetchedDoc, dAllFields, ppStr );
+}
+
+
+int Expr_Highlight_c::HighlightDocstoreFields ( const CSphMatch & tMatch, const DocstoreDoc_t & tFetchedDoc, CSphVector<FieldSource_t> & dFields, const BYTE ** ppStr ) const
+{
+	std::unique_ptr<TextSource_i> pSource = CreateHighlightSource ( dFields );
+	return HighlightSource ( pSource, ppStr );
+}
+
+
+int Expr_Highlight_c::HighlightSource ( std::unique_ptr<TextSource_i> & pSource, const BYTE ** ppStr ) const
+{
 	SnippetResult_t tRes;
 	if ( !m_pSnippetBuilder->Build ( pSource, tRes ) )
 		return 0;
 
+	return PackFields ( tRes, ppStr );
+}
+
+
+int Expr_Highlight_c::PackFields ( SnippetResult_t & tRes, const BYTE ** ppStr ) const
+{
 	CSphVector<BYTE> dPacked = m_pSnippetBuilder->PackResult ( tRes, m_dRequestedFieldIds );
 	int iResultLength = dPacked.GetLength();
 	*ppStr = dPacked.LeakData();
@@ -652,6 +681,8 @@ CSphVector<FieldSource_t> Expr_Highlight_c::RearrangeFetchedFields ( const Docst
 
 	return dAllFields;
 }
+
+
 uint64_t Expr_Highlight_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
 {
 	EXPR_CLASS_NAME("Expr_Highlight_c");
@@ -738,13 +769,236 @@ bool Expr_Highlight_c::ParseOptions ( const VecTraits_T<CSphNamedVariant> & dMap
 {
 	for ( const auto & i : dMap )
 	{
-		if ( !ParseSnippetOption ( i, m_tSnippetQuery, sError ) )
+		if ( !ParseSnippetOption ( i, m_tSnippetQuery, sError, true ) )
 			return false;
 	}
 
 	return true;
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+// HIGHLIGHT({knn_chunk=1},'field'): highlight only the chunk of the stored text whose vector won the KNN search.
+// The winning slot arrives through an internal sorter attribute, the chunk byte ranges sit in the docstore next
+// to the text. Without a KNN clause, or on a table without chunk provenance, it behaves as ordinary highlighting
+class Expr_KNNChunkHighlight_c final : public Expr_Highlight_c
+{
+public:
+				Expr_KNNChunkHighlight_c ( ISphExpr * pArglist, const CSphIndex * pIndex, const ISphSchema * pRsetSchema, QueryProfile_c * pProfiler, QueryType_e eQueryType, CSphString & sError );
+
+	void		Command ( ESphExprCommand eCmd, void * pArg ) final;
+	void		FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) final;
+	ISphExpr *	Clone() const final;
+
+protected:
+	int			HighlightDocstoreFields ( const CSphMatch & tMatch, const DocstoreDoc_t & tFetchedDoc, CSphVector<FieldSource_t> & dFields, const BYTE ** ppStr ) const final;
+	bool		MarkRequestedFields ( CSphString & sError ) final;
+
+private:
+	bool			m_bActive = false;			///< the query has a KNN clause with chunk provenance for this field
+	int				m_iChunkField = -1;			///< the (single) full-text field the vectors were generated from
+	CSphString		m_sSpansDocstoreName;		///< the vector attribute whose DOCSTORE_KNN_CHUNK_SPANS entry holds the row's chunk byte ranges
+	int				m_iSpansFetchIdx = -1;		///< position of that entry among the fetched fields, -1 when the docstore lacks it
+	CSphAttrLocator	m_tSlotLoc;
+
+				Expr_KNNChunkHighlight_c ( const Expr_KNNChunkHighlight_c & rhs ) = default;
+
+	bool		Setup ( const ISphSchema * pRsetSchema, bool bExplicitFields, CSphString & sError );
+	int			PackVerbatim ( const TextSource_i & tSource, const BYTE ** ppStr ) const;
+};
+
+
+Expr_KNNChunkHighlight_c::Expr_KNNChunkHighlight_c ( ISphExpr * pArglist, const CSphIndex * pIndex, const ISphSchema * pRsetSchema, QueryProfile_c * pProfiler, QueryType_e eQueryType, CSphString & sError )
+	: Expr_Highlight_c ( pArglist, pIndex, pRsetSchema, pProfiler, eQueryType, sError )
+{
+	if ( !sError.IsEmpty() )
+		return;
+
+	bool bExplicitFields = pArglist && pArglist->IsArglist() && pArglist->GetNumArgs()>=2;
+	Setup ( pRsetSchema, bExplicitFields, sError );
+}
+
+
+bool Expr_KNNChunkHighlight_c::Setup ( const ISphSchema * pRsetSchema, bool bExplicitFields, CSphString & sError )
+{
+	if ( m_pText )
+	{
+		sError = "KNN chunk highlighting requires a quoted explicit stored-field list";
+		return false;
+	}
+
+	if ( !bExplicitFields || m_bFetchAllFields || m_dRequestedFieldIds.GetLength()!=1 )
+	{
+		sError = "KNN chunk highlighting requires exactly one explicit full-text field";
+		return false;
+	}
+
+	// chunk offsets refer to the field text as prepared for indexing (field filter, index HTML stripper);
+	// other strip modes and passage boundary markers would shift them
+	if ( m_tSnippetQuery.m_sStripMode!="index" )
+	{
+		sError = "KNN chunk highlighting requires html_strip_mode=index";
+		return false;
+	}
+
+	if ( m_tSnippetQuery.m_ePassageSPZ!=SPH_SPZ_NONE )
+	{
+		sError = "KNN chunk highlighting does not support passage_boundary";
+		return false;
+	}
+
+	// no slot means no KNN clause in this query (or in this hybrid sub-query), or an attribute without provenance
+	const CSphColumnInfo * pSlot = pRsetSchema ? pRsetSchema->GetAttr ( GetKnnChunkSlotAttrName() ) : nullptr;
+	if ( !pSlot )
+		return true;
+
+	// the slot column carries the name of the vector attribute it belongs to
+	const CSphColumnInfo * pVector = m_pIndex->GetMatchSchema().GetAttr ( pSlot->m_sKNNFrom.cstr() );
+	if ( !pVector || pVector->m_sKNNFrom.IsEmpty() )
+	{
+		sError = "KNN chunk highlighting requires one explicit full-text FROM field";
+		return false;
+	}
+
+	CSphVector<std::pair<int,bool>> dFrom;
+	if ( !ParseEmbeddingSources ( dFrom, pVector->m_sKNNFrom, m_pIndex->GetMatchSchema(), sError ) )
+		return false;
+
+	if ( dFrom.GetLength()!=1 )
+	{
+		sError = "KNN chunk highlighting requires one explicit full-text FROM field";
+		return false;
+	}
+
+	if ( !dFrom[0].second )
+	{
+		sError = "KNN chunk highlighting does not support string-attribute FROM sources";
+		return false;
+	}
+
+	m_iChunkField = dFrom[0].first;
+	if ( m_dRequestedFieldIds[0]!=m_iChunkField )
+	{
+		sError.SetSprintf ( "KNN chunk highlighting field must be '%s'", m_pIndex->GetMatchSchema().GetFieldName(m_iChunkField) );
+		return false;
+	}
+
+	m_sSpansDocstoreName = pVector->m_sName;
+	m_tSlotLoc = pSlot->m_tLocator;
+	m_bActive = true;
+	return true;
+}
+
+
+void Expr_KNNChunkHighlight_c::Command ( ESphExprCommand eCmd, void * pArg )
+{
+	Expr_Highlight_c::Command ( eCmd, pArg );
+
+	if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS && m_bActive )
+		static_cast<StrVec_t*>(pArg)->Add ( GetKnnChunkSlotAttrName() );
+}
+
+
+void Expr_KNNChunkHighlight_c::FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+{
+	Expr_Highlight_c::FixupLocator ( pOldSchema, pNewSchema );
+	if ( !m_bActive )
+		return;
+
+	const CSphColumnInfo * pSlot = pNewSchema->GetAttr ( GetKnnChunkSlotAttrName() );
+	assert(pSlot);
+	m_tSlotLoc = pSlot->m_tLocator;
+}
+
+
+ISphExpr * Expr_KNNChunkHighlight_c::Clone() const
+{
+	return new Expr_KNNChunkHighlight_c ( *this );
+}
+
+
+bool Expr_KNNChunkHighlight_c::MarkRequestedFields ( CSphString & sError )
+{
+	bool bResult = Expr_Highlight_c::MarkRequestedFields(sError);
+	m_iSpansFetchIdx = -1;
+	if ( !m_bActive )
+		return bResult;
+
+	// chunks created before the table got chunk provenance have no spans entry; they highlight the whole field
+	assert ( m_tSession.m_pDocstore );
+	int iSpansField = m_tSession.m_pDocstore->GetFieldId ( m_sSpansDocstoreName, DOCSTORE_KNN_CHUNK_SPANS );
+	if ( iSpansField==-1 )
+		return bResult;
+
+	m_dFieldsToFetch.Add(iSpansField);
+	m_dFieldsToFetch.Uniq();
+	ARRAY_FOREACH ( i, m_dFieldsToFetch )
+		if ( m_dFieldsToFetch[i]==iSpansField )
+			m_iSpansFetchIdx = i;
+
+	return bResult;
+}
+
+
+int Expr_KNNChunkHighlight_c::HighlightDocstoreFields ( const CSphMatch & tMatch, const DocstoreDoc_t & tFetchedDoc, CSphVector<FieldSource_t> & dFields, const BYTE ** ppStr ) const
+{
+	std::unique_ptr<TextSource_i> pSource = CreateHighlightSource ( dFields );
+
+	// the chunk range applies to the prepared text (field filter, HTML stripper), the same text the embeddings
+	// were generated from, not to the raw stored bytes
+	if ( m_bActive && m_iSpansFetchIdx>=0 && m_iSpansFetchIdx<tFetchedDoc.m_dFields.GetLength() && m_iChunkField<dFields.GetLength() )
+	{
+		const CSphVector<BYTE> & dSpans = tFetchedDoc.m_dFields[m_iSpansFetchIdx];
+		int64_t iStart = 0, iEnd = 0;
+		if ( UnpackKnnChunkSpan ( { dSpans.Begin(), dSpans.GetLength() }, (int64_t)tMatch.GetAttr(m_tSlotLoc), iStart, iEnd ) && iEnd<=INT_MAX )
+			pSource->SetFieldRange ( m_iChunkField, (int)iStart, (int)iEnd );
+	}
+
+	CSphString sError;
+	if ( !m_pSnippetBuilder->PrepareSource ( *pSource, sError ) )
+		return 0;
+
+	// a semantic-only query has nothing to mark up; the chunk itself is the answer
+	if ( m_bActive && pSource->IsFieldRanged(m_iChunkField) && GetQuery().IsEmpty() )
+		return PackVerbatim ( *pSource, ppStr );
+
+	return HighlightSource ( pSource, ppStr );
+}
+
+
+int Expr_KNNChunkHighlight_c::PackVerbatim ( const TextSource_i & tSource, const BYTE ** ppStr ) const
+{
+	SnippetResult_t tRes;
+	tRes.m_dFields.Resize ( tSource.GetNumFields() );
+	ARRAY_FOREACH ( i, tRes.m_dFields )
+		tRes.m_dFields[i].m_sName = tSource.GetFieldName(i);
+
+	PassageResult_t & tPassage = tRes.m_dFields[m_iChunkField].m_dPassages.Add();
+	tPassage.m_dText.Append ( tSource.GetText(m_iChunkField) );
+	return PackFields ( tRes, ppStr );
+}
+
+
+// knn_chunk is a HIGHLIGHT() option; it decides which expression class is built
+static bool HighlightUsesKnnChunk ( ISphExpr * pArglist )
+{
+	if ( !pArglist )
+		return false;
+
+	// the first argument is a map; ExprHook_c::GetReturnType checked that
+	auto * pMapArg = (Expr_MapArg_c *)( pArglist->IsArglist() ? pArglist->GetArg(0) : pArglist );
+	if ( !pMapArg || !pMapArg->m_pValues )
+		return false;
+
+	for ( int64_t i = 0; i < pMapArg->m_iCount; i++ )
+	{
+		const CSphNamedVariant & tOpt = pMapArg->m_pValues[i];
+		if ( !strcasecmp ( tOpt.m_sKey.cstr(), "knn_chunk" ) )
+			return tOpt.m_iValue!=0;
+	}
+
+	return false;
+}
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -777,7 +1031,10 @@ ISphExpr * ExprHook_c::CreateNode ( int iID, ISphExpr * pLeft, const ISphSchema 
 		break;
 
 	case HOOK_HIGHLIGHT:
-		pRes = new Expr_Highlight_c ( pLeft, m_pIndex, pRsetSchema, m_pProfiler, m_eQueryType, sError );
+		if ( HighlightUsesKnnChunk(pLeft) )
+			pRes = new Expr_KNNChunkHighlight_c ( pLeft, m_pIndex, pRsetSchema, m_pProfiler, m_eQueryType, sError );
+		else
+			pRes = new Expr_Highlight_c ( pLeft, m_pIndex, pRsetSchema, m_pProfiler, m_eQueryType, sError );
 		break;
 
 	default:

@@ -1505,7 +1505,7 @@ public:
 			errno = 0;
 			SphAttr_t uVal = strtoull ( sStart, &sEnd, 10 );
 				
-			if ( g_bAttrAutoconvStrict && !ValidateConv ( sStart, sEnd, errno, tVal.m_sVal.Length(), "bigint", sError ) )
+			if ( g_bAttrAutoconvStrict && !ValidateConv ( sStart, sEnd, tVal.m_sVal.Length(), errno, "bigint", sError ) )
 				return 0;
 				
 			return uVal;
@@ -4786,7 +4786,7 @@ static bool PrepareUuidDocidValue ( const SqlInsert_t & tVal, int iRow, int iQue
 }
 
 
-bool AttributeConverter_c::CheckInsertTypes ( const CSphColumnInfo & tCol, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx )
+static bool CheckInsertTypes ( ESphAttr eAttrType, const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx, CSphString & sError )
 {
 	// null fits all values as for now it sets default value for any type
 	if ( tVal.m_iType==SqlInsert_t::TOK_NULL )
@@ -4797,28 +4797,39 @@ bool AttributeConverter_c::CheckInsertTypes ( const CSphColumnInfo & tCol, const
 		&& tVal.m_iType!=SqlInsert_t::CONST_FLOAT
 		&& tVal.m_iType!=SqlInsert_t::CONST_MVA )
 	{
-		m_sError.SetSprintf ( "row %d, column %d: internal error: unknown insval type %d", 1+iRow, 1+iQuerySchemaIdx, tVal.m_iType ); // 1 for human base
+		sError.SetSprintf ( "row %d, column %d: internal error: unknown insval type %d", 1+iRow, 1+iQuerySchemaIdx, tVal.m_iType ); // 1 for human base
 		return false;
 	}
 
-	if ( tVal.m_iType==SqlInsert_t::CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET || tCol.m_eAttrType==SPH_ATTR_JSON || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY ) )
+	if ( tVal.m_iType==SqlInsert_t::CONST_MVA && !( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET || eAttrType==SPH_ATTR_JSON || eAttrType==SPH_ATTR_FLOAT_VECTOR || eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY ) )
 	{
-		m_sError.SetSprintf ( "row %d, column %d: MVA value specified for a non-MVA column", 1+iRow, 1+iQuerySchemaIdx ); // 1 for human base
+		sError.SetSprintf ( "row %d, column %d: MVA value specified for a non-MVA column", 1+iRow, 1+iQuerySchemaIdx ); // 1 for human base
 		return false;
 	}
 
-	if ( ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET ) && tVal.m_iType!=SqlInsert_t::CONST_MVA )
+	if ( ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET ) && tVal.m_iType!=SqlInsert_t::CONST_MVA )
 	{
-		m_sError.SetSprintf ( "row %d, column %d: non-MVA value specified for a MVA column", 1+iRow, 1+iQuerySchemaIdx ); // 1 for human base
+		sError.SetSprintf ( "row %d, column %d: non-MVA value specified for a MVA column", 1+iRow, 1+iQuerySchemaIdx ); // 1 for human base
 		return false;
 	}
 
-	if ( ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR || tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY ) && tVal.m_iType!=SqlInsert_t::CONST_MVA )
+	if ( ( eAttrType==SPH_ATTR_FLOAT_VECTOR || eAttrType==SPH_ATTR_FLOAT_VECTOR_ARRAY ) && tVal.m_iType!=SqlInsert_t::CONST_MVA )
 	{
-		m_sError.SetSprintf ( "row %d, column %d: incompatible value specified for a float vector column", 1+iRow, 1+iQuerySchemaIdx ); // 1 for human base
+		sError.SetSprintf ( "row %d, column %d: incompatible value specified for a float vector column", 1+iRow, 1+iQuerySchemaIdx ); // 1 for human base
 		return false;
 	}
 
+	return true;
+}
+
+
+bool ConvertInsertDocId ( const SqlInsert_t & tVal, int iRow, int iQuerySchemaIdx, uint64_t & uDocID, CSphString & sError )
+{
+	SphAttr_t tAttr = 0;
+	if ( !CheckInsertTypes ( SPH_ATTR_BIGINT, tVal, iRow, iQuerySchemaIdx, sError ) || !CSphMatchVariant::ConvertPlainAttr ( tVal, SPH_ATTR_BIGINT, nullptr, tAttr, true, sError ) )
+		return false;
+
+	uDocID = (uint64_t)tAttr;
 	return true;
 }
 
@@ -4872,7 +4883,7 @@ bool AttributeConverter_c::SetAttrValue ( int iCol, const SqlInsert_t & tVal, in
 		return true;
 	}
 
-	if ( !CheckInsertTypes ( tCol, tVal, iRow, iQuerySchemaIdx ) )
+	if ( !CheckInsertTypes ( tCol.m_eAttrType, tVal, iRow, iQuerySchemaIdx, m_sError ) )
 		return false;
 
 	SphAttr_t tAttr;
@@ -10445,7 +10456,13 @@ static void HandleMysqlPurge ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	pServed = nullptr;
 
 	CSphString sError;
-	if ( !RemoveIndexerRtBulkRoot ( sRoot, sError ) )
+	if ( !PurgeSharedBulkImport ( tStmt.m_sIndex, tStmt.m_iIntParam!=0, sError ) )
+	{
+		tOut.Error ( sError.cstr() );
+		return;
+	}
+
+	if ( !RemoveIndexerRtBulkRoot ( tStmt.m_sIndex, sRoot, sError ) )
 	{
 		tOut.Error ( sError.cstr() );
 		return;
@@ -17331,6 +17348,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	searchd::AddShutdownCb ( ReplicationServiceShutdown );
 	ReplicationServiceStart ( eBs );
 	searchd::AddShutdownCb ( BuddyShutdown );
+	searchd::AddShutdownCb ( ShutdownSharedBulkImport );
 	// --test should not guess buddy path
 	// otherwise daemon generates warning message that counts as bad daemon restart by ubertest
 	if ( bWithBuddy.value_or (!bTestMode) )

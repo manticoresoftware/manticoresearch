@@ -38,11 +38,12 @@ public:
 	virtual void Done() = 0;
 	virtual int64_t GetNumFails() const = 0;
 	virtual const DocID_t* GetExtractDocs () const {return nullptr;};
+	virtual bool IsDocstoreBadIds () const { return false; };
 	virtual void CheckDocidDup ( DocID_t tDocid, DWORD uRowid ) = 0;
 	virtual void FinishDiskChunk ( int64_t iNumRows ) = 0;
 };
 
-DebugCheckError_i* MakeDebugCheckError ( FILE* fp, DocID_t* pExtract );
+DebugCheckError_i* MakeDebugCheckError ( FILE* fp, DocID_t* pExtract, bool bDocstoreBadIds = false );
 
 // disk index checker
 class DiskIndexChecker_c

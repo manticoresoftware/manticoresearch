@@ -15,16 +15,13 @@
 #include <type_traits>
 
 #include "indexer_rt_bulk.h"
-#if _WIN32
 #include "coroutine.h"
-#endif
 
 #include <boost/version.hpp>
 #if BOOST_VERSION >= 108800
 #define BOOST_PROCESS_VERSION 1
 #include <boost/process/v1/args.hpp>
 #include <boost/process/v1/child.hpp>
-#include <boost/process/v1/env.hpp>
 #include <boost/process/v1/error.hpp>
 #include <boost/process/v1/extend.hpp>
 #include <boost/process/v1/handles.hpp>
@@ -36,6 +33,11 @@
 #endif
 
 #if !_WIN32
+#if BOOST_VERSION >= 108800
+#include <boost/process/v1/posix.hpp>
+#else
+#include <boost/process/posix.hpp>
+#endif
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/socket.h>
@@ -107,14 +109,6 @@ static bool GetIndexerPath ( CSphString & sIndexer, CSphString & sError )
 	#endif
 	sIndexer.SetSprintf ( "%s%s", GetPathOnly ( sExecutable ).cstr(), szIndexer );
 	return true;
-}
-
-
-static CSphString GetIndexerRtBulkFile ( const IndexerRtBulkState_t & tState, const char * szFile )
-{
-	CSphString sPath;
-	sPath.SetSprintf ( "%s/%s", tState.m_sDir.cstr(), szFile );
-	return sPath;
 }
 
 
@@ -277,8 +271,13 @@ bool ListIndexerRtBulkFiles ( const CSphString & sRoot, CSphVector<IndexerRtBulk
 }
 
 
-bool RemoveIndexerRtBulkRoot ( const CSphString & sRoot, CSphString & sError )
+static void DropSharedBulkImport ( const CSphString & sTable );
+
+// For PURGE and DROP: cancel the shared load into sTable, if any, so that its children stop writing, then remove the
+// staging root.
+bool RemoveIndexerRtBulkRoot ( const CSphString & sTable, const CSphString & sRoot, CSphString & sError )
 {
+	DropSharedBulkImport ( sTable );
 	sError = "";
 	boost::system::error_code tError;
 	fs::remove_all ( sRoot.cstr(), tError );
@@ -290,22 +289,94 @@ bool RemoveIndexerRtBulkRoot ( const CSphString & sRoot, CSphString & sError )
 }
 
 
-class IndexerRtBulkState_t::Impl_c
+static bool CheckSchemaSupported ( const CSphSchema & tSchema, CSphString & sError );
+static bool WriteIndexerRtBulkConfig ( const RtIndex_i & tRt, const CSphString & sDir, CSphVector<int> & dCsvAttrOrder, CSphString & sError );
+
+// One indexer child: its staging directory, generated config, CSV input stream and chunk.
+class RtBulkIndexer_c
 {
 public:
-	~Impl_c()
+	~RtBulkIndexer_c()
 	{
 		Abort();
+		RemoveDir();
 	}
 
-	bool Start ( const CSphString & sIndexer, const CSphString & sConfig, const CSphString & sOutput, CSphString & sError )
+	bool Start ( const RtIndex_i & tRt, CSphString & sError )
+	{
+		if ( !CheckSchemaSupported ( tRt.GetMatchSchema(), sError ) )
+			return false;
+
+		CSphString sRoot = GetIndexerRtBulkRoot ( tRt );
+		if ( !PrepareStagingRoot ( sRoot, sError ) )
+			return false;
+
+		if ( !CreateStagingDir ( sRoot, m_sDir, sError ) )
+			return false;
+
+		if ( !WriteIndexerRtBulkConfig ( tRt, m_sDir, m_dCsvAttrOrder, sError ) )
+			return false;
+
+		CSphString sIndexer;
+		if ( !GetIndexerPath ( sIndexer, sError ) )
+			return false;
+
+		return Launch ( sIndexer, GetFile ( "indexer.conf" ), GetFile ( "indexer.log" ), sError );
+	}
+
+	CSphString GetFile ( const char * szFile ) const
+	{
+		CSphString sPath;
+		sPath.SetSprintf ( "%s/%s", m_sDir.cstr(), szFile );
+		return sPath;
+	}
+
+	const CSphVector<int> & GetCsvAttrOrder() const { return m_dCsvAttrOrder; }
+	int GetPid() const { return (int)m_tChild.id(); }
+
+	CSphString GetOutput() const
+	{
+		CSphString sPath = GetFile ( "indexer.log" );
+		FILE * fp = fopen ( sPath.cstr(), "rb" );
+		if ( !fp )
+			return {};
+
+		char sBuffer[4097];
+		size_t iLength = fread ( sBuffer, 1, sizeof(sBuffer)-1, fp );
+		fclose ( fp );
+		while ( iLength && sphIsSpace ( sBuffer[iLength-1] ) )
+			--iLength;
+		sBuffer[iLength] = '\0';
+		return CSphString ( sBuffer );
+	}
+
+private:
+	void RemoveDir() noexcept
+	{
+		if ( m_sDir.IsEmpty() )
+			return;
+
+		fs::path tDir ( m_sDir.cstr() );
+		boost::system::error_code tError;
+		fs::remove_all ( tDir, tError );
+		if ( tError )
+			sphWarning ( "bulk_import cleanup failed for '%s': %s", m_sDir.cstr(), tError.message().c_str() );
+		else
+		{
+			tError.clear();
+			fs::remove ( tDir.parent_path(), tError );
+			if ( tError && tError!=boost::system::errc::directory_not_empty )
+				sphWarning ( "bulk_import cleanup failed for '%s': %s", tDir.parent_path().string().c_str(), tError.message().c_str() );
+		}
+		m_sDir = "";
+	}
+
+	bool Launch ( const CSphString & sIndexer, const CSphString & sConfig, const CSphString & sOutput, CSphString & sError )
 	{
 		assert ( !m_tChild.valid() );
 		m_sExecutable = sIndexer;
 
 		std::vector<std::string> dArgs { "--config", sConfig.cstr(), "--remove_dups", "indexer_rt_bulk_chunk" };
-		boost::process::environment tEnvironment = boost::this_process::environment();
-		tEnvironment.erase ( "INDEXER_RT_BULK_CSV_PIPE_COMMAND" );
 		// limit_handles keeps per-launch handles in mutable state.
 		// Do not share Boost's global instance across concurrent requests.
 		std::decay_t<decltype(boost::process::limit_handles)> tLimitHandles;
@@ -350,22 +421,26 @@ public:
 			#endif
 
 			boost::process::pipe tSocketInput ( dSockets[0], dSockets[1] );
+			// Keep socket ownership here; Boost may return an invalid child before its error callbacks run.
+			errno = 0;
 			m_tChild = boost::process::child
 			(
 				sIndexer.cstr(),
 				boost::process::args ( dArgs ),
-				boost::process::std_in < tSocketInput,
+				boost::process::posix::fd.bind ( STDIN_FILENO, tSocketInput.native_source() ),
 				( boost::process::std_out & boost::process::std_err ) > sOutput.cstr(),
 				tLimitHandles,
 				ResetSignalMask_t {},
-				boost::process::error ( tError ),
-				tEnvironment
+				boost::process::error ( tError )
 			);
+			const int iStartError = errno;
 
 			if ( tError || !m_tChild.valid() )
 			{
 				if ( tError )
 					sError.SetSprintf ( "failed to start bulk_import process '%s': %s", sIndexer.cstr(), tError.message().c_str() );
+				else if ( iStartError )
+					sError.SetSprintf ( "failed to start bulk_import process '%s': %s", sIndexer.cstr(), strerrorm ( iStartError ) );
 				else
 					sError.SetSprintf ( "failed to start bulk_import process '%s'", sIndexer.cstr() );
 				Abort();
@@ -411,8 +486,7 @@ public:
 			#if !_WIN32
 			ResetSignalMask_t {},
 			#endif
-			boost::process::error ( tError ),
-			tEnvironment
+			boost::process::error ( tError )
 		);
 
 		if ( tError || !m_tChild.valid() )
@@ -428,6 +502,7 @@ public:
 		return true;
 	}
 
+public:
 	bool WriteCsvBatch ( const CSphString & sCsv )
 	{
 		#if !_WIN32
@@ -438,17 +513,30 @@ public:
 		#endif
 	}
 
-	IndexerRtBulkWait_e CloseInputAndWait ( CSphString & sError )
+	// Kill the child at once, without waiting and without touching the input a writer may be blocked in: the writer
+	// fails as soon as the child's end of the input is closed. Abort() or the destructor reaps the child.
+	void Kill() const noexcept
 	{
-		if ( CheckIndexerRtBulkCancelled ( sError ) )
-		{
-			Abort();
-			return IndexerRtBulkWait_e::CANCELLED;
-		}
+		if ( !m_tChild.valid() )
+			return;
+		#if _WIN32
+		::TerminateProcess ( m_tChild.native_handle(), 1 );
+		#else
+		::kill ( m_tChild.id(), SIGKILL );
+		#endif
+	}
 
+	// Flush and close the CSV input; the child sees EOF.
+	bool EndInput ( CSphString & sError )
+	{
 		CSphString sInputError;
-		bool bInputOk = CloseInput ( sInputError );
+		const bool bInputOk = CloseInput ( sInputError );
+		AppendIndexerRtBulkError ( sError, sInputError );
+		return bInputOk;
+	}
 
+	IndexerRtBulkWait_e WaitChild ( CSphString & sError )
+	{
 		CSphString sChildError;
 		if ( !m_tChild.valid() )
 			sChildError = "bulk_import process is unavailable";
@@ -459,7 +547,6 @@ public:
 				if ( CheckIndexerRtBulkCancelled ( sChildError ) )
 				{
 					Abort();
-					AppendIndexerRtBulkError ( sError, sInputError );
 					AppendIndexerRtBulkError ( sError, sChildError );
 					return IndexerRtBulkWait_e::CANCELLED;
 				}
@@ -489,9 +576,8 @@ public:
 		if ( !sChildError.IsEmpty() )
 			Abort();
 
-		AppendIndexerRtBulkError ( sError, sInputError );
 		AppendIndexerRtBulkError ( sError, sChildError );
-		return bInputOk && sChildError.IsEmpty() ? IndexerRtBulkWait_e::OK : IndexerRtBulkWait_e::FAILED;
+		return sChildError.IsEmpty() ? IndexerRtBulkWait_e::OK : IndexerRtBulkWait_e::FAILED;
 	}
 
 	void Abort() noexcept
@@ -502,10 +588,7 @@ public:
 		{
 			std::error_code tRunningError;
 			if ( m_tChild.running ( tRunningError ) )
-			{
-				std::error_code tTerminateError;
-				m_tChild.terminate ( tTerminateError );
-			}
+				Kill(); // not child::terminate(): on Windows it closes the process handle, and the wait below would not wait
 
 			std::error_code tFinalWaitError;
 			m_tChild.wait ( tFinalWaitError );
@@ -607,6 +690,8 @@ private:
 		{}
 	}
 
+	CSphString m_sDir;
+	CSphVector<int> m_dCsvAttrOrder;
 	boost::process::opstream m_tInput;
 	boost::process::child m_tChild;
 	CSphString m_sExecutable;
@@ -617,53 +702,25 @@ private:
 };
 
 
-static CSphString GetIndexerRtBulkOutput ( const IndexerRtBulkState_t & tState )
+static IndexerRtBulkWait_e WaitIndexerRtBulk ( RtBulkIndexer_c & tIndexer, CSphString & sError )
 {
-	CSphString sPath = GetIndexerRtBulkFile ( tState, "indexer.log" );
-	FILE * fp = fopen ( sPath.cstr(), "rb" );
-	if ( !fp )
-		return {};
+	auto eResult = IndexerRtBulkWait_e::CANCELLED;
+	if ( CheckIndexerRtBulkCancelled ( sError ) )
+		tIndexer.Abort();
+	else
+	{
+		const bool bInputOk = tIndexer.EndInput ( sError );
+		eResult = tIndexer.WaitChild ( sError );
+		if ( eResult==IndexerRtBulkWait_e::OK && !bInputOk )
+			eResult = IndexerRtBulkWait_e::FAILED;
+		if ( eResult==IndexerRtBulkWait_e::OK )
+			return eResult;
+	}
 
-	char sBuffer[4097];
-	size_t iLength = fread ( sBuffer, 1, sizeof(sBuffer)-1, fp );
-	fclose ( fp );
-	while ( iLength && sphIsSpace ( sBuffer[iLength-1] ) )
-		--iLength;
-	sBuffer[iLength] = '\0';
-	return CSphString ( sBuffer );
-}
-
-
-static IndexerRtBulkWait_e WaitIndexerRtBulk ( IndexerRtBulkState_t & tState, CSphString & sError )
-{
-	if ( !tState.m_pImpl )
-		return IndexerRtBulkWait_e::OK;
-
-	auto eResult = tState.m_pImpl->CloseInputAndWait ( sError );
-	if ( eResult==IndexerRtBulkWait_e::OK )
-		return eResult;
-
-	CSphString sOutput = GetIndexerRtBulkOutput ( tState );
+	CSphString sOutput = tIndexer.GetOutput();
 	if ( !sOutput.IsEmpty() )
 		AppendIndexerRtBulkError ( sError, sOutput );
 	return eResult;
-}
-
-
-static bool StartIndexerRtBulk ( IndexerRtBulkState_t & tState, CSphString & sError )
-{
-	CSphString sIndexer;
-	if ( !GetIndexerPath ( sIndexer, sError ) )
-		return false;
-
-	CSphString sConfig = GetIndexerRtBulkFile ( tState, "indexer.conf" );
-	CSphString sOutput = GetIndexerRtBulkFile ( tState, "indexer.log" );
-	tState.m_pImpl = std::make_unique<IndexerRtBulkState_t::Impl_c>();
-	if ( tState.m_pImpl->Start ( sIndexer, sConfig, sOutput, sError ) )
-		return true;
-
-	tState.m_pImpl.reset();
-	return false;
 }
 
 
@@ -695,7 +752,21 @@ static void AppendCsvQuoted ( StringBuilder_c & sOut, const char * szValue )
 }
 
 
-static void AppendInsertValueToCsv ( StringBuilder_c & sOut, const SqlInsert_t & tValue, ESphAttr eType, bool bDocid )
+// The id as an ordinary insert takes it, never the raw value (the indexer would read a string loosely or drop its
+// row): a missing id or one that converts to 0 gets an auto-id, as there. ValidateIndexerRtBulkInputValues has
+// refused a failed conversion.
+static void AppendIdToCsv ( StringBuilder_c & sOut, const SqlInsert_t * pValue )
+{
+	uint64_t uId = 0;
+	CSphString sError;
+	if ( pValue )
+		ConvertInsertDocId ( *pValue, 0, 0, uId, sError );
+
+	sOut << '"' << ( uId ? uId : (uint64_t)UidShort() ) << '"';
+}
+
+
+static void AppendInsertValueToCsv ( StringBuilder_c & sOut, const SqlInsert_t & tValue, ESphAttr eType )
 {
 	sOut << '"';
 	switch ( tValue.m_iType )
@@ -709,10 +780,7 @@ static void AppendInsertValueToCsv ( StringBuilder_c & sOut, const SqlInsert_t &
 		break;
 
 	case SqlInsert_t::CONST_INT:
-		if ( bDocid )
-			sOut << tValue.GetValueUint();
-		else
-			sOut << tValue.GetValueInt();
+		sOut << tValue.GetValueInt();
 		break;
 
 	case SqlInsert_t::CONST_MVA:
@@ -792,29 +860,7 @@ static constexpr ESphAttr g_dSVpipeAttrOrder[] =
 
 void AbortIndexerRtBulkBatch ( ClientSession_c & tSession )
 {
-	auto & tState = tSession.m_tIndexerRtBulk;
-	auto pImpl = std::move ( tState.m_pImpl );
-	if ( pImpl )
-		pImpl->Abort();
-
-	if ( !tState.m_sDir.IsEmpty() )
-	{
-		fs::path tDir ( tState.m_sDir.cstr() );
-		boost::system::error_code tError;
-		fs::remove_all ( tDir, tError );
-		if ( tError )
-			sphWarning ( "bulk_import cleanup failed for '%s': %s", tState.m_sDir.cstr(), tError.message().c_str() );
-		else
-		{
-			tError.clear();
-			fs::remove ( tDir.parent_path(), tError );
-			if ( tError && tError!=boost::system::errc::directory_not_empty )
-				sphWarning ( "bulk_import cleanup failed for '%s': %s", tDir.parent_path().string().c_str(), tError.message().c_str() );
-		}
-	}
-
-	tState.m_sDir = "";
-	tState.m_dCsvAttrOrder.Reset();
+	tSession.m_tIndexerRtBulk.m_pIndexer.reset();
 }
 
 
@@ -957,6 +1003,36 @@ static bool RecheckTarget ( ClientSession_c & tSession, CSphString & sError, con
 }
 
 
+// Take the write reservation of the target and make sure the table did not change meanwhile.
+static bool ReserveIndexerRtBulkTarget ( const CSphString & sTable, ServedIndexWriteReservation_c & tReservation, IndexerRtBulkTarget_t & tCurrent, CSphString & sError )
+{
+	IndexerRtBulkTarget_t tTarget;
+	if ( !CheckIndexerRtBulkTarget ( sTable, tTarget, sError ) )
+		return false;
+
+	if ( !CheckIndexerRtBulkExecutable ( sError ) )
+		return false;
+
+	ServedIndexWriteReservation_c tNew;
+	if ( !tNew.TryAcquire ( tTarget.m_pServed ) )
+	{
+		sError.SetSprintf ( "table '%s' is locked", sTable.cstr() );
+		return false;
+	}
+
+	if ( !CheckIndexerRtBulkTarget ( sTable, tCurrent, sError ) )
+		return false;
+	if ( !tNew.Matches ( tCurrent.m_pServed ) || tCurrent.m_iIndexId!=tTarget.m_iIndexId || tCurrent.m_iAlterGeneration!=tTarget.m_iAlterGeneration )
+	{
+		sError.SetSprintf ( "table '%s' changed while enabling bulk_import", sTable.cstr() );
+		return false;
+	}
+
+	tReservation = std::move ( tNew );
+	return true;
+}
+
+
 bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTable, CSphString & sError )
 {
 	auto & tState = tSession.m_tIndexerRtBulk;
@@ -983,28 +1059,10 @@ bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTab
 		return false;
 	}
 
-	IndexerRtBulkTarget_t tTarget;
-	if ( !CheckIndexerRtBulkTarget ( sTable, tTarget, sError ) )
-		return false;
-
-	if ( !CheckIndexerRtBulkExecutable ( sError ) )
-		return false;
-
-	ServedIndexWriteReservation_c tReservation;
-	if ( !tReservation.TryAcquire ( tTarget.m_pServed ) )
-	{
-		sError.SetSprintf ( "table '%s' is locked", sTable.cstr() );
-		return false;
-	}
-
 	IndexerRtBulkTarget_t tCurrent;
-	if ( !CheckIndexerRtBulkTarget ( sTable, tCurrent, sError ) )
+	ServedIndexWriteReservation_c tReservation;
+	if ( !ReserveIndexerRtBulkTarget ( sTable, tReservation, tCurrent, sError ) )
 		return false;
-	if ( !tReservation.Matches ( tCurrent.m_pServed ) || tCurrent.m_iIndexId!=tTarget.m_iIndexId || tCurrent.m_iAlterGeneration!=tTarget.m_iAlterGeneration )
-	{
-		sError.SetSprintf ( "table '%s' changed while enabling bulk_import", sTable.cstr() );
-		return false;
-	}
 
 	tState.m_sTable = sTable;
 	tState.m_iIndexId = tCurrent.m_iIndexId;
@@ -1014,18 +1072,16 @@ bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTab
 }
 
 
-static bool InitIndexerRtBulk ( ClientSession_c & tSession, const RtIndex_i & tRt, CSphString & sError )
-{
-	auto & tState = tSession.m_tIndexerRtBulk;
-	if ( tState.HasPendingData() )
-		return true;
+// Explicit indexer limits for the generated config; these are the indexer defaults.
+static const char * g_szIndexerRtBulkMemLimit = "128M";
+static const char * g_szIndexerRtBulkWriteBuffer = "1M";
 
+
+static bool WriteIndexerRtBulkConfig ( const RtIndex_i & tRt, const CSphString & sDir, CSphVector<int> & dCsvAttrOrder, CSphString & sError )
+{
 	const CSphSchema & tSchema = tRt.GetMatchSchema();
-	if ( !CheckSchemaSupported ( tSchema, sError ) )
-		return false;
 
 	// Use the same type-grouped order for csvpipe directives and streamed values.
-	CSphVector<int> dCsvAttrOrder;
 	for ( ESphAttr eType : g_dSVpipeAttrOrder )
 		for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
 		{
@@ -1037,27 +1093,18 @@ static bool InitIndexerRtBulk ( ClientSession_c & tSession, const RtIndex_i & tR
 			dCsvAttrOrder.Add(i);
 		}
 
-	CSphString sRoot = GetIndexerRtBulkRoot ( tRt );
-	if ( !PrepareStagingRoot ( sRoot, sError ) )
-		return false;
-
-	CSphString sDir;
-	if ( !CreateStagingDir ( sRoot, sDir, sError ) )
-		return false;
-	tState.m_sDir = sDir;
-
-	CSphString sConfig = GetIndexerRtBulkFile ( tState, "indexer.conf" );
-	CSphString sIndex = GetIndexerRtBulkFile ( tState, "chunk" );
+	CSphString sConfig = SphSprintf ( "%s/indexer.conf", sDir.cstr() );
+	CSphString sIndex = SphSprintf ( "%s/chunk", sDir.cstr() );
 	FILE * fpConfig = fopen ( sConfig.cstr(), "wb" );
 	if ( !fpConfig )
 	{
-		sError.SetSprintf ( "failed to create bulk staging config in '%s': %s", tState.m_sDir.cstr(), strerrorm ( errno ) );
-		AbortIndexerRtBulkBatch ( tSession );
+		sError.SetSprintf ( "failed to create bulk staging config in '%s': %s", sDir.cstr(), strerrorm ( errno ) );
 		return false;
 	}
 
 	CSphString sConfigLemmatizerBase = EscapeIndexerRtBulkConfigPath ( g_sLemmatizerBase );
 	fprintf ( fpConfig, "common {\n  lemmatizer_base = %s\n}\n\n", sConfigLemmatizerBase.cstr() );
+	fprintf ( fpConfig, "indexer {\n  mem_limit = %s\n  write_buffer = %s\n}\n\n", g_szIndexerRtBulkMemLimit, g_szIndexerRtBulkWriteBuffer );
 	const char * szPipeField = "csvpipe_field";
 	const char * szPipeFieldString = "csvpipe_field_string";
 	const char * szPipeAttrOrder = "csvpipe_attr_order";
@@ -1096,16 +1143,26 @@ static bool InitIndexerRtBulk ( ClientSession_c & tSession, const RtIndex_i & tR
 		fprintf ( fpConfig, "\n	knn = %s", FormatKNNConfigStr ( tRt.GetSettings().m_dKNN ).cstr() );
 	fprintf ( fpConfig, "\n}\n" );
 	fclose ( fpConfig );
-
-	if ( !StartIndexerRtBulk ( tState, sError ) )
-	{
-		AbortIndexerRtBulkBatch ( tSession );
-		return false;
-	}
-	tState.m_dCsvAttrOrder = std::move ( dCsvAttrOrder );
 	return true;
 }
 
+
+static bool InitIndexerRtBulk ( ClientSession_c & tSession, const RtIndex_i & tRt, CSphString & sError )
+{
+	auto & tState = tSession.m_tIndexerRtBulk;
+	if ( tState.HasPendingData() )
+		return true;
+
+	auto pIndexer = std::make_unique<RtBulkIndexer_c>();
+	if ( !pIndexer->Start ( tRt, sError ) )
+		return false;
+
+	tState.m_pIndexer = std::move ( pIndexer );
+	return true;
+}
+
+
+static bool ValidateIndexerRtBulkInputValues ( const CSphSchema & tSchema, const SqlStmt_t & tStmt, const IndexerRtBulkInputMap_t & tMap, CSphString & sError );
 
 static bool PrepareIndexerRtBulkInputMap ( const CSphSchema & tSchema, const SqlStmt_t & tStmt, IndexerRtBulkInputMap_t & tMap, EMYSQL_ERR & eError, CSphString & sError )
 {
@@ -1170,21 +1227,22 @@ static bool PrepareIndexerRtBulkInputMap ( const CSphSchema & tSchema, const Sql
 		return false;
 	}
 
-	tMap.m_iId = iDocidAttr>=0 ? tMap.m_dAttrs[iDocidAttr] : -1;
+	tMap.m_iId = iDocidAttr>=0 ? tMap.m_dAttrs[iDocidAttr] : -1; // without an id column every row gets an auto-id
+	return ValidateIndexerRtBulkInputValues ( tSchema, tStmt, tMap, sError );
+}
+
+
+// Per-row checks of a statement whose columns already match tMap.
+static bool ValidateIndexerRtBulkInputValues ( const CSphSchema & tSchema, const SqlStmt_t & tStmt, const IndexerRtBulkInputMap_t & tMap, CSphString & sError )
+{
+	const int iColumns = tStmt.m_iSchemaSz;
 	const int iIdColumn = tMap.m_iId;
-	if ( iIdColumn<0 )
+	for ( int iRow=0; iIdColumn>=0 && iRow<tStmt.m_iRowsAffected; ++iRow )
 	{
-		sError = "bulk_import requires an explicit id";
-		return false;
-	}
-	for ( int iRow=0; iRow<tStmt.m_iRowsAffected; ++iRow )
-	{
-		const SqlInsert_t & tId = tStmt.m_dInsertValues[iRow*iColumns+iIdColumn];
-		if ( tId.m_iType==SqlInsert_t::CONST_INT && ( tId.IsNegativeInt() || !tId.GetValueUint() ) )
-		{
-			sError.SetSprintf ( "row %d: bulk_import requires an explicit non-zero id", iRow+1 );
+		// the id is converted as by an ordinary insert, with its errors; its 0 gets an auto-id, as there
+		uint64_t uId = 0;
+		if ( !ConvertInsertDocId ( tStmt.m_dInsertValues[iRow*iColumns+iIdColumn], iRow, iIdColumn, uId, sError ) )
 			return false;
-		}
 	}
 
 	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
@@ -1213,6 +1271,29 @@ static void BuildIndexerRtBulkColumns ( const CSphSchema & tSchema, const Indexe
 		dColumns.Add ( { iColumn, SPH_ATTR_STRING, false } );
 	for ( int iAttr : dCsvAttrOrder )
 		dColumns.Add ( { tMap.m_dAttrs[iAttr], tSchema.GetAttr ( iAttr ).m_eAttrType, false } );
+}
+
+
+static void AppendIndexerRtBulkCsv ( StringBuilder_c & sBatch, const CSphVector<IndexerRtBulkColumn_t> & dColumns, const SqlStmt_t & tStmt )
+{
+	const int iColumns = tStmt.m_iSchemaSz;
+	for ( int iRow=0; iRow<tStmt.m_iRowsAffected; ++iRow )
+	{
+		bool bFirst = true;
+		for ( const auto & tColumn : dColumns )
+		{
+			if ( !bFirst )
+				sBatch << ',';
+			bFirst = false;
+			if ( tColumn.m_bDocid )
+				AppendIdToCsv ( sBatch, tColumn.m_iColumn<0 ? nullptr : &tStmt.m_dInsertValues[iRow*iColumns+tColumn.m_iColumn] );
+			else if ( tColumn.m_iColumn<0 )
+				AppendCsvQuoted ( sBatch, "" );
+			else
+				AppendInsertValueToCsv ( sBatch, tStmt.m_dInsertValues[iRow*iColumns+tColumn.m_iColumn], tColumn.m_eType );
+		}
+		sBatch << '\n';
+	}
 }
 
 
@@ -1252,32 +1333,16 @@ bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, E
 	dColumns.Reserve ( 1 + tSchema.GetFieldsCount() + tSchema.GetAttrsCount() );
 	if ( !InitIndexerRtBulk ( tSession, *pRt.Ptr(), sError ) )
 		return false;
-	BuildIndexerRtBulkColumns ( tSchema, tMap, tState.m_dCsvAttrOrder, dColumns );
+	BuildIndexerRtBulkColumns ( tSchema, tMap, tState.m_pIndexer->GetCsvAttrOrder(), dColumns );
 
-	const int iColumns = tStmt.m_iSchemaSz;
-
-	assert ( tState.m_pImpl );
+	assert ( tState.m_pIndexer );
 	StringBuilder_c sBatch;
-	for ( int iRow=0; iRow<tStmt.m_iRowsAffected; ++iRow )
-	{
-		bool bFirst = true;
-		for ( const auto & tColumn : dColumns )
-		{
-			if ( !bFirst )
-				sBatch << ',';
-			bFirst = false;
-			if ( tColumn.m_iColumn<0 )
-				AppendCsvQuoted ( sBatch, "" );
-			else
-				AppendInsertValueToCsv ( sBatch, tStmt.m_dInsertValues[iRow*iColumns+tColumn.m_iColumn], tColumn.m_eType, tColumn.m_bDocid );
-		}
-		sBatch << '\n';
-	}
+	AppendIndexerRtBulkCsv ( sBatch, dColumns, tStmt );
 
 	CSphString sCsv;
 	sBatch.MoveTo ( sCsv );
 	errno = 0;
-	if ( !tState.m_pImpl->WriteCsvBatch ( sCsv ) )
+	if ( !tState.m_pIndexer->WriteCsvBatch ( sCsv ) )
 	{
 		if ( errno )
 			sError.SetSprintf ( "failed streaming bulk CSV to indexer: %s", strerrorm ( errno ) );
@@ -1296,7 +1361,7 @@ bool FinalizeIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError )
 	if ( !tState.HasPendingData() )
 		return true;
 
-	auto eWaitResult = WaitIndexerRtBulk ( tState, sError );
+	auto eWaitResult = WaitIndexerRtBulk ( *tState.m_pIndexer, sError );
 	if ( eWaitResult!=IndexerRtBulkWait_e::OK )
 	{
 		if ( eWaitResult==IndexerRtBulkWait_e::CANCELLED )
@@ -1318,10 +1383,717 @@ bool FinalizeIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError )
 	}
 
 	bool bTargetStale = false;
-	auto eResult = AttachIndexerRtBulkChunk ( tState.m_sTable, tState.m_tReservation, tState.m_iIndexId, tState.m_iAlterGeneration, GetIndexerRtBulkFile ( tState, "chunk" ), bTargetStale, sError );
+	auto eResult = AttachIndexerRtBulkChunk ( tState.m_sTable, tState.m_tReservation, tState.m_iIndexId, tState.m_iAlterGeneration, tState.m_pIndexer->GetFile ( "chunk" ), bTargetStale, sError );
 	if ( bTargetStale )
 		CleanupIndexerRtBulk ( tSession );
 	else
 		AbortIndexerRtBulkBatch ( tSession );
 	return eResult==DiskAttachRes_e::OK;
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+// Shared bulk_import
+
+constexpr int SHARED_BULK_BATCH_BYTES = 32*1024;
+constexpr int SHARED_BULK_WAIT_MS = 1000; // only to notice KILL; failures and slot returns notify
+static const long g_iSharedBulkChunks = env_long ( "INDEXER_RT_BULK_SHARED_POOL_SIZE" ).value_or ( 1 ); // N of a bare shared
+
+static const bool LOG_LEVEL_BULK_IMPORT = env_exists ( "MANTICORE_LOG_BULK_IMPORT" ); // shared bulk_import pool and slot events, ruled by this env variable
+#define BulkImportInfo( ... ) do if ( LOG_LEVEL_BULK_IMPORT ) sphInfo_impl (__VA_ARGS__); while(0)
+
+// Times of the BULK_IMPORT_SHARED lines; nothing is measured while they are off.
+static int64_t BulkImportTimer()
+{
+	return LOG_LEVEL_BULK_IMPORT ? sphMicroTimer() : 0;
+}
+
+struct SharedBulkSlot_t
+{
+	std::unique_ptr<RtBulkIndexer_c> m_pIndexer;
+	int64_t m_iRows = 0;
+	// batches, bytes and times are counted only for the BULK_IMPORT_SHARED lines
+	int64_t m_iBatches = 0;
+	int64_t m_iBytes = 0;
+	int64_t m_iWaitUs = 0;
+	int64_t m_iWriteUs = 0;
+	int64_t m_iMaxWaitUs = 0;
+	int64_t m_iMaxWriteUs = 0;
+	bool m_bOk = false;
+};
+
+
+// One load into one table: N indexer children (slots) fed by every request admitted to the pool.
+class SharedBulkPool_c : public ISphRefcountedMT
+{
+public:
+	const CSphString m_sTable;
+	const int m_iChunks;
+
+	// written by Start() before the slots are published under the lock; read-only afterwards
+	ServedIndexWriteReservation_c m_tReservation; // released by FailLocked() of a running load or after publishing
+	int64_t m_iIndexId = -1;
+	int m_iAlterGeneration = -1;
+	CSphSchema m_tSchema;
+	CSphVector<int> m_dCsvAttrOrder;
+
+	SharedBulkPool_c ( const CSphString & sTable, int iChunks )
+		: m_sTable ( sTable )
+		, m_iChunks ( iChunks )
+	{}
+
+	SharedBulkResult_e Enter ( CSphString & sError );
+	void Leave();
+	SharedBulkResult_e Start ( CSphString & sError );
+	SharedBulkResult_e WaitStarted ( CSphString & sError );
+	SharedBulkResult_e Write ( const CSphString & sCsv, int64_t iRows, CSphString & sError );
+	CSphString Fail ( const CSphString & sError );
+	bool FailOpen ( const CSphString & sError );
+	SharedBulkResult_e Publish ( bool bAdmitted, CSphString & sError );
+
+private:
+	CSphFixedVector<SharedBulkSlot_t> m_dSlots { 0 }; // destroyed first: children die, then the reservation goes
+	Threads::Coro::Mutex_c m_tLock;
+	Threads::Coro::ConditionVariable_c m_tChanged;
+	CSphVector<int> m_dFree;	// slots without a writer; empty until the children run
+	int m_iActive = 1;			// admitted requests; the creating request enters before the pool is visible
+	bool m_bStarted = false;	// m_dSlots are complete
+	bool m_bClosing = false;	// a commit owns the slots
+	CSphString m_sError;		// first error; a failed pool stays until commit or PURGE
+
+	void FailLocked ( const CSphString & sError );
+	bool PublishSlots ( CSphString & sError );
+};
+
+using SharedBulkPoolRefPtr_c = RefCountedRefPtr_T<SharedBulkPool_c>;
+static ReadOnlyHash_T<SharedBulkPool_c> g_hSharedBulk;
+
+
+static SharedBulkPoolRefPtr_c GetSharedBulkPool ( const CSphString & sTable )
+{
+	return ConstCastPtr ( g_hSharedBulk.Get ( sTable ) ); // pools are created mutable; the hash hands out const pointers
+}
+
+
+// Add pNew as the pool of sTable where there is none (pOld is nullptr), or remove the pool pOld (pNew is nullptr);
+// false when the current pool of the table is not pOld.
+static bool ReplaceSharedBulkPool ( const CSphString & sTable, const SharedBulkPool_c * pOld, const SharedBulkPoolRefPtr_c & pNew )
+{
+	WriteableHash_T<SharedBulkPool_c> tChanger { g_hSharedBulk };
+	do
+	{
+		tChanger.CopyOwnerHash();
+		auto * pEntry = ( *tChanger.m_pNewHash ) ( sTable );
+		if ( ( pEntry ? pEntry->Ptr() : nullptr )!=pOld )
+		{
+			tChanger.ResetChanges();
+			return false;
+		}
+		if ( pNew )
+			tChanger.Add ( pNew, sTable );
+		else
+			tChanger.m_pNewHash->Delete ( sTable );
+	} while ( !tChanger.TryCommit() );
+	return true;
+}
+
+
+SharedBulkResult_e SharedBulkPool_c::Enter ( CSphString & sError )
+{
+	Threads::Coro::ScopedMutex_t tLock { m_tLock };
+	if ( !m_sError.IsEmpty() )
+	{
+		sError = m_sError;
+		return SharedBulkResult_e::FAILED_ALREADY;
+	}
+	if ( m_bClosing )
+	{
+		sError.SetSprintf ( "shared bulk_import into table '%s' is being published", m_sTable.cstr() );
+		return SharedBulkResult_e::CLOSING;
+	}
+	++m_iActive;
+	return SharedBulkResult_e::STAGED;
+}
+
+
+void SharedBulkPool_c::Leave()
+{
+	Threads::Coro::ScopedMutex_t tLock { m_tLock };
+	--m_iActive;
+}
+
+
+// Reserve the table and start the children; the creating request runs it once, outside the lock.
+SharedBulkResult_e SharedBulkPool_c::Start ( CSphString & sError )
+{
+	IndexerRtBulkTarget_t tTarget;
+	if ( !ReserveIndexerRtBulkTarget ( m_sTable, m_tReservation, tTarget, sError ) )
+		return SharedBulkResult_e::PRECONDITION;
+
+	m_iIndexId = tTarget.m_iIndexId;
+	m_iAlterGeneration = tTarget.m_iAlterGeneration;
+	RIdx_T<RtIndex_i *> pRt { tTarget.m_pServed };
+	m_tSchema = pRt->GetMatchSchema();
+	BulkImportInfo ( "BULK_IMPORT_SHARED created table=%s pool_size=%d", m_sTable.cstr(), m_iChunks );
+
+	CSphFixedVector<SharedBulkSlot_t> dSlots ( m_iChunks );
+	ARRAY_FOREACH ( i, dSlots )
+	{
+		auto & pIndexer = dSlots[i].m_pIndexer;
+		pIndexer = std::make_unique<RtBulkIndexer_c>();
+		if ( !pIndexer->Start ( *pRt.Ptr(), sError ) )
+			return SharedBulkResult_e::FAILED;
+		BulkImportInfo ( "BULK_IMPORT_SHARED slot_started table=%s slot=%d pid=%d", m_sTable.cstr(), i, pIndexer->GetPid() );
+	}
+	for ( int iAttr : dSlots[0].m_pIndexer->GetCsvAttrOrder() )
+		m_dCsvAttrOrder.Add ( iAttr );
+
+	Threads::Coro::ScopedMutex_t tLock { m_tLock };
+	if ( !m_sError.IsEmpty() ) // PURGE, DROP, shutdown or a joiner's invalid document came first
+	{
+		sError = m_sError;
+		return SharedBulkResult_e::FAILED_ALREADY;
+	}
+	m_dSlots = std::move ( dSlots );
+	for ( int i=0; i<m_iChunks; ++i )
+		m_dFree.Add ( i );
+	m_bStarted = true;
+	m_tChanged.NotifyAll();
+	return SharedBulkResult_e::STAGED;
+}
+
+
+// The schema, CSV order and slots are usable once the creating request published them.
+SharedBulkResult_e SharedBulkPool_c::WaitStarted ( CSphString & sError )
+{
+	Threads::Coro::ScopedMutex_t tLock { m_tLock };
+	while ( m_sError.IsEmpty() && !m_bStarted )
+	{
+		if ( m_tChanged.WaitForMs ( tLock, SHARED_BULK_WAIT_MS ) )
+			continue; // notified
+
+		if ( CheckIndexerRtBulkCancelled ( sError ) )
+			return SharedBulkResult_e::FAILED;
+	}
+
+	if ( !m_sError.IsEmpty() )
+	{
+		sError = m_sError;
+		return SharedBulkResult_e::FAILED_ALREADY;
+	}
+	return SharedBulkResult_e::STAGED;
+}
+
+
+// Lease a slot for one batch; the leaseholder alone touches the slot until it is returned.
+SharedBulkResult_e SharedBulkPool_c::Write ( const CSphString & sCsv, int64_t iRows, CSphString & sError )
+{
+	if ( CheckIndexerRtBulkCancelled ( sError ) )
+		return SharedBulkResult_e::FAILED;
+
+	const int64_t tmLease = BulkImportTimer();
+	int iSlot = -1;
+	{
+		Threads::Coro::ScopedMutex_t tLock { m_tLock };
+		while ( m_sError.IsEmpty() && m_dFree.IsEmpty() )
+		{
+			if ( m_tChanged.WaitForMs ( tLock, SHARED_BULK_WAIT_MS ) )
+				continue; // notified
+
+			if ( CheckIndexerRtBulkCancelled ( sError ) )
+				return SharedBulkResult_e::FAILED;
+		}
+
+		if ( !m_sError.IsEmpty() )
+		{
+			sError = m_sError;
+			return SharedBulkResult_e::FAILED_ALREADY;
+		}
+		iSlot = m_dFree[0]; // round robin keeps the chunks even when one writer at a time is active
+		m_dFree.Remove ( 0 );
+	}
+
+	auto & tSlot = m_dSlots[iSlot];
+	const int64_t tmWrite = BulkImportTimer();
+	errno = 0;
+	const bool bWritten = tSlot.m_pIndexer->WriteCsvBatch ( sCsv );
+	const int iWriteError = errno;
+	if ( LOG_LEVEL_BULK_IMPORT )
+	{
+		const int64_t tmDone = sphMicroTimer();
+		tSlot.m_iWaitUs += tmWrite-tmLease;
+		tSlot.m_iMaxWaitUs = Max ( tSlot.m_iMaxWaitUs, tmWrite-tmLease );
+		tSlot.m_iWriteUs += tmDone-tmWrite;
+		tSlot.m_iMaxWriteUs = Max ( tSlot.m_iMaxWriteUs, tmDone-tmWrite );
+		if ( bWritten )
+		{
+			++tSlot.m_iBatches;
+			tSlot.m_iBytes += sCsv.Length();
+		}
+	}
+	if ( bWritten )
+		tSlot.m_iRows += iRows;
+
+	{
+		Threads::Coro::ScopedMutex_t tLock { m_tLock };
+		m_dFree.Add ( iSlot );
+		m_tChanged.NotifyOne();
+	}
+	if ( bWritten )
+		return SharedBulkResult_e::STAGED;
+
+	if ( iWriteError )
+		sError.SetSprintf ( "failed streaming bulk CSV to indexer: %s", strerrorm ( iWriteError ) );
+	else
+		sError = "failed streaming bulk CSV to indexer";
+	AppendIndexerRtBulkError ( sError, tSlot.m_pIndexer->GetOutput() ); // a child that died explains why; its log goes with the pool
+	sError = Fail ( sError );
+	return SharedBulkResult_e::FAILED;
+}
+
+
+// Keep the first error and wake everybody. A running load never attaches after that, so its children are killed (a
+// writer stalled in a full input fails at once) and the table is released; staging goes with the last reference.
+void SharedBulkPool_c::FailLocked ( const CSphString & sError )
+{
+	if ( m_sError.IsEmpty() )
+	{
+		m_sError = sError.IsEmpty() ? CSphString ( "shared bulk_import failed" ) : sError;
+		if ( LOG_LEVEL_BULK_IMPORT )
+			sphWarning ( "shared bulk_import into table '%s' failed: %s", m_sTable.cstr(), m_sError.cstr() );
+		if ( m_bStarted && !m_bClosing ) // while publishing, the commit owns the children and the reservation
+		{
+			for ( auto & tSlot : m_dSlots )
+				tSlot.m_pIndexer->Kill();
+			m_tReservation.Reset();
+		}
+	}
+	m_tChanged.NotifyAll();
+}
+
+
+CSphString SharedBulkPool_c::Fail ( const CSphString & sError )
+{
+	Threads::Coro::ScopedMutex_t tLock { m_tLock };
+	FailLocked ( sError );
+	return m_sError;
+}
+
+
+// Fail the pool unless a commit is already publishing it; for PURGE and for requests outside the pool.
+bool SharedBulkPool_c::FailOpen ( const CSphString & sError )
+{
+	Threads::Coro::ScopedMutex_t tLock { m_tLock };
+	if ( m_bClosing )
+		return false;
+	FailLocked ( sError );
+	return true;
+}
+
+
+// EOF to every slot with data, wait for those children, then attach their chunks in turn. A slot without rows never
+// got a byte (a failed write fails the pool), so its child is killed instead of building from an empty input.
+bool SharedBulkPool_c::PublishSlots ( CSphString & sError )
+{
+	bool bOk = true;
+	ARRAY_FOREACH ( i, m_dSlots )
+	{
+		auto & tSlot = m_dSlots[i];
+		const int64_t tmClose = BulkImportTimer();
+		bool bClosed = true;
+		if ( tSlot.m_iRows )
+			bClosed = tSlot.m_pIndexer->EndInput ( sError );
+		else
+		{
+			tSlot.m_pIndexer->Abort();
+			tSlot.m_bOk = true;
+		}
+		BulkImportInfo ( "BULK_IMPORT_SHARED slot_eof table=%s slot=%d pid=%d rows=" INT64_FMT " bytes=" INT64_FMT " close_ms=%.3f ok=%d", m_sTable.cstr(), i, tSlot.m_pIndexer->GetPid(), tSlot.m_iRows, tSlot.m_iBytes, ( sphMicroTimer()-tmClose )/1000.0, (int)bClosed );
+		bOk &= bClosed;
+	}
+
+	ARRAY_FOREACH ( i, m_dSlots )
+	{
+		auto & tSlot = m_dSlots[i];
+		if ( !tSlot.m_iRows )
+			continue;
+		BulkImportInfo ( "BULK_IMPORT_SHARED slot_wait_begin table=%s slot=%d pid=%d", m_sTable.cstr(), i, tSlot.m_pIndexer->GetPid() );
+		const int64_t tmWait = BulkImportTimer();
+		CSphString sChildError;
+		tSlot.m_bOk = tSlot.m_pIndexer->WaitChild ( sChildError )==IndexerRtBulkWait_e::OK;
+		BulkImportInfo ( "BULK_IMPORT_SHARED slot_complete table=%s slot=%d pid=%d wait_ms=%.3f ok=%d", m_sTable.cstr(), i, tSlot.m_pIndexer->GetPid(), ( sphMicroTimer()-tmWait )/1000.0, (int)tSlot.m_bOk );
+		if ( !tSlot.m_bOk )
+		{
+			AppendIndexerRtBulkError ( sChildError, tSlot.m_pIndexer->GetOutput() );
+			AppendIndexerRtBulkError ( sError, sChildError );
+			bOk = false;
+		}
+	}
+
+	{
+		Threads::Coro::ScopedMutex_t tLock { m_tLock };
+		if ( !m_sError.IsEmpty() ) // PURGE, DROP or shutdown while publishing
+		{
+			AppendIndexerRtBulkError ( sError, m_sError );
+			bOk = false;
+		}
+	}
+	if ( !bOk )
+		return false;
+
+	ARRAY_FOREACH ( i, m_dSlots )
+	{
+		auto & tSlot = m_dSlots[i];
+		if ( !tSlot.m_iRows )
+			continue;
+		const int64_t tmAttach = BulkImportTimer();
+		bool bTargetStale = false; // not read: Publish() removes every slot after a failed attach
+		auto eAttach = AttachIndexerRtBulkChunk ( m_sTable, m_tReservation, m_iIndexId, m_iAlterGeneration, tSlot.m_pIndexer->GetFile ( "chunk" ), bTargetStale, sError );
+		tSlot.m_bOk = eAttach==DiskAttachRes_e::OK;
+		BulkImportInfo ( "BULK_IMPORT_SHARED slot_attached table=%s slot=%d attach_ms=%.3f ok=%d", m_sTable.cstr(), i, ( sphMicroTimer()-tmAttach )/1000.0, (int)tSlot.m_bOk );
+		if ( !tSlot.m_bOk )
+			return false;
+	}
+
+	return true;
+}
+
+
+SharedBulkResult_e SharedBulkPool_c::Publish ( bool bAdmitted, CSphString & sError )
+{
+	bool bPublish;
+	{
+		Threads::Coro::ScopedMutex_t tLock { m_tLock };
+		if ( m_bClosing )
+		{
+			sError.SetSprintf ( "shared bulk_import into table '%s' is being published", m_sTable.cstr() );
+			return SharedBulkResult_e::CLOSING;
+		}
+		bPublish = m_sError.IsEmpty();
+		if ( bPublish && m_iActive>( bAdmitted ? 1 : 0 ) )
+		{
+			sError.SetSprintf ( "shared bulk_import into table '%s' has other active requests", m_sTable.cstr() );
+			return SharedBulkResult_e::BUSY;
+		}
+		if ( bPublish )
+			m_bClosing = true;
+		else
+			sError = m_sError;
+	}
+
+	// a failed load only leaves the hash; its last request destroys the children and staging
+	if ( !bPublish )
+	{
+		ReplaceSharedBulkPool ( m_sTable, this, nullptr );
+		return SharedBulkResult_e::FAILED;
+	}
+
+	const int64_t tmStart = BulkImportTimer();
+	const bool bOk = PublishSlots ( sError );
+	if ( LOG_LEVEL_BULK_IMPORT )
+	{
+		int64_t iRows = 0;
+		ARRAY_FOREACH ( i, m_dSlots )
+		{
+			const auto & tSlot = m_dSlots[i];
+			iRows += tSlot.m_iRows;
+			BulkImportInfo ( "BULK_IMPORT_SHARED slot_finished table=%s slot=%d rows=" INT64_FMT " batches=" INT64_FMT " bytes=" INT64_FMT " wait_ms=%.3f write_ms=%.3f max_wait_ms=%.3f max_write_ms=%.3f ok=%d",
+				m_sTable.cstr(), i, tSlot.m_iRows, tSlot.m_iBatches, tSlot.m_iBytes, tSlot.m_iWaitUs/1000.0, tSlot.m_iWriteUs/1000.0, tSlot.m_iMaxWaitUs/1000.0, tSlot.m_iMaxWriteUs/1000.0, (int)tSlot.m_bOk );
+		}
+		BulkImportInfo ( "BULK_IMPORT_SHARED finished table=%s rows=" INT64_FMT " ok=%d finalize_ms=%.3f pool_size=%d", m_sTable.cstr(), iRows, (int)bOk, ( sphMicroTimer()-tmStart )/1000.0, m_iChunks );
+	}
+
+	// children, staging directories and the table reservation go before the pool leaves the hash and before the
+	// reply; newcomers meanwhile get CLOSING rather than a failing reservation
+	CSphFixedVector<SharedBulkSlot_t> dSlots { 0 };
+	{
+		Threads::Coro::ScopedMutex_t tLock { m_tLock };
+		m_bStarted = false;
+		m_dFree.Reset();
+		dSlots = std::move ( m_dSlots );
+	}
+	dSlots.Reset ( 0 );
+	m_tReservation.Reset();
+	ReplaceSharedBulkPool ( m_sTable, this, nullptr );
+	return bOk ? SharedBulkResult_e::PUBLISHED : SharedBulkResult_e::FAILED;
+}
+
+
+// Pool size of a new load: shared=N, else env INDEXER_RT_BULK_SHARED_POOL_SIZE, else 1; a request that joins
+// an open pool ignores its N. Writers may block in a full socket, so at most searchd.threads-2 of them can hold
+// daemon threads: N is read as strtol() reads it, and a value out of 1..threads-2 is clamped into that range.
+static int ParseSharedBulkChunks ( const CSphString & sTable, const CSphString & sShared )
+{
+	const long iLimit = Max ( 1, Threads::NThreads()-2 );
+	const long iValue = sShared.IsEmpty() ? g_iSharedBulkChunks : strtol ( sShared.cstr(), nullptr, 10 );
+	const int iChunks = (int)Min ( Max ( iValue, 1L ), iLimit );
+	if ( iChunks!=iValue )
+		BulkImportInfo ( "BULK_IMPORT_SHARED pool_size_clamped table=%s requested=%ld pool_size=%d", sTable.cstr(), iValue, iChunks );
+	return iChunks;
+}
+
+
+struct SharedBulkRequest_c::Impl_t
+{
+	CSphString m_sTable;
+	CSphString m_sShared;			// N of shared=N; only a request that creates the pool reads it
+	bool m_bJoin = false;			// shared_join: never create a pool, so a load whose pool is gone fails
+	SharedBulkPoolRefPtr_c m_pPool;	// the pool this request is admitted to
+	StringBuilder_c m_sCsv;			// unwritten tail, less than a batch
+	int64_t m_iRows = 0;
+
+	// insert layout of the current pool
+	bool m_bLayout = false;
+	StrVec_t m_dInsertSchema;
+	int m_iSchemaSz = 0;
+	IndexerRtBulkInputMap_t m_tMap;
+	CSphVector<IndexerRtBulkColumn_t> m_dColumns;
+
+	void Leave()
+	{
+		if ( !m_pPool )
+			return;
+		m_sCsv.Rewind();
+		m_iRows = 0;
+		m_bLayout = false;
+		m_pPool->Leave();
+		m_pPool = nullptr;
+	}
+
+	// tStmt inserts the columns of the prepared layout with the same row width, so m_tMap and m_dColumns fit its rows
+	bool IsSameLayout ( const SqlStmt_t & tStmt ) const
+	{
+		if ( !m_bLayout )
+			return false;
+
+		if ( tStmt.m_iSchemaSz<=0 || tStmt.m_iSchemaSz!=m_iSchemaSz )
+			return false;
+
+		if ( tStmt.m_dInsertValues.GetLength() % tStmt.m_iSchemaSz )
+			return false;
+
+		if ( tStmt.m_dInsertSchema.GetLength()!=m_dInsertSchema.GetLength() )
+			return false;
+
+		ARRAY_FOREACH ( i, m_dInsertSchema )
+			if ( tStmt.m_dInsertSchema[i]!=m_dInsertSchema[i] )
+				return false;
+
+		return true;
+	}
+
+	// Join the open pool of the table or, unless shared_join, create it on the first data line.
+	SharedBulkResult_e Join ( CSphString & sError )
+	{
+		while ( true )
+		{
+			if ( CheckIndexerRtBulkCancelled ( sError ) )
+				return SharedBulkResult_e::FAILED;
+
+			auto pPool = GetSharedBulkPool ( m_sTable );
+			if ( pPool )
+			{
+				auto eResult = pPool->Enter ( sError );
+				if ( eResult==SharedBulkResult_e::STAGED )
+					m_pPool = std::move ( pPool );
+				return eResult;
+			}
+
+			if ( m_bJoin )
+			{
+				sError.SetSprintf ( "no shared bulk_import into table '%s' to join", m_sTable.cstr() );
+				return SharedBulkResult_e::NO_POOL;
+			}
+
+			pPool = new SharedBulkPool_c ( m_sTable, ParseSharedBulkChunks ( m_sTable, m_sShared ) ); // already counts this request as admitted
+			if ( !ReplaceSharedBulkPool ( m_sTable, nullptr, pPool ) )
+				continue;
+
+			m_pPool = std::move ( pPool );
+			auto eResult = m_pPool->Start ( sError );
+			if ( eResult==SharedBulkResult_e::STAGED )
+				return eResult;
+			sError = m_pPool->Fail ( sError ); // wakes the joiners waiting for the start
+			ReplaceSharedBulkPool ( m_sTable, m_pPool, nullptr );
+			Leave();
+			return eResult;
+		}
+	}
+
+	SharedBulkResult_e Flush ( CSphString & sError )
+	{
+		if ( !m_sCsv.GetLength() )
+			return SharedBulkResult_e::STAGED;
+		CSphString sCsv;
+		m_sCsv.MoveTo ( sCsv );
+		return m_pPool->Write ( sCsv, std::exchange ( m_iRows, 0 ), sError );
+	}
+};
+
+
+SharedBulkRequest_c::SharedBulkRequest_c ( const CSphString & sTable, const CSphString & sShared, bool bJoin )
+	: m_pImpl { std::make_unique<Impl_t>() }
+{
+	m_pImpl->m_sTable = sTable;
+	m_pImpl->m_sShared = sShared;
+	m_pImpl->m_bJoin = bJoin;
+}
+
+
+SharedBulkRequest_c::~SharedBulkRequest_c()
+{
+	m_pImpl->Leave(); // a broken body drops only its unwritten tail; the pool stays open
+}
+
+
+// Admit before reading the body if the table has an open pool, so a commit elsewhere sees this request;
+// a failed or closing pool answers the first data line or the commit.
+void SharedBulkRequest_c::Begin()
+{
+	auto pPool = GetSharedBulkPool ( m_pImpl->m_sTable );
+	CSphString sEnter;
+	if ( pPool && pPool->Enter ( sEnter )==SharedBulkResult_e::STAGED )
+		m_pImpl->m_pPool = std::move ( pPool );
+}
+
+
+SharedBulkResult_e SharedBulkRequest_c::StageLine ( Str_t tLine, CSphString & sError )
+{
+	GlobalCrashQueryGetRef().m_dQuery = { (const BYTE*) tLine.first, tLine.second };
+	SqlStmt_t tStmt;
+	tStmt.m_bJson = true;
+	tStmt.m_tQuery.m_eQueryType = QUERY_JSON;
+	CSphString sStmt, sQuery;
+	DocID_t tDocId = 0;
+	if ( sphParseJsonStatement ( tLine.first, tStmt, sStmt, sQuery, tDocId, sError, &m_pImpl->m_sTable ) )
+		return Stage ( tStmt, sError );
+
+	Fail ( sError );
+	return SharedBulkResult_e::FAILED_INPUT;
+}
+
+
+SharedBulkResult_e SharedBulkRequest_c::Stage ( const SqlStmt_t & tStmt, CSphString & sError )
+{
+	auto & tImpl = *m_pImpl;
+	if ( tStmt.m_eStmt!=STMT_INSERT || tStmt.m_sIndex!=tImpl.m_sTable )
+	{
+		sError.SetSprintf ( "shared bulk_import into table '%s' accepts only INSERT into that table", tImpl.m_sTable.cstr() );
+		Fail ( sError );
+		return SharedBulkResult_e::FAILED_INPUT;
+	}
+
+	if ( !tImpl.m_pPool )
+	{
+		auto eResult = tImpl.Join ( sError );
+		if ( eResult!=SharedBulkResult_e::STAGED )
+			return eResult;
+	}
+
+	const SharedBulkPool_c & tPool = *tImpl.m_pPool;
+	bool bValid;
+	if ( tImpl.IsSameLayout ( tStmt ) )
+		bValid = ValidateIndexerRtBulkInputValues ( tPool.m_tSchema, tStmt, tImpl.m_tMap, sError );
+	else
+	{
+		if ( !tImpl.m_bLayout )
+		{
+			auto eStarted = tImpl.m_pPool->WaitStarted ( sError );
+			if ( eStarted!=SharedBulkResult_e::STAGED )
+				return eStarted;
+		}
+		EMYSQL_ERR eError;
+		tImpl.m_bLayout = false;
+		bValid = PrepareIndexerRtBulkInputMap ( tPool.m_tSchema, tStmt, tImpl.m_tMap, eError, sError );
+		if ( bValid )
+		{
+			tImpl.m_dColumns.Resize ( 0 );
+			BuildIndexerRtBulkColumns ( tPool.m_tSchema, tImpl.m_tMap, tPool.m_dCsvAttrOrder, tImpl.m_dColumns );
+			tImpl.m_dInsertSchema = tStmt.m_dInsertSchema;
+			tImpl.m_iSchemaSz = tStmt.m_iSchemaSz;
+			tImpl.m_bLayout = true;
+		}
+	}
+	if ( !bValid )
+	{
+		Fail ( sError );
+		return SharedBulkResult_e::FAILED_INPUT;
+	}
+
+	AppendIndexerRtBulkCsv ( tImpl.m_sCsv, tImpl.m_dColumns, tStmt );
+	tImpl.m_iRows += tStmt.m_iRowsAffected;
+	return tImpl.m_sCsv.GetLength()<SHARED_BULK_BATCH_BYTES ? SharedBulkResult_e::STAGED : tImpl.Flush ( sError );
+}
+
+
+// A commit request carries no documents; Begin() may have admitted it to the open pool already.
+SharedBulkResult_e SharedBulkRequest_c::Commit ( CSphString & sError )
+{
+	auto & tImpl = *m_pImpl;
+	SharedBulkPoolRefPtr_c pPool = tImpl.m_pPool ? tImpl.m_pPool : GetSharedBulkPool ( tImpl.m_sTable );
+	if ( !pPool )
+	{
+		sError.SetSprintf ( "no shared bulk_import into table '%s' to commit", tImpl.m_sTable.cstr() );
+		return SharedBulkResult_e::NO_POOL;
+	}
+	return pPool->Publish ( !!tImpl.m_pPool, sError );
+}
+
+
+SharedBulkResult_e SharedBulkRequest_c::End ( CSphString & sError )
+{
+	return m_pImpl->m_pPool ? m_pImpl->Flush ( sError ) : SharedBulkResult_e::STAGED;
+}
+
+
+// An invalid document fails the table's open pool, also when this request has not joined it yet; a pool that is
+// already being published is left alone by requests outside it.
+void SharedBulkRequest_c::Fail ( const CSphString & sError )
+{
+	if ( m_pImpl->m_pPool )
+		m_pImpl->m_pPool->Fail ( sError );
+	else if ( auto pPool = GetSharedBulkPool ( m_pImpl->m_sTable ) )
+		pPool->FailOpen ( sError );
+}
+
+
+bool PurgeSharedBulkImport ( const CSphString & sTable, bool bClearSessions, CSphString & sError )
+{
+	auto pPool = GetSharedBulkPool ( sTable );
+	if ( !pPool )
+		return true;
+	if ( !bClearSessions )
+	{
+		sError.SetSprintf ( "shared bulk_import into table '%s' is open or failed; commit it or use OPTION clear_sessions=1 to cancel it", sTable.cstr() );
+		return false;
+	}
+	if ( !pPool->FailOpen ( "shared bulk_import was cancelled by PURGE BULK_IMPORT" ) )
+	{
+		sError.SetSprintf ( "shared bulk_import into table '%s' is being published; repeat PURGE after it finishes", sTable.cstr() );
+		return false;
+	}
+	ReplaceSharedBulkPool ( sTable, pPool, nullptr );
+	return true;
+}
+
+
+static void DropSharedBulkImport ( const CSphString & sTable )
+{
+	auto pPool = GetSharedBulkPool ( sTable );
+	if ( !pPool )
+		return;
+	pPool->Fail ( "shared bulk_import was cancelled by DROP TABLE or PURGE BULK_IMPORT" );
+	ReplaceSharedBulkPool ( sTable, pPool, nullptr );
+}
+
+
+void ShutdownSharedBulkImport()
+{
+	// shutdown callbacks run on the main thread; the pool mutex needs a coroutine
+	Threads::CallCoroutine ( [] {
+		auto pPools = g_hSharedBulk.GetHash();
+		for ( const auto & tPool : *pPools )
+			ConstCastPtr ( tPool.second )->Fail ( "Server shutdown in progress" );
+		g_hSharedBulk.ReleaseAndClear();
+	} );
 }

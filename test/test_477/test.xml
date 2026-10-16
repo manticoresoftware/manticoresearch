@@ -91,6 +91,12 @@ SELECT * FROM test_strict WHERE id=22;
 <!-- very large number overflows - fail -->
 INSERT INTO test_strict (id, title, attr_bigint) VALUES (23, 'test', '99999999999999999999');
 
+<!-- string document id: trailing characters and an overflow fail as for a bigint attribute -->
+INSERT INTO test_strict (id, title) VALUES ('24abc', 'test');
+INSERT INTO test_strict (id, title) VALUES ('99999999999999999999', 'test');
+INSERT INTO test_strict (id, title) VALUES ('25', 'test');
+SELECT id FROM test_strict WHERE id IN (24, 25);
+
 </sphinxql></queries>
 </test>
 

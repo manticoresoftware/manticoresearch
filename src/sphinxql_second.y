@@ -343,6 +343,7 @@ purge:
 				YYERROR;
 			}
 		}
+		opt_option_clause
 	;
 
 rtindex:

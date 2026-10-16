@@ -1828,7 +1828,7 @@ static bool DropLocalIndexWithCb ( const CSphString & sIndex, CSphString & sErro
 			sRoot = GetIndexerRtBulkRoot ( *pRt.Ptr() );
 		}
 
-		if ( !RemoveIndexerRtBulkRoot ( sRoot, sError ) )
+		if ( !RemoveIndexerRtBulkRoot ( sIndex, sRoot, sError ) )
 			return false;
 	}
 

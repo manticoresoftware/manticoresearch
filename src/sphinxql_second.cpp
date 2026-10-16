@@ -79,7 +79,9 @@ bool SqlSecondParser_c::SetPurge ( const SqlNode_t & tTarget, const SqlNode_t & 
 
 	m_pStmt->m_eStmt = STMT_PURGE;
 	m_pStmt->m_ePurgeTarget = PurgeTarget_e::INDEXER_RT_BULK;
+	m_pStmt->m_iIntParam = 0;
 	SetIndex ( tTable );
+	SetDefaultTableForOptions();
 	return true;
 }
 

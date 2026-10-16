@@ -260,7 +260,7 @@ merge_chunks_per_job = 4
 
 <!-- example conf knn_parallel_build -->
 此设置控制在包含带 KNN 索引的 `float_vector` 属性的表上执行 HNSW 相关重操作时，用于构建 HNSW 图的工作线程数量。多个路径会使用这个开关：
-* **chunk-save store pass**：当 RAM chunk 刷写到磁盘时，worker 会分担该 chunk 的 RAM 段，并并行向目标 HNSW 图中添加向量。
+* **chunk-save 存储阶段**：当 RAM chunk 被刷新到磁盘时（由自动刷新或 `FLUSH RAMCHUNK` 触发），所有 RAM 段中的行会被拆分成固定大小的范围，工作线程依次领取这些范围，并行添加到目标 HNSW 图中。并行度不取决于该 chunk 包含多少个 RAM 段，也不受各段大小不均衡的影响。
 * **chunk-merge store pass**：`OPTIMIZE TABLE` 和自动优化合并会并行构建目标 chunk 的 HNSW 图，把所有输入 chunk 的存活行范围分摊给各个 worker。
 * **ALTER KNN rebuild**：对 `float_vector` 属性执行 `ALTER TABLE ... ADD COLUMN`/`DROP COLUMN`，以及 `ALTER TABLE ... REBUILD KNN`，会并行重建磁盘 chunk 的 HNSW 图。
 
@@ -287,6 +287,32 @@ knn_parallel_build = 1
 <!-- request Increase -->
 ```ini
 knn_parallel_build = 4
+```
+
+<!-- end -->
+
+### knn_rescore_prefetch
+
+<!-- example conf knn_rescore_prefetch -->
+此设置控制 Manticore 是否在对所有 KNN 候选项进行[重评分](../Searching/KNN.md)之前，要求操作系统一次性读取它们的全精度向量。它适用于保存在[列式存储](../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)中并通过内存映射读取的向量属性；这是列式属性的默认[访问模式](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files)（`access_columnar_attrs = mmap`）。
+
+如果不预取，不在内存中的候选向量只会在距离计算进行到它时才从磁盘读取。向量会逐个读取，而且每次读取还会带入查询并不需要的相邻数据。启用预取后，会在计算任何距离之前一次性请求读取所有候选项，因此这些读取可以并行执行，并且只读取包含候选向量的数据。只要向量必须从磁盘读取，这就能让 KNN 查询快数倍：例如重启之后，或表中的向量无法全部放入可用内存时。
+
+在预取之前，Manticore 会检查一部分候选向量样本是否已经在内存中。如果已在内存中，则跳过预取，因此对于已完全缓存的数据，无论此设置开启还是关闭，查询速度都相同。此设置不会改变搜索结果。
+
+限制：
+* 它对行式存储中的向量属性以及使用 `access_columnar_attrs = file` 的列式属性无效。
+* 它在 Windows 上无效。
+* 在 Linux 上，缓存向量检查依赖操作系统报告文件的哪些部分位于内存中，而系统只会对 `searchd` 用户拥有或允许其写入的文件报告这些信息。如果表文件属于其他用户，并且对 `searchd` 是只读的（例如，由在不同账户下运行的 `indexer` 构建的普通表），这些向量会始终被报告为已缓存，因此预取永远不会执行。
+
+默认启用。设置为 `0` 可禁用。
+
+<!-- intro -->
+##### 示例：
+
+<!-- request Disable -->
+```ini
+knn_rescore_prefetch = 0
 ```
 
 <!-- end -->
@@ -934,15 +960,15 @@ listen = ( address ":" port | port | path | address ":" port start - port end ) 
 ```ini
 listen = localhost
 listen = localhost:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at localhost
-listen = 192.168.0.1:5000 # 在 192.168.0.1 的 5000 端口监听远程代理（二进制 API）以及 http/https 请求；仅限内部使用
+listen = 192.168.0.1:5000 # listen for remote agents (binary API) and http/https requests on port 5000 at 192.168.0.1; keep this internal
 listen = /var/run/manticore/manticore.s # listen for binary API requests on unix socket
 listen = /var/run/manticore/manticore.s:mysql # listen for mysql requests on unix socket
-listen = 9312 # 在任意接口的 9312 端口监听远程代理（二进制 API）以及 http/https 请求；仅限内部网络
+listen = 9312 # listen for remote agents (binary API) and http/https requests on port 9312 on any interface; internal networks only
 listen = localhost:9306:mysql # listen for mysql requests on port 9306 at localhost
 listen = localhost:9307:mysql_readonly # listen for mysql requests on port 9307 at localhost and accept only read queries
 listen = 127.0.0.1:9308:http # listen for http requests as well as connections from remote agents (and binary API) on port 9308 at localhost
-listen = 192.168.0.1:9320-9328:replication # 在 192.168.0.1 的 9320-9328 端口监听复制连接；仅限内部使用
-listen = 127.0.0.1:9443:https # 在 127.0.0.1 的 9443 端口监听 https 请求（不监听 http）；对公网访问时应使用此类监听器，并配合 `ssl_cert` 和 `ssl_key`
+listen = 192.168.0.1:9320-9328:replication # listen for replication connections on ports 9320-9328 at 192.168.0.1; keep this internal
+listen = 127.0.0.1:9443:https # listen for https requests (not http) on port 9443 at 127.0.0.1; use this listener type for public Internet access with ssl_cert and ssl_key
 listen = 127.0.0.1:9312:sphinx # listen for legacy Sphinx requests (e.g. from SphinxSE) on port 9312 at 127.0.0.1
 ```
 <!-- end -->

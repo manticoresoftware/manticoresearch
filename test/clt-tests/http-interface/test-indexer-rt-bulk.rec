@@ -25,10 +25,103 @@ BULK_IMPORT_JSON_ARRAYS_OK
 mysql -h0 -P9306 -e "DROP TABLE IF EXISTS bulk_import_zero_id; CREATE TABLE bulk_import_zero_id (title TEXT);"
 ––– output –––
 ––– input –––
-reply=$(printf '%s\n' '{"insert":{"table":"bulk_import_zero_id","id":0,"doc":{"title":"must be rejected"}}}' | curl -sS -X POST 'http://localhost:9308/bulk?bulk_import=bulk_import_zero_id' -H 'Content-Type: application/x-ndjson' --data-binary @-); count=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT COUNT(*) FROM bulk_import_zero_id"); if printf '%s' "$reply" | grep -q 'requires an explicit non-zero id' && [ "$count" = 0 ]; then echo BULK_IMPORT_ZERO_ID_REJECTED; else printf 'FAIL_BULK_IMPORT_ZERO_ID reply=%s count=%s\n' "$reply" "$count"; fi
+reply=$(printf '%s\n' '{"insert":{"table":"bulk_import_zero_id","id":0,"doc":{"title":"gets an auto-id"}}}' | curl -sS -X POST 'http://localhost:9308/bulk?bulk_import=bulk_import_zero_id' -H 'Content-Type: application/x-ndjson' --data-binary @-); count=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT COUNT(*) FROM bulk_import_zero_id WHERE id!=0"); if printf '%s' "$reply" | grep -q '"errors":false' && [ "$count" = 1 ]; then echo BULK_IMPORT_ZERO_ID_AUTO; else printf 'FAIL_BULK_IMPORT_ZERO_ID reply=%s count=%s\n' "$reply" "$count"; fi
 ––– output –––
-BULK_IMPORT_ZERO_ID_REJECTED
+BULK_IMPORT_ZERO_ID_AUTO
 ––– input –––
 mysql -h0 -P9306 -e "SET GLOBAL auto_optimize=1; DROP TABLE IF EXISTS bulk_import_auto_optimize; CREATE TABLE bulk_import_auto_optimize (title TEXT) optimize_cutoff='2';"; failed=0; for i in $(seq 1 6); do response=$(printf '{"insert":{"index":"bulk_import_auto_optimize","id":%s,"doc":{"title":"row %s"}}}\n' "$i" "$i" | curl -sS --max-time 60 -X POST 'http://localhost:9308/bulk?bulk_import=bulk_import_auto_optimize' -H 'Content-Type: application/x-ndjson' --data-binary @-) || failed=1; printf '%s' "$response" | grep -q '"errors":false' || failed=1; done; i=0; chunks=999; optimizing=1; while [ "$i" -lt 100 ]; do chunks=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SHOW TABLE bulk_import_auto_optimize STATUS LIKE 'disk_chunks'" | awk '{print $2}'); optimizing=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SHOW TABLE bulk_import_auto_optimize STATUS LIKE 'optimizing'" | awk '{print $2}'); [ "$optimizing" = 0 ] && [ "$chunks" -le 2 ] && break; sleep 0.1; i=$((i+1)); done; stats=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT COUNT(*),MIN(id),MAX(id),SUM(id) FROM bulk_import_auto_optimize"); if [ "$failed" = 0 ] && [ "$optimizing" = 0 ] && [ "$chunks" -le 2 ] && [ "$stats" = "$(printf '6\t1\t6\t21')" ]; then echo BULK_IMPORT_AUTO_OPTIMIZE_OK; else printf 'FAIL_BULK_IMPORT_AUTO_OPTIMIZE failed=%s chunks=%s optimizing=%s stats=%s\n' "$failed" "$chunks" "$optimizing" "$stats"; fi
 ––– output –––
 BULK_IMPORT_AUTO_OPTIMIZE_OK
+––– comment –––
+A bulk_import line can also be a bare document {"id":1,...}: its table is the one of
+bulk_import=<table>, it mixes with the /bulk form in one body, and an id above 2^63 loads as in
+the /bulk form. Every member of a bare document is a column, so a "doc" wrapper or a member
+named like an operation next to other members is an unknown column; plain /bulk still needs
+the /bulk form.
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS bulk_import_short; CREATE TABLE bulk_import_short (title TEXT, gid INTEGER);"
+––– output –––
+––– input –––
+printf '%s\n' '{"id":1,"title":"short one","gid":11}' '{"insert":{"table":"bulk_import_short","id":2,"doc":{"title":"long two","gid":12}}}' '{"gid":13,"title":"short three","id":3}' '{"id":9223372036854775809,"title":"short big id","gid":14}' '{"insert":{"table":"bulk_import_short","id":9223372036854775810,"doc":{"title":"long big id","gid":15}}}' | curl -sS -X POST 'http://localhost:9308/bulk?bulk_import=bulk_import_short' -H 'Content-Type: application/x-ndjson' --data-binary @- | grep -o '"errors":[a-z]*'; mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,title,gid FROM bulk_import_short ORDER BY gid ASC"
+––– output –––
+"errors":false
+1	short one	11
+2	long two	12
+3	short three	13
+-9223372036854775807	short big id	14
+-9223372036854775806	long big id	15
+––– input –––
+for line in '{"id":5,"doc":{"title":"wrapped"}}' '{"id":6,"insert":{"title":"operation name"}}'; do printf '%s\n' "$line" | curl -sS -X POST 'http://localhost:9308/bulk?bulk_import=bulk_import_short' -H 'Content-Type: application/x-ndjson' --data-binary @- | grep -o '"error":"[^"]*"'; done; printf '%s\n' '{"id":7,"title":"plain bulk"}' | curl -sS -X POST 'http://localhost:9308/bulk' -H 'Content-Type: application/x-ndjson' --data-binary @- | grep -o '"error":"[^"]*"'; mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT COUNT(*) FROM bulk_import_short"
+––– output –––
+"error":"unknown column: 'doc'"
+"error":"unknown column: 'insert'"
+"error":"statement id should be an object"
+5
+––– comment –––
+An id is converted as by an ordinary insert (SQL or /bulk), with its errors, and the indexer
+gets that number: "12abc" is 12, " 7" is 7, "-5" is 2^64-5, an overflow is 2^64-1 and 1.5 is
+1. Before, the indexer read the raw string itself and lost the row of "abc", "-5" or an
+overflow without an error.
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS bulk_import_string_id; CREATE TABLE bulk_import_string_id (title TEXT, gid INT);"
+––– output –––
+––– input –––
+for line in '{"insert":{"table":"bulk_import_string_id","doc":{"id":-5,"title":"negative"}}}' '{"insert":{"table":"bulk_import_string_id","doc":{"id":[1],"title":"array"}}}'; do printf '%s\n' "$line" | curl -sS -X POST 'http://localhost:9308/bulk?bulk_import=bulk_import_string_id' -H 'Content-Type: application/x-ndjson' --data-binary @- | grep -o '"error":"[^"]*"'; done; mysql -h0 -P9306 -e "SET bulk_import=bulk_import_string_id; INSERT INTO bulk_import_string_id (id, title) VALUES ((1,2), 'sql array')" 2>&1
+––– output –––
+"error":"Negative document ids are not allowed"
+"error":"row 1, column 1: MVA value specified for a non-MVA column"
+ERROR 1064 (42000) at line 1: row 1, column 1: MVA value specified for a non-MVA column
+––– input –––
+printf '%s\n' '{"id":"12abc","title":"tail","gid":1}' '{"id":" 7","title":"space","gid":2}' '{"insert":{"table":"bulk_import_string_id","id":"+8","doc":{"title":"plus","gid":3}}}' '{"id":"-5","title":"minus string","gid":4}' '{"id":"18446744073709551616","title":"overflow","gid":5}' '{"insert":{"table":"bulk_import_string_id","doc":{"id":1.5,"title":"float","gid":6}}}' '{"id":"052","title":"digits","gid":7}' | curl -sS -X POST 'http://localhost:9308/bulk?bulk_import=bulk_import_string_id' -H 'Content-Type: application/x-ndjson' --data-binary @- | grep -o '"errors":[a-z]*'; mysql -h0 -P9306 -e "SET bulk_import=bulk_import_string_id; INSERT INTO bulk_import_string_id (id, title, gid) VALUES ('13abc', 'sql tail', 8); COMMIT; SET bulk_import=0"; mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id, title, gid FROM bulk_import_string_id ORDER BY gid ASC"
+––– output –––
+"errors":false
+12	tail	1
+7	space	2
+8	plus	3
+-5	minus string	4
+-1	overflow	5
+1	float	6
+52	digits	7
+13	sql tail	8
+––– comment –––
+A row without an id, or with one that an ordinary insert takes as 0 (0, "0", "abc", "", null
+inside doc), gets an auto-id as there; the response does not return it. A line is an operation
+only when its only member is named as a /bulk operation and holds an object with "table" or
+"index": {"meta":{...}}, {"kubernetes":{"table":...}} and {"ins":{"table":...}}, whose name is
+only the start of one, are documents, and an operation without an id gets an auto-id as well.
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS bulk_import_auto_id; CREATE TABLE bulk_import_auto_id (title TEXT, gid INT, meta JSON, kubernetes JSON, ins JSON);"
+––– output –––
+––– input –––
+printf '%s\n' '{"title":"no id","gid":1}' '{"id":0,"title":"zero","gid":2}' '{"id":"0","title":"zero string","gid":3}' '{"id":"abc","title":"letters","gid":4}' '{"id":"","title":"empty string","gid":5}' '{"insert":{"table":"bulk_import_auto_id","doc":{"id":null,"title":"null","gid":6}}}' '{"insert":{"table":"bulk_import_auto_id","doc":{"title":"operation without id","gid":7}}}' '{"meta":{"gid":8}}' '{"kubernetes":{"table":"x"}}' '{"ins":{"table":"y"}}' | curl -sS -X POST 'http://localhost:9308/bulk?bulk_import=bulk_import_auto_id' -H 'Content-Type: application/x-ndjson' --data-binary @- | grep -o '"errors":[a-z]*'; mysql -h0 -P9306 -e "SET bulk_import=bulk_import_auto_id; INSERT INTO bulk_import_auto_id (title, gid) VALUES ('sql without id', 9); INSERT INTO bulk_import_auto_id (id, title, gid) VALUES (0, 'sql zero', 10); COMMIT; SET bulk_import=0"; mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT COUNT(*) FROM bulk_import_auto_id WHERE id!=0; SELECT title, gid FROM bulk_import_auto_id ORDER BY id ASC; SELECT COUNT(*) FROM bulk_import_auto_id WHERE meta.gid=8; SELECT COUNT(*) FROM bulk_import_auto_id WHERE kubernetes.table='x'; SELECT COUNT(*) FROM bulk_import_auto_id WHERE ins.table='y'"
+––– output –––
+"errors":false
+12
+no id	1
+zero	2
+zero string	3
+letters	4
+empty string	5
+null	6
+operation without id	7
+	0
+	0
+	0
+sql without id	9
+sql zero	10
+1
+1
+1
+––– comment –––
+A query parameter without a value is still a parameter: a bare bulk_import, at the end of the
+query or before another parameter, is refused on the Elasticsearch /_bulk like bulk_import=<table>.
+––– input –––
+id=8; for q in 'bulk_import=bulk_import_short' 'bulk_import' 'bulk_import&refresh=true'; do printf '%s\n' "{\"index\":{\"_index\":\"bulk_import_short\",\"_id\":\"$id\"}}" '{"title":"es bulk","gid":20}' | curl -sS -X POST "http://localhost:9308/_bulk?$q" -H 'Content-Type: application/x-ndjson' --data-binary @- -o /tmp/es.reply -w "$q HTTP %{http_code}\n"; grep -o 'unsupported on Elasticsearch /_bulk' /tmp/es.reply; id=$((id+1)); done; mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT COUNT(*) FROM bulk_import_short"
+––– output –––
+bulk_import=bulk_import_short HTTP 400
+unsupported on Elasticsearch /_bulk
+bulk_import HTTP 400
+unsupported on Elasticsearch /_bulk
+bulk_import&refresh=true HTTP 400
+unsupported on Elasticsearch /_bulk
+5

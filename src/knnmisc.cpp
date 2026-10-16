@@ -543,11 +543,15 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 	// row headers first (their addresses come from the match rows, without touching the pool), then the vectors,
 	// resolved through those headers. Resolving waits for the header reads already in flight instead of faulting
 	// row by row, and the vector round reads exactly the vector bytes, whatever other blob attributes precede them
-	// in the row. Same residency gate as the columnar prefetch, probing the vectors themselves: a hot table costs
-	// 8 header lookups and 8 mincore() calls, a cold one at most 8 serial header faults before the rounds start.
+	// in the row. Same residency gate as the columnar prefetch, but it probes the row headers, not the vectors, and
+	// touches nothing: resolving a vector means reading its header, and on a cold row that fault reads around and
+	// drags the vector in before mincore() gets asked, so a gate on resolved vectors saw every cold row as resident.
+	// Header and vector pages of a row are always touched together (by queries and by these two rounds), so they are
+	// cached and evicted together, and the header's residency stands for the row.
 	if ( KNNRescorePrefetchRowwise() && iCount )
 	{
 		const CSphAttrLocator & tLoc = m_tAttr.m_tLocator;
+		const size_t uHeaderBytes = 1 + sizeof(DWORD)*tLoc.m_nBlobAttrs;
 
 		int iPrefetchTag = 0;
 		bool bPrefetchPoolInitialized = false;
@@ -570,18 +574,13 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 		{
 			const CSphMatch * pMatch = dMatches [ iProbes>1 ? int ( (int64_t)i*( iCount-1 ) / ( iProbes-1 ) ) : 0 ];
 			const BYTE * pPool = fnPool(pMatch);
-			if ( !pPool )
-				continue;
-
-			ByteBlob_t tRes = pMatch->FetchAttrData ( tLoc, pPool );
-			if ( tRes.first && tRes.second>=iVecBytes )
-				dProbes.Add ( tRes.first );
+			if ( pPool )
+				dProbes.Add ( sphGetBlobRow ( *pMatch, tLoc, pPool ) );
 		}
 
-		if ( !dProbes.IsEmpty() && !AreVectorsResident ( dProbes, (size_t)iVecBytes ) )
+		if ( !dProbes.IsEmpty() && !AreVectorsResident ( dProbes, uHeaderBytes ) )
 		{
 			// round 1: the row headers
-			const size_t uHeaderBytes = 1 + sizeof(DWORD)*tLoc.m_nBlobAttrs;
 			CSphVector<MemRange_t> dRanges;
 			dRanges.Reserve(iCount);
 			for ( const CSphMatch * pMatch : dMatches )

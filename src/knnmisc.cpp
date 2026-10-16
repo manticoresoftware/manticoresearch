@@ -345,8 +345,6 @@ bool KNNRescorePrefetch()
 }
 
 
-
-
 class KNNVecDistCalc_c
 {
 public:

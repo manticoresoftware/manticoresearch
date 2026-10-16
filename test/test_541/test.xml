@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>distributed hybrid search over remote agents</name>
+
+<skip_indexer/>
+
+<requires>
+<knn/>
+<knn_float_tolerance/>
+<http/>
+<force-rt/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	create table hyb_a1 (title text, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='L2');
+	create table hyb_a2 (title text, vec float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='L2');
+
+	<!-- the same corpus as test_489 split between two agents: 1-5 on the first one, 6-10 on the second one -->
+	insert into hyb_a1 (id, title, vec) values
+		(1, 'machine learning basics', (0.1, 0.1, 0.1, 0.1)),
+		(2, 'deep learning for machine vision', (0.15, 0.12, 0.08, 0.11)),
+		(3, 'machine learning algorithms', (0.2, 0.15, 0.12, 0.09)),
+		(4, 'cooking recipes italian', (0.11, 0.09, 0.13, 0.1)),
+		(5, 'travel guide europe', (0.18, 0.11, 0.1, 0.12));
+	insert into hyb_a2 (id, title, vec) values
+		(6, 'sports news football', (0.22, 0.14, 0.09, 0.08)),
+		(7, 'machine learning in production', (5.0, 5.0, 5.0, 5.0)),
+		(8, 'advanced machine learning', (6.0, 6.0, 6.0, 6.0)),
+		(9, 'machine learning overview', (7.0, 7.0, 7.0, 7.0)),
+		(10, 'random unrelated document', (10.0, 10.0, 10.0, 10.0));
+	flush ramchunk hyb_a1;
+	flush ramchunk hyb_a2;
+
+	create table hyb_dist type='distributed'
+		agent='<agent0_address/>:hyb_a1'
+		agent='<agent0_address/>:hyb_a2';
+	create table hyb_mixed type='distributed'
+		local='hyb_a1'
+		agent='<agent0_address/>:hyb_a2';
+
+	<!-- regression: the merge queue of the distributed head must consume the hybrid_score()/knn_dist() values the agents
+	     return instead of adding its own sorter-only placeholders, which changed the layout of the merged matches -->
+	select id from hyb_dist where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) option fusion_method='rrf';
+	select id, hybrid_score() from hyb_dist where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) order by hybrid_score() desc, id asc option fusion_method='rrf';
+	select id, knn_dist(), weight(), hybrid_score() from hyb_dist where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) order by hybrid_score() desc, id asc option fusion_method='rrf';
+	select id, knn_dist() from hyb_dist where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) order by knn_dist() asc, id asc option fusion_method='rrf';
+	select id, weight() from hyb_dist where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) order by weight() desc, id asc option fusion_method='rrf';
+	select id, hybrid_score() from hyb_dist where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) order by hybrid_score() desc, id asc limit 3 option fusion_method='rrf', rank_constant=10;
+	select id, hybrid_score() from hyb_dist where match('xyznonexistent') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) order by hybrid_score() desc, id asc option fusion_method='rrf';
+
+	<!-- a local table merged with a remote agent -->
+	select id from hyb_mixed where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) option fusion_method='rrf';
+	select id, knn_dist(), weight(), hybrid_score() from hyb_mixed where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) order by hybrid_score() desc, id asc option fusion_method='rrf';
+
+	<!-- plain KNN over the agents, with and without the distance in the select list -->
+	select id from hyb_dist where knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) order by id asc;
+	select id, knn_dist() from hyb_dist where knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) order by knn_dist() asc, id asc;
+	select id, knn_dist() from hyb_mixed where knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) order by knn_dist() asc, id asc;
+
+	<!-- hybrid search filtered by the text match, no fusion -->
+	select id, knn_dist() from hyb_dist where match('machine learning') and knn(vec, 5, (0.1, 0.1, 0.1, 0.1)) order by knn_dist() asc, id asc;
+</sphinxql>
+
+<query endpoint="json/search">
+{
+	"index": "hyb_dist",
+	"_source": { "excludes": ["*"] },
+	"knn": {
+		"field": "vec",
+		"query_vector": [0.1, 0.1, 0.1, 0.1],
+		"k": 5
+	},
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "rrf" }
+}
+</query>
+
+<query endpoint="json/search">
+{
+	"index": "hyb_mixed",
+	"_source": { "excludes": ["*"] },
+	"knn": {
+		"field": "vec",
+		"query_vector": [0.1, 0.1, 0.1, 0.1],
+		"k": 5
+	},
+	"query": { "match": { "title": "machine learning" } },
+	"options": { "fusion_method": "rrf", "rank_constant": 10 }
+}
+</query>
+
+<sphinxql>
+	drop table hyb_mixed;
+	drop table hyb_dist;
+	drop table hyb_a1;
+	drop table hyb_a2;
+</sphinxql>
+</queries>
+
+</test>

@@ -1620,6 +1620,7 @@ struct SphQueueSettings_t
 	bool						m_bNeedDocids = false;
 	bool						m_bGrouped = false;	// are we going to push already grouped matches to it?
 	bool						m_bSkipKnnDistMatchSort = false;	// don't prepend the implicit "knn_dist() asc" to the match sort clause (group ordering keeps it)
+	bool						m_bBlobAttrsLocked = false;	// the table's blob pool is locked in memory (access_blob_attrs=mlock), so the KNN rescore has nothing to prefetch
 	std::function<int64_t (const CSphString &, CSphString &)>			m_fnGetCountDistinct;
 	std::function<int64_t (const CSphFilterSettings &, CSphString &)>	m_fnGetCountFilter;
 	std::function<int64_t ()>	m_fnGetCount;

@@ -353,6 +353,7 @@ SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex
 	tQS.m_bEnableFastDistinct = m_dLocal.GetLength()<=1;
 	tQS.m_bForceSingleThread = bForceSingleThread;
 	tQS.m_dCreateSchema = GetDefaultSchema ( pIndex );
+	tQS.m_bBlobAttrsLocked = IsMlock ( pIndex->GetMutableSettings().m_tFileAccess.m_eBlob );
 	if ( pJoinedIndex )
 		tQS.m_pJoinArgs = std::make_unique<JoinArgs_t> ( pJoinedIndex->GetMatchSchema(), pIndex->GetName(), szJoinedParent ? szJoinedParent : pJoinedIndex->GetName() );
 

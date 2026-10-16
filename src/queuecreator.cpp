@@ -2927,7 +2927,7 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	{
 		// rows the client can see must carry the exact distance even when the window is wider than k*oversampling
 		int64_t iWindow = m_tQuery.m_iLimit<0 ? iMaxMatches : int64_t ( m_tQuery.m_iLimit ) + m_tQuery.m_iOffset;
-		pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.SingleKnnSettings(), m_eMatchFunc, iWindow );
+		pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.SingleKnnSettings(), m_eMatchFunc, iWindow, m_tSettings.m_bBlobAttrsLocked );
 		if ( !pSorter )
 			return nullptr;
 	}

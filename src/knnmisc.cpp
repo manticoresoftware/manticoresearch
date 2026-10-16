@@ -539,19 +539,20 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 	static const int PF_HEADER = 8;
 
 	// The vectors live in the blob pool, and where a vector sits inside its blob row is known only after reading the
-	// row header, which shares the (cold) page with the vector itself. So the prefetch is issued by row address, which
-	// the match row provides without touching the pool, and covers the header plus one vector. Rows whose other blob
-	// attributes precede the vector get the uncovered tail read on demand. Same residency gate as the columnar prefetch.
-	if ( KNNRescorePrefetchRowwise() )
+	// row header. On a cold table the header and the vector are both on disk, so the prefetch takes two rounds: the
+	// row headers first (their addresses come from the match rows, without touching the pool), then the vectors,
+	// resolved through those headers. Resolving waits for the header reads already in flight instead of faulting
+	// row by row, and the vector round reads exactly the vector bytes, whatever other blob attributes precede them
+	// in the row. Same residency gate as the columnar prefetch, probing the vectors themselves: a hot table costs
+	// 8 header lookups and 8 mincore() calls, a cold one at most 8 serial header faults before the rounds start.
+	if ( KNNRescorePrefetchRowwise() && iCount )
 	{
-		const size_t uRowBytes = 1 + sizeof(DWORD)*m_tAttr.m_tLocator.m_nBlobAttrs + iVecBytes;
-		CSphVector<const void*> dRows;
-		dRows.Reserve(iCount);
+		const CSphAttrLocator & tLoc = m_tAttr.m_tLocator;
 
 		int iPrefetchTag = 0;
 		bool bPrefetchPoolInitialized = false;
 		const BYTE * pPrefetchPool = nullptr;
-		for ( const CSphMatch * pMatch : dMatches )
+		auto fnPool = [&] ( const CSphMatch * pMatch )
 		{
 			if ( !bPrefetchPoolInitialized || pMatch->m_iTag!=iPrefetchTag )
 			{
@@ -560,11 +561,53 @@ void KNNVecDistCalc_c::RescoreBlob ( VecTraits_T<CSphMatch*> & dMatches, const C
 				bPrefetchPoolInitialized = true;
 			}
 
-			if ( pPrefetchPool )
-				dRows.Add ( sphGetBlobRow ( *pMatch, m_tAttr.m_tLocator, pPrefetchPool ) );
+			return pPrefetchPool;
+		};
+
+		const int iProbes = Min ( iCount, KNN_PREFETCH_PROBES );
+		CSphVector<const void*> dProbes;
+		for ( int i = 0; i < iProbes; i++ )
+		{
+			const CSphMatch * pMatch = dMatches [ iProbes>1 ? int ( (int64_t)i*( iCount-1 ) / ( iProbes-1 ) ) : 0 ];
+			const BYTE * pPool = fnPool(pMatch);
+			if ( !pPool )
+				continue;
+
+			ByteBlob_t tRes = pMatch->FetchAttrData ( tLoc, pPool );
+			if ( tRes.first && tRes.second>=iVecBytes )
+				dProbes.Add ( tRes.first );
 		}
 
-		PrefetchVectors ( dRows, uRowBytes );
+		if ( !dProbes.IsEmpty() && !AreVectorsResident ( dProbes, (size_t)iVecBytes ) )
+		{
+			// round 1: the row headers
+			const size_t uHeaderBytes = 1 + sizeof(DWORD)*tLoc.m_nBlobAttrs;
+			CSphVector<MemRange_t> dRanges;
+			dRanges.Reserve(iCount);
+			for ( const CSphMatch * pMatch : dMatches )
+			{
+				const BYTE * pPool = fnPool(pMatch);
+				if ( pPool )
+					dRanges.Add ( { sphGetBlobRow ( *pMatch, tLoc, pPool ), uHeaderBytes } );
+			}
+
+			mmprefetch ( dRanges.Begin(), dRanges.GetLength() );
+
+			// round 2: the vectors, at their real addresses and lengths
+			dRanges.Resize(0);
+			for ( const CSphMatch * pMatch : dMatches )
+			{
+				const BYTE * pPool = fnPool(pMatch);
+				if ( !pPool )
+					continue;
+
+				ByteBlob_t tRes = pMatch->FetchAttrData ( tLoc, pPool );
+				if ( tRes.first && tRes.second )
+					dRanges.Add ( { tRes.first, (size_t)tRes.second } );
+			}
+
+			mmprefetch ( dRanges.Begin(), dRanges.GetLength() );
+		}
 	}
 
 	const void * dPtrs[CHUNK];

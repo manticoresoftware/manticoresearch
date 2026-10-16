@@ -13,6 +13,7 @@
 #include "searchdtask.h"
 #include "coroutine.h"
 #include "mini_timer.h"
+#include "task_info.h"
 
 #ifndef VERBOSE_TASKMANAGER
 #define VERBOSE_TASKMANAGER 0
@@ -46,6 +47,7 @@ Threads::Handler AttachClass ( TaskID iTask, Threads::Handler&& fnWorker )
 	return [iTask, fnWorker=std::move(fnWorker)] () {
 		Threads::JobTracker_t dTrack;
 		auto& tInfo = g_Tasks[iTask];
+		auto pDesc = PublishSystemInfo ( tInfo.m_sName.cstr() );
 		INFOX << "Task " << tInfo.m_sName << " started";
 		tInfo.m_iCurrentRunners.fetch_add ( 1, std::memory_order_relaxed );
 		auto itmStart = sphMicroTimer();

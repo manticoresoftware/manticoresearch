@@ -1,0 +1,40 @@
+name: CLT per-test reliability
+
+on:
+  schedule:
+    - cron: '20 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  report:
+    name: CLT failure rates (30 days)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Test report calculations
+        run: python3 -m unittest discover -s .github/scripts/tests -p 'test_clt_reliability.py' -v
+
+      - name: Build report from main-branch test runs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 .github/scripts/clt_reliability.py report \
+            --repository "$GITHUB_REPOSITORY" \
+            --branch main \
+            --days 30 \
+            --output "$RUNNER_TEMP/clt-reliability" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sortable per-test results
+        uses: actions/upload-artifact@v6
+        with:
+          name: clt-failure-rates-30d
+          path: ${{ runner.temp }}/clt-reliability/
+          retention-days: 90
+          if-no-files-found: error

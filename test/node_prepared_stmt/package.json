@@ -6,6 +6,6 @@
   "main": "index.js",
   "license": "UNLICENSED",
   "dependencies": {
-    "mysql2": "^3.11.0"
+    "mysql2": "^3.23.1"
   }
 }

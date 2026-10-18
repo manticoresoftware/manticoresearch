@@ -1,0 +1,173 @@
+––– comment –––
+String ranges must compare strings, not their equality hashes, after flushing to disk.
+The duplicate boundary makes equality/inequality counts differ from the range counts.
+Force iterator selection for this tiny fixture, which would normally bypass the optimizer.
+––– input –––
+export SEARCHD_ARGS="--force-pseudo-sharding"
+sql() { mysql -h0 -P9306 --skip-table --batch --raw --skip-column-names -e "$1"; }
+––– output –––
+––– block: ../base/start-searchd –––
+––– input –––
+sql "SET GLOBAL secondary_indexes=1; DROP TABLE IF EXISTS gh5006; CREATE TABLE gh5006 (rs STRING, cs STRING engine='columnar') engine='rowwise'; INSERT INTO gh5006 VALUES (1,'',''),(2,'a','a'),(3,'b','b'),(4,'m','m'),(5,'m','m'),(6,'n','n'),(7,'o','o'),(8,'z','z'); FLUSH RAMCHUNK gh5006;" && echo ready
+––– output –––
+ready
+––– comment –––
+Check ordinary row retrieval and both secondary-index hints for rowwise and columnar attributes.
+A forced hint must fall back when ordered string comparison is unsupported by the index.
+––– input –––
+for attr in rs cs; do
+  for op in '<' '<=' '>' '>='; do
+    for hint in '' "/*+ SecondaryIndex($attr) */" "/*+ NO_SecondaryIndex($attr) */"; do
+      printf '%s %s %s: ' "$attr" "$op" "${hint:-default}"
+      sql "SELECT id FROM gh5006 WHERE $attr $op 'm' ORDER BY id ASC $hint;" | paste -sd, -
+    done
+  done
+done
+––– output –––
+rs < default: 1,2,3
+rs < /*+ SecondaryIndex(rs) */: 1,2,3
+rs < /*+ NO_SecondaryIndex(rs) */: 1,2,3
+rs <= default: 1,2,3,4,5
+rs <= /*+ SecondaryIndex(rs) */: 1,2,3,4,5
+rs <= /*+ NO_SecondaryIndex(rs) */: 1,2,3,4,5
+rs > default: 6,7,8
+rs > /*+ SecondaryIndex(rs) */: 6,7,8
+rs > /*+ NO_SecondaryIndex(rs) */: 6,7,8
+rs >= default: 4,5,6,7,8
+rs >= /*+ SecondaryIndex(rs) */: 4,5,6,7,8
+rs >= /*+ NO_SecondaryIndex(rs) */: 4,5,6,7,8
+cs < default: 1,2,3
+cs < /*+ SecondaryIndex(cs) */: 1,2,3
+cs < /*+ NO_SecondaryIndex(cs) */: 1,2,3
+cs <= default: 1,2,3,4,5
+cs <= /*+ SecondaryIndex(cs) */: 1,2,3,4,5
+cs <= /*+ NO_SecondaryIndex(cs) */: 1,2,3,4,5
+cs > default: 6,7,8
+cs > /*+ SecondaryIndex(cs) */: 6,7,8
+cs > /*+ NO_SecondaryIndex(cs) */: 6,7,8
+cs >= default: 4,5,6,7,8
+cs >= /*+ SecondaryIndex(cs) */: 4,5,6,7,8
+cs >= /*+ NO_SecondaryIndex(cs) */: 4,5,6,7,8
+––– comment –––
+Single-filter COUNT(*) has a separate precalculation path. For each bound print the
+unhinted count and the NO_SecondaryIndex count; both must use the ordered comparison.
+––– input –––
+for attr in rs cs; do
+  for bound in m ''; do
+    for op in '<' '<=' '>' '>='; do
+      printf "%s %s '%s': " "$attr" "$op" "$bound"
+      sql "SELECT COUNT(*) FROM gh5006 WHERE $attr $op '$bound'; SELECT COUNT(*) FROM gh5006 WHERE $attr $op '$bound' /*+ NO_SecondaryIndex($attr) */;" | paste -sd, -
+    done
+  done
+done
+––– output –––
+rs < 'm': 3,3
+rs <= 'm': 5,5
+rs > 'm': 3,3
+rs >= 'm': 5,5
+rs < '': 0,0
+rs <= '': 1,1
+rs > '': 7,7
+rs >= '': 8,8
+cs < 'm': 3,3
+cs <= 'm': 5,5
+cs > 'm': 3,3
+cs >= 'm': 5,5
+cs < '': 0,0
+cs <= '': 1,1
+cs > '': 7,7
+cs >= '': 8,8
+––– comment –––
+A columnar-scan hint must also preserve string ordering when the analyzer cannot handle ranges.
+––– input –––
+for op in '<' '<=' '>' '>='; do
+  printf 'cs %s ColumnarScan: ' "$op"
+  sql "SELECT id FROM gh5006 WHERE cs $op 'm' ORDER BY id ASC /*+ ColumnarScan(cs) */;" | paste -sd, -
+done
+––– output –––
+cs < ColumnarScan: 1,2,3
+cs <= ColumnarScan: 1,2,3,4,5
+cs > ColumnarScan: 6,7,8
+cs >= ColumnarScan: 4,5,6,7,8
+––– comment –––
+JSON range filters use the same comparison flags, including inverted comparisons for inclusive bounds.
+Check both hits and totals and cover a two-sided range as well.
+––– input –––
+for attr in rs cs; do
+  for bounds in '{"lt":"m"}' '{"lte":"m"}' '{"gt":"m"}' '{"gte":"m"}' '{"gt":"a","lt":"n"}' '{"gte":"a","lte":"n"}'; do
+    printf '%s %s: ' "$attr" "$bounds"
+    curl -sS -X POST http://localhost:9308/search -H 'Content-Type: application/json' -d "{\"table\":\"gh5006\",\"query\":{\"range\":{\"$attr\":$bounds}},\"sort\":[{\"id\":\"asc\"}],\"limit\":20}" | php -r '$r=json_decode(stream_get_contents(STDIN),true); echo json_encode(["ids"=>array_column($r["hits"]["hits"],"_id"),"total"=>$r["hits"]["total"]]),PHP_EOL;'
+  done
+done
+––– output –––
+rs {"lt":"m"}: {"ids":[1,2,3],"total":3}
+rs {"lte":"m"}: {"ids":[1,2,3,4,5],"total":5}
+rs {"gt":"m"}: {"ids":[6,7,8],"total":3}
+rs {"gte":"m"}: {"ids":[4,5,6,7,8],"total":5}
+rs {"gt":"a","lt":"n"}: {"ids":[3,4,5],"total":3}
+rs {"gte":"a","lte":"n"}: {"ids":[2,3,4,5,6],"total":5}
+cs {"lt":"m"}: {"ids":[1,2,3],"total":3}
+cs {"lte":"m"}: {"ids":[1,2,3,4,5],"total":5}
+cs {"gt":"m"}: {"ids":[6,7,8],"total":3}
+cs {"gte":"m"}: {"ids":[4,5,6,7,8],"total":5}
+cs {"gt":"a","lt":"n"}: {"ids":[3,4,5],"total":3}
+cs {"gte":"a","lte":"n"}: {"ids":[2,3,4,5,6],"total":5}
+––– comment –––
+Equality and IN must still use secondary indexes. SHOW META verifies the actual row iterator,
+so this control cannot pass merely because COUNT(*) used its precalculation shortcut.
+––– input –––
+for attr in rs cs; do
+  printf '%s equality and IN:\n' "$attr"
+  sql "SELECT id FROM gh5006 WHERE $attr='m' ORDER BY id ASC /*+ SecondaryIndex($attr) */; SHOW META LIKE 'index'; SELECT id FROM gh5006 WHERE $attr IN ('m','z') ORDER BY id ASC /*+ SecondaryIndex($attr) */; SHOW META LIKE 'index';" | tr '\t' ' '
+done
+––– output –––
+rs equality and IN:
+4
+5
+index rs:SecondaryIndex (100%)
+4
+5
+8
+index rs:SecondaryIndex (100%)
+cs equality and IN:
+4
+5
+index cs:SecondaryIndex (100%)
+4
+5
+8
+index cs:SecondaryIndex (100%)
+––– comment –––
+Equality and its excluded form must retain their distinct COUNT(*) results.
+––– input –––
+for attr in rs cs; do
+  printf '%s equality/inequality counts: ' "$attr"
+  sql "SELECT COUNT(*) FROM gh5006 WHERE $attr='m'; SELECT COUNT(*) FROM gh5006 WHERE $attr!='m';" | paste -sd, -
+done
+––– output –––
+rs equality/inequality counts: 2,6
+cs equality/inequality counts: 2,6
+––– comment –––
+A range remains a residual filter beside a supported secondary index on another attribute.
+The matching cases also verify index use; the nonmatching cases ensure the range is not dropped.
+––– input –––
+sql "SELECT id FROM gh5006 WHERE rs>'m' AND cs='z' ORDER BY id ASC /*+ SecondaryIndex(cs) */; SHOW META LIKE 'index'; SELECT id FROM gh5006 WHERE cs>'m' AND rs='z' ORDER BY id ASC /*+ SecondaryIndex(rs) */; SHOW META LIKE 'index'; SELECT COUNT(*) FROM gh5006 WHERE rs<'m' AND cs='z' /*+ SecondaryIndex(cs) */; SELECT COUNT(*) FROM gh5006 WHERE cs<'m' AND rs='z' /*+ SecondaryIndex(rs) */;" | tr '\t' ' '
+––– output –––
+8
+index cs:SecondaryIndex (100%)
+8
+index rs:SecondaryIndex (100%)
+0
+0
+––– comment –––
+A supported columnar equality analyzer must still work beside a residual string range.
+––– input –––
+sql "SELECT id FROM gh5006 WHERE rs>'a' AND cs='m' ORDER BY id ASC /*+ ColumnarScan(cs) */; SHOW META LIKE 'index'; SELECT COUNT(*) FROM gh5006 WHERE rs<'a' AND cs='m' /*+ ColumnarScan(cs) */;" | tr '\t' ' '
+––– output –––
+4
+5
+index $cs_HASH:ColumnarScan (100%)
+0
+––– input –––
+sql "DROP TABLE gh5006;"
+––– output –––

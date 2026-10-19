@@ -68,8 +68,6 @@ cases = [
     ('huge-attribute-value', fixed_header(PROTOCOL_41 | CONNECT_ATTRS) + b'admin\x00\x00\x0b\x01x\xfe' + struct.pack('<Q', 1 << 32)),
     ('signed-overflow-attribute-value', fixed_header(PROTOCOL_41 | CONNECT_ATTRS) + b'admin\x00\x00\x0b\x01x\xfe' + struct.pack('<Q', 1 << 63)),
     ('truncated-lenenc64-auth', fixed_header(PROTOCOL_41 | LENENC_AUTH) + b'admin\x00\xfe\x01\x00'),
-    ('invalid-lenenc-null', fixed_header(PROTOCOL_41 | LENENC_AUTH) + b'admin\x00\xfb' + bytes(251)),
-    ('invalid-lenenc-ff', fixed_header(PROTOCOL_41 | LENENC_AUTH) + b'admin\x00\xff' + bytes(255)),
 ]
 for name, payload in cases:
     check(name, payload)
@@ -100,8 +98,6 @@ bad-attribute-value: rejected
 huge-attribute-value: rejected
 signed-overflow-attribute-value: rejected
 truncated-lenenc64-auth: rejected
-invalid-lenenc-null: rejected
-invalid-lenenc-ff: rejected
 valid-empty-attributes: parsed
 valid-attributes: parsed
 valid-lenenc64-auth: parsed

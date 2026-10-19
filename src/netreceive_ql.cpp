@@ -130,14 +130,16 @@ int64_t MysqlReadPackedInt ( InputBuffer_c& tIn )
 		}
 	case 0xFE:
 		{
-			if ( tIn.HasBytes()<8 )
-				return -1;
-			uint64_t uRes = tIn.GetLSBUint64();
-			return uRes>INT64_MAX ? -1 : int64_t ( uRes );
+			iRes = tIn.GetByte();
+			iRes += tIn.GetByte() << 8;
+			iRes += tIn.GetByte() << 16;
+			iRes += tIn.GetByte() << 24;
+			iRes += int64_t ( tIn.GetByte() ) << 32;
+			iRes += int64_t ( tIn.GetByte() ) << 40;
+			iRes += int64_t ( tIn.GetByte() ) << 48;
+			iRes += int64_t ( tIn.GetByte() ) << 56;
+			return iRes;
 		}
-	case 0xFB: // NULL and 0xFF are not valid length prefixes
-	case 0xFF:
-		return -1;
 	default:
 		return int64_t (uVal);
 	}

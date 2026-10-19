@@ -1,0 +1,27 @@
+––– comment –––
+Columnar analyzers with exclude filters (found in the #5006 review).
+10000 distinct ints give generic-packed blocks, so NOT IN with two values goes through the linear values analyzer.
+10000 strings of one length give const-length blocks whose last subblock is partial; under a case-sensitive
+collation the raw string analyzer is used, and threads=1 leaves no rowid boundary to clip rows past the end.
+––– input –––
+sql() { mysql -h0 -P9306 --skip-table --batch --raw --skip-column-names -e "$1"; }
+––– output –––
+––– block: ../base/start-searchd –––
+––– input –––
+{ echo "CREATE TABLE t (s STRING engine='columnar', n INT engine='columnar');"; for b in $(seq 0 9); do echo "INSERT INTO t VALUES $(for i in $(seq $((b*1000)) $((b*1000+999))); do printf "(%d,'v%04d',%d)," $((i+1)) $i $i; done | sed 's/,$//');"; done; echo "FLUSH RAMCHUNK t;"; } | mysql -h0 -P9306 && echo ready
+––– output –––
+ready
+––– input –––
+sql "SELECT COUNT(*), SUM(n) FROM t WHERE n NOT IN (1,2) /*+ ColumnarScan(n) */; SHOW META LIKE 'index';" | tr '\t' ' '
+––– output –––
+9998 49994997
+index n:ColumnarScan (100%)
+––– input –––
+sql "SET collation_connection=binary; SELECT COUNT(*) FROM t WHERE s != 'v0001' OPTION threads=1 /*+ ColumnarScan(s) */; SHOW META LIKE 'index'; SELECT COUNT(*) FROM t WHERE s NOT IN ('v0001','v0002') OPTION threads=1 /*+ ColumnarScan(s) */;" | tr '\t' ' '
+––– output –––
+9999
+index s:ColumnarScan (100%)
+9998
+––– input –––
+sql "DROP TABLE t;"
+––– output –––

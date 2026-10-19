@@ -78,6 +78,6 @@ CSphGrouper * CreateGrouperString ( const CSphAttrLocator & tLoc, ESphCollation 
 CSphGrouper * CreateGrouperStringExpr ( ISphExpr * pExpr, ESphCollation eCollation );
 CSphGrouper * CreateGrouperMulti ( const CSphVector<CSphColumnInfo> & dAttrs, VecRefPtrs_t<ISphExpr *> dJsonKeys, ESphCollation eCollation );
 
-DistinctFetcher_i * CreateDistinctFetcher ( const CSphString & sName, const CSphAttrLocator & tLocator, ESphAttr eType );
+DistinctFetcher_i * CreateDistinctFetcher ( const CSphString & sName, const CSphAttrLocator & tLocator, ESphAttr eType, ESphCollation eCollation );
 
 #endif // _grouper_

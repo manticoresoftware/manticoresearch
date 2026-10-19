@@ -768,20 +768,25 @@ public:
 };
 
 
-class DistinctFetcherString_c : public DistinctFetcherPlain_c
+template <typename HASH>
+class DistinctFetcherString_T : public DistinctFetcherPlain_c, public HASH
 {
 	using DistinctFetcherPlain_c::DistinctFetcherPlain_c;
 
 public:
 	SphAttr_t			GetKey ( const CSphMatch & tMatch ) const override;
-	DistinctFetcher_i *	Clone() const override { return new DistinctFetcherString_c(m_tLocator); }
+	DistinctFetcher_i *	Clone() const override { return new DistinctFetcherString_T<HASH>(m_tLocator); }
 };
 
 
-SphAttr_t DistinctFetcherString_c::GetKey ( const CSphMatch & tMatch ) const
+template <typename HASH>
+SphAttr_t DistinctFetcherString_T<HASH>::GetKey ( const CSphMatch & tMatch ) const
 {
 	auto dBlob = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
-	return (SphAttr_t) sphFNV64 ( dBlob );
+	if ( IsEmpty ( dBlob ) )
+		return 0;
+
+	return (SphAttr_t) HASH::Hash ( dBlob.first, dBlob.second );
 }
 
 
@@ -888,13 +893,25 @@ public:
 };
 
 
-DistinctFetcher_i * CreateDistinctFetcher ( const CSphString & sName, const CSphAttrLocator & tLocator, ESphAttr eType )
+static DistinctFetcher_i * CreateDistinctFetcherString ( const CSphAttrLocator & tLocator, ESphCollation eCollation )
+{
+	switch ( eCollation )
+	{
+	case SPH_COLLATION_UTF8_GENERAL_CI:	return new DistinctFetcherString_T<Utf8CIHash_fn>(tLocator);
+	case SPH_COLLATION_LIBC_CI:			return new DistinctFetcherString_T<LibcCIHash_fn>(tLocator);
+	case SPH_COLLATION_LIBC_CS:			return new DistinctFetcherString_T<LibcCSHash_fn>(tLocator);
+	default:							return new DistinctFetcherString_T<BinaryHash_fn>(tLocator);
+	}
+}
+
+
+DistinctFetcher_i * CreateDistinctFetcher ( const CSphString & sName, const CSphAttrLocator & tLocator, ESphAttr eType, ESphCollation eCollation )
 {
 	switch ( eType )
 	{
 	case SPH_ATTR_STRING:
-case SPH_ATTR_STRINGPTR:
-case SPH_ATTR_TDIGEST_PTR:		return new DistinctFetcherString_c(tLocator);
+	case SPH_ATTR_STRINGPTR:		return CreateDistinctFetcherString ( tLocator, eCollation );
+	case SPH_ATTR_TDIGEST_PTR:		return new DistinctFetcherString_T<BinaryHash_fn>(tLocator);
 	case SPH_ATTR_JSON_FIELD:		return new DistinctFetcherJsonField_c(tLocator);
 	case SPH_ATTR_JSON_FIELD_PTR:	return new DistinctFetcherJsonFieldPtr_c(tLocator);
 	case SPH_ATTR_UINT32SET:

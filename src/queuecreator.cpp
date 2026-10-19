@@ -548,7 +548,7 @@ bool QueueCreator_c::SetupDistinctAttr()
 	if ( tDistinctAttr.IsColumnar() )
 		m_tGroupSorterSettings.m_pDistinctFetcher = CreateColumnarDistinctFetcher ( tDistinctAttr.m_sName, tDistinctAttr.m_eAttrType, m_tQuery.m_eCollation );
 	else
-		m_tGroupSorterSettings.m_pDistinctFetcher = CreateDistinctFetcher ( tDistinctAttr.m_sName, tDistinctAttr.m_tLocator, tDistinctAttr.m_eAttrType );
+		m_tGroupSorterSettings.m_pDistinctFetcher = CreateDistinctFetcher ( tDistinctAttr.m_sName, tDistinctAttr.m_tLocator, tDistinctAttr.m_eAttrType, m_tQuery.m_eCollation );
 
 	m_bJoinedGroupSort |= IsJoinAttr(tDistinctAttr.m_sName);
 

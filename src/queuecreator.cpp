@@ -548,7 +548,7 @@ bool QueueCreator_c::SetupDistinctAttr()
 	if ( tDistinctAttr.IsColumnar() )
 		m_tGroupSorterSettings.m_pDistinctFetcher = CreateColumnarDistinctFetcher ( tDistinctAttr.m_sName, tDistinctAttr.m_eAttrType, m_tQuery.m_eCollation );
 	else
-		m_tGroupSorterSettings.m_pDistinctFetcher = CreateDistinctFetcher ( tDistinctAttr.m_sName, tDistinctAttr.m_tLocator, tDistinctAttr.m_eAttrType );
+		m_tGroupSorterSettings.m_pDistinctFetcher = CreateDistinctFetcher ( tDistinctAttr.m_sName, tDistinctAttr.m_tLocator, tDistinctAttr.m_eAttrType, m_tQuery.m_eCollation );
 
 	m_bJoinedGroupSort |= IsJoinAttr(tDistinctAttr.m_sName);
 
@@ -2854,6 +2854,15 @@ bool QueueCreator_c::SetupGroupConcatHelperStorage()
 
 bool QueueCreator_c::CanCalcFastCountDistinct() const
 {
+	// the count comes from secondary indexes, which hash strings with the default collation
+	int iDistinctAttr = GetGroupDistinctAttrIndex();
+	if ( iDistinctAttr>=0 && m_tQuery.m_eCollation!=SPH_COLLATION_DEFAULT )
+	{
+		ESphAttr eType = m_pSorterSchema->GetAttr(iDistinctAttr).m_eAttrType;
+		if ( eType==SPH_ATTR_STRING || eType==SPH_ATTR_STRINGPTR )
+			return false;
+	}
+
 	bool bHasAggregates = PredictAggregates();
 	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && !m_tQuery.HasKnn() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }

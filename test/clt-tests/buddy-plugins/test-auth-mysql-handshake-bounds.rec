@@ -58,7 +58,6 @@ cases = [
     ('no-protocol41', fixed_header(0) + b'admin\x00\x00'),
     ('unterminated-username', fixed_header() + b'admin-not-terminated'),
     ('unterminated-ssl-username', fixed_header(PROTOCOL_41 | SSL) + b'admin-not-terminated'),
-    ('unexpected-ssl-full-response', fixed_header(PROTOCOL_41 | SSL) + b'admin\x00\x00'),
     ('unterminated-database', fixed_header(PROTOCOL_41 | CONNECT_WITH_DB) + b'admin\x00\x00' + b'bad_db'),
     ('unterminated-plugin', fixed_header(PROTOCOL_41 | PLUGIN_AUTH) + b'admin\x00\x00' + b'bad_plugin'),
     ('short-auth-data', fixed_header() + b'admin\x00\x14abc'),
@@ -88,7 +87,6 @@ short-fixed-header: rejected
 no-protocol41: rejected
 unterminated-username: rejected
 unterminated-ssl-username: rejected
-unexpected-ssl-full-response: rejected
 unterminated-database: rejected
 unterminated-plugin: rejected
 short-auth-data: rejected

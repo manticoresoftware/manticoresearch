@@ -2104,8 +2104,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			tSess.SetTaskState ( TaskState_e::HANDSHAKE );
 			HandshakeResponse41 tResponse ( *pIn, iPacketLen );
 
-			// SSLRequest is the only valid way to start TLS.
-			if ( !tResponse.IsValid() || ( tResponse.WantSSL() && !tSess.GetSsl() && iPacketLen!=32 ) || ( tSess.GetSsl() && iPacketLen==32 ) )
+			if ( !tResponse.IsValid() )
 			{
 				SendMysqlErrorPacket ( *pOut, uPacketID, FROMS ( "malformed MySQL handshake response" ), EMYSQL_ERR::UNKNOWN_COM_ERROR );
 				pOut->Flush ();

@@ -1181,7 +1181,8 @@ public:
 };
 
 
-class ExprFilterString_c : public ExprFilter_c<ISphFilter>
+template <EStrCmpDir DIR>
+class ExprFilterString_T : public ExprFilter_c<ISphFilter>
 {
 protected:
 	CSphString				m_sVal;
@@ -1190,7 +1191,7 @@ protected:
 	bool					m_bEq;
 
 public:
-	explicit ExprFilterString_c ( ISphExpr * pExpr, ESphCollation eCollation, bool bEq )
+	explicit ExprFilterString_T ( ISphExpr * pExpr, ESphCollation eCollation, bool bEq )
 		: ExprFilter_c<ISphFilter> ( pExpr )
 		, m_fnStrCmp ( GetStringCmpFunc ( eCollation ) )
 		, m_bEq ( bEq )
@@ -1209,26 +1210,35 @@ public:
 	bool Eval ( const CSphMatch & tMatch ) const
 	{
 		// attribute storages can fetch string length without reading the string itself
-		int iLen = m_pExpr->StringLenEval ( tMatch );
-		// StringLenEval returns -1 if not supported by expression
-		if ( iLen!=-1 && m_iValLength!=iLen )
-			return false;
+		// a different length only rules out equality
+		if_const ( DIR==EStrCmpDir::EQ )
+		{
+			int iLen = m_pExpr->StringLenEval ( tMatch );
+			// StringLenEval returns -1 if not supported by expression
+			if ( iLen!=-1 && m_iValLength!=iLen )
+				return false;
+		}
 
 		const BYTE * pVal = nullptr;
-		iLen = m_pExpr->StringEval ( tMatch, &pVal );
-		bool bEq = m_fnStrCmp ( {pVal, iLen}, {(const BYTE *) m_sVal.cstr (), m_iValLength}, false )==0;
-		return ( m_bEq==bEq );
+		int iLen = m_pExpr->StringEval ( tMatch, &pVal );
+		int iCmp = m_fnStrCmp ( {pVal, iLen}, {(const BYTE *) m_sVal.cstr (), m_iValLength}, false );
+		FreeDataPtr ( *m_pExpr, pVal );
+
+		if_const ( DIR==EStrCmpDir::EQ )
+			return m_bEq==( iCmp==0 );
+
+		return DIR==EStrCmpDir::LT ? iCmp<0 : iCmp>0;
 	}
 };
 
-class ExprFilterStringValues_c : public ExprFilterString_c
+class ExprFilterStringValues_c : public ExprFilterString_T<EStrCmpDir::EQ>
 {
 private:
 	StrVec_t m_dValues;
 
 public:
 	ExprFilterStringValues_c ( ISphExpr * pExpr, ESphCollation eCollation, bool bEq )
-		: ExprFilterString_c ( pExpr, eCollation, bEq )
+		: ExprFilterString_T<EStrCmpDir::EQ> ( pExpr, eCollation, bEq )
 	{}
 
 	void SetRefString ( const CSphString * pRef, int iCount )
@@ -1242,11 +1252,14 @@ public:
 		int iLen = m_pExpr->StringEval ( tMatch, &pVal );
 		ByteBlob_t sRef ( pVal, iLen );
 
-		return m_dValues.any_of( [this, &sRef] ( const CSphString & sVal )
+		bool bMatch = m_dValues.any_of( [this, &sRef] ( const CSphString & sVal )
 		{
 			bool bEq = m_fnStrCmp ( sRef, ByteBlob_t ( sVal ), false )==0;
 			return ( m_bEq==bEq );
 		});
+
+		FreeDataPtr ( *m_pExpr, pVal );
+		return bMatch;
 	}
 };
 
@@ -1347,7 +1360,8 @@ static std::unique_ptr<ISphFilter> SetupJsonExpr ( CSphRefcountedPtr<ISphExpr> &
 	ISphExpr* pFoo = nullptr;
 	AT_SCOPE_EXIT ( [&pFoo] { if (pFoo) pFoo->Release(); } );
 
-	if ( tFixedSettings.m_eType==SPH_FILTER_STRING_LIST || tFixedSettings.m_eType==SPH_FILTER_STRING )
+	// IN only checks equality; ordered string comparisons go to the converted field below
+	if ( tFixedSettings.m_eType==SPH_FILTER_STRING_LIST || ( tFixedSettings.m_eType==SPH_FILTER_STRING && tFixedSettings.m_eStrCmpDir==EStrCmpDir::EQ ) )
 		return std::make_unique<ExprFilterProxy_c> ( pFoo = ExprJsonIn ( tSettings.m_dStrings, pExpr, eCollation ), SPH_ATTR_INTEGER );
 
 	if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ANY )
@@ -1373,6 +1387,17 @@ static std::unique_ptr<ISphFilter> SetupJsonExpr ( CSphRefcountedPtr<ISphExpr> &
 }
 
 
+static std::unique_ptr<ISphFilter> CreateExprFilterString ( ISphExpr * pExpr, ESphCollation eCollation, EStrCmpDir eStrCmpDir, bool bEq )
+{
+	switch ( eStrCmpDir )
+	{
+		case EStrCmpDir::LT:	return std::make_unique<ExprFilterString_T<EStrCmpDir::LT>> ( pExpr, eCollation, bEq );
+		case EStrCmpDir::GT:	return std::make_unique<ExprFilterString_T<EStrCmpDir::GT>> ( pExpr, eCollation, bEq );
+		default:				return std::make_unique<ExprFilterString_T<EStrCmpDir::EQ>> ( pExpr, eCollation, bEq );
+	}
+}
+
+
 static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, CSphString & sError, ESphCollation eCollation, ESphAttr eAttrType )
 {
 	CSphRefcountedPtr<ISphExpr> pExpr { _pExpr };
@@ -1387,7 +1412,7 @@ static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const C
 		case SPH_FILTER_VALUES:			return std::make_unique<ExprFilterValues_c> ( pExpr );
 		case SPH_FILTER_FLOATRANGE:		CREATE_EXPR_RANGE_FILTER ( ExprFilterFloatRange_c, pExpr, tSettings.m_bHasEqualMin, tSettings.m_bHasEqualMax );
 		case SPH_FILTER_RANGE:			CREATE_EXPR_RANGE_FILTER ( ExprFilterRange_c, pExpr, tSettings.m_bHasEqualMin, tSettings.m_bHasEqualMax );
-		case SPH_FILTER_STRING:			return std::make_unique<ExprFilterString_c> ( pExpr, eCollation, tSettings.m_bHasEqualMin || tSettings.m_bHasEqualMax );
+		case SPH_FILTER_STRING:			return CreateExprFilterString ( pExpr, eCollation, tFixedSettings.m_eStrCmpDir, tSettings.m_bHasEqualMin || tSettings.m_bHasEqualMax );
 		case SPH_FILTER_STRING_LIST:	return std::make_unique<ExprFilterStringValues_c> ( pExpr, eCollation, tSettings.m_bHasEqualMin || tSettings.m_bHasEqualMax );
 		case SPH_FILTER_NULL:			return std::make_unique<ExprFilterNull_c> ( pExpr, tSettings.m_bIsNull, false );
 		case SPH_FILTER_EXPRESSION:

@@ -590,9 +590,6 @@ std::pair<bool, std::unique_ptr<FilterTreeNode_t>> FilterTreeConstructor_c::Cons
 				if ( !pFilter )
 					return {false, nullptr};
 
-				// might be a list from range string with both lt(e) and gt(e) nodes
-				if ( pFilter->m_pRight )
-					dAdded.push_back ( std::move(pFilter->m_pRight) );
 				dAdded.push_back ( std::move(pFilter) );
 			}
 		}
@@ -988,7 +985,7 @@ std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructRangeFilter 
 				pFilterNodeGt->m_pFilter = std::make_unique<CSphFilterSettings>( tFilter );
 				SetRangeStrLess ( tLess, tFilter );
 				SetRangeStrGreater ( tGreater, *pFilterNodeGt->m_pFilter );
-				pFilterNode->m_pRight = std::move ( pFilterNodeGt );
+				ConcatTrees ( pFilterNode, pFilterNodeGt );
 			}
 			else if ( bLess )
 			{

@@ -1718,6 +1718,8 @@ uint64_t CSphFilterSettings::GetHash() const
 				h = sphFNV64cont ( m_dStrings[iString].cstr(), h );
 			if ( m_eMvaFunc!=SPH_MVAFUNC_NONE )
 				h = sphFNV64 ( &m_eMvaFunc, sizeof ( m_eMvaFunc ), h );
+			if ( m_eStrCmpDir!=EStrCmpDir::EQ )
+				h = sphFNV64 ( &m_eStrCmpDir, sizeof ( m_eStrCmpDir ), h );
 		break;
 		case SPH_FILTER_NULL:
 			break;

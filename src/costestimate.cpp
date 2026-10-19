@@ -616,6 +616,10 @@ bool SelectIteratorCtx_t::IsEnabled_SI ( const CSphFilterSettings & tFilter ) co
 	if ( tFilter.m_eType!=SPH_FILTER_VALUES && tFilter.m_eType!=SPH_FILTER_STRING && tFilter.m_eType!=SPH_FILTER_STRING_LIST && tFilter.m_eType!=SPH_FILTER_RANGE && tFilter.m_eType!=SPH_FILTER_FLOATRANGE && tFilter.m_eType!=SPH_FILTER_NULL )
 		return false;
 
+	// string hashes do not preserve ordering
+	if ( tFilter.m_eType==SPH_FILTER_STRING && tFilter.m_eStrCmpDir!=EStrCmpDir::EQ )
+		return false;
+
 	// all(mva\string) need to scan whole row
 	if ( tFilter.m_eMvaFunc==SPH_MVAFUNC_ALL )
 		return false;
@@ -636,6 +640,10 @@ bool SelectIteratorCtx_t::IsEnabled_SI ( const CSphFilterSettings & tFilter ) co
 
 bool SelectIteratorCtx_t::IsEnabled_Analyzer ( const CSphFilterSettings & tFilter ) const
 {
+	// columnar string analyzers only support equality comparisons
+	if ( tFilter.m_eType==SPH_FILTER_STRING && tFilter.m_eStrCmpDir!=EStrCmpDir::EQ )
+		return false;
+
 	auto pAttr = m_tIndexSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
 	return pAttr && ( pAttr->IsColumnar() || pAttr->IsColumnarExpr() );
 }

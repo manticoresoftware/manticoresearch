@@ -207,6 +207,12 @@ sql "SELECT id FROM gh5006 WHERE rs>'a' AND cs='m' ORDER BY id ASC /*+ ColumnarS
 index $cs_HASH:ColumnarScan (100%)
 0
 ––– comment –––
+A string range on an expression key (not an attribute) keeps its direction; concat(rs,cs) doubles the value.
+––– input –––
+q '{"must":[{"range":{"concat(rs,cs)":{"gt":"mm"}}}]}'
+––– output –––
+[6,7,8]
+––– comment –––
 Single-filter COUNT(*) precalculation hashes strings with the default collation, so it must not
 answer string filters under a case-sensitive session collation (no row holds 'M').
 ––– input –––

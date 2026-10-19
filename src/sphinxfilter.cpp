@@ -1252,11 +1252,14 @@ public:
 		int iLen = m_pExpr->StringEval ( tMatch, &pVal );
 		ByteBlob_t sRef ( pVal, iLen );
 
-		return m_dValues.any_of( [this, &sRef] ( const CSphString & sVal )
+		bool bMatch = m_dValues.any_of( [this, &sRef] ( const CSphString & sVal )
 		{
 			bool bEq = m_fnStrCmp ( sRef, ByteBlob_t ( sVal ), false )==0;
 			return ( m_bEq==bEq );
 		});
+
+		FreeDataPtr ( *m_pExpr, pVal );
+		return bMatch;
 	}
 };
 

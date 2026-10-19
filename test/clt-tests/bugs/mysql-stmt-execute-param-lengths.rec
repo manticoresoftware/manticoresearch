@@ -1,0 +1,71 @@
+––– comment –––
+COM_STMT_EXECUTE: a negative length-encoded parameter length must be rejected,
+and an empty ?VEC? value must be bound as an empty list instead of crashing searchd.
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE stmt_vec (title text, m multi)" && echo created
+––– output –––
+created
+––– input –––
+python3 - <<'PY'
+import socket
+import struct
+
+
+def packet(sock):
+    header = b''
+    while len(header) < 4:
+        part = sock.recv(4 - len(header))
+        if not part:
+            raise RuntimeError('connection closed')
+        header += part
+    size = int.from_bytes(header[:3], 'little')
+    data = b''
+    while len(data) < size:
+        part = sock.recv(size - len(data))
+        if not part:
+            raise RuntimeError('connection closed')
+        data += part
+    return data
+
+
+def send(sock, seq, payload):
+    sock.sendall(len(payload).to_bytes(3, 'little') + bytes([seq]) + payload)
+
+
+def execute(name, query, param_type, value):
+    with socket.create_connection(('127.0.0.1', 9306), timeout=5) as sock:
+        sock.settimeout(5)
+        packet(sock)  # greeting
+        send(sock, 1, struct.pack('<IIB', 0x200, 1 << 24, 33) + bytes(23) + b'test\x00\x00')
+        packet(sock)  # OK
+        send(sock, 0, b'\x16' + query.encode())
+        prepared = packet(sock)
+        stmt_id, columns, params = struct.unpack('<IHH', prepared[1:9])
+        for _ in range(params + 1 + columns + (1 if columns else 0)):
+            packet(sock)  # param and column definitions with their EOFs
+        send(sock, 0, b'\x17' + struct.pack('<IBI', stmt_id, 0, 1) + b'\x00\x01' + bytes([param_type, 0]) + value)
+        reply = packet(sock)
+    print(name + (': rejected' if reply[0] == 0xff else ': ok' if reply[0] == 0x00 else ': result set'))
+
+
+DECIMAL, VAR_STRING = 0x00, 0xfd
+negative = b'\xfe' + b'\xff' * 8
+execute('decimal-negative', 'SELECT id FROM stmt_vec WHERE MATCH(?)', DECIMAL, negative)
+execute('string-negative', 'SELECT id FROM stmt_vec WHERE MATCH(?)', VAR_STRING, negative)
+execute('vector-negative', 'INSERT INTO stmt_vec (id, m) VALUES (2, (?VEC?))', VAR_STRING, negative)
+execute('vector-empty', 'INSERT INTO stmt_vec (id, m) VALUES (1, (?VEC?))', VAR_STRING, b'\x00')
+PY
+––– output –––
+decimal-negative: rejected
+string-negative: rejected
+vector-negative: rejected
+vector-empty: ok
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, LENGTH(m) AS n FROM stmt_vec"
+––– output –––
++------+------+
+| id   | n    |
++------+------+
+|    1 |    0 |
++------+------+

@@ -1454,7 +1454,7 @@ bool ParseBinaryParameters ( InputBuffer_c& tIn, const BinaryPreparedStmt_t& tSt
 		case MYSQL_TYPE::eDECIMAL:
 			{
 				auto iLen = MysqlReadPackedInt ( tIn );
-				if ( iLen > tIn.HasBytes() )
+				if ( iLen < 0 || iLen > tIn.HasBytes() )
 					return false;
 				CSphString sRawValue = tIn.GetRawString ( iLen );
 				dEscaped.AppendEscapedSkippingComma(sRawValue.cstr());
@@ -1543,7 +1543,7 @@ bool ParseBinaryParameters ( InputBuffer_c& tIn, const BinaryPreparedStmt_t& tSt
 		default:
 			{
 				auto iLen = MysqlReadPackedInt ( tIn );
-				if ( iLen > tIn.HasBytes() )
+				if ( iLen < 0 || iLen > tIn.HasBytes() )
 					return false;
 
 				CSphString sRawValue = tIn.GetRawString ( iLen );

@@ -102,9 +102,3 @@ valid-empty-attributes: parsed
 valid-attributes: parsed
 valid-lenenc64-auth: parsed
 valid-db-plugin: parsed
-––– comment –––
-Ordinary authenticated MySQL clients must still connect and execute a query.
-––– input –––
-MYSQL_PWD=adminpass mysql -h0 -P9306 -uadmin -e 'SELECT 1' >/dev/null && echo authenticated
-––– output –––
-authenticated

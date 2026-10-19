@@ -1250,6 +1250,27 @@ public:
 	}
 };
 
+class ExprFilterStringCmp_c : public ExprFilterString_c
+{
+public:
+	ExprFilterStringCmp_c ( ISphExpr * pExpr, ESphCollation eCollation, EStrCmpDir eStrCmpDir )
+		: ExprFilterString_c ( pExpr, eCollation, true )
+		, m_eStrCmpDir ( eStrCmpDir )
+	{}
+
+	bool Eval ( const CSphMatch & tMatch ) const
+	{
+		const BYTE * pVal = nullptr;
+		int iLen = m_pExpr->StringEval ( tMatch, &pVal );
+		int iCmp = m_fnStrCmp ( {pVal, iLen}, {(const BYTE *) m_sVal.cstr (), m_iValLength}, false );
+		FreeDataPtr ( *m_pExpr, pVal );
+		return m_eStrCmpDir==EStrCmpDir::LT ? iCmp<0 : iCmp>0;
+	}
+
+private:
+	EStrCmpDir	m_eStrCmpDir;
+};
+
 class ExprFilterNull_c : public ExprFilter_c<ISphFilter>
 {
 public:
@@ -1347,7 +1368,8 @@ static std::unique_ptr<ISphFilter> SetupJsonExpr ( CSphRefcountedPtr<ISphExpr> &
 	ISphExpr* pFoo = nullptr;
 	AT_SCOPE_EXIT ( [&pFoo] { if (pFoo) pFoo->Release(); } );
 
-	if ( tFixedSettings.m_eType==SPH_FILTER_STRING_LIST || tFixedSettings.m_eType==SPH_FILTER_STRING )
+	// IN only checks equality; ordered string comparisons go to the converted field below
+	if ( tFixedSettings.m_eType==SPH_FILTER_STRING_LIST || ( tFixedSettings.m_eType==SPH_FILTER_STRING && tFixedSettings.m_eStrCmpDir==EStrCmpDir::EQ ) )
 		return std::make_unique<ExprFilterProxy_c> ( pFoo = ExprJsonIn ( tSettings.m_dStrings, pExpr, eCollation ), SPH_ATTR_INTEGER );
 
 	if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ANY )
@@ -1381,6 +1403,9 @@ static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const C
 	std::unique_ptr<ISphFilter> pRes = SetupJsonExpr ( pExpr, tSettings, tFixedSettings, eCollation );
 	if ( pRes )
 		return pRes;
+
+	if ( tFixedSettings.m_eType==SPH_FILTER_STRING && tFixedSettings.m_eStrCmpDir!=EStrCmpDir::EQ )
+		return std::make_unique<ExprFilterStringCmp_c> ( pExpr, eCollation, tFixedSettings.m_eStrCmpDir );
 
 	switch ( tFixedSettings.m_eType )
 	{

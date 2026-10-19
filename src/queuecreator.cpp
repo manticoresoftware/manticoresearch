@@ -2861,6 +2861,11 @@ bool QueueCreator_c::CanCalcFastCountDistinct() const
 
 bool QueueCreator_c::CanCalcFastCountFilter() const
 {
+	// the count comes from secondary indexes, which hash strings with the default collation
+	const auto & dFilters = m_tQuery.m_dFilters;
+	if ( dFilters.GetLength()==1 && ( dFilters[0].m_eType==SPH_FILTER_STRING || dFilters[0].m_eType==SPH_FILTER_STRING_LIST ) && m_tQuery.m_eCollation!=SPH_COLLATION_DEFAULT )
+		return false;
+
 	bool bHasAggregates = PredictAggregates();
 	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.GetLength()==1 && m_tQuery.m_sQuery.IsEmpty() && !m_tQuery.HasKnn() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }

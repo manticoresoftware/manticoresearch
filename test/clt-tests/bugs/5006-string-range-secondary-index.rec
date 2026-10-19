@@ -195,6 +195,13 @@ sql "SELECT id FROM gh5006 WHERE rs>'a' AND cs='m' ORDER BY id ASC /*+ ColumnarS
 index $cs_HASH:ColumnarScan (100%)
 0
 ––– comment –––
+Single-filter COUNT(*) precalculation hashes strings with the default collation, so it must not
+answer string filters under a case-sensitive session collation (no row holds 'M').
+––– input –––
+sql "SET collation_connection=binary; SELECT COUNT(*) FROM gh5006 WHERE rs='M'; SELECT COUNT(*) FROM gh5006 WHERE cs IN ('M','z'); SELECT COUNT(*) FROM gh5006 WHERE j.s='M';" | paste -sd, -
+––– output –––
+0,1,0
+––– comment –––
 The query cache must keep string comparison directions apart: every query below has the same
 MATCH() and string, so a cached result of one direction must not be served for another.
 ––– input –––

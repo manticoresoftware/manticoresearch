@@ -354,13 +354,17 @@ Expr_Snippet_c::Expr_Snippet_c ( ISphExpr * pArglist, const CSphIndex * pIndex, 
 	char * pWords;
 	for ( int i = 2; i < pArglist->GetNumArgs(); i++ )
 	{
-		assert ( !pArglist->GetArg(i)->IsDataPtrAttr() ); // aware of memleaks potentially caused by StringEval()
-		int iLen = pArglist->GetArg(i)->StringEval ( tDummy, (const BYTE**)&pWords );
+		const ISphExpr * pArg = pArglist->GetArg(i);
+		int iLen = pArg->StringEval ( tDummy, (const BYTE**)&pWords );
 		if ( !pWords || !iLen )
+		{
+			FreeDataPtr ( pArg, pWords );
 			continue;
+		}
 
 		CSphString sArgs;
 		sArgs.SetBinary ( pWords, iLen );
+		FreeDataPtr ( pArg, pWords );
 		pWords = const_cast<char *> ( sArgs.cstr() );
 
 		const char * sEnd = pWords + iLen;

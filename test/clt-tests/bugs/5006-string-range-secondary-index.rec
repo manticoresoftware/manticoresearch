@@ -139,6 +139,18 @@ j.s {"gte":"m"}: {"ids":[4,5,6,7,8],"total":5}
 j.s {"gt":"a","lt":"n"}: {"ids":[3,4,5],"total":3}
 j.s {"gte":"a","lte":"n"}: {"ids":[2,3,4,5,6],"total":5}
 ––– comment –––
+A two-sided string range is one condition inside bool should and must_not, as an array item or an object.
+––– input –––
+q() { curl -sS -X POST http://localhost:9308/search -H 'Content-Type: application/json' -d "{\"table\":\"gh5006\",\"query\":{\"bool\":$1},\"sort\":[{\"id\":\"asc\"}],\"limit\":20}" | php -r '$r=json_decode(stream_get_contents(STDIN),true); echo json_encode(array_column($r["hits"]["hits"],"_id")),PHP_EOL;'; }
+R='{"range":{"rs":{"gt":"a","lt":"n"}}}'
+q "{\"should\":[$R]}"
+q "{\"must_not\":[$R]}"
+q "{\"must_not\":$R}"
+––– output –––
+[3,4,5]
+[1,2,6,7,8]
+[1,2,6,7,8]
+––– comment –––
 Equality and IN must still use secondary indexes. SHOW META verifies the actual row iterator,
 so this control cannot pass merely because COUNT(*) used its precalculation shortcut.
 ––– input –––

@@ -326,6 +326,36 @@ $typesRow = $typesRes->fetch_assoc();
 $results[] = "types row: " . json_encode($typesRow, JSON_UNESCAPED_SLASHES);
 $selectTypes->close();
 
+$emptyTypes = $mysqli->prepare("UPDATE ps_types SET m = (?VEC?), m64 = (?VEC?), vec = (?VEC?) WHERE id = ?");
+if (!$emptyTypes) {
+    $results[] = "Prepare types empty update failed: {$mysqli->error}";
+}
+$emptyM = "";
+$emptyM64 = "";
+$emptyVec = "";
+$emptyTypes->bind_param("sssi", $emptyM, $emptyM64, $emptyVec, $typeId);
+try {
+    if ($emptyTypes->execute()) {
+        $results[] = "empty vector/mva update ok";
+    } else {
+        $results[] = "empty vector/mva update failed: {$emptyTypes->error}";
+    }
+} catch (Throwable $e) {
+    $results[] = "empty vector/mva update failed: " . $e->getMessage();
+}
+$emptyTypes->close();
+
+$selectEmpty = $mysqli->prepare("SELECT id, m, m64, vec FROM ps_types WHERE id = ?");
+if (!$selectEmpty) {
+    $results[] = "Prepare types empty select failed: {$mysqli->error}";
+}
+$selectEmpty->bind_param("i", $typeId);
+if (!$selectEmpty->execute()) {
+    $results[] = "Execute types empty select failed: {$selectEmpty->error}";
+}
+$results[] = "types row after empty update: " . json_encode($selectEmpty->get_result()->fetch_assoc(), JSON_UNESCAPED_SLASHES);
+$selectEmpty->close();
+
 $results[] =  "Mode check: autocommit off and rollback (may be unsupported).";
 $mysqli->autocommit(false);
 $txStmt = $mysqli->prepare("INSERT INTO ps_test (id, title, price) VALUES (?, ?, ?)");

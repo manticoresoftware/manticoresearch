@@ -1,0 +1,34 @@
+––– comment –––
+COUNT(DISTINCT s) must count string values the same way GROUP BY s groups them under the session collation,
+for rowwise and columnar strings and for the precalculated (secondary index) count alike.
+––– input –––
+sql() { mysql -h0 -P9306 --skip-table --batch --raw --skip-column-names -e "$1"; }
+––– output –––
+––– block: ../base/start-searchd –––
+––– input –––
+sql "CREATE TABLE t (s STRING, n INT); CREATE TABLE tc (s STRING engine='columnar', n INT); INSERT INTO t VALUES (1,'a',1),(2,'A',1),(3,'m',1),(4,'M',1),(5,'m',1),(6,'z',1); INSERT INTO tc VALUES (1,'a',1),(2,'A',1),(3,'m',1),(4,'M',1),(5,'m',1),(6,'z',1); FLUSH RAMCHUNK t; FLUSH RAMCHUNK tc;" && echo ready
+––– output –––
+ready
+––– comment –––
+Per line: number of GROUP BY s groups, then COUNT(DISTINCT s) without a filter (precalculated under the default
+collation), with a filter, and per group of n.
+––– input –––
+for t in t tc; do
+  for c in libc_ci utf8_general_ci libc_cs binary; do
+    g=$(sql "SET collation_connection=$c; SELECT s FROM $t GROUP BY s" | wc -l)
+    d=$(sql "SET collation_connection=$c; SELECT COUNT(DISTINCT s) FROM $t; SELECT COUNT(DISTINCT s) FROM $t WHERE n=1; SELECT COUNT(DISTINCT s) FROM $t GROUP BY n" | paste -sd' ' -)
+    echo "$t $c: groups $g, distinct $d"
+  done
+done
+––– output –––
+t libc_ci: groups 3, distinct 3 3 3
+t utf8_general_ci: groups 3, distinct 3 3 3
+t libc_cs: groups 5, distinct 5 5 5
+t binary: groups 5, distinct 5 5 5
+tc libc_ci: groups 3, distinct 3 3 3
+tc utf8_general_ci: groups 3, distinct 3 3 3
+tc libc_cs: groups 5, distinct 5 5 5
+tc binary: groups 5, distinct 5 5 5
+––– input –––
+sql "DROP TABLE t; DROP TABLE tc;"
+––– output –––

@@ -2511,6 +2511,8 @@ public:
 		else
 			UTF8ToLower ( dBuf, std::basic_string_view<char> ( pSrcDoc, iSrcDocLen ) );
 
+		FreeDataPtr ( *m_pArg, pSrcDoc );
+
 		int iDstDocLen = dBuf.size();
 		CSphFixedVector<BYTE> dDst ( iDstDocLen );
 		memcpy ( dDst.Begin(), dBuf.data(), iDstDocLen );

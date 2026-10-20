@@ -22,6 +22,7 @@
 #include "sphinxudf.h"
 #include "sphinxquery/xqparser.h"
 #include "indexfiles.h"
+#include "fastcount.h"
 
 #include <gmock/gmock.h>
 
@@ -747,4 +748,31 @@ TEST_F ( RT, SendVsMerge )
 	SafeDelete ( pSrc );
 	pTok = nullptr; // owned and deleted by index
 	});
+}
+
+
+TEST ( FastCount, Aggregate64 )
+{
+	CSphSchema tSchema;
+	tSchema.AddAttr ( CSphColumnInfo ( "id", SPH_ATTR_BIGINT ), false );
+	CSphQuery tQuery;
+	tQuery.m_sQuery = "foo";
+	auto & tItem = tQuery.m_dItems.Add();
+	tItem.m_sExpr = "count(*)";
+	tItem.m_sAlias = "n";
+	SphQueueSettings_t tSettings ( tSchema );
+	SphQueueRes_t tRes;
+	CSphString sError;
+	std::unique_ptr<ISphMatchSorter> pSorter ( sphCreateQueue ( tSettings, tQuery, sError, tRes ) );
+	ASSERT_TRUE ( pSorter ) << sError.cstr();
+	ASSERT_TRUE ( pSorter->IsGroupby() );
+	auto * p = pSorter.get();
+	DWORD dStatic[2] = {};
+	const int64_t iLarge = ( int64_t(1)<<32 ) + 17;
+	PushFastCountMatch ( { &p, 1 }, dStatic, 0, 1, iLarge );
+	PushFastCountMatch ( { &p, 1 }, dStatic, 0, 1, iLarge );
+	EXPECT_EQ ( pSorter->GetTotalCount(), 1 );
+	CSphMatch tMatch;
+	ASSERT_EQ ( pSorter->Flatten ( &tMatch ), 1 );
+	EXPECT_EQ ( tMatch.GetAttr ( pSorter->GetSchema()->GetAttr("@count")->m_tLocator ), 2*iLarge );
 }

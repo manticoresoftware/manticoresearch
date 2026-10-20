@@ -11,6 +11,7 @@
 //
 
 #include "sphinxint.h"
+#include "fastcount.h"
 #include "sphinxrt.h"
 #include "sphinxpq.h"
 #include "sphinxsearch.h"
@@ -1725,6 +1726,7 @@ public:
 
 	bool				RtQwordSetup ( RtQword_t * pQword, int iSeg, const RtGuard_t& tGuard ) const;
 	bool				RtQwordSetupSegment ( RtQword_t* pQword, const RtSegment_t* pCurSeg, bool bSetup ) const;
+	bool				FastTermCountRam ( const RtSegVec_c & dRamSegs, const XQKeyword_t & tWord, const DictRefPtr_c & pDict, const VecTraits_T<ISphMatchSorter*> & dSorters, const CSphMultiQueryArgs & tArgs, CSphQueryResultMeta & tMeta ) const;
 
 	bool				IsWordDict () const { return GetDictFormat()!=DictFormat_e::CRC; }
 	DictFormat_e		GetDictFormat () const { assert ( m_pDict ); return m_pDict->GetSettings().GetDictFormat(); }
@@ -9352,6 +9354,8 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	tCtx.m_bSkipQCache = true;
 
 	int iStackNeed = -1;
+	bool bFastTermCount = false;
+
 	// no need to create ranker, etc if there's no query
 	if ( !bFullscan )
 	{
@@ -9362,6 +9366,8 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 			iStackNeed = 0;
 		} else
 		{
+			// single-term count(*) fast path: proven on the parsed tree here and re-checked after the transforms
+			bFastTermCount = IsFastTermCountQuery ( tQueryToRun, dSorters, tArgs ) && GetFastTermCountKeyword ( tParsed.m_pRoot, m_tSchema );
 			const bool bCanExpandRamWildcards = IsStarDict ( bWordDict );
 			iStackNeed = PrepareFTSearch ( this, bCanExpandRamWildcards, bWordDict, m_tMutableSettings.m_iExpandKeywords, m_iExpansionLimit, m_tSettings, tQueryToRun,(cRefCountedRefPtrGeneric_t) tGuard.m_tSegmentsAndChunks.m_pSegs, pDict, tMeta, pProfiler, &tPayloads, tParsed );
 		}
@@ -9401,7 +9407,12 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 		tFTArgs.m_bFinalizeSorters = tArgs.m_bFinalizeSorters;
 		tMeta.m_bBigram = ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE );
 
-		bResult = DoFullTextSearch ( tGuard.m_dRamSegs, tMaxSorterSchema, tQueryToRun, tQuerySettings, tFTArgs, iMatchPoolSize, iStackNeed, tTermSetup, pProfiler, tCtx, dSorters, tParsed, tMeta, dSorters.GetLength()==1 ? dSorters[0] : nullptr );
+		// RAM word doc counts include killed rows; with any dead row in RAM the regular path runs for all RAM segments
+		const XQKeyword_t * pFastWord = bFastTermCount ? GetFastTermCountKeyword ( tParsed.m_pRoot, m_tSchema ) : nullptr;
+		if ( pFastWord && tGuard.m_dRamSegs.all_of ( []( const auto & pSeg ) { return !pSeg->m_tDeadRowMap.HasDead(); } ) )
+			bResult = FastTermCountRam ( tGuard.m_dRamSegs, *pFastWord, pDict, dSorters, tFTArgs, tMeta );
+		else
+			bResult = DoFullTextSearch ( tGuard.m_dRamSegs, tMaxSorterSchema, tQueryToRun, tQuerySettings, tFTArgs, iMatchPoolSize, iStackNeed, tTermSetup, pProfiler, tCtx, dSorters, tParsed, tMeta, dSorters.GetLength()==1 ? dSorters[0] : nullptr );
 	}
 
 	if (!bResult)
@@ -9419,6 +9430,40 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	tResult.m_pDocstore = m_tSchema.HasStoredFields() || m_tSchema.HasStoredAttrs() ? this : nullptr;
 	tMeta.SetQueryTimeUs ( sphMicroTimer() - tmQueryStart );
 	tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
+	return true;
+}
+
+
+bool RtIndex_c::FastTermCountRam ( const RtSegVec_c & dRamSegs, const XQKeyword_t & tWord, const DictRefPtr_c & pDict, const VecTraits_T<ISphMatchSorter*> & dSorters, const CSphMultiQueryArgs & tArgs, CSphQueryResultMeta & tMeta ) const
+{
+	CSphScopedProfile tProf ( tMeta.m_pProfile, SPH_QSTATE_FAST_COUNT );
+
+	RtQword_t tQword;
+	KeywordBuf_t tBuf ( GetDictFormat() );
+	SetupFastCountQword ( tQword, tWord, pDict, tBuf );
+	if ( tQword.m_uWordID )
+		for ( const auto & pSeg : dRamSegs )
+			RtQwordSetupSegment ( &tQword, pSeg, false );
+
+	// same keyword stats the ranker would have produced
+	tMeta.m_bBigram = ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE );
+	tMeta.AddStat ( tQword.m_sDictWord, tQword.m_iDocs, tQword.m_iHits );
+
+	if ( tQword.m_iDocs>0 )
+	{
+		// any live row works as the static part of the aggregated match; segment 0 row 0 is live since no RAM rows are dead
+		const RtSegment_t * pSeg = dRamSegs[0];
+		SccRL_t rLock ( pSeg->m_tLock );
+		for ( auto * pSorter : dSorters )
+		{
+			pSorter->SetBlobPool ( pSeg->m_dBlobs.Begin() );
+			pSorter->SetColumnar ( pSeg->m_pColumnar.get() );
+		}
+
+		PushFastCountMatch ( dSorters, pSeg->GetDocinfoByRowID(0), 1, tArgs.m_iIndexWeight, tQword.m_iDocs );
+	}
+
+	RecordFastCount ( tMeta );
 	return true;
 }
 

@@ -388,6 +388,7 @@ public:
 private:
 	CSphQueue<typename BASE::IteratorState_t*, typename BASE::IteratorState_t> m_tMerge;
 	int			m_iRowsLeft = INT_MAX;
+	RowID_t		m_tLastRowID = INVALID_ROWID;
 
 	FORCE_INLINE void AdvanceQueue ( typename BASE::IteratorState_t * pState );
 };
@@ -434,17 +435,16 @@ bool RowidIterator_Union_T<T,ROWID_LIMITS>::GetNextRowIdBlock ( RowIdBlock_t & d
 	RowID_t * pRowIdMax = pRowIdStart + Min ( BASE::m_dCollected.GetLength()-1, m_iRowsLeft );
 	RowID_t * pRowID = pRowIdStart;
 
-	RowID_t tLastRowID = INVALID_ROWID;
 	while ( pRowID<pRowIdMax && m_tMerge.GetLength()>1 )
 	{
 		auto pState = m_tMerge.Root();
 		m_tMerge.Pop();
 
 		RowID_t tCurRowID = *pState->m_pRowID;
-		if ( tCurRowID!=tLastRowID ) // skip all items with the same row-id
+		if ( tCurRowID!=m_tLastRowID ) // skip all items with the same row-id
 			*pRowID++ = tCurRowID;
 
-		tLastRowID = tCurRowID;
+		m_tLastRowID = tCurRowID;
 		AdvanceQueue(pState);
 	}
 
@@ -454,7 +454,12 @@ bool RowidIterator_Union_T<T,ROWID_LIMITS>::GetNextRowIdBlock ( RowIdBlock_t & d
 		do
 		{
 			while ( pRowID<pRowIdMax && pState->m_pRowID<pState->m_pRowIDMax )
-				*pRowID++ = *pState->m_pRowID++;
+			{
+				RowID_t tCurRowID = *pState->m_pRowID++;
+				if ( tCurRowID!=m_tLastRowID )
+					*pRowID++ = tCurRowID;
+				m_tLastRowID = tCurRowID;
+			}
 		}
 		while ( pState->m_pRowID>=pState->m_pRowIDMax && pState->WarmupDocs() );
 

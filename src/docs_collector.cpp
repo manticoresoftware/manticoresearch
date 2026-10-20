@@ -45,6 +45,7 @@ class DocsCollector_c::Impl_c
 
 	void ProcessFull ( const CSphQuery& tQuery, bool bJson, QueryType_e eQueryType, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
 	{
+		CrashQueryKeeper_c _; // the search points the crash index into tHandler; restore the caller's one on exit
 		SearchHandler_c tHandler ( 1, CreateQueryParser ( bJson ), eQueryType, false );
 		tHandler.m_dAcquired.AddIndex ( sIndex, pDesc );
 		tHandler.RunCollect ( tQuery, sIndex, pError, &m_dCompressedDocids );

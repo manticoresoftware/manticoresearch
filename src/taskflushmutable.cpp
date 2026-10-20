@@ -11,6 +11,7 @@
 //
 #include "taskflushmutable.h"
 #include "searchdtask.h"
+#include "task_info.h"
 #include "searchdaemon.h"
 
 using namespace Threads;
@@ -82,6 +83,8 @@ void ScheduleFlushTask ( CSphString sName )
 
 	TaskManager::ScheduleJob ( iRtFlushTask, iLastFlushFinishedTime + FlushPeriodUs(), [sName = std::move ( sName )]() mutable
 	{
+		auto pDesc = PublishSystemInfo ( "FLUSH RT" );
+		pDesc->m_dCrashIndex = FromStr ( sName );
 		if ( FlushSet().IsDisabled() || !FlushSet().Contains ( sName ) )
 			return;
 

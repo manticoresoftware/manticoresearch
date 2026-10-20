@@ -415,6 +415,7 @@ bool Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	}
 
 	auto fnHandler = [] {
+		auto pDesc = PublishSystemInfo ( "SHUTDOWN" );
 		SHUTINFO << "Abandon local tables list ...";
 		g_pLocalIndexes->ReleaseAndClear();
 
@@ -2169,6 +2170,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries,
 
 	RIdx_c pLocalIndex { pServed };
 	assert ( pLocalIndex );
+	GlobalCrashQueryGetRef().m_dIndex = FromSz ( pLocalIndex->GetName() );
 
 	///////////////////
 	/// do highlighting
@@ -3270,6 +3272,7 @@ void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLengt
 	auto& tCrashQuery = GlobalCrashQueryGetRef();
 	tCrashQuery.m_eType = QUERY_API;
 	tCrashQuery.m_dQuery = { tBuf.GetBufferPtr(), iLength };
+	tCrashQuery.m_dIndex = {};
 	tCrashQuery.m_uCMD = eCommand;
 	tCrashQuery.m_uVer = uCommandVer;
 
@@ -3868,6 +3871,7 @@ static void PQLocalMatch ( const BlobVec_t & dDocs, const CSphString & sIndex, c
 	pServed->m_pStats->IncCmd ( SEARCHD_COMMAND_CALLPQ );
 
 	RIdx_T<PercolateIndex_i*> pIndex { pServed };
+	GlobalCrashQueryGetRef().m_dIndex = FromSz ( pIndex->GetName() );
 	RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
 	sMsg.Err ( sError );
 
@@ -5693,6 +5697,7 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 		sError.SetSprintf ( "no such table %s", sIndex.cstr() );
 		return false;
 	}
+	GlobalCrashQueryGetRef().m_dIndex = FromStr ( sIndex );
 
 	bool bOk = false;
 	// just local plain or template index
@@ -5714,6 +5719,7 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 				tFailureLog.Submit ( sLocal.cstr(), sIndex.cstr(), "missed table" );
 				continue;
 			}
+			GlobalCrashQueryGetRef().m_dIndex = FromStr ( sLocal );
 			pServed->m_pStats->IncCmd ( SEARCHD_COMMAND_KEYWORDS );
 
 			dKeywordsLocal.Resize(0);
@@ -6161,6 +6167,7 @@ static bool SuggestLocalIndexGet ( const cServedIndexRefPtr_c & pServed, const S
 	pServed->m_pStats->IncCmd ( SEARCHD_COMMAND_SUGGEST );
 
 	RIdx_c pIdx { pServed };
+	GlobalCrashQueryGetRef().m_dIndex = FromSz ( pIdx->GetName() );
 	if ( pIdx->GetDictionary()->GetSettings().IsKeywordsV2() )
 	{
 		sError.SetSprintf ( "SUGGEST/QSUGGEST is not supported for dict=keywords_32k yet" );
@@ -12941,6 +12948,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	auto& tCrashQuery = GlobalCrashQueryGetRef();
 	tCrashQuery.m_eType = QUERY_SQL;
 	tCrashQuery.m_dQuery = { (const BYTE*) sQuery.first, sQuery.second };
+	tCrashQuery.m_dIndex = {};
 
 	// fixme! That is dirty hack, should be handled another way
 	constexpr Str_t mysqldump_8_0_39_30_hack {FROMS("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE table_schema = 'performance_schema' AND table_name = 'session_variables'")};
@@ -12989,6 +12997,8 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	}
 	SqlStmt_t * pStmt = dStmt.Begin();
 	assert ( !bParsedOK || pStmt );
+	if ( pStmt )
+		tCrashQuery.m_dIndex = FromStr ( pStmt->m_sIndex );
 
 	myinfo::SetCommand ( SqlStmt2Str(eStmt) );
 	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
@@ -14541,6 +14551,7 @@ static void InvokeRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( MainT
 		{
 			ServedIndexRefPtr_c& pReplacementServed = tIndex.second;
 			const CSphString& sIndex = tIndex.first;
+			pDesc->m_dCrashIndex = FromStr ( sIndex );
 
 			// cluster indexes got managed by different path
 			assert ( !ServedDesc_t::IsCluster ( pReplacementServed ) && "Rotation of clusters MUST never happens!" );
@@ -14567,6 +14578,7 @@ static void InvokeRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( MainT
 
 			g_pDistIndexes->Delete ( sIndex ); // postponed delete of same-named distributed (if any)
 		}
+		pDesc->m_dCrashIndex = {};
 
 		g_bInRotate = false;
 		RotateGlobalIdf();
@@ -15201,11 +15213,13 @@ static void DoGreedyRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( Mai
 	assert ( !g_bSeamlessRotate );
 	sd::reloading();
 	ScRL_t tRotateConfigMutex { g_tRotateConfigMutex };
+	auto pDesc = PublishSystemInfo ( "ROTATION" );
 
 	for ( auto& dDeferredIndex :  dDeferredIndexes )
 	{
 		sd::reloading();
 		const CSphString& sDeferredIndex = dDeferredIndex.first;
+		pDesc->m_dCrashIndex = FromStr ( sDeferredIndex );
 		ServedIndexRefPtr_c& pDeferredIndex = dDeferredIndex.second;
 		assert ( pDeferredIndex );
 
@@ -15256,6 +15270,7 @@ static void DoGreedyRotation ( VecOfServed_c&& dDeferredIndexes ) REQUIRES ( Mai
 
 		g_pDistIndexes->Delete ( sDeferredIndex ); // postponed delete of same-named distributed (if any)
 	}
+	pDesc->m_dCrashIndex = {};
 
 //	assert ( dDeferredIndexes.IsEmpty() );
 	g_bInRotate = false;
@@ -16331,6 +16346,8 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 
 			StrVec_t dWarnings;
 			CSphString sError;
+			auto pDesc = PublishSystemInfo ( "PRELOAD" );
+			pDesc->m_dCrashIndex = FromSz ( szIndexName );
 			ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, szIndexName, dWarnings, sError );
 			for ( const auto & i : dWarnings )
 				sphWarning ( "table '%s': %s", szIndexName, i.cstr() );
@@ -17044,6 +17061,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	tEarlyLibCleanup.Release();
 
 	sd::mainpid(getpid());
+	CrashLogger::SetupTimePID(); // crash dump header before the main loop starts refreshing it
 	LogTimeZoneStartup(sTZWarning);
 
 	// init before workpool, as last checks binlog

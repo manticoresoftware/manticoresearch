@@ -2348,6 +2348,7 @@ public:
 			bResult = false;
 			auto& tCrashQuery = GlobalCrashQueryGetRef();
 			tCrashQuery.m_dQuery = { (const BYTE*) tQuery.first, tQuery.second };
+			tCrashQuery.m_dIndex = {};
 			const char* szStmt = tQuery.first;
 			SqlStmt_t tStmt;
 			tStmt.m_bJson = true;
@@ -2539,6 +2540,7 @@ private:
 	bool CommitBulkTxn ( BulkTxnState_t & tTxnState, DocID_t & tDocId, JsonObj_c & tResult, JsonObj_c & tResults, int & iLastTxStartLine, int iCommittedThroughLine )
 	{
 		assert ( tTxnState.HasIndex() );
+		GlobalCrashQueryGetRef().m_dQuery = S2B ( FROMS ( "bulk commit" ) ); // not the line that triggered the commit
 		bool bResult = ProcessCommitRollback ( FromStr ( tTxnState.m_sIndex ), tDocId, tResult, m_sError );
 		AddBulkResult ( tResults, "bulk", tResult );
 		if ( bResult )
@@ -2798,6 +2800,10 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoi
 HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType, bool bSkipAuth, bool bCompressed )
 {
 	TRACE_CONN ( "conn", "ProcessHttpQuery" );
+	auto & tCrashQuery = GlobalCrashQueryGetRef();
+	tCrashQuery.m_eType = QUERY_JSON;
+	tCrashQuery.m_dQuery = {};
+	tCrashQuery.m_dIndex = {};
 
 	HttpProcessResult_t tRes;
 

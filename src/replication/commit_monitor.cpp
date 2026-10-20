@@ -81,6 +81,7 @@ bool CommitMonitor_c::CommitNonEmptyCmds ( RtIndex_i * pIndex, const Replication
 	TLS_MSG_STRING ( sError );
 
 	assert ( pIndex );
+	GlobalCrashQueryGetRef().m_dIndex = FromSz ( pIndex->GetName() );
 	if ( !bOnlyTruncate )
 		return pIndex->Commit ( m_pDeletedCount, &m_tAcc, &sError );
 
@@ -185,6 +186,7 @@ bool CommitMonitor_c::UpdateTOI ()
 	cServedIndexRefPtr_c pServed { GetServed ( tCmd.m_sIndex ) };
 	if ( !pServed )
 		return TlsMsg::Err ( "requires an existing table" );
+	GlobalCrashQueryGetRef().m_dIndex = FromSz ( UnlockedHazardIdxFromServed ( *pServed )->GetName() );
 
 	assert ( m_pUpdated );
 	assert ( m_pWarning );

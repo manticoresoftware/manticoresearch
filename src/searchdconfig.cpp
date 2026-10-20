@@ -622,6 +622,8 @@ void ConfigureAndPreloadConfiglessIndexes ( int & iValidIndexes, int & iCounter 
 	{
 		CSphString sError;
 		StrVec_t dWarnings;
+		auto pDesc = PublishSystemInfo ( "PRELOAD" );
+		pDesc->m_dCrashIndex = FromStr ( tIndex.m_sName );
 		ESphAddIndex eAdd = ConfiglessPreloadIndex ( tIndex, dWarnings, sError );
 		iValidIndexes += ( eAdd==ADD_ERROR ? 0 : 1 );
 		iCounter += ( eAdd== ADD_NEEDLOAD ? 1 : 0 );

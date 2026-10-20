@@ -14,7 +14,7 @@ ready
 ––– comment –––
 Force SI in SQL to verify the iterator path instead of accidentally testing a table scan.
 ––– input –––
-mysql -N -B -h0 -P9306 -e "SELECT id, IN(j.series,'a','b') AS matched FROM si_union_small WHERE matched=1 ORDER BY id ASC LIMIT 0,16 /*+ SecondaryIndex(j['series']) */; SHOW META LIKE 'index';" | php -r '$ids=[];$si=false;while(($line=fgets(STDIN))!==false){$f=explode("\t",trim($line));if($f[0]==="index"){$si=strpos($f[1]??"","SecondaryIndex")!==false;}elseif(ctype_digit($f[0])){$ids[]=(int)$f[0];}}echo json_encode(["ids"=>$ids,"unique"=>count(array_unique($ids)),"si"=>$si]),PHP_EOL;'
+curl -sS -X POST 'http://localhost:9308/sql?mode=raw' --data-urlencode "query=SELECT id, IN(j.series,'a','b') AS matched FROM si_union_small WHERE matched=1 ORDER BY id ASC LIMIT 0,16 /*+ SecondaryIndex(j['series']) */; SHOW META LIKE 'index'" | php -r '$r=json_decode(stream_get_contents(STDIN),true);if(!is_array($r)||!isset($r[0]["data"])||!empty($r[0]["error"])){fwrite(STDERR,"SQL error: ".json_encode($r)."\n");exit(1);}$ids=array_map("intval",array_column($r[0]["data"],"id"));$si=false;foreach($r[1]["data"]??[] as $m){if($m["Variable_name"]==="index")$si=strpos($m["Value"],"SecondaryIndex")!==false;}echo json_encode(["ids"=>$ids,"unique"=>count(array_unique($ids)),"si"=>$si]),PHP_EOL;'
 ––– output –––
 {"ids":[10001,10002,10003,10004],"unique":4,"si":true}
 ––– comment –––
@@ -25,9 +25,14 @@ curl -sS -X POST http://localhost:9308/search -H 'Content-Type: application/json
 {"total":4,"ids":[10001,10002,10003,10004],"colors":{"blue":2,"red":2}}
 ––– comment –––
 When a union result spans more than one row-id block, the last emitted row
-must also be remembered across GetNextRowIdBlock() calls.
+must also be remembered across GetNextRowIdBlock() calls. Keep the matches
+selective so the secondary index is actually used.
 ––– input –––
-manticore-load --quiet --json --port=9306 --init="DROP TABLE IF EXISTS si_union_blocks; CREATE TABLE si_union_blocks (j JSON secondary_index='1');" --load="INSERT INTO si_union_blocks (id,j) VALUES (<increment>,'{\"series\":[\"a\",\"b\"],\"color\":\"red\"}')" --batch-size=550 --threads=1 --total=1100 > /dev/null; echo $?
+manticore-load --quiet --json --port=9306 --init="DROP TABLE IF EXISTS si_union_blocks; CREATE TABLE si_union_blocks (j JSON secondary_index='1');" --load="INSERT INTO si_union_blocks (id,j) VALUES (<increment>,'{\"series\":[\"other\"],\"color\":\"other\"}')" --batch-size=1000 --threads=2 --total=10000 > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+manticore-load --quiet --json --port=9306 --load="REPLACE INTO si_union_blocks (id,j) VALUES (<increment>,'{\"series\":[\"a\",\"b\"],\"color\":\"red\"}')" --batch-size=550 --threads=1 --total=1100 > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
@@ -35,7 +40,7 @@ mysql -h0 -P9306 -e "FLUSH RAMCHUNK si_union_blocks;" && echo ready
 ––– output –––
 ready
 ––– input –––
-mysql -N -B -h0 -P9306 -e "SELECT id, IN(j.series,'a','b') AS matched FROM si_union_blocks WHERE matched=1 ORDER BY id ASC LIMIT 0,1200 OPTION max_matches=2000,cutoff=0 /*+ SecondaryIndex(j['series']) */; SHOW META LIKE 'index';" | php -r '$ids=[];$si=false;while(($line=fgets(STDIN))!==false){$f=explode("\t",trim($line));if($f[0]==="index"){$si=strpos($f[1]??"","SecondaryIndex")!==false;}elseif(ctype_digit($f[0])){$ids[]=(int)$f[0];}}echo json_encode(["rows"=>count($ids),"unique"=>count(array_unique($ids)),"si"=>$si]),PHP_EOL;'
+curl -sS -X POST 'http://localhost:9308/sql?mode=raw' --data-urlencode "query=SELECT id, IN(j.series,'a','b') AS matched FROM si_union_blocks WHERE matched=1 ORDER BY id ASC LIMIT 0,1200 OPTION max_matches=2000,cutoff=0 /*+ SecondaryIndex(j['series']) */; SHOW META LIKE 'index'" | php -r '$r=json_decode(stream_get_contents(STDIN),true);if(!is_array($r)||!isset($r[0]["data"])||!empty($r[0]["error"])){fwrite(STDERR,"SQL error: ".json_encode($r)."\n");exit(1);}$ids=array_map("intval",array_column($r[0]["data"],"id"));$si=false;foreach($r[1]["data"]??[] as $m){if($m["Variable_name"]==="index")$si=strpos($m["Value"],"SecondaryIndex")!==false;}echo json_encode(["rows"=>count($ids),"unique"=>count(array_unique($ids)),"si"=>$si]),PHP_EOL;'
 ––– output –––
 {"rows":1100,"unique":1100,"si":true}
 ––– input –––

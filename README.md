@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://manticoresearch.com" target="_blank" rel="noopener">
-    <img src="https://manticoresearch.com/logo.png" width="50%" alt="Manticore Search Logo">
+    <img src="https://manticoresearch.com/logo.png" width="30%" alt="Manticore Search Logo">
   </a>
 </p>
 
@@ -72,6 +72,17 @@ select * from movies where match('google');
 
 Next steps: the [Quick start guide](https://manual.manticoresearch.com/Quick_start_guide) shows the same workflow over HTTP JSON and with the official clients, and the [interactive courses](https://play.manticoresearch.com/) let you try features in the browser.
 
+# Live demos
+
+| Demo | What it shows | Source |
+|---|---|---|
+| [Search Playground](https://playground.manticoresearch.com/) | One product catalog searched six ways: [full-text with typos](https://playground.manticoresearch.com/?mode=fulltext&q=lether+jaket), [vector](https://playground.manticoresearch.com/?mode=vector&q=outfit+for+a+job+interview), [hybrid](https://playground.manticoresearch.com/?mode=hybrid&q=comfy+shoes+for+all+day), [image](https://playground.manticoresearch.com/?mode=image&q=red+plaid+flannel+shirt), [geo](https://playground.manticoresearch.com/?mode=geo) and [Ask AI](https://playground.manticoresearch.com/?mode=chat) conversational search. Each search shows the SQL it ran. | [demo-search-playground](https://github.com/manticoresoftware/demo-search-playground) |
+| [GitHub issue search](https://github.manticoresearch.com/manticoresoftware/manticoresearch) | Keyword, fuzzy and semantic search with autocomplete and filter counts over GitHub issues, pull requests and comments | [manticore-github-issue-search](https://github.com/manticoresoftware/manticore-github-issue-search) |
+| [Reverse image search](https://image.manticoresearch.com/) | Finds similar images from an uploaded picture or a text description with KNN vector search | [manticore-image-search](https://github.com/manticoresoftware/manticore-image-search) |
+| [Faceted search](https://facet.manticoresearch.com/) | Product filters whose facet counts are computed in the same request and stay useful after every click | [facet_demo](https://github.com/manticoresoftware/facet_demo) |
+| [Catalog demo](https://catalog.manticoresearch.com/) | A board-game catalog built with the PHP client: full-text search with autocomplete, faceted category and tag filters with counts, and price, year, player and play-time ranges | [php-catalog-demo](https://github.com/manticoresoftware/php-catalog-demo) |
+| [Shop assistant](https://chat.manticoresearch.com/) | Conversational search over 82,524 products: Manticore retrieves the products and an LLM answers using only those results, with an editable answer prompt | [demo-conversational-search](https://github.com/manticoresoftware/demo-conversational-search) |
+
 # Why Manticore Search
 
 * ⚡ **Low latency on modest hardware.** The search daemon is written in C++, parallelizes queries to use all CPU cores when needed, and uses about 40 MB of RSS RAM when empty. See the [benchmarks](#benchmarks).
@@ -104,7 +115,7 @@ Each ratio is the dashboard's geometric mean of per-query response-time ratios, 
 
 # Installation
 
-The current release is listed on the [releases page](https://github.com/manticoresoftware/manticoresearch/releases/latest) and in the [changelog](https://manual.manticoresearch.com/Changelog). Since version 25.0.0, the `manticore` package is a single bundle that already includes Manticore Buddy, the Manticore Columnar Library (columnar storage, secondary indexes, KNN and auto-embeddings), backup and Galera.
+The current release is listed on the [releases page](https://github.com/manticoresoftware/manticoresearch/releases/latest) and in the [changelog](https://manual.manticoresearch.com/Changelog). Since version 25.0.0, the DEB and RPM `manticore` package is a single bundle that already includes Manticore Buddy, the Manticore Columnar Library (columnar storage, secondary indexes, KNN and auto-embeddings), backup and Galera. The Homebrew formula and the Docker image also include Manticore Buddy and the Manticore Columnar Library.
 
 ## Quick install on Linux and macOS
 

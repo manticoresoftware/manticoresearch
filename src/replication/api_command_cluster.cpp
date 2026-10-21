@@ -19,6 +19,7 @@
 #include "cluster_commands.h"
 #include "cluster_recv_state_cleanup.h"
 #include "cluster_sst_progress.h"
+#include "cluster_check_node.h"
 
 void operator<< ( ISphOutputBuffer& tOut, const ClusterRequest_t& tReq )
 {
@@ -195,6 +196,10 @@ void HandleAPICommandCluster ( GenericOutputBuffer_c & tOut, WORD uCommandVer, I
 
 	case E_CLUSTER::RECV_STATE_CLEANUP:
 		ReceiveClusterRecvStateCleanup ( tOut, tBuf, sCluster );
+		break;
+
+	case E_CLUSTER::CHECK_NODE:
+		ReceiveClusterCheckNode ( tOut, tBuf, sCluster );
 		break;
 
 	default:

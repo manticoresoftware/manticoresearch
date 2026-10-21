@@ -40,6 +40,7 @@ enum class E_CLUSTER : WORD
 	RECV_STATE_CLEANUP	= 13,
 	EXIT_UPDATE_NODES	= 14,
 	GET_NODE_AUTH		= 15,
+	CHECK_NODE			= 16,
 };
 
 inline constexpr bool IsClusterHeartbeatCommand ( E_CLUSTER eCmd )
@@ -66,6 +67,7 @@ inline constexpr const char* szClusterCmd ( E_CLUSTER eCmd )
 	case E_CLUSTER::RECV_STATE_CLEANUP: return "recv_state_cleanup";
 	case E_CLUSTER::EXIT_UPDATE_NODES: return "exit_update_nodes";
 	case E_CLUSTER::GET_NODE_AUTH: return "get_node_auth";
+	case E_CLUSTER::CHECK_NODE: return "check_node";
 	default: return "unknown";
 	}
 }

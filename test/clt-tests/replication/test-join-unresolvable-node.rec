@@ -1,0 +1,97 @@
+––– comment –––
+JOIN CLUSTER joins the existing cluster when a node in its node list no longer resolves, instead of starting a new one-node cluster (gh-4975)
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=gone_check
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE t (id bigint, title text); ALTER CLUSTER gone_check ADD t; INSERT INTO gone_check:t VALUES (1, 'a'), (2, 'b');"
+––– output –––
+––– comment –––
+Node 2 uses node_address c-gone-node, a name that resolves only through /etc/hosts
+––– input –––
+echo "127.0.0.1 c-gone-node" >> /etc/hosts; getent hosts c-gone-node | awk '{print $1}'
+––– output –––
+127.0.0.1
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-2 && echo -e 'searchd\n{\n\tlisten = 127.0.0.1:2306:mysql41\n\tlisten = 127.0.0.1:2312\n\tlisten = 127.0.0.1:2308:http\n\tnode_address = c-gone-node\n\tlog = /var/log/manticore-2/searchd.log\n\tquery_log = /var/log/manticore-2/query.log\n\tpid_file = /var/log/manticore-2/searchd.pid\n\tdata_dir = /var/log/manticore-2\n\tserver_id = 2\n}' > /tmp/gone-node2.conf
+––– output –––
+––– input –––
+stdbuf -oL searchd -c /tmp/gone-node2.conf > /dev/null; for i in $(seq 1 60); do mysql -h0 -P2306 -e "SELECT 1" > /dev/null 2>&1 && echo "node 2 ready" && break; sleep 1; done
+––– output –––
+node 2 ready
+––– input –––
+mysql -h0 -P2306 -e "JOIN CLUSTER gone_check AT '127.0.0.1:1312'"; mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_gone_check_nodes_set'\G" | grep -o "c-gone-node:2312"
+––– output –––
+c-gone-node:2312
+––– comment –––
+Node 2 stops and its name stops resolving; node 1 still lists it in its node list. A clean stop keeps node 1 primary (with kill -9 one of two nodes loses quorum)
+––– input –––
+searchd -c /tmp/gone-node2.conf --stopwait > /dev/null 2>&1; for i in $(seq 1 60); do mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_gone_check_size'\G" | grep -q "Value: 1$" && echo "node 1 alone" && break; sleep 1; done; mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_gone_check_status'\G" | grep Value
+––– output –––
+node 1 alone
+  Value: primary
+––– input –––
+grep -v c-gone-node /etc/hosts > /tmp/hosts.new && cat /tmp/hosts.new > /etc/hosts; getent hosts c-gone-node || echo "c-gone-node does not resolve"; mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_gone_check_nodes_set'\G" | grep -o "c-gone-node:2312"
+––– output –––
+c-gone-node does not resolve
+c-gone-node:2312
+––– comment –––
+Node 3 joins at node 1 and gets the list with c-gone-node in it; the join does not wait for that name
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+s=$(date +%s); mysql -h0 -P3306 -e "JOIN CLUSTER gone_check AT '127.0.0.1:1312'"; echo "rc=$?"; [ $(( $(date +%s) - s )) -lt 60 ] && echo "joined in time"
+––– output –––
+rc=0
+joined in time
+––– comment –––
+Node 3 sent its node list update to node 1
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_gone_check_nodes_set'\G" | grep -o "127.0.0.1:3312"
+––– output –––
+127.0.0.1:3312
+––– comment –––
+Node 3 is in node 1's cluster: two nodes, the same cluster state UUID, and the table with its rows
+––– input –––
+for n in 1 3; do mysql -h0 -P${n}306 -e "SHOW STATUS LIKE 'cluster_gone_check_size'\G" | grep Value; done
+––– output –––
+  Value: 2
+  Value: 2
+––– input –––
+u1=$(mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_gone_check_state_uuid'\G" | grep Value); u3=$(mysql -h0 -P3306 -e "SHOW STATUS LIKE 'cluster_gone_check_state_uuid'\G" | grep Value); [ -n "$u1" ] && [ "$u1" = "$u3" ] && echo "same cluster" || echo "different clusters: $u1 / $u3"
+––– output –––
+same cluster
+––– input –––
+mysql -h0 -P3306 -e "SELECT COUNT(*) FROM t\G" 2>&1 | grep -i "count"
+––– output –––
+count(*): 2
+––– comment –––
+Other cluster operations skip c-gone-node too: ALTER CLUSTER ADD on node 1 does not wait for it, and the table reaches node 3
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE t2 (id bigint, title text)"; s=$(date +%s); mysql -h0 -P1306 -e "ALTER CLUSTER gone_check ADD t2"; echo "rc=$?"; [ $(( $(date +%s) - s )) -lt 60 ] && echo "altered in time"
+––– output –––
+rc=0
+altered in time
+––– input –––
+mysql -h0 -P3306 -e "SELECT COUNT(*) FROM t2\G" 2>&1 | grep -i "count"
+––– output –––
+count(*): 0
+––– comment –––
+Node 3 restarts with c-gone-node in its saved node list and rejoins by itself
+––– input –––
+mysql -h0 -P3306 -e "SHOW STATUS LIKE 'cluster_gone_check_nodes_set'\G" | grep -o "c-gone-node:2312"
+––– output –––
+c-gone-node:2312
+––– input –––
+searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf --stopwait > /dev/null 2>&1; s=$(date +%s); stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; for i in $(seq 1 120); do mysql -h0 -P3306 -e "SHOW STATUS LIKE 'cluster_gone_check_node_state'\G" 2>/dev/null | grep -q "Value: synced" && break; sleep 1; done; [ $(( $(date +%s) - s )) -lt 120 ] && echo "rejoined in time"; for n in 1 3; do mysql -h0 -P${n}306 -e "SHOW STATUS LIKE 'cluster_gone_check_size'\G" | grep Value; done
+––– output –––
+rejoined in time
+  Value: 2
+  Value: 2

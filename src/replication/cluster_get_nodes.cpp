@@ -64,7 +64,7 @@ StrVec_t QueryNodeListFromRemotes ( const VecTraits_T<CSphString>& dClusterNodes
 {
 	StrVec_t dNodes;
 	TlsMsg::ResetErr();
-	VecAgentDesc_t dDesc = GetDescAPINodes ( dClusterNodes, Resolve_e::QUICK );
+	VecAgentDesc_t dDesc = GetDescAPINodesEach ( dClusterNodes, sCluster );
 	if ( dDesc.IsEmpty() )
 	{
 		if ( TlsMsg::HasErr() )
@@ -153,7 +153,7 @@ static bool SendClusterNodesStates ( const CSphString & sCluster, const CSphStri
 	ClusterNodeState_c::REQUEST_T tReq;
 	tReq.m_sCluster = sCluster;
 
-	auto dAgents = ClusterNodeState_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::SLOW ), sUser, ReplicationTimeoutQuery(), tReq );
+	auto dAgents = ClusterNodeState_c::MakeAgents ( GetDescAPINodesEach ( dNodes, sCluster ), sUser, ReplicationTimeoutQuery(), tReq );
 	// no nodes left seems a valid case
 	if ( dAgents.IsEmpty() )
 		return true;
@@ -259,7 +259,7 @@ bool CheckRemotesVersions ( const ClusterDesc_t & tDesc, CSphString & sUser, int
 	ClusterNodeVerId_c::REQUEST_T tReqId;
 	tReqId.m_sCluster = tDesc.m_sName;
 
-	auto dAgents = ClusterNodeVerId_c::MakeAgents ( GetDescAPINodes ( tDesc.m_dClusterNodes, Resolve_e::QUICK ), tDesc.m_sUser, ReplicationTimeoutAnyNode(), tReqId );
+	auto dAgents = ClusterNodeVerId_c::MakeAgents ( GetDescAPINodesEach ( tDesc.m_dClusterNodes, tDesc.m_sName ), tDesc.m_sUser, ReplicationTimeoutAnyNode(), tReqId );
 	// no nodes left seems a valid case
 	if ( dAgents.IsEmpty() )
 		return true;
@@ -427,7 +427,7 @@ bool GetRemotesAuth ( const ClusterDesc_t & tDesc )
 	CSphString sAuth = WriteJson ( *tAuth.get() );
 	tReq.m_uAuthHash = sphFNV64 ( sAuth.cstr(), sAuth.Length() );
 
-	VecRefPtrs_t<AgentConn_t*> dAgents = ClusterAuth_c::MakeAgents ( GetDescAPINodes ( tDesc.m_dClusterNodes, Resolve_e::QUICK ), tDesc.m_sUser, ReplicationTimeoutAnyNode(), tReq );
+	VecRefPtrs_t<AgentConn_t*> dAgents = ClusterAuth_c::MakeAgents ( GetDescAPINodesEach ( tDesc.m_dClusterNodes, tDesc.m_sName ), tDesc.m_sUser, ReplicationTimeoutAnyNode(), tReq );
 	// no nodes is a valid case
 	if ( dAgents.IsEmpty() )
 		return true;

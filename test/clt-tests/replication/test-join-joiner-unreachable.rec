@@ -1,0 +1,46 @@
+––– comment –––
+JOIN CLUSTER fails before the state transfer when a cluster node cannot reach the joining node at its node_address (gh-4975)
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=reach_check
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE t (id bigint, title text); ALTER CLUSTER reach_check ADD t; INSERT INTO reach_check:t VALUES (1, 'a');"
+––– output –––
+––– comment –––
+Node 2 advertises node_address 127.0.0.2, but its API listens on 127.0.0.1 only, so node 1 cannot reach it; short retries keep the test fast
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-2 && echo -e 'searchd\n{\n\tlisten = 127.0.0.1:2306:mysql41\n\tlisten = 127.0.0.1:2312\n\tnode_address = 127.0.0.2\n\treplication_retry_delay = 10ms\n\tlog = /var/log/manticore-2/searchd.log\n\tquery_log = /var/log/manticore-2/query.log\n\tpid_file = /var/log/manticore-2/searchd.pid\n\tdata_dir = /var/log/manticore-2\n\tserver_id = 2\n}' > /tmp/reach-node2.conf
+––– output –––
+––– input –––
+stdbuf -oL searchd -c /tmp/reach-node2.conf > /dev/null; for i in $(seq 1 60); do mysql -h0 -P2306 -e "SELECT 1" > /dev/null 2>&1 && echo "node 2 ready" && break; sleep 1; done
+––– output –––
+node 2 ready
+––– comment –––
+The join is refused with node 1's reason; Galera is never started on node 2
+––– input –––
+mysql -h0 -P2306 -e "JOIN CLUSTER reach_check AT '127.0.0.1:1312'" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: cluster 'reach_check': node '127.0.0.1:1312' cannot reach this node at '127.0.0.2:2312': ping '127.0.0.2:2312' failed: #!/.+; in 21 attempts within [0-9.]+ sec/!#
+––– comment –––
+Node 2 keeps running without the cluster
+––– input –––
+mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_reach_check_status'"; mysql -h0 -P2306 -e "SELECT 1" > /dev/null && echo "node 2 alive"
+––– output –––
+node 2 alive
+––– comment –––
+Node 1 stays synced and never started a state transfer
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_reach_check_node_state'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_reach_check_node_state
+  Value: synced
+––– input –––
+grep -cE "invalid node|State transfer" /var/log/manticore-1/searchd.log || true
+––– output –––
+0

@@ -1390,6 +1390,8 @@ This setting is an integer that specifies how many times Manticore will attempt 
 
 This setting is an integer in milliseconds (or [special_suffixes](../Server_settings/Special_suffixes.md)) that specifies the delay before Manticore retries querying a remote node in case of failure during replication. This value is only relevant when a non-zero value is specified. The default value is 500.
 
+It is also the base delay between attempts to resolve the names of cluster nodes, for example when a donor sends data to a joining node: Manticore makes 21 attempts with growing pauses, about 621 times this delay in total (about 5 minutes with the default).
+
 ### qcache_max_bytes
 
 <!-- example conf qcache_max_bytes -->

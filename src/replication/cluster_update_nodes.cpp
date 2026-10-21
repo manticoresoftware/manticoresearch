@@ -63,7 +63,7 @@ bool SendClusterUpdateNodes ( const CSphString & sCluster, const CSphString & sU
 	tRequest.m_sCluster = sCluster;
 	tRequest.m_eKindNodes = eNodes;
 
-	auto dAgents = ClusterUpdateNodes_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::SLOW ), sUser, ReplicationTimeoutQuery(), tRequest );
+	auto dAgents = ClusterUpdateNodes_c::MakeAgents ( GetDescAPINodesEach ( dNodes, sCluster ), sUser, ReplicationTimeoutQuery(), tRequest );
 	// no nodes left seems a valid case
 	if ( dAgents.IsEmpty() )
 		return true;
@@ -79,7 +79,7 @@ bool SendClusterExitUpdateNodes ( const CSphString & sCluster, const CSphString 
 	tRequest.m_sLeavingNode = sLeavingNode;
 	tRequest.m_iWaitTimeoutMs = iWaitTimeoutMs;
 
-	auto dAgents = ClusterExitUpdateNodes_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::SLOW ), sUser, ReplicationTimeoutQuery ( iWaitTimeoutMs + 5000 ), tRequest );
+	auto dAgents = ClusterExitUpdateNodes_c::MakeAgents ( GetDescAPINodesEach ( dNodes, sCluster ), sUser, ReplicationTimeoutQuery ( iWaitTimeoutMs + 5000 ), tRequest );
 	if ( dAgents.IsEmpty() )
 		return true;
 

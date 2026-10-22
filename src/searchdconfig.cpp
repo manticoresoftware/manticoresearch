@@ -22,6 +22,12 @@
 #include "global_idf.h"
 #include "indexer_rt_bulk.h"
 
+#if _WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
+
 using namespace Threads;
 
 static Coro::Mutex_c g_tSaveInProgress;
@@ -450,7 +456,10 @@ static bool ConfigRead ( const CSphString& sConfigPath, CSphVector<ClusterDesc_t
 
 	int iSize = (int)tConfigFile.GetFilesize();
 	if ( !iSize )
-		return true;
+	{
+		sError.SetSprintf ( "JSON config '%s' is empty", sConfigPath.cstr() );
+		return false;
+	}
 
 	CSphFixedVector<char> dJsonText ( iSize + 2 );
 	auto iRead = (int64_t)sphReadThrottled ( tConfigFile.GetFD(), dJsonText.begin(), iSize );
@@ -559,36 +568,63 @@ static bool ConfigWrite ( const CSphString & sConfigPath, const CSphVector<Clust
 
 	tOut.FinishBlocks();
 
-	CSphString sNew, sOld;
-	auto & sCur = sConfigPath;
-	sNew.SetSprintf ( "%s.new", sCur.cstr() );
-	sOld.SetSprintf ( "%s.old", sCur.cstr() );
+	CSphString sNew;
+	sNew.SetSprintf ( "%s.new", sConfigPath.cstr() );
 
-	CSphWriter tConfigFile;
-	if ( !tConfigFile.OpenFile ( sNew, sError ) )
+	CSphAutofile tNewFile;
+	if ( tNewFile.Open ( sNew, SPH_O_NEW, sError, true )<0 )
 		return false;
 
+	CSphWriter tConfigFile;
+	tConfigFile.SetFile ( tNewFile, nullptr, sError );
 	tConfigFile.PutString ( (Str_t)tOut );
 	assert ( bson::ValidateJson ( tOut.cstr() ) );
 	tConfigFile.CloseFile();
 	if ( tConfigFile.IsError() )
 		return false;
 
-	if ( sphIsReadable ( sCur, nullptr ) && rename ( sCur.cstr(), sOld.cstr() ) )
+#if _WIN32
+	int iSyncResult = _commit ( tNewFile.GetFD() );
+#else
+	int iSyncResult = ::fsync ( tNewFile.GetFD() );
+#endif
+	if ( iSyncResult )
 	{
-		sError.SetSprintf ( "failed to rename current to old, '%s'->'%s', error '%s'", sCur.cstr(), sOld.cstr(), strerror(errno) );
+		sError.SetSprintf ( "failed to sync JSON config '%s': %s", sNew.cstr(), strerrorm(errno) );
 		return false;
 	}
 
-	if ( rename ( sNew.cstr(), sCur.cstr() ) )
+#if !_WIN32
+	CSphAutofile tDir;
+	if ( tDir.Open ( g_sDataDir, SPH_O_READ, sError )<0 )
+		return false;
+#endif
+
+	// Replacing the file directly keeps the previous config available until the new one is ready.
+	tNewFile.SetPersistent();
+	tNewFile.Close();
+
+#if _WIN32
+	if ( !MoveFileEx ( sNew.cstr(), sConfigPath.cstr(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH ) )
 	{
-		sError.SetSprintf ( "failed to rename new to current, '%s'->'%s', error '%s'", sNew.cstr(), sCur.cstr(), strerror(errno) );
-		if ( sphIsReadable ( sOld, nullptr ) && rename ( sOld.cstr(), sCur.cstr() ) )
-			sError.SetSprintf ( "%s, rollback failed too", sError.cstr() );
+		sError.SetSprintf ( "failed to replace JSON config '%s': error %u", sConfigPath.cstr(), GetLastError() );
+		unlink ( sNew.cstr() );
+		return false;
+	}
+#else
+	if ( sph::rename ( sNew.cstr(), sConfigPath.cstr() ) )
+	{
+		sError.SetSprintf ( "failed to replace JSON config '%s': %s", sConfigPath.cstr(), strerrorm(errno) );
+		unlink ( sNew.cstr() );
 		return false;
 	}
 
-	unlink ( sOld.cstr() );
+	if ( ::fsync ( tDir.GetFD() ) )
+	{
+		sError.SetSprintf ( "failed to sync JSON config directory '%s': %s", g_sDataDir.cstr(), strerrorm(errno) );
+		return false;
+	}
+#endif
 
 	sphLogDebug ( "config saved, tables %d, clusters %d", dIndexes.GetLength(), dClusters.GetLength() );
 

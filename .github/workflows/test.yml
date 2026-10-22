@@ -70,6 +70,9 @@ jobs:
           fetch-depth: 0
           submodules: recursive
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
+      - name: Verify CLT reliability calculations
+        run: python3 -m unittest discover -s .github/scripts/tests -p 'test_clt_reliability.py' -v
+
       - name: Commit info
         run: |
           echo "# Automated Tests of commit ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY

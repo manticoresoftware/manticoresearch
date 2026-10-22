@@ -178,7 +178,7 @@ jobs:
         with:
           name: clt-test-results-${{ matrix.chunk.id }}-attempt-${{ github.run_attempt }}
           path: ${{ runner.temp }}/clt-test-results.jsonl
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 90
 
       # Containers write model blobs as root with mode 600; make them readable so the
@@ -260,26 +260,12 @@ jobs:
     runs-on: ubuntu-22.04
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v5
-        with:
-          repository: ${{ inputs.repository }}
-          ref: ${{ inputs.ref }}
-
-      - name: Test report calculations
-        run: python3 -m unittest discover -s .github/scripts/tests -p 'test_clt_reliability.py' -v
-
-      - name: Download shard results
-        uses: actions/download-artifact@v7
-        with:
-          pattern: clt-test-results-*-attempt-*
-          path: ${{ runner.temp }}/clt-results
-
-      - name: Upload combined results
-        uses: actions/upload-artifact@v6
+      - name: Merge per-test result artifacts
+        uses: actions/upload-artifact/merge@v6
         with:
           name: clt-results-merged-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/clt-results
-          if-no-files-found: error
+          pattern: clt-test-results-*-attempt-*
+          separate-directories: true
           retention-days: 90
 
   persist-clt-caches:

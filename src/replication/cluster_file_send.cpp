@@ -225,7 +225,13 @@ bool FileReader_t::ReadChunk ( int64_t iFileOff, int iSize, StringBuilder_c& sEr
 			sErrors.Appendf ( "pread error %d '%s'", errno, strerrorm ( errno ) );
 			return false;
 		};
+		if ( !iRes )
+		{
+			sErrors.Appendf ( "unexpected EOF in %s at offset " INT64_FMT ", %d bytes left", m_tFile.GetFilename(), iFileOff, iSize );
+			return false;
+		}
 		tBuf.Consume ( iRes );
+		iFileOff += iRes;
 		iSize -= iRes; // according to man, pread may return not whole requested chunk, and that is not error
 	}
 	return true;

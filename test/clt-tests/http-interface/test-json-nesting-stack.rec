@@ -1,0 +1,88 @@
+––– comment –––
+Deeply nested HTTP JSON should be parsed or rejected without crashing searchd.
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS json_nesting_stack; CREATE TABLE json_nesting_stack (a JSON);"
+––– output –––
+––– input –––
+php <<'PHP'
+<?php
+function post_json(string $endpoint, string $payload, string $contentType = 'application/json'): array
+{
+    $curl = curl_init("http://127.0.0.1:9308/$endpoint");
+    curl_setopt_array($curl, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_HTTPHEADER => ["Content-Type: $contentType", 'User-Agent: Manticore Buddy'],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 3,
+        CURLOPT_TIMEOUT => 15,
+    ]);
+    $response = curl_exec($curl);
+    $status = curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+    $error = curl_error($curl);
+    curl_close($curl);
+    if ($response === false) {
+        throw new RuntimeException("$endpoint transport error: $error");
+    }
+    return [$status, $response];
+}
+
+function check_request(string $name, string $endpoint, string $payload, int $expectedStatus, string $contentType = 'application/json'): void
+{
+    [$status, $response] = post_json($endpoint, $payload, $contentType);
+    if ($status !== $expectedStatus) {
+        throw new RuntimeException("$name: expected HTTP $expectedStatus, got $status: " . substr($response, 0, 150));
+    }
+
+    [$healthStatus] = post_json('sql', 'SELECT COUNT(*) FROM json_nesting_stack', 'application/x-www-form-urlencoded');
+    if ($healthStatus !== 200) {
+        throw new RuntimeException("$name: HTTP health check failed: $healthStatus");
+    }
+    $db = new mysqli('127.0.0.1', '', '', '', 9306);
+    $result = $db->query('SELECT COUNT(*) FROM json_nesting_stack');
+    if (!$result || !$result->fetch_row()) {
+        throw new RuntimeException("$name: MySQL health check failed");
+    }
+    $db->close();
+    echo "$name: HTTP $status, HTTP/MySQL alive\n";
+}
+
+function nested(int $depth, string $type = 'object'): string
+{
+    if ($type === 'array') {
+        return str_repeat('[', $depth) . '1' . str_repeat(']', $depth);
+    }
+    return str_repeat('{"a":', $depth) . '1' . str_repeat('}', $depth);
+}
+
+$table = 'json_nesting_stack';
+$doc750 = nested(750);
+$doc999 = nested(999);
+$doc1000 = nested(1000);
+$doc2000 = nested(2000);
+
+check_request('insert-750', 'insert', '{"table":"' . $table . '","id":1,"doc":' . $doc750 . '}', 200);
+check_request('replace-750', 'replace', '{"table":"' . $table . '","id":1,"doc":' . $doc750 . '}', 200);
+check_request('insert-999', 'insert', '{"table":"' . $table . '","id":2,"doc":' . $doc999 . '}', 200);
+check_request('insert-1000', 'insert', '{"table":"' . $table . '","id":3,"doc":' . $doc1000 . '}', 400);
+check_request('insert-2000', 'insert', '{"table":"' . $table . '","id":3,"doc":' . $doc2000 . '}', 400);
+check_request('replace-2000', 'replace', '{"table":"' . $table . '","id":1,"doc":' . $doc2000 . '}', 400);
+check_request('update-2000', 'update', '{"table":"' . $table . '","id":1,"doc":' . $doc2000 . '}', 400);
+check_request('delete-2000', 'delete', '{"table":"' . $table . '","id":1,"doc":' . $doc2000 . '}', 400);
+check_request('search-2000', 'search', '{"table":"' . $table . '","query":' . $doc2000 . '}', 400);
+check_request('bulk-2000', 'bulk', '{"insert":{"table":"' . $table . '","id":4,"doc":' . $doc2000 . '}}', 400, 'application/x-ndjson');
+check_request('array-2000', 'insert', '{"table":"' . $table . '","id":5,"doc":{"a":' . nested(2000, 'array') . '}}', 400);
+PHP
+––– output –––
+insert-750: HTTP 200, HTTP/MySQL alive
+replace-750: HTTP 200, HTTP/MySQL alive
+insert-999: HTTP 200, HTTP/MySQL alive
+insert-1000: HTTP 400, HTTP/MySQL alive
+insert-2000: HTTP 400, HTTP/MySQL alive
+replace-2000: HTTP 400, HTTP/MySQL alive
+update-2000: HTTP 400, HTTP/MySQL alive
+delete-2000: HTTP 400, HTTP/MySQL alive
+search-2000: HTTP 400, HTTP/MySQL alive
+bulk-2000: HTTP 400, HTTP/MySQL alive
+array-2000: HTTP 400, HTTP/MySQL alive

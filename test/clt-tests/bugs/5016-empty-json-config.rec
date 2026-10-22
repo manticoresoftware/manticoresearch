@@ -1,0 +1,29 @@
+––– comment –––
+Regression for issue #5016: a zero-byte manticore.json must stop searchd
+and stay untouched instead of silently starting with no tables.
+––– input –––
+bash <<'EOF'
+dir=$(mktemp -d /tmp/gh5016.XXXXXX)
+trap 'rm -rf "$dir"' EXIT
+: > "$dir/manticore.json"
+cat > "$dir/manticore.conf" <<CONF
+searchd {
+    listen = 127.0.0.1:19516:mysql41
+    log = $dir/searchd.log
+    pid_file = $dir/searchd.pid
+    data_dir = $dir
+    buddy_path =
+}
+CONF
+output=$(timeout 10 searchd --config "$dir/manticore.conf" --nodetach 2>&1)
+code=$?
+if [ "$code" -ne 0 ] && [ "$code" -ne 124 ] && \
+   { printf '%s\n' "$output" | grep -q "JSON config.*is empty" || grep -q "JSON config.*is empty" "$dir/searchd.log" 2>/dev/null; } && \
+   [ ! -s "$dir/manticore.json" ]; then
+    echo EMPTY_JSON_REJECTED
+else
+    echo EMPTY_JSON_NOT_REJECTED
+fi
+EOF
+––– output –––
+EMPTY_JSON_REJECTED

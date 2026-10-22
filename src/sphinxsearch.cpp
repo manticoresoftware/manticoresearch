@@ -1222,16 +1222,32 @@ int64_t ExtRanker_T<USE_BM25>::CountDocs ( const DeadRowMap_Disk_c * pDeadRows )
 	if ( !m_pRoot )
 		return 0;
 
+	CSphScopedProfile tProf ( m_pCtx->m_pProfile, SPH_QSTATE_FAST_COUNT );
+
+	// the node tree decides the match; only attribute filters need a row, and nothing needs a CSphMatch
+	const bool bFilter = m_pCtx->m_pFilter || !m_pCtx->m_dCalcFilter.IsEmpty();
 	int64_t iCount = 0;
 	while ( true )
 	{
-		const ExtDoc_t * pDoc = GetFilteredDocs();
+		const ExtDoc_t * pDoc = m_pRoot->GetDocsChunk();
 		if ( !pDoc )
 			break;
 
 		for ( ; pDoc->m_tRowID!=INVALID_ROWID; pDoc++ )
-			if ( !pDeadRows || !pDeadRows->IsSet ( pDoc->m_tRowID ) )
-				iCount++;
+		{
+			if ( pDeadRows && pDeadRows->IsSet ( pDoc->m_tRowID ) )
+				continue;
+
+			if ( bFilter )
+			{
+				m_tTestMatch.m_tRowID = pDoc->m_tRowID;
+				m_tTestMatch.m_pStatic = nullptr;
+				if ( m_pIndex->EarlyReject ( m_pCtx, m_tTestMatch ) )
+					continue;
+			}
+
+			iCount++;
+		}
 	}
 
 	return iCount;

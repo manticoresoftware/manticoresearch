@@ -101,6 +101,8 @@ def summary(rows, runs, reports):
             name = row["test"].replace("|", "\\|")
             lines.append(f'| `{name}` | {row["failed"]} | {row["executions"]} | '
                          f'{row["failure_rate"]:.1f}% | [Run]({row["last_failure_url"]}) |')
+    elif not reports:
+        lines.append("No CLT results available for this period.")
     else:
         lines.append(f"No failing tests with at least {MIN_EXECUTIONS} executions yet.")
     lines += ["", "Download the CSV artifact for all tests, including those with no failures.", ""]

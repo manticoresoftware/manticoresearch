@@ -69,7 +69,8 @@ class ReliabilityTest(unittest.TestCase):
             list(clt.shard_results(archive([])))
 
     def test_empty_summary(self):
-        self.assertIn("No failing tests", clt.summary([], 2, 0))
+        self.assertIn("No CLT results available", clt.summary([], 2, 0))
+        self.assertIn("No failing tests", clt.summary([], 2, 1))
 
 
 if __name__ == "__main__":

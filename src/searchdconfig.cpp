@@ -619,11 +619,9 @@ static bool ConfigWrite ( const CSphString & sConfigPath, const CSphVector<Clust
 		return false;
 	}
 
+	// The new config is already visible; returning an error here would make CREATE roll back the table.
 	if ( ::fsync ( tDir.GetFD() ) )
-	{
-		sError.SetSprintf ( "failed to sync JSON config directory '%s': %s", g_sDataDir.cstr(), strerrorm(errno) );
-		return false;
-	}
+		sphDie ( "failed to sync JSON config directory '%s' after replacing the config: %s", g_sDataDir.cstr(), strerrorm(errno) );
 #endif
 
 	sphLogDebug ( "config saved, tables %d, clusters %d", dIndexes.GetLength(), dClusters.GetLength() );

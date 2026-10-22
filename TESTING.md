@@ -173,25 +173,16 @@ CLT tests are organized into test suites defined in `.github/workflows/clt_tests
 
 ### Finding unstable CLT tests
 
-Each [Test workflow](https://github.com/manticoresoftware/manticoresearch/actions/workflows/test.yml)
-stores **all individual CLT outcomes** (passed, failed, interrupted, missing, or not run)
-with test paths, durations, exit codes, shard IDs, and workflow attempt IDs. Each CLT
-matrix shard uploads a report even when some of its tests fail. The workflow also
-combines the shard reports into one `clt-results-merged-<attempt>` JSON artifact
-(kept for 90 days).
+Each CLT shard uploads its individual test results, including failed tests. The
+[Test workflow](https://github.com/manticoresoftware/manticoresearch/actions/workflows/test.yml)
+collects these results into one artifact per run.
 
 The [CLT per-test reliability workflow](https://github.com/manticoresoftware/manticoresearch/actions/workflows/clt_reliability.yml)
-runs daily or on demand. Open its latest run's **Summary** to see the
-highest per-test failure rates for the last 30 days; download the
-`clt-failure-rates-30d` artifact for a complete CSV and JSON, including
-tests that always pass. The report only considers push runs on `main`
-to avoid mixing intentionally broken PR code into the stability baseline.
-
-Failure rate is **failed / (passed + failed)** for each test, with at least five
-executions required for the summary ranking. Interrupted, missing, not-run, and unknown outcomes are reported separately,
-not counted as successes. An unknown outcome means a whole shard report is missing. When failed
-matrix jobs are rerun, a prior successful shard is counted only once.
-Historical statistics start with the first run that uploads these artifacts.
+runs daily or on demand. Its Summary ranks failing tests across the last 30
+days of pushes to `main`; the CSV artifact lists every test. Failure rate is
+**failed / (passed + failed)**, and the ranking requires at least five executions.
+Interrupted, missing, or unstarted tests are not treated as successes.
+Re-running failed jobs adds new test executions without counting unchanged shards again.
 
 ### Running Locally
 

@@ -159,20 +159,6 @@ jobs:
           find "${{ runner.temp }}/clt-model-cache" -mindepth 1 \( -type f -o -type l \) -printf '%P\t%y\t%s\t%T@\t%l\n' |
             LC_ALL=C sort > "${{ runner.temp }}/clt-model-cache-before.tsv"
 
-      - name: Prepare per-test result manifest
-        shell: bash
-        env:
-          CLT_TESTS_JSON: ${{ toJSON(matrix.chunk.tests) }}
-          CLT_SHARD: ${{ matrix.chunk.id }}
-          CLT_ATTEMPT: ${{ github.run_attempt }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/clt-test-report"
-          jq -n --arg shard "$CLT_SHARD" --argjson attempt "$CLT_ATTEMPT" \
-            --argjson tests "$CLT_TESTS_JSON" \
-            '{shard: $shard, attempt: $attempt, tests: $tests}' \
-            > "$RUNNER_TEMP/clt-test-report/manifest.json"
-
       - id: run-clt
         # First release of the per-test result output; pin until the CLT action release.
         uses: manticoresoftware/clt@9e6be93fbc84182c8ceca99c12c75a6ab177b12d
@@ -186,29 +172,14 @@ jobs:
           run_args: "-e OPENAI_API_KEY -e VOYAGE_API_KEY -e JINA_API_KEY -v ${{ runner.temp }}/clt-model-cache:/var/lib/manticore/.cache"
           ui_host: "https://clt.manticoresearch.com"
 
-      - name: Stage per-test outcomes
-        if: ${{ always() }}
-        shell: bash
-        env:
-          CLT_RESULTS_PATH: ${{ steps.run-clt.outputs.test-results }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/clt-test-report"
-          if [[ -n "$CLT_RESULTS_PATH" && -f "$CLT_RESULTS_PATH" ]]; then
-            cp "$CLT_RESULTS_PATH" "$RUNNER_TEMP/clt-test-report/results.jsonl"
-          else
-            : > "$RUNNER_TEMP/clt-test-report/results.jsonl"
-            echo "::warning::CLT did not produce its per-test results file"
-          fi
-
-      - name: Upload per-test outcomes (including failing shards)
+      - name: Upload per-test results
         if: ${{ always() }}
         uses: actions/upload-artifact@v6
         with:
-          name: clt-test-results-${{ matrix.chunk.id }}
-          path: ${{ runner.temp }}/clt-test-report/
-          if-no-files-found: error
+          name: clt-test-results-${{ matrix.chunk.id }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/clt-test-results.jsonl
+          if-no-files-found: warn
           retention-days: 90
-          overwrite: true
 
       # Containers write model blobs as root with mode 600; make them readable so the
       # runner user can upload changed cache subtrees.
@@ -284,10 +255,9 @@ jobs:
 
   aggregate-clt-results:
     name: Aggregate per-test results
-    needs: [discover, clt]
-    if: ${{ always() && needs.discover.result == 'success' }}
+    needs: [clt]
+    if: ${{ always() && needs.clt.result != 'skipped' }}
     runs-on: ubuntu-22.04
-    # Reporting must not change the pass/fail status of CLT itself.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v5
@@ -295,40 +265,22 @@ jobs:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.ref }}
 
-      - name: Verify report calculations
+      - name: Test report calculations
         run: python3 -m unittest discover -s .github/scripts/tests -p 'test_clt_reliability.py' -v
 
-      - name: Download shard reports
+      - name: Download shard results
         uses: actions/download-artifact@v7
-        # A complete worker failure may mean that no shard artifacts were uploaded.
-        continue-on-error: true
         with:
-          pattern: clt-test-results-*
-          path: ${{ runner.temp }}/clt-shard-reports
+          pattern: clt-test-results-*-attempt-*
+          path: ${{ runner.temp }}/clt-results
 
-      - name: Merge CLT reports
-        env:
-          CLT_REPO: ${{ github.repository }}
-          CLT_RUN_ID: ${{ github.run_id }}
-          CLT_ATTEMPT: ${{ github.run_attempt }}
-          CLT_EVENT: ${{ github.event_name }}
-          CLT_REF: ${{ github.ref }}
-          CLT_SHA: ${{ github.sha }}
-          CLT_MATRIX_JSON: ${{ needs.discover.outputs.matrix }}
-        run: |
-          python3 .github/scripts/clt_reliability.py merge \
-            --input "$RUNNER_TEMP/clt-shard-reports" \
-            --output "$RUNNER_TEMP/clt-merged/clt-results.json" \
-            --summary "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload merged CLT results
+      - name: Upload combined results
         uses: actions/upload-artifact@v6
         with:
           name: clt-results-merged-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/clt-merged/clt-results.json
+          path: ${{ runner.temp }}/clt-results
           if-no-files-found: error
           retention-days: 90
-          overwrite: true
 
   persist-clt-caches:
     name: Persist CLT caches

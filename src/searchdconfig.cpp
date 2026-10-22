@@ -22,12 +22,6 @@
 #include "global_idf.h"
 #include "indexer_rt_bulk.h"
 
-#if _WIN32
-#include <io.h>
-#else
-#include <unistd.h>
-#endif
-
 using namespace Threads;
 
 static Coro::Mutex_c g_tSaveInProgress;
@@ -457,7 +451,7 @@ static bool ConfigRead ( const CSphString& sConfigPath, CSphVector<ClusterDesc_t
 	int iSize = (int)tConfigFile.GetFilesize();
 	if ( !iSize )
 	{
-		sError.SetSprintf ( "JSON config '%s' is empty", sConfigPath.cstr() );
+		sError = "file is empty";
 		return false;
 	}
 
@@ -575,12 +569,8 @@ static bool ConfigWrite ( const CSphString & sConfigPath, const CSphVector<Clust
 	if ( tNewFile.Open ( sNew, SPH_O_NEW, sError, true )<0 )
 		return false;
 
-	CSphWriter tConfigFile;
-	tConfigFile.SetFile ( tNewFile, nullptr, sError );
-	tConfigFile.PutString ( (Str_t)tOut );
 	assert ( bson::ValidateJson ( tOut.cstr() ) );
-	tConfigFile.CloseFile();
-	if ( tConfigFile.IsError() )
+	if ( !sphWriteThrottled ( tNewFile.GetFD(), tOut.cstr(), tOut.GetLength(), sNew.cstr(), sError ) )
 		return false;
 
 #if _WIN32
@@ -604,14 +594,6 @@ static bool ConfigWrite ( const CSphString & sConfigPath, const CSphVector<Clust
 	tNewFile.SetPersistent();
 	tNewFile.Close();
 
-#if _WIN32
-	if ( !MoveFileEx ( sNew.cstr(), sConfigPath.cstr(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH ) )
-	{
-		sError.SetSprintf ( "failed to replace JSON config '%s': error %u", sConfigPath.cstr(), GetLastError() );
-		unlink ( sNew.cstr() );
-		return false;
-	}
-#else
 	if ( sph::rename ( sNew.cstr(), sConfigPath.cstr() ) )
 	{
 		sError.SetSprintf ( "failed to replace JSON config '%s': %s", sConfigPath.cstr(), strerrorm(errno) );
@@ -619,9 +601,11 @@ static bool ConfigWrite ( const CSphString & sConfigPath, const CSphVector<Clust
 		return false;
 	}
 
-	// The new config is already visible; returning an error here would make CREATE roll back the table.
+#if !_WIN32
+	// The new config is already in use, and an error here would make CREATE roll back the table.
+	// Without the directory sync, a power loss can only bring back the previous config.
 	if ( ::fsync ( tDir.GetFD() ) )
-		sphDie ( "failed to sync JSON config directory '%s' after replacing the config: %s", g_sDataDir.cstr(), strerrorm(errno) );
+		sphWarning ( "failed to sync JSON config directory '%s' after replacing the config: %s", g_sDataDir.cstr(), strerrorm(errno) );
 #endif
 
 	sphLogDebug ( "config saved, tables %d, clusters %d", dIndexes.GetLength(), dClusters.GetLength() );
@@ -833,7 +817,7 @@ bool SaveConfigInt ( CSphString & sError )
 
 	if ( !ConfigWrite ( g_sConfigPath, dClusters, dIndexes, sError ) )
 	{
-		sphWarning ( "%s", TlsMsg::szError() );
+		sphWarning ( "%s", sError.cstr() );
 		return false;
 	}
 

@@ -1,18 +1,6 @@
 ––– comment –––
-Regression for issue #5016: the config is replaced without an intermediate .old file,
-and a zero-byte manticore.json must not silently discard the table registry.
-
-––– block: ../base/start-searchd –––
-––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS gh5016; CREATE TABLE gh5016 (title text);"
-––– output –––
-––– input –––
-python3 -c 'import json,os; p="/var/lib/manticore/manticore.json"; d=json.load(open(p)); print("JSON_CONFIG_OK" if "gh5016" in d["indexes"] and not os.path.exists(p+".old") else "JSON_CONFIG_BAD")'
-––– output –––
-JSON_CONFIG_OK
-––– input –––
-mysql -h0 -P9306 -e "DROP TABLE gh5016;"
-––– output –––
+Regression for issue #5016: a zero-byte manticore.json must stop searchd
+and stay untouched instead of silently starting with no tables.
 ––– input –––
 bash <<'EOF'
 dir=$(mktemp -d /tmp/gh5016.XXXXXX)

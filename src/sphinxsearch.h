@@ -145,11 +145,16 @@ public:
 };
 
 /// generic ranker interface
+class DeadRowMap_Disk_c;
+
 class ISphRanker : public ISphExtra
 {
 public:
 	virtual CSphMatch *			GetMatchesBuffer() = 0;
 	virtual int					GetMatches () = 0;
+
+	/// count matching docs without building matches; -1 means the ranker can not do it
+	virtual int64_t				CountDocs ( const DeadRowMap_Disk_c * ) { return -1; }
 	virtual void				Reset ( const ISphQwordSetup & tSetup ) = 0;
 	virtual bool				IsCache() const { return false; }
 	virtual void				FinalizeCache ( const ISphSchema & ) {}

@@ -112,5 +112,112 @@ searchd
 	select count(*), max(gid) from tc where match('error'); show meta;
 </sphinxql>
 
+<!-- rankless count: any tree, filters allowed; every fast query is followed by its slow twin -->
+<sphinxql>
+	create table tr ( title text, body text, gid integer, ts bigint ) morphology='none' min_infix_len='3';
+	insert into tr ( id, title, body, gid, ts ) values
+		( 1, 'error alpha', 'beta cache', 1, 100 ),
+		( 2, 'alpha', 'error beta failed', 1, 200 ),
+		( 3, 'error', 'error charge', 2, 300 ),
+		( 4, 'gamma', 'delta connection', 2, 400 ),
+		( 5, 'alpha error', 'error error error charge cache', 3, 500 ),
+		( 6, 'failed order', 'order failed', 3, 600 ),
+		( 7, 'place order', 'failed to place order', 4, 700 ),
+		( 8, 'connection refused', 'error failed charge cache', 4, 800 );
+
+	select count(*) from tr where match('error failed'); show meta;
+	select count(*), max(gid) from tr where match('error failed'); show meta;
+	select count(*) from tr where match('error failed charge cache'); show meta like 'index';
+	select count(*), max(gid) from tr where match('error failed charge cache'); show meta like 'index';
+	select count(*) from tr where match('error | gamma'); show meta;
+	select count(*), max(gid) from tr where match('error | gamma'); show meta;
+	select count(*) from tr where match('connection | order | delta | cache'); show meta like 'index';
+	select count(*), max(gid) from tr where match('connection | order | delta | cache'); show meta like 'index';
+	select count(*) from tr where match('"error failed charge cache"/2'); show meta like 'index';
+	select count(*), max(gid) from tr where match('"error failed charge cache"/2'); show meta like 'index';
+	select count(*) from tr where match('error -cache'); show meta like 'index';
+	select count(*), max(gid) from tr where match('error -cache'); show meta like 'index';
+	select count(*) from tr where match('(error | failed) -charge'); show meta like 'index';
+	select count(*), max(gid) from tr where match('(error | failed) -charge'); show meta like 'index';
+	select count(*) from tr where match('"place order"'); show meta;
+	select count(*), max(gid) from tr where match('"place order"'); show meta;
+	select count(*) from tr where match('"failed to place order"'); show meta like 'index';
+	select count(*), max(gid) from tr where match('"failed to place order"'); show meta like 'index';
+	select count(*) from tr where match('"failed order"~3'); show meta like 'index';
+	select count(*), max(gid) from tr where match('"failed order"~3'); show meta like 'index';
+	select count(*) from tr where match('error NEAR/2 charge'); show meta like 'index';
+	select count(*), max(gid) from tr where match('error NEAR/2 charge'); show meta like 'index';
+	select count(*) from tr where match('failed &lt;&lt; order'); show meta like 'index';
+	select count(*), max(gid) from tr where match('failed &lt;&lt; order'); show meta like 'index';
+	select count(*) from tr where match('"failed to place order" | charge'); show meta like 'index';
+	select count(*), max(gid) from tr where match('"failed to place order" | charge'); show meta like 'index';
+	select count(*) from tr where match('^error'); show meta like 'index';
+	select count(*), max(gid) from tr where match('^error'); show meta like 'index';
+	select count(*) from tr where match('@title[1] error'); show meta like 'index';
+	select count(*), max(gid) from tr where match('@title[1] error'); show meta like 'index';
+	select count(*) from tr where match('@body error'); show meta like 'index';
+	select count(*), max(gid) from tr where match('@body error'); show meta like 'index';
+	select count(*) from tr where match('error MAYBE charge'); show meta like 'index';
+	select count(*), max(gid) from tr where match('error MAYBE charge'); show meta like 'index';
+
+	<!-- expansions -->
+	select count(*) from tr where match('err*'); show meta like 'index';
+	select count(*), max(gid) from tr where match('err*'); show meta like 'index';
+	select count(*) from tr where match('*tion'); show meta like 'index';
+	select count(*), max(gid) from tr where match('*tion'); show meta like 'index';
+	select count(*) from tr where match('*nnec*'); show meta like 'index';
+	select count(*), max(gid) from tr where match('*nnec*'); show meta like 'index';
+	select count(*) from tr where match('error') option expand_keywords=1; show meta like 'index';
+	select count(*), max(gid) from tr where match('error') option expand_keywords=1; show meta like 'index';
+
+	<!-- filters: evaluated inside the count walk -->
+	select count(*) from tr where match('error') and gid=1; show meta;
+	select count(*), max(gid) from tr where match('error') and gid=1; show meta;
+	select count(*) from tr where match('error failed') and gid between 1 and 3; show meta like 'index';
+	select count(*), max(gid) from tr where match('error failed') and gid between 1 and 3; show meta like 'index';
+	select count(*) from tr where match('error') and ts between 250 and 650; show meta like 'index';
+	select count(*), max(gid) from tr where match('error') and ts between 250 and 650; show meta like 'index';
+	select count(*) from tr where match('error | failed') and gid=4 and ts&gt;=800; show meta like 'index';
+	select count(*), max(gid) from tr where match('error | failed') and gid=4 and ts&gt;=800; show meta like 'index';
+
+	<!-- weight filter needs ranking: regular path -->
+	select count(*) from tr where match('error failed') and weight()&gt;0; show meta like 'index';
+	select count(*), max(gid) from tr where match('error failed') and weight()&gt;0; show meta like 'index';
+
+	<!-- kills: RAM, then disk chunk, mixed, merged -->
+	delete from tr where id=5;
+	select count(*) from tr where match('error failed'); show meta;
+	select count(*), max(gid) from tr where match('error failed'); show meta;
+	select count(*) from tr where match('error'); show meta;
+	select count(*), max(gid) from tr where match('error'); show meta;
+	flush ramchunk tr;
+	select count(*) from tr where match('error failed'); show meta;
+	select count(*), max(gid) from tr where match('error failed'); show meta;
+	insert into tr ( id, title, body, gid, ts ) values ( 9, 'x', 'error failed', 5, 900 ), ( 10, 'error', 'y', 5, 1000 );
+	delete from tr where id=2;
+	select count(*) from tr where match('error failed'); show meta;
+	select count(*), max(gid) from tr where match('error failed'); show meta;
+	select count(*) from tr where match('error'); show meta;
+	select count(*), max(gid) from tr where match('error'); show meta;
+	delete from tr where id=10;
+	select count(*) from tr where match('error | failed'); show meta;
+	select count(*), max(gid) from tr where match('error | failed'); show meta;
+	flush ramchunk tr;
+	optimize table tr option sync=1, cutoff=1;
+	select count(*) from tr where match('error failed'); show meta;
+	select count(*), max(gid) from tr where match('error failed'); show meta;
+	select count(*) from tr where match('error') and gid=1; show meta like 'index';
+	select count(*), max(gid) from tr where match('error') and gid=1; show meta like 'index';
+</sphinxql>
+
+<!-- zones need the ranker: regular path -->
+<sphinxql>
+	create table tz ( body text ) morphology='none' html_strip='1' index_zones='h1';
+	insert into tz ( id, body ) values ( 1, '&lt;h1&gt;error&lt;/h1&gt; failed' ), ( 2, 'error &lt;h1&gt;failed&lt;/h1&gt;' );
+	select count(*) from tz where match('ZONE:h1 error'); show meta like 'index';
+	select count(*), max(id) from tz where match('ZONE:h1 error'); show meta like 'index';
+	select count(*) from tz where match('error failed'); show meta like 'index';
+</sphinxql>
+
 </queries>
 </test>

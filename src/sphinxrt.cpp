@@ -8886,7 +8886,7 @@ static bool DoFullScanQuery ( const RtSegVec_c & dRamChunks, const ISphSchema & 
 }
 
 
-static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_t & tTermSetup, ISphRanker * pRanker, int iIndexWeight, int iCutoff, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters )
+static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_t & tTermSetup, ISphRanker * pRanker, int iIndexWeight, int iCutoff, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters, bool bCountOnly )
 {
 	if ( !iCutoff )
 		return;
@@ -8926,6 +8926,17 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 
 		pRanker->ExtraData ( EXTRA_SET_BLOBPOOL, (void**)&pBlobPool );
 		pRanker->ExtraData ( EXTRA_SET_COLUMNAR, (void**)&pColumnar );
+
+		// count-only query: RAM qwords skip dead rows themselves, filters run inside the ranker walk
+		if ( bCountOnly )
+		{
+			int64_t iCount = pRanker->CountDocs ( nullptr );
+			if ( iCount>=0 )
+			{
+				PushFastCountMatch ( dSorters, pSeg->GetDocinfoByRowID(0), iTag, iIndexWeight, iCount );
+				continue;
+			}
+		}
 
 		CSphMatch * pMatch = pRanker->GetMatchesBuffer();
 		while (true)
@@ -8989,7 +9000,7 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 	}
 }
 
-static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema & tMaxSorterSchema, const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, const CSphMultiQueryArgs & tArgs, int iMatchPoolSize, int iStackNeed, RtQwordSetup_t & tTermSetup, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters, XQQuery_t & tParsed, CSphQueryResultMeta & tMeta, ISphMatchSorter * pSorter )
+static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema & tMaxSorterSchema, const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, const CSphMultiQueryArgs & tArgs, int iMatchPoolSize, int iStackNeed, RtQwordSetup_t & tTermSetup, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters, XQQuery_t & tParsed, CSphQueryResultMeta & tMeta, ISphMatchSorter * pSorter, bool bCountOnly )
 {
 	// set zonespanlist settings
 	tParsed.m_bNeedSZlist = tQuery.m_bZSlist;
@@ -8998,9 +9009,14 @@ static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema &
 
 	return Threads::Coro::ContinueBool ( iStackNeed, [&] {
 
+	// count-only query: the node tree matches, nothing is ranked or turned into matches
+	QueryExecutionSettings_t tRankerSettings = tQuerySettings;
+	if ( bCountOnly )
+		tRankerSettings.m_eRanker = SPH_RANK_NONE;
+
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tParsed, tQuery, tQuerySettings, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
+	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tParsed, tQuery, tRankerSettings, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
 	if ( !pRanker )
 		return false;
 
@@ -9028,7 +9044,9 @@ static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema &
 
 		// do searching
 		int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters, true );
-		PerformFullTextSearch ( dRamChunks, tTermSetup, pRanker.get (), tArgs.m_iIndexWeight, iCutoff, pProfiler, tCtx, dSorters );
+		PerformFullTextSearch ( dRamChunks, tTermSetup, pRanker.get (), tArgs.m_iIndexWeight, iCutoff, pProfiler, tCtx, dSorters, bCountOnly );
+		if ( bCountOnly )
+			RecordFastCount ( tMeta, "RanklessCount" );
 	}
 
 	if ( !FinalExpressionCalculation ( tCtx, dRamChunks, dSorters, tArgs.m_bFinalizeSorters, tMeta ) )
@@ -9355,6 +9373,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 
 	int iStackNeed = -1;
 	bool bFastTermCount = false;
+	bool bRanklessCount = false;
 
 	// no need to create ranker, etc if there's no query
 	if ( !bFullscan )
@@ -9368,6 +9387,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 		{
 			// single-term count(*) fast path: proven on the parsed tree here and re-checked after the transforms
 			bFastTermCount = IsFastTermCountQuery ( tQueryToRun, dSorters, tArgs ) && GetFastTermCountKeyword ( tParsed.m_pRoot, m_tSchema );
+			bRanklessCount = IsRanklessCountQuery ( tQueryToRun, dSorters, tArgs );
 			const bool bCanExpandRamWildcards = IsStarDict ( bWordDict );
 			iStackNeed = PrepareFTSearch ( this, bCanExpandRamWildcards, bWordDict, m_tMutableSettings.m_iExpandKeywords, m_iExpansionLimit, m_tSettings, tQueryToRun,(cRefCountedRefPtrGeneric_t) tGuard.m_tSegmentsAndChunks.m_pSegs, pDict, tMeta, pProfiler, &tPayloads, tParsed );
 		}
@@ -9412,7 +9432,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 		if ( pFastWord && tGuard.m_dRamSegs.all_of ( []( const auto & pSeg ) { return !pSeg->m_tDeadRowMap.HasDead(); } ) )
 			bResult = FastTermCountRam ( tGuard.m_dRamSegs, *pFastWord, pDict, dSorters, tFTArgs, tMeta );
 		else
-			bResult = DoFullTextSearch ( tGuard.m_dRamSegs, tMaxSorterSchema, tQueryToRun, tQuerySettings, tFTArgs, iMatchPoolSize, iStackNeed, tTermSetup, pProfiler, tCtx, dSorters, tParsed, tMeta, dSorters.GetLength()==1 ? dSorters[0] : nullptr );
+			bResult = DoFullTextSearch ( tGuard.m_dRamSegs, tMaxSorterSchema, tQueryToRun, tQuerySettings, tFTArgs, iMatchPoolSize, iStackNeed, tTermSetup, pProfiler, tCtx, dSorters, tParsed, tMeta, dSorters.GetLength()==1 ? dSorters[0] : nullptr, bRanklessCount && TreeAllowsRanklessCount ( tParsed ) );
 	}
 
 	if (!bResult)
@@ -9463,7 +9483,7 @@ bool RtIndex_c::FastTermCountRam ( const RtSegVec_c & dRamSegs, const XQKeyword_
 		PushFastCountMatch ( dSorters, pSeg->GetDocinfoByRowID(0), 1, tArgs.m_iIndexWeight, tQword.m_iDocs );
 	}
 
-	RecordFastCount ( tMeta );
+	RecordFastCount ( tMeta, "FastCount" );
 	return true;
 }
 

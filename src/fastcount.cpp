@@ -13,7 +13,7 @@
 #include "sphinxquery/sphinxquery.h"
 #include "sphinxutils.h"
 
-bool IsFastTermCountQuery ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters, const CSphMultiQueryArgs & tArgs )
+bool IsRanklessCountQuery ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters, const CSphMultiQueryArgs & tArgs )
 {
 	if ( tQuery.m_sQuery.IsEmpty() )
 		return false;
@@ -24,7 +24,8 @@ bool IsFastTermCountQuery ( const CSphQuery & tQuery, const VecTraits_T<ISphMatc
 	if ( !tQuery.m_sGroupBy.IsEmpty() || !tQuery.m_sGroupDistinct.IsEmpty() || !tQuery.m_tHaving.m_sAttrName.IsEmpty() )
 		return false;
 
-	if ( !tQuery.m_dFilters.IsEmpty() || !tQuery.m_dFilterTree.IsEmpty() )
+	// filters are evaluated by the node tree walk; only a weight filter needs ranking
+	if ( tQuery.m_dFilters.any_of ( []( const CSphFilterSettings & tFilter ) { return tFilter.m_sAttrName=="@weight" || tFilter.m_sAttrName=="weight()"; } ) )
 		return false;
 
 	if ( tQuery.HasKnn() || tQuery.m_bHybridSearch || tQuery.m_eJoinType!=JoinType_e::NONE || !tQuery.m_sJoinIdx.IsEmpty() )
@@ -40,10 +41,6 @@ bool IsFastTermCountQuery ( const CSphQuery & tQuery, const VecTraits_T<ISphMatc
 		return false;
 
 	if ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
-		return false;
-
-	// keep syntactically complex queries on the regular path even if they simplify to a single term
-	if ( strpbrk ( tQuery.m_sQuery.cstr(), "\"~!/^$<>=-\\" ) )
 		return false;
 
 	if ( dSorters.GetLength()!=1 )
@@ -63,6 +60,30 @@ bool IsFastTermCountQuery ( const CSphQuery & tQuery, const VecTraits_T<ISphMatc
 		if ( tAttr.m_eAggrFunc!=SPH_AGGR_NONE && tAttr.m_sName!="@count" )
 			return false;
 	}
+
+	return true;
+}
+
+
+bool TreeAllowsRanklessCount ( const XQQuery_t & tParsed )
+{
+	// zones are matched with the ranker's help; everything else is decided inside the node tree
+	return tParsed.m_pRoot && tParsed.m_dZones.IsEmpty() && !tParsed.m_bNeedSZlist;
+}
+
+
+bool IsFastTermCountQuery ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters, const CSphMultiQueryArgs & tArgs )
+{
+	if ( !IsRanklessCountQuery ( tQuery, dSorters, tArgs ) )
+		return false;
+
+	// the dictionary count is exact only over the whole chunk
+	if ( !tQuery.m_dFilters.IsEmpty() || !tQuery.m_dFilterTree.IsEmpty() )
+		return false;
+
+	// keep syntactically complex queries on the regular path even if they simplify to a single term
+	if ( strpbrk ( tQuery.m_sQuery.cstr(), "\"~!/^$<>=-\\" ) )
+		return false;
 
 	return true;
 }
@@ -144,10 +165,10 @@ void PushFastCountMatch ( const VecTraits_T<ISphMatchSorter*> & dSorters, const 
 }
 
 
-void RecordFastCount ( CSphQueryResultMeta & tMeta )
+void RecordFastCount ( CSphQueryResultMeta & tMeta, const char * szType )
 {
 	IteratorStats_t tStats;
-	tStats.m_dIterators.Add ( { "fulltext", "FastCount" } );
+	tStats.m_dIterators.Add ( { "fulltext", szType } );
 	tStats.m_iTotal = 1;
 	tMeta.m_tIteratorStats.Merge ( tStats );
 }

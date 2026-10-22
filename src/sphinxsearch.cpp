@@ -21,6 +21,7 @@
 #include "columnarlib.h"
 #include "dict/dict_entry.h"
 #include "client_task_info.h"
+#include "killlist.h"
 
 #include <math.h>
 bool operator < ( const SkiplistEntry_t & a, RowID_t b )	{ return a.m_tBaseRowIDPlus1<b; }
@@ -229,6 +230,7 @@ public:
 								ExtRanker_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings );
 
 	virtual const ExtDoc_t *	GetFilteredDocs ();
+	int64_t						CountDocs ( const DeadRowMap_Disk_c * pDeadRows ) override;
 };
 
 
@@ -1213,6 +1215,28 @@ const ExtDoc_t * ExtRanker_T<USE_BM25>::GetFilteredDocs ()
 
 
 //////////////////////////////////////////////////////////////////////////
+
+template <bool USE_BM25>
+int64_t ExtRanker_T<USE_BM25>::CountDocs ( const DeadRowMap_Disk_c * pDeadRows )
+{
+	if ( !m_pRoot )
+		return 0;
+
+	int64_t iCount = 0;
+	while ( true )
+	{
+		const ExtDoc_t * pDoc = GetFilteredDocs();
+		if ( !pDoc )
+			break;
+
+		for ( ; pDoc->m_tRowID!=INVALID_ROWID; pDoc++ )
+			if ( !pDeadRows || !pDeadRows->IsSet ( pDoc->m_tRowID ) )
+				iCount++;
+	}
+
+	return iCount;
+}
+
 
 template < bool USE_BM25 >
 int ExtRanker_WeightSum_c<USE_BM25>::GetMatches ()

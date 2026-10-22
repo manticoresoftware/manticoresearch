@@ -15,13 +15,20 @@
 
 struct XQNode_t;
 struct XQKeyword_t;
+struct XQQuery_t;
 struct KeywordBuf_t;
 
 // Fast path for `SELECT COUNT(*) FROM t WHERE MATCH('term')`: the count is taken from the per-term
 // document counts stored in the dictionary instead of iterating the posting list.
 // It is exact only when the chunk/segment has no killed rows and the term covers every indexed field.
 
-/// query and sorter part of the eligibility check; does not depend on the parsed full-text tree
+/// count-only query over any full-text tree: one count(*) item, one implicit-group sorter, attribute filters allowed
+bool IsRanklessCountQuery ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters, const CSphMultiQueryArgs & tArgs );
+
+/// tree part for the rankless count: anything the node tree can match on its own (no zones)
+bool TreeAllowsRanklessCount ( const XQQuery_t & tParsed );
+
+/// query and sorter part of the single-term eligibility check; does not depend on the parsed full-text tree
 bool IsFastTermCountQuery ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters, const CSphMultiQueryArgs & tArgs );
 
 /// tree part: the single plain keyword whose field spec covers every indexed field, or nullptr
@@ -33,5 +40,5 @@ void SetupFastCountQword ( ISphQword & tQword, const XQKeyword_t & tWord, const 
 /// push one grouped match carrying a precomputed count into implicit-group sorters
 void PushFastCountMatch ( const VecTraits_T<ISphMatchSorter*> & dSorters, const CSphRowitem * pStatic, int iTag, int iIndexWeight, int64_t iCount );
 
-/// record the fast path in the iterator stats (SHOW META 'index' row)
-void RecordFastCount ( CSphQueryResultMeta & tMeta );
+/// record the count path in the iterator stats (SHOW META 'index' row), e.g. "FastCount" or "RanklessCount"
+void RecordFastCount ( CSphQueryResultMeta & tMeta, const char * szType );

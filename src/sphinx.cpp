@@ -12055,7 +12055,7 @@ bool CSphIndex_VLN::TryFastTermCount ( CSphQueryResult & tResult, const VecTrait
 		PushFastCountMatch ( dSorters, GetRawAttrs(), tArgs.m_iTag, tArgs.m_iIndexWeight, iDocs );
 	}
 
-	RecordFastCount ( tMeta );
+	RecordFastCount ( tMeta, "FastCount" );
 	PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), tArgs.m_bFinalizeSorters, pProfile, tArgs.m_bModifySorterSchemas );
 
 	tResult.m_pBlobPool = m_tBlobAttrs.GetReadPtr();
@@ -12528,9 +12528,18 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 	// bind weights
 	tCtx.BindWeights ( tQuery, m_tSchema, tMeta.m_sWarning );
 
+	// count-only query: the node tree matches, nothing is ranked or turned into matches
+	const bool bRanklessCount = IsRanklessCountQuery ( tQuery, dSorters, tArgs ) && TreeAllowsRanklessCount ( tXQ );
+	QueryExecutionSettings_t tRankerSettings = tQuerySettings;
+	if ( bRanklessCount )
+	{
+		tRankerSettings.m_eRanker = SPH_RANK_NONE;
+		tCtx.m_bSkipQCache = true;
+	}
+
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tXQ, tQuery, tQuerySettings, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
+	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tXQ, tQuery, tRankerSettings, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
 	if ( !pRanker )
 		return false;
 
@@ -12634,6 +12643,19 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 
 	int iIndex = bUseKlist*64 + bHaveRandom*32 + bUseFactors*16 + bHasSortCalc*8 + bHasWeightFilter*4 + bHasFilterCalc*2 + bHasCutoff;
 
+	bool bCounted = false;
+	if ( bRanklessCount )
+	{
+		int64_t iCount = pRanker->CountDocs ( bUseKlist ? &m_tDeadRowMap : nullptr );
+		if ( iCount>=0 )
+		{
+			PushFastCountMatch ( dSorters, GetRawAttrs(), iMyTag, tArgs.m_iIndexWeight, iCount );
+			RecordFastCount ( tMeta, "RanklessCount" );
+			bCounted = true;
+		}
+	}
+
+	if ( !bCounted )
 	switch ( iIndex )
 	{
 #define DECL_FNSCAN( _, n, params ) case n: MatchExtended<!!(n&64), !!(n&32), !!(n&16), !!(n&8), !!(n&4), !!(n&2), !!(n&1)> params; break;

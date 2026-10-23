@@ -1,5 +1,5 @@
 backup 1.11.0+26090711-f5c09c1e-dev
-buddy 4.4.8+26101510-d856db03-dev
+buddy 4.4.9+26102317-85bde9ce-dev
 executor 1.4.6+26102310-445049b4-dev
 tzdata 1.0.1 250714 7eebffa
 load 1.29.0+26101001-0d5796a7-dev

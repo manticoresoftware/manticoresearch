@@ -25,8 +25,8 @@ download_package() {
 		file_name="${package}_${version}-${date}-${commit}_${arch}.deb"
 	fi
 
-	# Try both repositories (with and without _dev suffix)
-	for repo_suffix in "" "_dev"; do
+	# Try release, dev, and release-candidate repositories
+	for repo_suffix in "" "_dev" "_release_candidate"; do
 		repo_url="https://repo.manticoresearch.com/repository/manticoresearch_jammy${repo_suffix}/dists/jammy/main/binary-amd64"
 		file_url="${repo_url}/${file_name}"
 		echo "Trying to download from $file_url"

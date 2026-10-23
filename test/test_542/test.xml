@@ -197,8 +197,9 @@ searchd
 	delete from tr where id=2;
 	select count(*) from tr where match('error failed'); show meta;
 	select count(*), max(gid) from tr where match('error failed'); show meta;
-	select count(*) from tr where match('error'); show meta;
-	select count(*), max(gid) from tr where match('error'); show meta;
+	<!-- the dictionary path on RAM and the rankless path on the disk chunk; the index shares depend on the pseudo-shard count, so only the stats are checked -->
+	select count(*) from tr where match('error'); show meta like 'docs%';
+	select count(*), max(gid) from tr where match('error'); show meta like 'docs%';
 	delete from tr where id=10;
 	select count(*) from tr where match('error | failed'); show meta;
 	select count(*), max(gid) from tr where match('error | failed'); show meta;

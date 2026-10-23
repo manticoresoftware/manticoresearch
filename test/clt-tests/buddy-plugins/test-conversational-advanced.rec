@@ -66,7 +66,7 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM knowledge_base;"
 ––– comment –––
 Create multiple CHAT models with different configurations
 ––– input –––
-mysql -h0 -P9306 -e "CREATE CHAT MODEL fast_assistant (model='openai:gpt-3.5-turbo', max_document_length=0, retrieval_limit=3);"
+mysql -h0 -P9306 -e "CREATE CHAT MODEL fast_assistant (model='openai:gpt-4o-mini', max_document_length=0, retrieval_limit=3);"
 ––– output –––
 +----------------+
 | name           |

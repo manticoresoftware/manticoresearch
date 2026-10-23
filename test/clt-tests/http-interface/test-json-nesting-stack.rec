@@ -5,75 +5,57 @@ Deeply nested HTTP JSON should be parsed or rejected without crashing searchd.
 mysql -h0 -P9306 -e "DROP TABLE IF EXISTS json_nesting_stack; CREATE TABLE json_nesting_stack (a JSON);"
 ––– output –––
 ––– input –––
-php <<'PHP'
-<?php
-function post_json(string $endpoint, string $payload, string $contentType = 'application/json'): array
-{
-    $curl = curl_init("http://127.0.0.1:9308/$endpoint");
-    curl_setopt_array($curl, [
-        CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => $payload,
-        CURLOPT_HTTPHEADER => ["Content-Type: $contentType", 'User-Agent: Manticore Buddy'],
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_CONNECTTIMEOUT => 3,
-        CURLOPT_TIMEOUT => 15,
-    ]);
-    $response = curl_exec($curl);
-    $status = curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
-    $error = curl_error($curl);
-    curl_close($curl);
-    if ($response === false) {
-        throw new RuntimeException("$endpoint transport error: $error");
-    }
-    return [$status, $response];
+bash <<'BASH'
+set -euo pipefail
+
+nested() {
+    local depth=$1 open=$2 close=$3 i
+    for (( i=0; i<depth; i++ )); do printf '%s' "$open"; done
+    printf '1'
+    for (( i=0; i<depth; i++ )); do printf '%s' "$close"; done
 }
 
-function check_request(string $name, string $endpoint, string $payload, int $expectedStatus, string $contentType = 'application/json'): void
-{
-    [$status, $response] = post_json($endpoint, $payload, $contentType);
-    if ($status !== $expectedStatus) {
-        throw new RuntimeException("$name: expected HTTP $expectedStatus, got $status: " . substr($response, 0, 150));
-    }
+check_request() {
+    local name=$1 endpoint=$2 body=$3 expected=$4 type=application/json
+    if (( $# > 4 )); then type=$5; fi
+    local status
 
-    [$healthStatus] = post_json('sql', 'SELECT COUNT(*) FROM json_nesting_stack', 'application/x-www-form-urlencoded');
-    if ($healthStatus !== 200) {
-        throw new RuntimeException("$name: HTTP health check failed: $healthStatus");
-    }
-    $db = new mysqli('127.0.0.1', '', '', '', 9306);
-    $result = $db->query('SELECT COUNT(*) FROM json_nesting_stack');
-    if (!$result || !$result->fetch_row()) {
-        throw new RuntimeException("$name: MySQL health check failed");
-    }
-    $db->close();
-    echo "$name: HTTP $status, HTTP/MySQL alive\n";
+    if ! status=$(curl -sS --connect-timeout 3 --max-time 15 -o /dev/null -w '%{http_code}' \
+        -H "Content-Type: $type" --data-binary "$body" "http://localhost:9308/$endpoint"); then
+        echo "$name: HTTP request failed"
+        return 1
+    fi
+    if [[ "$status" != "$expected" ]]; then
+        echo "$name: expected HTTP $expected, got $status"
+        return 1
+    fi
+    if [[ "$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' \
+        -d 'SELECT COUNT(*) FROM json_nesting_stack' http://localhost:9308/sql)" != 200 ]] ||
+        ! mysql -h0 -P9306 -e 'SELECT COUNT(*) FROM json_nesting_stack' > /dev/null; then
+        echo "$name: HTTP/MySQL liveness failed"
+        return 1
+    fi
+    echo "$name: HTTP $status, HTTP/MySQL alive"
 }
 
-function nested(int $depth, string $type = 'object'): string
-{
-    if ($type === 'array') {
-        return str_repeat('[', $depth) . '1' . str_repeat(']', $depth);
-    }
-    return str_repeat('{"a":', $depth) . '1' . str_repeat('}', $depth);
-}
+doc750=$(nested 750 '{"a":' '}')
+doc999=$(nested 999 '{"a":' '}')
+doc1000=$(nested 1000 '{"a":' '}')
+doc2000=$(nested 2000 '{"a":' '}')
+array2000=$(nested 2000 '[' ']')
 
-$table = 'json_nesting_stack';
-$doc750 = nested(750);
-$doc999 = nested(999);
-$doc1000 = nested(1000);
-$doc2000 = nested(2000);
-
-check_request('insert-750', 'insert', '{"table":"' . $table . '","id":1,"doc":' . $doc750 . '}', 200);
-check_request('replace-750', 'replace', '{"table":"' . $table . '","id":1,"doc":' . $doc750 . '}', 200);
-check_request('insert-999', 'insert', '{"table":"' . $table . '","id":2,"doc":' . $doc999 . '}', 200);
-check_request('insert-1000', 'insert', '{"table":"' . $table . '","id":3,"doc":' . $doc1000 . '}', 400);
-check_request('insert-2000', 'insert', '{"table":"' . $table . '","id":3,"doc":' . $doc2000 . '}', 400);
-check_request('replace-2000', 'replace', '{"table":"' . $table . '","id":1,"doc":' . $doc2000 . '}', 400);
-check_request('update-2000', 'update', '{"table":"' . $table . '","id":1,"doc":' . $doc2000 . '}', 400);
-check_request('delete-2000', 'delete', '{"table":"' . $table . '","id":1,"doc":' . $doc2000 . '}', 400);
-check_request('search-2000', 'search', '{"table":"' . $table . '","query":' . $doc2000 . '}', 400);
-check_request('bulk-2000', 'bulk', '{"insert":{"table":"' . $table . '","id":4,"doc":' . $doc2000 . '}}', 400, 'application/x-ndjson');
-check_request('array-2000', 'insert', '{"table":"' . $table . '","id":5,"doc":{"a":' . nested(2000, 'array') . '}}', 400);
-PHP
+check_request insert-750 insert "{\"table\":\"json_nesting_stack\",\"id\":1,\"doc\":$doc750}" 200
+check_request replace-750 replace "{\"table\":\"json_nesting_stack\",\"id\":1,\"doc\":$doc750}" 200
+check_request insert-999 insert "{\"table\":\"json_nesting_stack\",\"id\":2,\"doc\":$doc999}" 200
+check_request insert-1000 insert "{\"table\":\"json_nesting_stack\",\"id\":3,\"doc\":$doc1000}" 400
+check_request insert-2000 insert "{\"table\":\"json_nesting_stack\",\"id\":3,\"doc\":$doc2000}" 400
+check_request replace-2000 replace "{\"table\":\"json_nesting_stack\",\"id\":1,\"doc\":$doc2000}" 400
+check_request update-2000 update "{\"table\":\"json_nesting_stack\",\"id\":1,\"doc\":$doc2000}" 400
+check_request delete-2000 delete "{\"table\":\"json_nesting_stack\",\"id\":1,\"doc\":$doc2000}" 400
+check_request search-2000 search "{\"table\":\"json_nesting_stack\",\"query\":$doc2000}" 400
+check_request bulk-2000 bulk "{\"insert\":{\"table\":\"json_nesting_stack\",\"id\":4,\"doc\":$doc2000}}" 400 application/x-ndjson
+check_request array-2000 insert "{\"table\":\"json_nesting_stack\",\"id\":5,\"doc\":{\"a\":$array2000}}" 400
+BASH
 ––– output –––
 insert-750: HTTP 200, HTTP/MySQL alive
 replace-750: HTTP 200, HTTP/MySQL alive

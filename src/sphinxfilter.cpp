@@ -1346,14 +1346,16 @@ public:
 };
 
 
-// plain numeric filter (=, IN, ranges) on a json field: a scalar is checked as before,
-// an array matches when any element matches as a scalar of the same type would, like MVA and json string arrays
+// numeric filter (=, IN, ranges) on a json field, plain or in any() / all(): a scalar is checked as before,
+// an array matches when any element (for all(), every element of a non-empty array) matches as a scalar
+// of the same type would, like MVA and json string arrays
 class ExprFilterJsonValue_c : public IFilter_Values
 {
 public:
 	ExprFilterJsonValue_c ( ISphExpr * pJson, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings )
 		: m_pJson ( pJson )
 		, m_tRange ( tFixedSettings )
+		, m_bAll ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ALL )
 	{
 		SafeAddRef ( pJson );
 	}
@@ -1373,11 +1375,12 @@ public:
 		if ( !bson::IsArray ( tNode ) )
 			return EvalValue ( tNode );
 
+		// stop at the first match, or for all() at the first element that does not match; an empty array does not match
 		bool bMatch = false;
 		bson::ForSome ( tNode, [this, &bMatch] ( const bson::NodeHandle_t & tElem )
 		{
 			bMatch = EvalValue ( tElem );
-			return !bMatch;
+			return bMatch==m_bAll;
 		} );
 
 		return bMatch;
@@ -1387,6 +1390,7 @@ private:
 	CSphRefcountedPtr<ISphExpr>	m_pJson;
 	const BYTE *				m_pBlobPool = nullptr;
 	CommonFilterSettings_t		m_tRange;	// json filters keep the settings as given (no attribute type fixup)
+	bool						m_bAll;
 
 	// a scalar or an array element, read as a number the way a json value converts everywhere (bson::Int / bson::Double)
 	bool EvalValue ( const bson::NodeHandle_t & tNode ) const
@@ -1446,25 +1450,9 @@ static std::unique_ptr<ISphFilter> SetupJsonExpr ( CSphRefcountedPtr<ISphExpr> &
 	if ( tFixedSettings.m_eType==SPH_FILTER_STRING_LIST || ( tFixedSettings.m_eType==SPH_FILTER_STRING && tFixedSettings.m_eStrCmpDir==EStrCmpDir::EQ ) )
 		return std::make_unique<ExprFilterProxy_c> ( pFoo = ExprJsonIn ( tSettings.m_dStrings, pExpr, eCollation ), SPH_ATTR_INTEGER );
 
-	// plain numeric filters check each element of a json array
-	if ( !bAutoConvert && tSettings.m_eMvaFunc==SPH_MVAFUNC_NONE && ( tFixedSettings.m_eType==SPH_FILTER_VALUES || tFixedSettings.m_eType==SPH_FILTER_RANGE || tFixedSettings.m_eType==SPH_FILTER_FLOATRANGE ) )
+	// numeric filters, plain or in any() / all(), check each element of a json array
+	if ( !bAutoConvert && ( tFixedSettings.m_eType==SPH_FILTER_VALUES || tFixedSettings.m_eType==SPH_FILTER_RANGE || tFixedSettings.m_eType==SPH_FILTER_FLOATRANGE ) )
 		return std::make_unique<ExprFilterJsonValue_c> ( pExpr, tSettings, tFixedSettings );
-
-	if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ANY )
-	{
-		switch ( tFixedSettings.m_eType )
-		{
-		case SPH_FILTER_VALUES:
-			return std::make_unique<ExprFilterProxy_c> ( pFoo = ExprJsonIn ( tSettings.m_dValues, pExpr, eCollation ), SPH_ATTR_INTEGER );
-
-		case SPH_FILTER_RANGE:
-		case SPH_FILTER_FLOATRANGE:
-			return std::make_unique<ExprFilterProxy_c> ( pFoo = ExprJsonRange ( tFixedSettings, pExpr ), SPH_ATTR_INTEGER );
-
-		default:
-			break;
-		}
-	}
 
 	if ( !bAutoConvert )
 		pExpr = sphJsonFieldConv(pExpr);

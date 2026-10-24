@@ -463,93 +463,63 @@ private:
 	StrVec_t m_dValues;
 };
 
-struct Filter_StringTags_c : IFilter_Str
+void StringTags_c::SetTags ( const CSphString * pRef, int iCount )
 {
-protected:
-	CSphVector<uint64_t> m_dTags;
-	mutable CSphVector<uint64_t> m_dMatchTags;
+	assert ( pRef );
+	assert ( iCount>0 );
 
-public:
-	void SetRefString ( const CSphString * pRef, int iCount ) final
-	{
-		assert ( pRef );
-		assert ( iCount>0 );
+	m_dTags.Resize ( iCount );
 
-		m_dTags.Resize ( iCount );
+	for ( int i = 0; i<iCount; ++i )
+		m_dTags[i] = sphFNV64 ( pRef[i].cstr () );
 
-		for ( int i = 0; i<iCount; ++i )
-			m_dTags[i] = sphFNV64 ( pRef[i].cstr () );
+	m_dTags.Uniq ();
+}
 
-		m_dTags.Uniq ();
-	}
-
-protected:
-	inline void GetMatchTags ( const CSphMatch &tMatch ) const
-	{
-		auto dStr = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
-
-		m_dMatchTags.Resize ( 0 );
-		sphSplitApply ( ( const char * ) dStr.first, dStr.second, [this] ( const char * pTag, int iLen ) {
-			m_dMatchTags.Add ( sphFNV64 ( pTag, iLen, SPH_FNV64_SEED ) );
-		} );
-		m_dMatchTags.Uniq ();
-	}
-};
-
-struct Filter_StringTagsAny_c : Filter_StringTags_c
+bool StringTags_c::Match ( ByteBlob_t tStr, bool bAll ) const
 {
-public:
-	bool Eval ( const CSphMatch &tMatch ) const final
+	m_dMatchTags.Resize ( 0 );
+	sphSplitApply ( ( const char * ) tStr.first, tStr.second, [this] ( const char * pTag, int iLen ) {
+		m_dMatchTags.Add ( sphFNV64 ( pTag, iLen, SPH_FNV64_SEED ) );
+	} );
+	m_dMatchTags.Uniq ();
+
+	// both lists are sorted: walk them together until enough listed tags are found
+	auto pFilter = m_dMatchTags.begin ();
+	auto pQueryTags = m_dTags.begin ();
+	auto pFilterEnd = m_dMatchTags.end ();
+	auto pTagsEnd = m_dTags.end ();
+	int iExpectedTags = bAll ? m_dTags.GetLength() : 1;
+
+	while ( pFilter<pFilterEnd && pQueryTags<pTagsEnd && iExpectedTags>0 )
 	{
-		GetMatchTags ( tMatch );
-
-		auto pFilter = m_dMatchTags.begin ();
-		auto pQueryTags = m_dTags.begin ();
-		auto pFilterEnd = m_dMatchTags.end ();
-		auto pTagsEnd = m_dTags.end ();
-
-		while ( pFilter<pFilterEnd && pQueryTags<pTagsEnd )
+		if ( *pQueryTags<*pFilter )
+			++pQueryTags;
+		else if ( *pFilter<*pQueryTags )
+			++pFilter;
+		else
 		{
-			if ( *pQueryTags<*pFilter )
-				++pQueryTags;
-			else if ( *pFilter<*pQueryTags )
-				++pFilter;
-			else if ( *pQueryTags==*pFilter )
-				return true;
+			--iExpectedTags;
+			++pQueryTags;
+			++pFilter;
 		}
-		return false;
 	}
-};
+	return !iExpectedTags;
+}
 
-struct Filter_StringTagsAll_c : Filter_StringTags_c
+template <bool ALL>
+struct Filter_StringTags_T : IFilter_Str
 {
 public:
-	bool Eval ( const CSphMatch &tMatch ) const final
-	{
-		GetMatchTags ( tMatch );
+	void SetRefString ( const CSphString * pRef, int iCount ) final	{ m_tTags.SetTags ( pRef, iCount ); }
+	bool Eval ( const CSphMatch & tMatch ) const final				{ return m_tTags.Match ( tMatch.FetchAttrData ( m_tLocator, m_pBlobPool ), ALL ); }
 
-		auto pFilter = m_dMatchTags.begin ();
-		auto pQueryTags = m_dTags.begin ();
-		auto pFilterEnd = m_dMatchTags.end ();
-		auto pTagsEnd = m_dTags.end ();
-		int iExpectedTags = m_dTags.GetLength();
-
-		while ( pFilter<pFilterEnd && pQueryTags<pTagsEnd && iExpectedTags>0 )
-		{
-			if ( *pQueryTags<*pFilter )
-				++pQueryTags;
-			else if ( *pFilter<*pQueryTags )
-				++pFilter;
-			else if ( *pQueryTags==*pFilter )
-			{
-				--iExpectedTags;
-				++pQueryTags;
-				++pFilter;
-			}
-		}
-		return !iExpectedTags;
-	}
+private:
+	StringTags_c m_tTags;
 };
+
+using Filter_StringTagsAny_c = Filter_StringTags_T<false>;
+using Filter_StringTagsAll_c = Filter_StringTags_T<true>;
 
 
 struct Filter_And2 final : public ISphFilter
@@ -1445,6 +1415,18 @@ static std::unique_ptr<ISphFilter> SetupJsonExpr ( CSphRefcountedPtr<ISphExpr> &
 
 	ISphExpr* pFoo = nullptr;
 	AT_SCOPE_EXIT ( [&pFoo] { if (pFoo) pFoo->Release(); } );
+
+	// ALL('a','b') matches when every listed value is present, as ALL() on string tags does
+	if ( tFixedSettings.m_eType==SPH_FILTER_STRING_LIST && tSettings.m_eMvaFunc==SPH_MVAFUNC_ALL && tSettings.m_dStrings.GetLength()>1 )
+	{
+		auto pAll = std::make_unique<Filter_And>();
+		for ( int i = 0; i<tSettings.m_dStrings.GetLength(); ++i )
+		{
+			CSphRefcountedPtr<ISphExpr> pIn { ExprJsonIn ( tSettings.m_dStrings.Slice ( i, 1 ), pExpr, eCollation ) };
+			pAll->Add ( std::make_unique<ExprFilterProxy_c> ( pIn, SPH_ATTR_INTEGER ) );
+		}
+		return pAll;
+	}
 
 	// IN only checks equality; ordered string comparisons go to the converted field below
 	if ( tFixedSettings.m_eType==SPH_FILTER_STRING_LIST || ( tFixedSettings.m_eType==SPH_FILTER_STRING && tFixedSettings.m_eStrCmpDir==EStrCmpDir::EQ ) )

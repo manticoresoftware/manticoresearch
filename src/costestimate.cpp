@@ -669,6 +669,10 @@ bool SelectIteratorCtx_t::IsEnabled_Analyzer ( const CSphFilterSettings & tFilte
 	if ( tFilter.m_eType==SPH_FILTER_STRING && tFilter.m_eStrCmpDir!=EStrCmpDir::EQ )
 		return false;
 
+	// they also compare whole strings, while ANY() / ALL() over a string list match words
+	if ( tFilter.m_eType==SPH_FILTER_STRING_LIST && tFilter.m_eMvaFunc!=SPH_MVAFUNC_NONE )
+		return false;
+
 	auto pAttr = m_tIndexSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
 	return pAttr && ( pAttr->IsColumnar() || pAttr->IsColumnarExpr() );
 }

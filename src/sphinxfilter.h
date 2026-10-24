@@ -91,6 +91,18 @@ struct CreateFilterContext_t
 	bool						m_bAddKNNDistFilter = false;	///< join the knn guard onto the chain: docs without a vector must not match a knn query
 };
 
+/// string tags for ANY() / ALL() over a string list: a string matches when any / every listed tag is one of its words
+class StringTags_c
+{
+public:
+	void	SetTags ( const CSphString * pRef, int iCount );
+	bool	Match ( ByteBlob_t tStr, bool bAll ) const;
+
+private:
+	CSphVector<uint64_t>			m_dTags;
+	mutable CSphVector<uint64_t>	m_dMatchTags;
+};
+
 std::unique_ptr<ISphFilter> sphCreateFilter ( const CSphFilterSettings &tSettings, const CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning);
 std::unique_ptr<ISphFilter> sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const CSphString & sAttrName, const ISphSchema & tSchema, CSphString & sError );
 std::unique_ptr<ISphFilter> sphJoinFilters ( std::unique_ptr<ISphFilter>, std::unique_ptr<ISphFilter> );

@@ -2618,15 +2618,20 @@ void ExprConstArgs_c::AppendFilter ( const CSphFilterSettings & tFilter )
 		break;
 
 	case SPH_FILTER_RANGE:
-	case SPH_FILTER_FLOATRANGE:
-		m_iMinValue = Max ( m_iMinValue, tFilter.m_iMinValue );
-		m_iMaxValue = Min ( m_iMaxValue, tFilter.m_iMaxValue );
-		m_fMinValue = Max ( m_fMinValue, tFilter.m_fMinValue );
-		m_fMaxValue = Min ( m_fMaxValue, tFilter.m_fMaxValue );
-		m_bHasEqualMin |= tFilter.m_bHasEqualMin;
-		m_bHasEqualMax |= tFilter.m_bHasEqualMax;
-		m_bOpenLeft	 &= tFilter.m_bOpenLeft;
-		m_bOpenRight &= tFilter.m_bOpenRight;
+		// each comparison sets one bound; keep the tighter bound with its own inclusiveness
+		if ( !tFilter.m_bOpenLeft && ( m_bOpenLeft || tFilter.m_iMinValue>m_iMinValue || ( tFilter.m_iMinValue==m_iMinValue && !tFilter.m_bHasEqualMin ) ) )
+		{
+			m_iMinValue = tFilter.m_iMinValue;
+			m_bHasEqualMin = tFilter.m_bHasEqualMin;
+			m_bOpenLeft = false;
+		}
+
+		if ( !tFilter.m_bOpenRight && ( m_bOpenRight || tFilter.m_iMaxValue<m_iMaxValue || ( tFilter.m_iMaxValue==m_iMaxValue && !tFilter.m_bHasEqualMax ) ) )
+		{
+			m_iMaxValue = tFilter.m_iMaxValue;
+			m_bHasEqualMax = tFilter.m_bHasEqualMax;
+			m_bOpenRight = false;
+		}
 		break;
 
 	default:
@@ -2833,6 +2838,9 @@ public:
 		return (SphAttr_t*)&m_uData;
 	}
 
+	// set by the parser: ANY() whose condition is a plain filter on the array values
+	void SetFilterCond ( bool bFilterCond ) { m_bFilterCond = bFilterCond; }
+
 	void SetExpr ( ISphExpr * pExpr )
 	{
 		if ( pExpr==m_pExpr )
@@ -2931,7 +2939,7 @@ public:
 		if ( !CanAliasedExprSetupAsFilter ( tFilter, bExclude ) )
 			return false;
 
-		if ( m_bStrict )
+		if ( !m_bFilterCond )
 			return false;
 
 		ExprConstArgs_c tConstArgs;
@@ -2997,6 +3005,7 @@ private:
 	CSphRefcountedPtr<ISphExpr> m_pExpr;
 	bool				m_bStrict {false};
 	bool				m_bIndex {false};
+	bool				m_bFilterCond {false};
 	mutable uint64_t	m_uData {0};
 
 	Expr_ForIn_c ( const Expr_ForIn_c& rhs )
@@ -3004,6 +3013,7 @@ private:
 		, m_pExpr ( SafeClone ( rhs.m_pExpr ) )
 		, m_bStrict ( rhs.m_bStrict )
 		, m_bIndex ( rhs.m_bIndex )
+		, m_bFilterCond ( rhs.m_bFilterCond )
 	{
 		if ( m_pExpr )
 			m_pExpr->Command ( SPH_EXPR_SET_ITERATOR, &m_uData );
@@ -4389,6 +4399,7 @@ private:
 	ISphExpr *				CreateContainsNode ( const ExprNode_t & tNode );
 	ISphExpr *				CreateAggregateNode ( const ExprNode_t & tNode, ESphAggrFunc eFunc, ISphExpr * pLeft );
 	ISphExpr *				CreateForInNode ( int iNode );
+	bool					IsForInFilterCond ( int iNode ) const;
 	ISphExpr *				CreateExprDateAdd ( int iNode, bool bAdd );
 	ISphExpr *				CreateRegexNode ( ISphExpr * pAttr, ISphExpr * pString );
 	ISphExpr *				CreateConcatNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs );
@@ -9209,9 +9220,53 @@ ISphExpr * ExprParser_t::CreateForInNode ( int iNode )
 	auto * pFunc = new Expr_ForIn_c ( pArg, iFunc==FUNC_ALL, iFunc==FUNC_INDEXOF );
 
 	FixupIterators ( iExprNode, m_dNodes[iNameNode].m_sIdent, pFunc->GetRef() );
+	pFunc->SetFilterCond ( iFunc==FUNC_ANY && IsForInFilterCond ( iExprNode ) );
 	pFunc->SetExpr ( CSphRefcountedPtr<ISphExpr> { CreateTree ( iExprNode ) } );
 
 	return pFunc;
+}
+
+// ANY(cond FOR x IN json) is replaced with a secondary index filter on the json values
+// only when cond compares the plain iterator with constants:
+// x = int or string (either side), x < > <= >= int (x on the left), joined by AND/OR.
+// Negations, functions, expressions over x or other attributes are not such a filter.
+bool ExprParser_t::IsForInFilterCond ( int iNode ) const
+{
+	if ( iNode<0 )
+		return false;
+
+	const ExprNode_t & tNode = m_dNodes[iNode];
+	switch ( tNode.m_iToken )
+	{
+	case TOK_AND:
+	case TOK_OR:
+		return IsForInFilterCond ( tNode.m_iLeft ) && IsForInFilterCond ( tNode.m_iRight );
+
+	case TOK_EQ:
+	case '<':
+	case '>':
+	case TOK_LTE:
+	case TOK_GTE:
+	{
+		if ( tNode.m_iLeft<0 || tNode.m_iRight<0 )
+			return false;
+
+		const ExprNode_t * pIter = &m_dNodes[tNode.m_iLeft];
+		const ExprNode_t * pConst = &m_dNodes[tNode.m_iRight];
+
+		// '=' is symmetric; the bound collected for '<' '>' '<=' '>=' assumes x on the left
+		if ( tNode.m_iToken==TOK_EQ && pConst->m_iToken==TOK_ITERATOR )
+			std::swap ( pIter, pConst );
+
+		if ( pIter->m_iToken!=TOK_ITERATOR || pIter->m_iLeft!=-1 )
+			return false;
+
+		return pConst->m_iToken==TOK_CONST_INT || ( tNode.m_iToken==TOK_EQ && pConst->m_iToken==TOK_CONST_STRING );
+	}
+
+	default:
+		return false;
+	}
 }
 
 

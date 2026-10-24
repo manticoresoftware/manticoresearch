@@ -1,0 +1,71 @@
+––– comment –––
+Filters on JSON keys must return the same rows with and without the JSON secondary index. Each table has 10000
+padding docs so its chunk uses secondary indexes; each line compares No_SecondaryIndex with SecondaryIndex and
+shows whether the secondary index was used.
+- si_any_for: ANY(cond FOR x IN json.array) is replaced with a secondary index filter only when x is compared with
+  constants ('=' with an int or a string, '<' '>' '<=' '>=' with an int, joined by AND/OR, the bounds in any
+  order, an int64 bound too). Negations, functions,
+  expressions over x, other attributes, float constants and INDEXOF() must not use it.
+  Docs 1 i=[1,2] s=[x,y] f=[1.5,2.5], 2 [2] [y] [2.5], 3 [3] [z] [3.5], 4 [1] [x] [1.5], 5 [4,5] [w] [4.5].
+––– block: ../base/start-searchd –––
+––– input –––
+manticore-load --quiet --json --port=9306 --init="SET GLOBAL auto_optimize=0; DROP TABLE IF EXISTS si_any_for; CREATE TABLE si_any_for (j JSON secondary_index='1');" --load="INSERT INTO si_any_for (id,j) VALUES (<increment>,'{\"i\":[99],\"s\":[\"pad\"],\"f\":[99.5]}')" --batch-size=1000 --threads=2 --total=10000 > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "REPLACE INTO si_any_for VALUES (1,'{\"i\":[1,2],\"s\":[\"x\",\"y\"],\"f\":[1.5,2.5]}'), (2,'{\"i\":[2],\"s\":[\"y\"],\"f\":[2.5]}'), (3,'{\"i\":[3],\"s\":[\"z\"],\"f\":[3.5]}'), (4,'{\"i\":[1],\"s\":[\"x\"],\"f\":[1.5]}'), (5,'{\"i\":[4,5],\"s\":[\"w\"],\"f\":[4.5]}'); FLUSH RAMCHUNK si_any_for;" && echo ready
+––– output –––
+ready
+––– input –––
+cat > /tmp/json_si_vs_scan.php <<'PHP'
+<?php
+function run ( $sQuery, $iMaxId ) {
+	$tCtx = stream_context_create ( [ 'http' => [ 'method' => 'POST', 'header' => 'Content-Type: application/x-www-form-urlencoded', 'content' => http_build_query ( [ 'query' => $sQuery ] ) ] ] );
+	$dRes = json_decode ( file_get_contents ( 'http://localhost:9308/sql?mode=raw', false, $tCtx ), true );
+	if ( !is_array ( $dRes ) || !empty ( $dRes[0]['error'] ) )
+		return [ 'error' => $dRes[0]['error'] ?? 'bad response' ];
+	$dIds = array_values ( array_filter ( array_map ( 'intval', array_column ( $dRes[0]['data'], 'id' ) ), fn ( $i ) => $i<=$iMaxId ) );
+	$dMeta = array_column ( $dRes[1]['data'], 'Value', 'Variable_name' );
+	return [ 'rows' => $dRes[0]['data'], 'ids' => $dIds, 'total' => (int)$dMeta['total_found'], 'index' => $dMeta['index'] ?? '' ];
+}
+// the same query without and with the secondary index of $sAttr
+function compare ( $sLabel, $sValue, $sTable, $sSelect, $sWhere, $sAttr, $iMaxId ) {
+	$sQuery = "SELECT id$sSelect FROM $sTable WHERE $sWhere ORDER BY id ASC LIMIT 100 OPTION cutoff=0 /*+ %s($sAttr) */; SHOW META";
+	$tScan = run ( sprintf ( $sQuery, 'No_SecondaryIndex' ), $iMaxId );
+	$tSI = run ( sprintf ( $sQuery, 'SecondaryIndex' ), $iMaxId );
+	$bSame = !isset ( $tScan['error'] ) && !isset ( $tSI['error'] ) && $tScan['ids']===$tSI['ids'] && $tScan['total']===$tSI['total'];
+	$bSI = isset ( $tSI['index'] ) ? strpos ( $tSI['index'], 'SecondaryIndex' )!==false : null;
+	echo json_encode ( [ $sLabel => $sValue, 'same' => $bSame, 'si' => $bSI, 'ids' => $tScan['ids'] ?? $tScan, 'total' => $tScan['total'] ?? null ] ), PHP_EOL;
+}
+echo "si_any_for", PHP_EOL;
+foreach ( [ [ "ANY(x=2 FOR x IN j.i)", "j['i']" ], [ "ANY(x=3 OR x=4 FOR x IN j.i)", "j['i']" ], [ "ANY(x>1 AND x<3 FOR x IN j.i)", "j['i']" ], [ "ANY(x<3 AND x>1 FOR x IN j.i)", "j['i']" ],
+	[ "ANY(x<=2 AND x>=2 FOR x IN j.i)", "j['i']" ], [ "ANY(x<10 AND x<4294967296 FOR x IN j.i)", "j['i']" ], [ "ANY(x='y' FOR x IN j.s)", "j['s']" ],
+	[ "ANY(x!=2 FOR x IN j.i)", "j['i']" ], [ "ANY(NOT (x=2) FOR x IN j.i)", "j['i']" ], [ "ANY(IF(x=2,0,1) FOR x IN j.i)", "j['i']" ], [ "ANY(x!='y' FOR x IN j.s)", "j['s']" ],
+	[ "ANY(2<x FOR x IN j.i)", "j['i']" ], [ "ANY(x+1=3 FOR x IN j.i)", "j['i']" ], [ "ANY(x<5 AND id>1 FOR x IN j.i)", "j['i']" ], [ "ANY(x<'y' FOR x IN j.s)", "j['s']" ],
+	[ "ANY(x=2.5 FOR x IN j.f)", "j['f']" ], [ "ANY(x>=2.5 AND x<=3.5 FOR x IN j.f)", "j['f']" ], [ "INDEXOF(x=2 FOR x IN j.i)", "j['i']" ] ] as [ $sExpr, $sAttr ] )
+	compare ( 'expr', $sExpr, 'si_any_for', ", $sExpr AS m", 'm=1', $sAttr, 5 );
+PHP
+php /tmp/json_si_vs_scan.php
+––– output –––
+si_any_for
+{"expr":"ANY(x=2 FOR x IN j.i)","same":true,"si":true,"ids":[1,2],"total":2}
+{"expr":"ANY(x=3 OR x=4 FOR x IN j.i)","same":true,"si":true,"ids":[3,5],"total":2}
+{"expr":"ANY(x>1 AND x<3 FOR x IN j.i)","same":true,"si":true,"ids":[1,2],"total":2}
+{"expr":"ANY(x<3 AND x>1 FOR x IN j.i)","same":true,"si":true,"ids":[1,2],"total":2}
+{"expr":"ANY(x<=2 AND x>=2 FOR x IN j.i)","same":true,"si":true,"ids":[1,2],"total":2}
+{"expr":"ANY(x<10 AND x<4294967296 FOR x IN j.i)","same":true,"si":true,"ids":[1,2,3,4,5],"total":5}
+{"expr":"ANY(x='y' FOR x IN j.s)","same":true,"si":true,"ids":[1,2],"total":2}
+{"expr":"ANY(x!=2 FOR x IN j.i)","same":true,"si":false,"ids":[1,3,4,5],"total":9999}
+{"expr":"ANY(NOT (x=2) FOR x IN j.i)","same":true,"si":false,"ids":[1,3,4,5],"total":9999}
+{"expr":"ANY(IF(x=2,0,1) FOR x IN j.i)","same":true,"si":false,"ids":[1,3,4,5],"total":9999}
+{"expr":"ANY(x!='y' FOR x IN j.s)","same":true,"si":false,"ids":[1,3,4,5],"total":9999}
+{"expr":"ANY(2<x FOR x IN j.i)","same":true,"si":false,"ids":[3,5],"total":9997}
+{"expr":"ANY(x+1=3 FOR x IN j.i)","same":true,"si":false,"ids":[1,2],"total":2}
+{"expr":"ANY(x<5 AND id>1 FOR x IN j.i)","same":true,"si":false,"ids":[2,3,4,5],"total":4}
+{"expr":"ANY(x<'y' FOR x IN j.s)","same":true,"si":false,"ids":[1,4,5],"total":9998}
+{"expr":"ANY(x=2.5 FOR x IN j.f)","same":true,"si":false,"ids":[1,2],"total":2}
+{"expr":"ANY(x>=2.5 AND x<=3.5 FOR x IN j.f)","same":true,"si":false,"ids":[1,2,3],"total":3}
+{"expr":"INDEXOF(x=2 FOR x IN j.i)","same":true,"si":false,"ids":[1],"total":1}
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE si_any_for;"; rm -f /tmp/json_si_vs_scan.php
+––– output –––

@@ -303,7 +303,6 @@ extract_one() {
 }
 
 DEB_PACKAGES_CACHE_ARCH=""
-DEB_PACKAGES_CACHE_ROOT=""
 DEB_PACKAGES_CACHE_TEXT=""
 
 deb_repo_arch() { is_arm_arch && echo arm64 || echo amd64; }
@@ -314,31 +313,26 @@ deb_pkg_arch() {
 }
 
 get_deb_packages() {
-  local deb_arch="$1" repo_root="${2:-$deb_repo_root}" text=""
-  if [[ "$DEB_PACKAGES_CACHE_ARCH" == "$deb_arch" && "$DEB_PACKAGES_CACHE_ROOT" == "$repo_root" && -n "$DEB_PACKAGES_CACHE_TEXT" ]]; then
+  local deb_arch="$1" text=""
+  if [[ "$DEB_PACKAGES_CACHE_ARCH" == "$deb_arch" && -n "$DEB_PACKAGES_CACHE_TEXT" ]]; then
     printf '%s' "$DEB_PACKAGES_CACHE_TEXT"; return 0
   fi
-  local gz="${repo_root}/dists/${DISTR}/main/binary-${deb_arch}/Packages.gz"
-  local plain="${repo_root}/dists/${DISTR}/main/binary-${deb_arch}/Packages"
+  local gz="${deb_repo_root}/dists/${DISTR}/main/binary-${deb_arch}/Packages.gz"
+  local plain="${deb_repo_root}/dists/${DISTR}/main/binary-${deb_arch}/Packages"
   local t
   t=$(mktemp)
   if download_retry "$gz" "$t"; then text=$(gzip -dc "$t" 2>/dev/null || true); fi
   rm -f "$t"
   [[ -n "$text" ]] || text=$(download_text "$plain" || true)
   [[ -n "$text" ]] || { echo "Error: could not fetch Packages(.gz) for binary-${deb_arch}" >&2; return 1; }
-  DEB_PACKAGES_CACHE_ARCH="$deb_arch"; DEB_PACKAGES_CACHE_ROOT="$repo_root"; DEB_PACKAGES_CACHE_TEXT="$text"; printf '%s' "$text"
+  DEB_PACKAGES_CACHE_ARCH="$deb_arch"; DEB_PACKAGES_CACHE_TEXT="$text"; printf '%s' "$text"
 }
 
 resolve_deb_url() {
-  local real_pkg="$1" repo_arch="$2" pkg_arch="$3" pkgs fn repo_root
-  local repo_roots=("$deb_repo_root")
-  # Some pinned dev dependencies are published only to release_candidate.
-  if [[ "$REPO_TYPE" == dev ]]; then
-    repo_roots+=("https://repo.manticoresearch.com/repository/manticoresearch_${DISTR}_release_candidate")
-  fi
-  for repo_root in "${repo_roots[@]}"; do
-    pkgs=$(get_deb_packages "$repo_arch" "$repo_root") || continue
-    fn=$(awk -v p="$real_pkg" -v a="$pkg_arch" -v v="$DEP_VERSION" -v d="$DEP_DATE" -v c="$DEP_COMMIT" -v s="$DEP_SUFFIX" -v e="$DEP_VERSION_STRING" '
+  local real_pkg="$1" repo_arch="$2" pkg_arch="$3" pkgs
+  pkgs=$(get_deb_packages "$repo_arch") || return 1
+  local fn
+  fn=$(awk -v p="$real_pkg" -v a="$pkg_arch" -v v="$DEP_VERSION" -v d="$DEP_DATE" -v c="$DEP_COMMIT" -v s="$DEP_SUFFIX" -v e="$DEP_VERSION_STRING" '
 BEGIN{RS="";FS="\n";best=-1}
 {
   P=V=A=F=""; for(i=1;i<=NF;i++){if($i~/^Package: /)P=substr($i,10); else if($i~/^Version: /)V=substr($i,10); else if($i~/^Architecture: /)A=substr($i,15); else if($i~/^Filename: /)F=substr($i,11)}
@@ -349,13 +343,8 @@ BEGIN{RS="";FS="\n";best=-1}
 }
 END{if(bestF!="")print bestF}
 ' <<< "$pkgs")
-    if [[ -n "$fn" ]]; then
-      echo "${repo_root}/${fn}"
-      return 0
-    fi
-  done
-  echo "Error: no matching deb artifact for $real_pkg ($DEP_VERSION_STRING) in Packages" >&2
-  return 1
+  [[ -n "$fn" ]] || { echo "Error: no matching deb artifact for $real_pkg ($DEP_VERSION_STRING) in Packages" >&2; return 1; }
+  echo "${deb_repo_root}/${fn}"
 }
 
 LISTING_HTML=""

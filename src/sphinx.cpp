@@ -3616,9 +3616,12 @@ int64_t	CSphIndex_VLN::GetCountDistinct ( const CSphString & sAttr, CSphString &
 	if ( m_tDeadRowMap.HasDead() )
 		return -1;
 
+	// a json key is counted like any expression: nulls skipped, strings compared with case;
+	// its secondary index keeps nulls as 0 and strings by a case-insensitive hash
 	sModifiedAttr = sAttr;
-	if ( !m_tSchema.GetAttr ( sAttr.cstr() ) && sphJsonNameSplit ( sAttr.cstr() ) )
-		sModifiedAttr = UnifyJsonFieldName(sAttr);
+	const CSphColumnInfo * pAttr = m_tSchema.GetAttr ( sAttr.cstr() );
+	if ( !pAttr || pAttr->m_eAttrType==SPH_ATTR_JSON )
+		return -1;
 
 	return m_tSI.GetCountDistinct(sModifiedAttr);
 }

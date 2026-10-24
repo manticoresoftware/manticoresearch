@@ -481,6 +481,13 @@ void HandleSleep ( RowBuffer_i & tOut, int64_t iParam )
 {
 	int64_t tmStart = sphMicroTimer ();
 	Threads::Coro::SleepMsec ( Max ( iParam/1000, 1 ) );
+
+	// verification aid, not for main: crash after the coroutine resumed to check which query the dump shows
+	if ( env_bool ( "MANTICORE_DEBUG_SLEEP_CRASH" ).value_or ( false ) )
+	{
+		volatile BYTE * pSegv = nullptr;
+		*pSegv = 'a';
+	}
 	int64_t tmDelta = sphMicroTimer ()-tmStart;
 
 	tOut.HeadTuplet ( "command", "result" );

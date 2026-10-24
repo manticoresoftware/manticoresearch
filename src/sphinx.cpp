@@ -20,6 +20,7 @@
 #include "sphinxexpr.h"
 #include "sphinxfilter.h"
 #include "sphinxint.h"
+#include "fastcount.h"
 #include "sphinxsearch.h"
 #include "searchnode.h"
 #include "sphinxjson.h"
@@ -1453,6 +1454,7 @@ private:
 
 	bool						ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tXQ, DictRefPtr_c pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const;
 	bool						RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, bool bCloneDict, const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResult & tResult, VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tParsed, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
+	bool						TryFastTermCount ( CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter*> & dSorters, const XQKeyword_t & tWord, const DictRefPtr_c & pDict, const CSphMultiQueryArgs & tArgs ) const;
 
 	template <bool ROWID_LIMITS>
 	bool						ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResultMeta & tMeta, const VecTraits_T<ISphMatchSorter *> & dSorters, CSphMatch & tMatch, int iCutoff, bool bRandomize, int iIndexWeight, int64_t tmMaxTimer, const RowIdBoundaries_t * pBoundaries = nullptr ) const;
@@ -12004,6 +12006,74 @@ bool CSphIndex_VLN::RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, 
 		});
 }
 
+// single-term count(*) answered from the dictionary doc count; false means the regular path must run
+bool CSphIndex_VLN::TryFastTermCount ( CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter*> & dSorters, const XQKeyword_t & tWord, const DictRefPtr_c & pDict, const CSphMultiQueryArgs & tArgs ) const
+{
+	// dictionary doc counts include killed rows; such chunks take the regular path
+	if ( !m_bPassedAlloc || m_tDeadRowMap.HasDead() )
+		return false;
+
+	auto & tMeta = *tResult.m_pMeta;
+	QueryProfile_c * pProfile = tMeta.m_pProfile;
+	int64_t tmQueryStart = sphMicroTimer();
+	auto tmCpuQueryStart = sphTaskCpuTimer();
+	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
+	if ( pProfile )
+		eOldState = pProfile->Switch ( SPH_QSTATE_FAST_COUNT );
+
+	tMeta.m_bBigram = ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE );
+
+	int64_t iDocs = 0;
+	int64_t iHits = 0;
+	CSphString sDictWord;
+	WITH_QWORD ( this, false, Qword,
+	{
+		// no readers: Setup() does the checkpoint search and the dictionary lookup only
+		DiskIndexQwordSetup_c tTermSetup ( DataReaderFactoryPtr_c{}, DataReaderFactoryPtr_c{}, m_tSkiplists.GetReadPtr(), m_tSettings.m_iSkiplistBlockSize, false, RowID_t(m_iDocinfo) );
+		tTermSetup.SetDict ( pDict );
+		tTermSetup.m_pIndex = this;
+
+		Qword tQword ( false, false, m_iIndexId );
+		SetupFastCountQword ( tQword, tWord, pDict, tTermSetup.m_tKeywordBuf );
+		if ( tQword.m_uWordID )
+			tTermSetup.QwordSetup ( &tQword );
+
+		iDocs = tQword.m_iDocs;
+		iHits = tQword.m_iHits;
+		sDictWord = tQword.m_sDictWord;
+	});
+
+	// same keyword stats the ranker would have produced
+	tMeta.AddStat ( sDictWord, iDocs, iHits );
+
+	if ( iDocs>0 )
+	{
+		for ( auto * pSorter : dSorters )
+		{
+			pSorter->SetBlobPool ( m_tBlobAttrs.GetReadPtr() );
+			pSorter->SetColumnar ( m_pColumnar.get() );
+		}
+
+		PushFastCountMatch ( dSorters, GetRawAttrs(), tArgs.m_iTag, tArgs.m_iIndexWeight, iDocs );
+	}
+
+	RecordFastCount ( tMeta, "FastCount" );
+	PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), tArgs.m_bFinalizeSorters, pProfile, tArgs.m_bModifySorterSchemas );
+
+	tResult.m_pBlobPool = m_tBlobAttrs.GetReadPtr();
+	tResult.m_pDocstore = m_pDocstore ? this : nullptr;
+	tResult.m_pColumnar = m_pColumnar.get();
+
+	tMeta.AddQueryTimeUs ( sphMicroTimer() - tmQueryStart );
+	tMeta.m_iCpuTime += sphTaskCpuTimer() - tmCpuQueryStart;
+
+	if ( pProfile )
+		pProfile->Switch ( eOldState );
+
+	return true;
+}
+
+
 /// one regular query vs many sorters (like facets, or similar for common-tree optimization)
 bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs ) const
 {
@@ -12091,6 +12161,9 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	if ( !tParsed.m_sParseWarning.IsEmpty() )
 		tMeta.m_sWarning = tParsed.m_sParseWarning;
 
+	// single-term count(*) fast path
+	const bool bFastTermCount = IsFastTermCountQuery ( tQuery, dSorters, tArgs ) && !m_tDeadRowMap.HasDead() && GetFastTermCountKeyword ( tParsed.m_pRoot, m_tSchema );
+
 	// transform query if needed (quorum transform, etc.)
 	SwitchProfile ( pProfile, SPH_QSTATE_TRANSFORMS );
 	TransformExtendedQueryArgs_t tTranformArgs { GetBooleanSimplify ( tQuery ), tParsed.m_bNeedPhraseTransform, this };
@@ -12120,6 +12193,14 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	int iStackNeed = ConsiderStack ( tParsed.m_pRoot, tMeta.m_sError );
 	if ( !iStackNeed  )
 		return false;
+
+	// answered from the dictionary; no pseudo-sharding split (that would add @rowid filters)
+	if ( bFastTermCount )
+	{
+		const XQKeyword_t * pWord = GetFastTermCountKeyword ( tParsed.m_pRoot, m_tSchema );
+		if ( pWord && TryFastTermCount ( tResult, dSorters, *pWord, pDict, tArgs ) )
+			return true;
+	}
 
 	if ( tArgs.m_iThreads>1 )
 		return SplitQuery (
@@ -12449,9 +12530,18 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 	// bind weights
 	tCtx.BindWeights ( tQuery, m_tSchema, tMeta.m_sWarning );
 
+	// count-only query: the node tree matches, nothing is ranked or turned into matches
+	const bool bRanklessCount = IsRanklessCountQuery ( tQuery, dSorters, tArgs ) && TreeAllowsRanklessCount ( tXQ );
+	QueryExecutionSettings_t tRankerSettings = tQuerySettings;
+	if ( bRanklessCount )
+	{
+		tRankerSettings.m_eRanker = SPH_RANK_NONE;
+		tCtx.m_bSkipQCache = true;
+	}
+
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tXQ, tQuery, tQuerySettings, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
+	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tXQ, tQuery, tRankerSettings, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
 	if ( !pRanker )
 		return false;
 
@@ -12555,6 +12645,19 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 
 	int iIndex = bUseKlist*64 + bHaveRandom*32 + bUseFactors*16 + bHasSortCalc*8 + bHasWeightFilter*4 + bHasFilterCalc*2 + bHasCutoff;
 
+	bool bCounted = false;
+	if ( bRanklessCount )
+	{
+		int64_t iCount = pRanker->CountDocs ( bUseKlist ? &m_tDeadRowMap : nullptr );
+		if ( iCount>=0 )
+		{
+			PushFastCountMatch ( dSorters, GetRawAttrs(), iMyTag, tArgs.m_iIndexWeight, iCount );
+			RecordFastCount ( tMeta, "RanklessCount" );
+			bCounted = true;
+		}
+	}
+
+	if ( !bCounted )
 	switch ( iIndex )
 	{
 #define DECL_FNSCAN( _, n, params ) case n: MatchExtended<!!(n&64), !!(n&32), !!(n&16), !!(n&8), !!(n&4), !!(n&2), !!(n&1)> params; break;

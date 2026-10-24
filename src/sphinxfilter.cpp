@@ -2123,6 +2123,11 @@ static void TransformForJsonSI ( const CreateFilterContext_t & tCtx, CSphVector<
 			}
 		}
 
+		// an excluding filter on a json key keeps only the documents that have the key, while the secondary
+		// index excludes from all rows and would also return documents without it: leave it to the full scan
+		if ( ( !pAttr || pAttr->m_tLocator.m_bDynamic ) && tFilter.m_bExclude && tFilter.m_eType!=SPH_FILTER_NULL )
+			continue;
+
 		if ( !pAttr || pAttr->m_tLocator.m_bDynamic )
 		{
 			CSphString sTransformed = UnifyJsonFieldName ( tFilter.m_sAttrName );

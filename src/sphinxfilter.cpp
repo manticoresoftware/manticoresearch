@@ -1949,7 +1949,7 @@ static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<C
 	for ( int i = dModified.GetLength()-1; i>=0; i-- )
 	{
 		const CSphColumnInfo * pAttr = tCtx.m_pMatchSchema->GetAttr ( dModified[i].m_sAttrName.cstr() );
-		bool bRemove = pAttr ? pAttr->IsJoined() : dModified[i].m_sAttrName.Begins ( sPrefix.cstr() );
+		bool bRemove = pAttr ? pAttr->IsJoined() : ( dModified[i].m_sAttrName.Begins ( sPrefix.cstr() ) || ClassifyJoinExpressionFilter ( dModified[i], *tCtx.m_pMatchSchema, tCtx.m_sJoinIdx )==JoinExpressionFilter_e::RIGHT );
 		if ( bRemove )
 			dModified.Remove(i);		
 	}

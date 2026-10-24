@@ -10,6 +10,7 @@
 //
 
 #include "joinsorter.h"
+#include "sphinxexpr.h"
 
 #include "std/hash.h"
 #include "std/openhash.h"
@@ -47,6 +48,28 @@ int	GetJoinBatchSize()
 }
 
 
+// Skip a quoted SQL literal without interpreting attribute names inside it.
+static const char * SkipQuotedString ( const char * szValue )
+{
+	char cQuote = *szValue++;
+	while ( *szValue )
+	{
+		if ( *szValue=='\\' && szValue[1] )
+			szValue += 2;
+		else if ( *szValue==cQuote )
+		{
+			if ( szValue[1]==cQuote )
+				szValue += 2;
+			else
+				return szValue+1;
+		}
+		else
+			szValue++;
+	}
+	return szValue;
+}
+
+
 bool ExprHasLeftTableAttrs ( const CSphString & sAttr, const ISphSchema & tLeftSchema )
 {
 	const char * szAttr = sAttr.cstr();
@@ -55,7 +78,14 @@ bool ExprHasLeftTableAttrs ( const CSphString & sAttr, const ISphSchema & tLeftS
 	int iPos = 0;
 	while ( *szAttr )
 	{
-		if ( sphIsAlphaOnly(*szAttr) || *szAttr=='.' || *szAttr=='_' )
+		if ( *szAttr=='\'' || *szAttr=='"' )
+		{
+			szAttr = SkipQuotedString ( szAttr );
+			iPos = 0;
+			continue;
+		}
+
+		if ( sphIsAlphaOnly(*szAttr) || ( *szAttr>='0' && *szAttr<='9' ) || *szAttr=='.' || *szAttr=='_' )
 		{
 			if ( iPos==MAX_ATTR_NAME_LEN-1 )
 				break;
@@ -88,50 +118,54 @@ bool ExprHasLeftTableAttrs ( const CSphString & sAttr, const ISphSchema & tLeftS
 }
 
 
-static bool GetJoinAttrName ( const CSphString & sAttr, const CSphString & sJoinedIndex, const ISphSchema & tLeftSchema, CSphString * pModified = nullptr )
+static bool GetJoinAttrName ( const CSphString & sAttr, const CSphString & sJoinedIndex, const ISphSchema & tLeftSchema, CSphString * pModified = nullptr, bool bCheckLeftAttrs = true )
 {
 	CSphString sPrefix;
 	sPrefix.SetSprintf ( "%s.", sJoinedIndex.cstr() );
 	int iPrefixLen = sPrefix.Length();
 
-	if ( ExprHasLeftTableAttrs ( sAttr, tLeftSchema ) )
+	if ( bCheckLeftAttrs && ExprHasLeftTableAttrs ( sAttr, tLeftSchema ) )
 		return false;
 
 	bool bRightTable = false;
 	CSphString sMod = sAttr;
-	const char * szStart = sMod.cstr();
+	int iSearchFrom = 0;
 
 	while ( true )
 	{
-		const char * szFound = strstr ( sMod.cstr(), sPrefix.cstr() );
+		const char * szFound = strstr ( sMod.cstr()+iSearchFrom, sPrefix.cstr() );
+		const char * szQuote = strpbrk ( sMod.cstr()+iSearchFrom, "'\"" );
+		if ( szQuote && ( !szFound || szQuote<szFound ) )
+		{
+			iSearchFrom = SkipQuotedString ( szQuote )-sMod.cstr();
+			continue;
+		}
+
 		if ( !szFound )
 			break;
 
-		if ( szFound > szStart )
+		int iStart = szFound-sMod.cstr();
+		if ( iStart>0 )
 		{
 			char c = *(szFound-1);
-			if ( ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || c=='_' )
-				continue;		
+			if ( ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || c=='_' || c=='.' )
+			{
+				iSearchFrom = iStart+iPrefixLen;
+				continue;
+			}
 		}
 
 		bRightTable = true;
-		int iStart = szFound-sMod.cstr();
-		CSphString sNewExprPre = iStart > 0 ? sMod.SubString ( 0, iStart ) : "";
-
+		CSphString sNewExprPre = iStart>0 ? sMod.SubString ( 0, iStart ) : "";
 		int iPostLen = sMod.Length()-iStart-iPrefixLen;
-		CSphString sNewExprPost = iPostLen > 0 ? sMod.SubString ( iStart + iPrefixLen, sMod.Length()-iStart-iPrefixLen ) : "";
+		CSphString sNewExprPost = iPostLen>0 ? sMod.SubString ( iStart+iPrefixLen, iPostLen ) : "";
 		sMod.SetSprintf ( "%s%s", sNewExprPre.cstr(), sNewExprPost.cstr() );
+		iSearchFrom = iStart+1;
 	}
 
-	if ( bRightTable )
-	{
-		if ( pModified )
-			*pModified = sMod;
-
-		return true;
-	}
-
-	return false;
+	if ( bRightTable && pModified )
+		*pModified = sMod;
+	return bRightTable;
 }
 
 
@@ -177,6 +211,40 @@ static const char * GetBatchedItemPrefix()
 }
 
 
+JoinExpressionFilter_e ClassifyJoinExpressionFilter ( const CSphFilterSettings & tFilter, const ISphSchema & tSchema, const CSphString & sJoinedIndex, StrVec_t * pDependencies )
+{
+	if ( tFilter.m_eType!=SPH_FILTER_EXPRESSION || tSchema.GetAttr ( tFilter.m_sAttrName.cstr() ) )
+		return JoinExpressionFilter_e::NONE;
+
+	ExprParseArgs_t tArgs;
+	tArgs.m_pJoinIdx = &sJoinedIndex;
+	CSphString sError;
+	ISphExprRefPtr_c pExpr { sphExprParse ( tFilter.m_sAttrName.cstr(), tSchema, sError, tArgs ) };
+	if ( !pExpr )
+		return JoinExpressionFilter_e::NONE;
+
+	StrVec_t dDeps;
+	pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDeps );
+	FetchAttrDependencies ( dDeps, tSchema );
+
+	bool bRight = false;
+	bool bLeft = false;
+	for ( const auto & sDep : dDeps )
+	{
+		const CSphColumnInfo * pAttr = tSchema.GetAttr ( sDep.cstr() );
+		if ( pAttr && pAttr->IsJoined() )
+			bRight = true;
+		else
+			bLeft = true;
+	}
+
+	if ( pDependencies )
+		*pDependencies = dDeps;
+
+	return !bRight ? JoinExpressionFilter_e::NONE : ( bLeft ? JoinExpressionFilter_e::MIXED : JoinExpressionFilter_e::RIGHT );
+}
+
+
 CSphVector<std::pair<int,bool>> FetchJoinRightTableFilters ( const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tSchema, const char * szJoinedIndex )
 {
 	CSphString sPrefix;
@@ -186,7 +254,7 @@ CSphVector<std::pair<int,bool>> FetchJoinRightTableFilters ( const CSphVector<CS
 	ARRAY_FOREACH ( i, dFilters )
 	{
 		const auto & tFilter = dFilters[i];
-		bool bHasPrefix = tFilter.m_sAttrName.Begins ( sPrefix.cstr() );
+		bool bHasPrefix = tFilter.m_sAttrName.Begins ( sPrefix.cstr() ) || ClassifyJoinExpressionFilter ( tFilter, tSchema, szJoinedIndex )==JoinExpressionFilter_e::RIGHT;
 		const CSphColumnInfo * pFilterAttr = tSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
 		if ( pFilterAttr )
 		{
@@ -243,6 +311,10 @@ bool NeedPostJoinFilterEvaluation ( const CSphVector<CSphFilterSettings> & dFilt
 {
 	if ( HasFiltersDependingOnJoinedAttrs ( dFilters, tSchema ) )
 		return true;
+
+	for ( const auto & tFilter : dFilters )
+		if ( ClassifyJoinExpressionFilter ( tFilter, tSchema, sJoinIdx )==JoinExpressionFilter_e::MIXED )
+			return true;
 
 	CSphVector<std::pair<int,bool>> dRightFilters = FetchJoinRightTableFilters ( dFilters, tSchema, sJoinIdx.cstr() );
 	if ( !dRightFilters.GetLength() )
@@ -1783,7 +1855,13 @@ bool JoinSorter_c::SetupRightFilters ( CSphString & sError )
 		const auto & tFilter = m_tQuery.m_dFilters[dRightFilters[i].first];
 		m_tJoinQuery.m_dFilters.Add(tFilter);
 		if ( dRightFilters[i].second )
-			RemoveTableNamePrefix ( m_tJoinQuery.m_dFilters.Last().m_sAttrName, tFilter, sPrefix );
+		{
+			CSphString & sAttr = m_tJoinQuery.m_dFilters.Last().m_sAttrName;
+			if ( tFilter.m_eType==SPH_FILTER_EXPRESSION )
+				GetJoinAttrName ( tFilter.m_sAttrName, GetJoinedIndexName(), *m_pSorterSchema, &sAttr, false );
+			else
+				RemoveTableNamePrefix ( sAttr, tFilter, sPrefix );
+		}
 	}
 
 	return true;
@@ -2201,6 +2279,18 @@ void JoinSorter_c::AddExpressionItemsToJoinSelectList()
 	const CSphSchema & tJoinedSchema = m_pJoinedIndex->GetMatchSchema();
 	for ( const auto & i : m_tQuery.m_dFilters )
 	{
+		StrVec_t dDeps;
+		if ( ClassifyJoinExpressionFilter ( i, *m_pSorterSchema, GetJoinedIndexName(), &dDeps )!=JoinExpressionFilter_e::NONE )
+		{
+			for ( const auto & sDep : dDeps )
+			{
+				const CSphColumnInfo * pAttr = m_pSorterSchema->GetAttr ( sDep.cstr() );
+				if ( pAttr && pAttr->IsJoined() )
+					AddToJoinSelectList ( sDep );
+			}
+			continue;
+		}
+
 		bool bIndexPrefix = false;
 		if ( sphJsonNameSplit ( i.m_sAttrName.cstr(), GetJoinedIndexName().cstr(), nullptr, &bIndexPrefix ) )
 		{

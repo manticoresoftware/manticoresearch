@@ -1346,6 +1346,88 @@ public:
 };
 
 
+// plain numeric filter (=, IN, ranges) on a json field: a scalar is checked as before,
+// an array matches when any element matches as a scalar of the same type would, like MVA and json string arrays
+class ExprFilterJsonValue_c : public IFilter_Values
+{
+public:
+	ExprFilterJsonValue_c ( ISphExpr * pJson, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings )
+		: m_pJson ( pJson )
+		, m_tRange ( tFixedSettings )
+	{
+		SafeAddRef ( pJson );
+	}
+
+	void SetBlobStorage ( const BYTE * pBlobPool ) final
+	{
+		m_pBlobPool = pBlobPool;
+		m_pJson->Command ( SPH_EXPR_SET_BLOB_POOL, (void*)pBlobPool );
+	}
+
+	void SetColumnar ( const columnar::Columnar_i * pColumnar ) final	{ m_pJson->Command ( SPH_EXPR_SET_COLUMNAR, (void*)pColumnar ); }
+
+	bool Eval ( const CSphMatch & tMatch ) const final
+	{
+		uint64_t uPacked = m_pJson->Int64Eval ( tMatch );
+		bson::NodeHandle_t tNode { m_pBlobPool + sphJsonUnpackOffset ( uPacked ), sphJsonUnpackType ( uPacked ) };
+		if ( !bson::IsArray ( tNode ) )
+			return EvalValue ( tNode );
+
+		bool bMatch = false;
+		bson::ForSome ( tNode, [this, &bMatch] ( const bson::NodeHandle_t & tElem )
+		{
+			bMatch = EvalValue ( tElem );
+			return !bMatch;
+		} );
+
+		return bMatch;
+	}
+
+private:
+	CSphRefcountedPtr<ISphExpr>	m_pJson;
+	const BYTE *				m_pBlobPool = nullptr;
+	CommonFilterSettings_t		m_tRange;	// json filters keep the settings as given (no attribute type fixup)
+
+	// a scalar or an array element, read as a number the way a json value converts everywhere (bson::Int / bson::Double)
+	bool EvalValue ( const bson::NodeHandle_t & tNode ) const
+	{
+		if ( m_tRange.m_eType==SPH_FILTER_FLOATRANGE )
+			return EvalRange ( (float)bson::Double ( tNode ), m_tRange );
+
+		// an int filter compares a double value as a double: cut to int, 2.5 would be equal to 2
+		double fValue;
+		if ( GetDouble ( tNode, fValue ) )
+		{
+			if ( m_tRange.m_eType==SPH_FILTER_VALUES )
+				return m_tValues.any_of ( [fValue] ( SphAttr_t tValue ) { return (double)tValue==fValue; } );
+
+			return EvalRange ( fValue, m_tRange );
+		}
+
+		int64_t iValue = bson::Int ( tNode );
+		return m_tRange.m_eType==SPH_FILTER_VALUES ? EvalValues ( iValue ) : EvalRange ( iValue, m_tRange );
+	}
+
+	// a json double, or a string that converts to one
+	static bool GetDouble ( const bson::NodeHandle_t & tNode, double & fValue )
+	{
+		if ( bson::IsDouble ( tNode ) )
+		{
+			fValue = bson::Double ( tNode );
+			return true;
+		}
+
+		if ( tNode.second!=JSON_STRING )
+			return false;
+
+		Str_t tStr = bson::RawBlob ( tNode );
+		ESphJsonType eType;
+		int64_t iValue;
+		return sphJsonStringToNumber ( tStr.first, tStr.second, eType, iValue, fValue ) && eType==JSON_DOUBLE;
+	}
+};
+
+
 static std::unique_ptr<ISphFilter> SetupJsonExpr ( CSphRefcountedPtr<ISphExpr> & pExpr, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ESphCollation eCollation )
 {
 	// auto-convert all JSON types except SPH_FILTER_NULL, it needs more info
@@ -1363,6 +1445,10 @@ static std::unique_ptr<ISphFilter> SetupJsonExpr ( CSphRefcountedPtr<ISphExpr> &
 	// IN only checks equality; ordered string comparisons go to the converted field below
 	if ( tFixedSettings.m_eType==SPH_FILTER_STRING_LIST || ( tFixedSettings.m_eType==SPH_FILTER_STRING && tFixedSettings.m_eStrCmpDir==EStrCmpDir::EQ ) )
 		return std::make_unique<ExprFilterProxy_c> ( pFoo = ExprJsonIn ( tSettings.m_dStrings, pExpr, eCollation ), SPH_ATTR_INTEGER );
+
+	// plain numeric filters check each element of a json array
+	if ( !bAutoConvert && tSettings.m_eMvaFunc==SPH_MVAFUNC_NONE && ( tFixedSettings.m_eType==SPH_FILTER_VALUES || tFixedSettings.m_eType==SPH_FILTER_RANGE || tFixedSettings.m_eType==SPH_FILTER_FLOATRANGE ) )
+		return std::make_unique<ExprFilterJsonValue_c> ( pExpr, tSettings, tFixedSettings );
 
 	if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ANY )
 	{

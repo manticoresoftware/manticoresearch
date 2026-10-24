@@ -3624,6 +3624,23 @@ int64_t	CSphIndex_VLN::GetCountDistinct ( const CSphString & sAttr, CSphString &
 }
 
 
+// COUNT(*) from the secondary index sums the row counts of the matching values (and takes them from all rows
+// for an excluding filter). That counts each document once only for a single-value attribute or one value of an MVA;
+// a json key may hold arrays, and its excluding filter must skip documents without the key
+static bool IsExactSICount ( const CSphFilterSettings & tFilter, const CSphColumnInfo * pAttr )
+{
+	bool bJson = !pAttr || pAttr->m_eAttrType==SPH_ATTR_JSON;
+	if ( !bJson && !IsMvaAttr ( pAttr->m_eAttrType ) )
+		return true;
+
+	bool bOneValue = ( tFilter.m_eType==SPH_FILTER_VALUES && tFilter.GetNumValues()==1 )
+		|| ( tFilter.m_eType==SPH_FILTER_STRING_LIST && tFilter.m_dStrings.GetLength()==1 )
+		|| tFilter.m_eType==SPH_FILTER_STRING;
+
+	return bOneValue && !( bJson && tFilter.m_bExclude );
+}
+
+
 int64_t CSphIndex_VLN::GetCountFilter ( const CSphFilterSettings & tFilter, CSphString & sModifiedAttr ) const
 {
 	if ( m_tDeadRowMap.HasDead() )
@@ -3642,6 +3659,9 @@ int64_t CSphIndex_VLN::GetCountFilter ( const CSphFilterSettings & tFilter, CSph
 	}
 
 	if ( !tCtx.IsEnabled_SI(tModifiedFilter) )
+		return -1;
+
+	if ( !IsExactSICount ( tModifiedFilter, m_tSchema.GetAttr ( tModifiedFilter.m_sAttrName.cstr() ) ) )
 		return -1;
 
 	common::Filter_t tColumnarFilter;

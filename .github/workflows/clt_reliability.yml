@@ -1,0 +1,30 @@
+name: CLT per-test reliability
+
+on:
+  schedule:
+    - cron: '20 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  report:
+    name: CLT failure rates (30 days)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Calculate CLT failure rates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/clt_reliability.py
+
+      - name: Upload CSV report
+        uses: actions/upload-artifact@v6
+        with:
+          name: clt-failure-rates-30d
+          path: ${{ runner.temp }}/clt-failure-rates.csv
+          if-no-files-found: error
+          retention-days: 90

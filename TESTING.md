@@ -170,6 +170,20 @@ The easiest way to run CLT tests is through GitHub Actions:
 
 CLT tests are organized into test suites defined in `.github/workflows/clt_tests.yml`.
 
+
+### Finding unstable CLT tests
+
+Each CLT shard uploads its individual test results, including failed tests. The
+[Test workflow](https://github.com/manticoresoftware/manticoresearch/actions/workflows/test.yml)
+collects these results into one artifact per run.
+
+The [CLT per-test reliability workflow](https://github.com/manticoresoftware/manticoresearch/actions/workflows/clt_reliability.yml)
+runs daily or on demand. Its Summary ranks failing tests across the last 30
+days of pushes to `main`; the CSV artifact lists every test. Failure rate is
+**failed / (passed + failed)**, and the ranking requires at least five executions.
+Interrupted, missing, or unstarted tests are not treated as successes.
+Re-running failed jobs adds new test executions without counting unchanged shards again.
+
 ### Running Locally
 
 CLT tests run inside Docker containers to ensure consistent environment. There are two main scenarios for local testing:

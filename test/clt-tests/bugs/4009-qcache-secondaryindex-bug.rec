@@ -11,6 +11,10 @@ Test verifies:
 - Edge case: Query with timeout + hint doesn't use cached partial results
 - Both WITH and WITHOUT cache return same results (cache works correctly)
 
+The queries select count(*), max(id) rather than a bare count(*): a bare count(*) is answered by the
+count fast path (dictionary doc counts / rankless count executor) which never touches the query cache,
+and this test is about the query cache key.
+
 ––– block: ../base/start-searchd –––
 ––– comment –––
 Create 1M records: id (sequential), name (random text), type (random 1-100)
@@ -32,19 +36,21 @@ mysql -h0 -P9306 -e "SET GLOBAL qcache_max_bytes=16000000; SET GLOBAL qcache_thr
 ––– comment –––
 Baseline: count documents with MATCH('hard') - result will be cached
 ––– input –––
-mysql -NE -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard')"
+mysql -NE -h0 -P9306 -e "SELECT count(*), max(id) FROM test WHERE MATCH('hard')"
 ––– output –––
 *************************** 1. row ***************************
 229322
+1000000
 ––– comment –––
 Critical: same MATCH + type=5 filter + SecondaryIndex hint
 Bug: returned 183114 (wrong cache hit), correct: 2252
 After fix: cache is disabled when hint is used
 ––– input –––
-mysql -NE -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5 /*+ SecondaryIndex(type) */"
+mysql -NE -h0 -P9306 -e "SELECT count(*), max(id) FROM test WHERE MATCH('hard') AND type=5 /*+ SecondaryIndex(type) */"
 ––– output –––
 *************************** 1. row ***************************
 2252
+%{NUMBER}
 ––– comment –––
 Verify cache was NOT used for query with hint (qcache_hits should be 0)
 ––– input –––
@@ -57,10 +63,11 @@ Counter: qcache_hits
 Control: same filter WITHOUT hint - should return same result (2252)
 Query without hint SHOULD use cache
 ––– input –––
-mysql -NE -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5"
+mysql -NE -h0 -P9306 -e "SELECT count(*), max(id) FROM test WHERE MATCH('hard') AND type=5"
 ––– output –––
 *************************** 1. row ***************************
 2252
+%{NUMBER}
 ––– comment –––
 Verify cache WAS used for query without hint (qcache_hits should increase)
 ––– input –––
@@ -68,7 +75,7 @@ mysql -h0 -P9306 -e "SHOW STATUS LIKE 'qcache_hits'\G"
 ––– output –––
 *************************** 1. row ***************************
 Counter: qcache_hits
-  Value: %{NUMBER}
+  Value: #!/[1-9][0-9]*/!#
 ––– comment –––
 Edge case: query with max_query_time timeout + SecondaryIndex hint
 Test that timed-out query result is not used for query with hint
@@ -95,21 +102,24 @@ mysql -h0 -P9306 -e "SET GLOBAL qcache_max_bytes=0;"
 ––– comment –––
 Re-run baseline without cache - expect 229322
 ––– input –––
-mysql -NE -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard')"
+mysql -NE -h0 -P9306 -e "SELECT count(*), max(id) FROM test WHERE MATCH('hard')"
 ––– output –––
 *************************** 1. row ***************************
 229322
+1000000
 ––– comment –––
 Re-run with hint without cache - proves bug was in cache, not SecondaryIndex
 ––– input –––
-mysql -NE -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5 /*+ SecondaryIndex(type) */"
+mysql -NE -h0 -P9306 -e "SELECT count(*), max(id) FROM test WHERE MATCH('hard') AND type=5 /*+ SecondaryIndex(type) */"
 ––– output –––
 *************************** 1. row ***************************
 2252
+%{NUMBER}
 ––– comment –––
 Re-run without hint - verify consistency (2252)
 ––– input –––
-mysql -NE -h0 -P9306 -e "SELECT count(*) FROM test WHERE MATCH('hard') AND type=5"
+mysql -NE -h0 -P9306 -e "SELECT count(*), max(id) FROM test WHERE MATCH('hard') AND type=5"
 ––– output –––
 *************************** 1. row ***************************
 2252
+%{NUMBER}

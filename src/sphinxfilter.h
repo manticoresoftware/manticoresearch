@@ -295,6 +295,10 @@ struct MvaEvalAll_c
 	template<typename T>
 	static inline bool Eval ( const VecTraits_T<T> & dMvas, SphAttr_t tValue )
 	{
+		// an empty MVA does not match ALL(), as in the list and range checks
+		if ( dMvas.IsEmpty() )
+			return false;
+
 		for ( T tMVA : dMvas )
 			if ( tMVA!=tValue )
 				return false;

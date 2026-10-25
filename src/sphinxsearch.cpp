@@ -70,6 +70,26 @@ RowID_t	ISphQword::AdvanceTo ( RowID_t tRowID )
 }
 
 
+int ISphQword::GetNextDocs ( QwordDoc_t * pDocs, int iMax )
+{
+	int iGot = 0;
+	while ( iGot<iMax )
+	{
+		const CSphMatch & tMatch = GetNextDoc();
+		if ( tMatch.m_tRowID==INVALID_ROWID )
+			break;
+
+		QwordDoc_t & tDoc = pDocs[iGot++];
+		tDoc.m_tRowID = tMatch.m_tRowID;
+		tDoc.m_uFields = m_dQwordFields.GetMask32();
+		tDoc.m_uMatchHits = m_uMatchHits;
+		tDoc.m_iHitlistPos = m_iHitlistPos;
+	}
+
+	return iGot;
+}
+
+
 void ISphQword::CollectHitMask()
 {
 	if ( m_bAllFieldsKnown )

@@ -32,6 +32,12 @@ public:
 	virtual RowID_t		UnzipRowid() = 0;
 	virtual SphWordID_t	UnzipWordid() = 0;
 	virtual void		Reset () = 0;
+
+	// window access for batched decoding: expose the buffered bytes at the current position without consuming them,
+	// topping the buffer up when fewer than iMinBytes are available. Returns the window length; 0 means "use the byte API"
+	virtual int			GetWindow ( const BYTE *& pData, int iMinBytes ) { pData = nullptr; return 0; }
+	// consume bytes previously exposed by GetWindow
+	virtual void		Advance ( int iBytes ) { assert ( 0 && "Advance() without GetWindow()" ); }
 };
 
 

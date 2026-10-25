@@ -264,6 +264,9 @@ protected:
 		RowID_t		m_tRowID;
 	};
 
+	int					FillDocsBatched ( StoredHit_t * & pStoredHit );
+	int					FillDocsWideFields ( StoredHit_t * & pStoredHit );
+
 	ISphQword *			m_pQword = nullptr;
 	FieldMask_t			m_dQueriedFields;	///< accepted fields mask
 	bool				m_bHasWideFields = false;	///< whether fields mask for this term refer to fields 32+
@@ -2106,6 +2109,118 @@ void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::Reset ( const ISphQwordSetup & tSet
 	m_dStoredHits.Resize(0);
 }
 
+// chunk fill for terms whose fields all fit the low 32 bits: the qword decodes whole batches, no per-document calls
+template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
+int ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::FillDocsBatched ( StoredHit_t * & pStoredHit )
+{
+	const DWORD uQueriedFields = m_dQueriedFields.GetMask32();
+	QwordDoc_t dBatch[MAX_BLOCK_DOCS];
+	int iDoc = 0;
+	while ( iDoc<MAX_BLOCK_DOCS-1 )
+	{
+		const int iWant = MAX_BLOCK_DOCS-1-iDoc;
+		const int iGot = m_pQword->GetNextDocs ( dBatch, iWant );
+		bool bDone = iGot<iWant; // end of doclist
+		for ( int i=0; i<iGot; i++ )
+		{
+			const QwordDoc_t & tSrc = dBatch[i];
+			if constexpr ( ROWID_LIMITS )
+			{
+				if ( tSrc.m_tRowID<m_tBoundaries.m_tMinRowID )
+					continue;
+
+				if ( tSrc.m_tRowID>m_tBoundaries.m_tMaxRowID )
+				{
+					bDone = true;
+					break;
+				}
+			}
+
+			if (!( tSrc.m_uFields & uQueriedFields ))
+				continue;
+
+			ExtDoc_t & tDoc = m_dDocs[iDoc++];
+			tDoc.m_tRowID = tSrc.m_tRowID;
+			tDoc.m_uDocFields = tSrc.m_uFields & uQueriedFields; // OPTIMIZE: only needed for phrase node
+
+			if_const ( USE_BM25 )
+				tDoc.m_fTFIDF = float(tSrc.m_uMatchHits) / float(tSrc.m_uMatchHits+SPH_BM25_K1) * m_fIDF;
+
+			// store some hit info here, we can't reuse m_dDocs in CollectHits
+			// but only if the ranker uses hits
+			if ( m_bCollectHits )
+			{
+				pStoredHit->m_tHitlistOffset = tSrc.m_iHitlistPos;
+				pStoredHit->m_tRowID = tDoc.m_tRowID;
+				pStoredHit++;
+			}
+		}
+
+		if ( bDone )
+		{
+			m_pQword->m_iDocs = 0;
+			break;
+		}
+	}
+
+	return iDoc;
+}
+
+
+// chunk fill for terms that refer to fields 32+: each document needs CollectHitMask(), so the qword is read one document at a time
+template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
+int ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::FillDocsWideFields ( StoredHit_t * & pStoredHit )
+{
+	int iDoc = 0;
+	while ( iDoc<MAX_BLOCK_DOCS-1 )
+	{
+		const CSphMatch & tMatch = m_pQword->GetNextDoc();
+		if constexpr ( ROWID_LIMITS )
+		{
+			if ( tMatch.m_tRowID<m_tBoundaries.m_tMinRowID )
+				continue;
+
+			if ( tMatch.m_tRowID>m_tBoundaries.m_tMaxRowID )
+			{
+				m_pQword->m_iDocs = 0;
+				break;
+			}
+		}
+
+		if ( tMatch.m_tRowID==INVALID_ROWID )
+		{
+			m_pQword->m_iDocs = 0;
+			break;
+		}
+
+		m_pQword->CollectHitMask();
+		bool bHasSameFields = false;
+		for ( int i=0; i<FieldMask_t::SIZE && !bHasSameFields; i++ )
+			bHasSameFields = ( m_pQword->m_dQwordFields[i] & m_dQueriedFields[i] )!=0;
+		if ( !bHasSameFields )
+			continue;
+
+		ExtDoc_t & tDoc = m_dDocs[iDoc++];
+		tDoc.m_tRowID = tMatch.m_tRowID;
+		tDoc.m_uDocFields = m_pQword->m_dQwordFields.GetMask32() & m_dQueriedFields.GetMask32(); // OPTIMIZE: only needed for phrase node
+
+		if_const ( USE_BM25 )
+			tDoc.m_fTFIDF = float(m_pQword->m_uMatchHits) / float(m_pQword->m_uMatchHits+SPH_BM25_K1) * m_fIDF;
+
+		// store some hit info here, we can't reuse m_dDocs in CollectHits
+		// but only if the ranker uses hits
+		if ( m_bCollectHits )
+		{
+			pStoredHit->m_tHitlistOffset = m_pQword->m_iHitlistPos;
+			pStoredHit->m_tRowID = tDoc.m_tRowID;
+			pStoredHit++;
+		}
+	}
+
+	return iDoc;
+}
+
+
 template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
 const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 {
@@ -2149,60 +2264,7 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 		pFirstHit = pStoredHit-iLength;	// hack to get to m_pData
 	}
 
-	int iDoc = 0;
-	while ( iDoc<MAX_BLOCK_DOCS-1 )
-	{
-		const CSphMatch & tMatch = m_pQword->GetNextDoc();
-		if constexpr ( ROWID_LIMITS )
-		{
-			if ( tMatch.m_tRowID<m_tBoundaries.m_tMinRowID )
-				continue;
-
-			if ( tMatch.m_tRowID>m_tBoundaries.m_tMaxRowID )
-			{
-				m_pQword->m_iDocs = 0;
-				break;
-			}
-		}
-
-		if ( tMatch.m_tRowID==INVALID_ROWID )
-		{
-			m_pQword->m_iDocs = 0;
-			break;
-		}
-
-		if ( !m_bHasWideFields )
-		{
-			// fields 0-31 can be quickly checked right here, right now
-			if (!( m_pQword->m_dQwordFields.GetMask32() & m_dQueriedFields.GetMask32() ))
-				continue;
-		} else
-		{
-			// fields 32+ need to be checked with CollectHitMask() and stuff
-			m_pQword->CollectHitMask();
-			bool bHasSameFields = false;
-			for ( int i=0; i<FieldMask_t::SIZE && !bHasSameFields; i++ )
-				bHasSameFields = ( m_pQword->m_dQwordFields[i] & m_dQueriedFields[i] )!=0;
-			if ( !bHasSameFields )
-				continue;
-		}
-
-		ExtDoc_t & tDoc = m_dDocs[iDoc++];
-		tDoc.m_tRowID = tMatch.m_tRowID;
-		tDoc.m_uDocFields = m_pQword->m_dQwordFields.GetMask32() & m_dQueriedFields.GetMask32(); // OPTIMIZE: only needed for phrase node
-
-		if_const ( USE_BM25 )
-			tDoc.m_fTFIDF = float(m_pQword->m_uMatchHits) / float(m_pQword->m_uMatchHits+SPH_BM25_K1) * m_fIDF;
-
-		// store some hit info here, we can't reuse m_dDocs in CollectHits
-		// but only if the ranker uses hits
-		if ( m_bCollectHits )
-		{
-			pStoredHit->m_tHitlistOffset = m_pQword->m_iHitlistPos;
-			pStoredHit->m_tRowID = tDoc.m_tRowID;
-			pStoredHit++;
-		}
-	}
+	int iDoc = m_bHasWideFields ? FillDocsWideFields ( pStoredHit ) : FillDocsBatched ( pStoredHit );
 
 	if ( m_bCollectHits )
 		m_dStoredHits.Resize ( pStoredHit-pFirstHit );

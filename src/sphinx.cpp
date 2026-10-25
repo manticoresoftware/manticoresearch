@@ -345,7 +345,17 @@ public:
 			ReadNext();
 
 		while ( m_tDoc.m_tRowID < tRowID )
-			ReadNext();
+		{
+			DocCursor_t tCursor;
+			if ( OpenCursor ( tCursor ) )
+			{
+				do
+					DecodeNext ( tCursor );
+				while ( m_tDoc.m_tRowID < tRowID && tCursor.Has() );
+				CloseCursor ( tCursor );
+			} else
+				DecodeNext ( *m_rdDoclist );
+		}
 
 		return m_tDoc.m_tRowID;
 	}
@@ -410,6 +420,39 @@ public:
 		return m_tDoc;
 	}
 
+	int GetNextDocs ( QwordDoc_t * pDocs, int iMax ) override
+	{
+		int iGot = 0;
+		while ( iGot<iMax )
+		{
+			DocCursor_t tCursor;
+			if ( OpenCursor ( tCursor ) )
+			{
+				while ( iGot<iMax && tCursor.Has() )
+				{
+					DecodeNext ( tCursor );
+					if ( m_tDoc.m_tRowID==INVALID_ROWID )
+					{
+						CloseCursor ( tCursor );
+						return iGot;
+					}
+
+					StoreDoc ( pDocs[iGot++] );
+				}
+				CloseCursor ( tCursor );
+			} else
+			{
+				DecodeNext ( *m_rdDoclist );
+				if ( m_tDoc.m_tRowID==INVALID_ROWID )
+					return iGot;
+
+				StoreDoc ( pDocs[iGot++] );
+			}
+		}
+
+		return iGot;
+	}
+
 	void SeekHitlist ( SphOffset_t uOff ) final
 	{
 		if ( uOff >> 63 )
@@ -464,9 +507,55 @@ public:
 private:
 	int m_iSkipListBlock = -1;
 
-	inline void ReadNext()
+	// upper bound of one encoded doclist entry: inline layout is delta(5) + hits(5) + first(5) + field(5) | hitpos delta(10),
+	// the non-inline one is delta(5) + hitlist delta(10) + fields(5) + hits(5). A window of this size decodes one entry
+	// without bounds checks
+	static const int MAX_POSTING_BYTES = 25;
+
+	// raw byte source over the reader's window; same decoding interface as FileBlockReader_i
+	struct DocCursor_t
 	{
-		RowID_t uDelta = m_rdDoclist->UnzipRowid();
+		const BYTE *	m_pCur = nullptr;
+		const BYTE *	m_pStart = nullptr;
+		const BYTE *	m_pEnd = nullptr;
+
+		FORCE_INLINE bool			Has() const		{ return m_pEnd-m_pCur>=MAX_POSTING_BYTES; }
+		FORCE_INLINE RowID_t		UnzipRowid()	{ return UnzipIntBE ( m_pCur ); }
+		FORCE_INLINE DWORD			UnzipInt()		{ return UnzipIntBE ( m_pCur ); }
+		FORCE_INLINE SphOffset_t	UnzipOffset()	{ return UnzipOffsetBE ( m_pCur ); }
+	};
+
+	FORCE_INLINE bool OpenCursor ( DocCursor_t & tCursor )
+	{
+		const BYTE * pData = nullptr;
+		int iLen = m_rdDoclist->GetWindow ( pData, MAX_POSTING_BYTES );
+		if ( iLen<MAX_POSTING_BYTES )
+			return false;
+
+		tCursor.m_pCur = tCursor.m_pStart = pData;
+		tCursor.m_pEnd = pData + iLen;
+		return true;
+	}
+
+	FORCE_INLINE void CloseCursor ( DocCursor_t & tCursor )
+	{
+		assert ( tCursor.m_pCur>=tCursor.m_pStart && tCursor.m_pCur<=tCursor.m_pEnd );
+		m_rdDoclist->Advance ( int ( tCursor.m_pCur-tCursor.m_pStart ) );
+	}
+
+	FORCE_INLINE void StoreDoc ( QwordDoc_t & tDoc ) const
+	{
+		tDoc.m_tRowID = m_tDoc.m_tRowID;
+		tDoc.m_uFields = m_dQwordFields.GetMask32();
+		tDoc.m_uMatchHits = m_uMatchHits;
+		tDoc.m_iHitlistPos = m_iHitlistPos;
+	}
+
+	// decode one doclist entry from SRC (the virtual reader, or a DocCursor_t over its window)
+	template <typename SRC>
+	FORCE_INLINE void DecodeNext ( SRC & tSrc )
+	{
+		RowID_t uDelta = tSrc.UnzipRowid();
 		if ( uDelta )
 		{
 			m_bAllFieldsKnown = false;
@@ -474,11 +563,11 @@ private:
 
 			if_const ( INLINE_HITS )
 			{
-				m_uMatchHits = m_rdDoclist->UnzipInt();
-				const DWORD uFirst = m_rdDoclist->UnzipInt();
+				m_uMatchHits = tSrc.UnzipInt();
+				const DWORD uFirst = tSrc.UnzipInt();
 				if ( m_uMatchHits==1 && m_bHasHitlist )
 				{
-					DWORD uField = m_rdDoclist->UnzipInt(); // field and end marker
+					DWORD uField = tSrc.UnzipInt(); // field and end marker
 					m_iHitlistPos = uFirst | ( uField << 23 ) | ( U64C(1)<<63 );
 					m_dQwordFields.UnsetAll();
 					// want to make sure bad field data not cause crash
@@ -487,21 +576,32 @@ private:
 				} else
 				{
 					m_dQwordFields.Assign32 ( uFirst );
-					m_uHitPosition += m_rdDoclist->UnzipOffset();
+					m_uHitPosition += tSrc.UnzipOffset();
 					m_iHitlistPos = m_uHitPosition;
 				}
 			} else
 			{
-				SphOffset_t iDeltaPos = m_rdDoclist->UnzipOffset();
+				SphOffset_t iDeltaPos = tSrc.UnzipOffset();
 				assert ( iDeltaPos>=0 );
 
 				m_iHitlistPos += iDeltaPos;
 
-				m_dQwordFields.Assign32 ( m_rdDoclist->UnzipInt() );
-				m_uMatchHits = m_rdDoclist->UnzipInt();
+				m_dQwordFields.Assign32 ( tSrc.UnzipInt() );
+				m_uMatchHits = tSrc.UnzipInt();
 			}
 		} else
 			m_tDoc.m_tRowID = INVALID_ROWID;
+	}
+
+	inline void ReadNext()
+	{
+		DocCursor_t tCursor;
+		if ( OpenCursor ( tCursor ) )
+		{
+			DecodeNext ( tCursor );
+			CloseCursor ( tCursor );
+		} else
+			DecodeNext ( *m_rdDoclist );
 	}
 
 private:
@@ -576,6 +676,11 @@ public:
 		}
 
 		return this->m_tDoc;
+	}
+
+	int GetNextDocs ( QwordDoc_t * pDocs, int iMax ) final
+	{
+		return ISphQword::GetNextDocs ( pDocs, iMax ); // goes through GetNextDoc(), which chains the doclists
 	}
 
 	bool Setup ( const DiskIndexQwordSetup_c * ) final

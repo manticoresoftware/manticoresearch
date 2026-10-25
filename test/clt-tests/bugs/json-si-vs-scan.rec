@@ -7,15 +7,27 @@ shows whether the secondary index was used.
   order, an int64 bound too). Negations, functions,
   expressions over x, other attributes, float constants and INDEXOF() must not use it.
   Docs 1 i=[1,2] s=[x,y] f=[1.5,2.5], 2 [2] [y] [2.5], 3 [3] [z] [3.5], 4 [1] [x] [1.5], 5 [4,5] [w] [4.5].
+- si_dup_vals: a value repeated in one array ([2,2], ["y","y"], ["Y","y"] for the case-insensitive string hash,
+  two doubles that become one float) is stored once per document, so the document comes back once and COUNT(*)
+  counts it once. Docs 1 [2,2] [y,y] [2.5,2.5], 2 [2] [y] [2.5], 3 [3] [Y,y] [3.5], 4 [4] [z] [1.00000001,1.00000002].
+- si_types: a JSON secondary index column takes the widest type of the key in the chunk and is used only when it
+  answers the filter type (int column: int =/IN/ranges, float column: float ranges, string column: string =/IN).
+  A key that mixes numbers and strings is not indexed. Docs 1..4 below.
 ––– block: ../base/start-searchd –––
 ––– input –––
-manticore-load --quiet --json --port=9306 --init="SET GLOBAL auto_optimize=0; DROP TABLE IF EXISTS si_any_for; CREATE TABLE si_any_for (j JSON secondary_index='1');" --load="INSERT INTO si_any_for (id,j) VALUES (<increment>,'{\"i\":[99],\"s\":[\"pad\"],\"f\":[99.5]}')" --batch-size=1000 --threads=2 --total=10000 > /dev/null; echo $?
+manticore-load --quiet --json --port=9306 --init="SET GLOBAL auto_optimize=0; DROP TABLE IF EXISTS si_any_for; CREATE TABLE si_any_for (j JSON secondary_index='1');" --load="INSERT INTO si_any_for (id,j) VALUES (<increment>,'{\"i\":[99],\"s\":[\"pad\"],\"f\":[99.5]}')" --batch-size=1000 --threads=2 --total=10000 > /dev/null && manticore-load --quiet --json --port=9306 --init="DROP TABLE IF EXISTS si_dup_vals; CREATE TABLE si_dup_vals (j JSON secondary_index='1');" --load="INSERT INTO si_dup_vals (id,j) VALUES (<increment>,'{\"i\":[99],\"s\":[\"pad\"],\"f\":[99.5]}')" --batch-size=1000 --threads=2 --total=10000 > /dev/null && manticore-load --quiet --json --port=9306 --init="DROP TABLE IF EXISTS si_types; CREATE TABLE si_types (j JSON secondary_index='1');" --load="INSERT INTO si_types (id,j) VALUES (<increment>,'{\"int\":99,\"flt\":99.5,\"str\":\"pad\",\"intstr\":99}')" --batch-size=1000 --threads=2 --total=10000 > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P9306 -e "REPLACE INTO si_any_for VALUES (1,'{\"i\":[1,2],\"s\":[\"x\",\"y\"],\"f\":[1.5,2.5]}'), (2,'{\"i\":[2],\"s\":[\"y\"],\"f\":[2.5]}'), (3,'{\"i\":[3],\"s\":[\"z\"],\"f\":[3.5]}'), (4,'{\"i\":[1],\"s\":[\"x\"],\"f\":[1.5]}'), (5,'{\"i\":[4,5],\"s\":[\"w\"],\"f\":[4.5]}'); FLUSH RAMCHUNK si_any_for;" && echo ready
+mysql -h0 -P9306 -e "REPLACE INTO si_any_for VALUES (1,'{\"i\":[1,2],\"s\":[\"x\",\"y\"],\"f\":[1.5,2.5]}'), (2,'{\"i\":[2],\"s\":[\"y\"],\"f\":[2.5]}'), (3,'{\"i\":[3],\"s\":[\"z\"],\"f\":[3.5]}'), (4,'{\"i\":[1],\"s\":[\"x\"],\"f\":[1.5]}'), (5,'{\"i\":[4,5],\"s\":[\"w\"],\"f\":[4.5]}'); REPLACE INTO si_dup_vals VALUES (1,'{\"i\":[2,2],\"s\":[\"y\",\"y\"],\"f\":[2.5,2.5]}'), (2,'{\"i\":[2],\"s\":[\"y\"],\"f\":[2.5]}'), (3,'{\"i\":[3],\"s\":[\"Y\",\"y\"],\"f\":[3.5]}'), (4,'{\"i\":[4],\"s\":[\"z\"],\"f\":[1.00000001,1.00000002]}'); REPLACE INTO si_types VALUES (1,'{\"int\":1,\"flt\":1.5,\"str\":\"a\",\"intstr\":1}'), (2,'{\"int\":2,\"flt\":2.5,\"str\":\"b\",\"intstr\":2}'), (3,'{\"int\":3,\"flt\":3.5,\"str\":\"c\",\"intstr\":\"2\"}'), (4,'{\"intstr\":\"x\"}'); FLUSH RAMCHUNK si_any_for; FLUSH RAMCHUNK si_dup_vals; FLUSH RAMCHUNK si_types;" && echo ready
 ––– output –––
 ready
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE si_types INDEXES" | grep -o "j\['[a-z]*'\] *| *[a-z0-9]*" | tr -s ' ' | sort
+––– output –––
+j['flt'] | float
+j['int'] | uint32
+j['str'] | string
 ––– input –––
 cat > /tmp/json_si_vs_scan.php <<'PHP'
 <?php
@@ -44,6 +56,16 @@ foreach ( [ [ "ANY(x=2 FOR x IN j.i)", "j['i']" ], [ "ANY(x=3 OR x=4 FOR x IN j.
 	[ "ANY(2<x FOR x IN j.i)", "j['i']" ], [ "ANY(x+1=3 FOR x IN j.i)", "j['i']" ], [ "ANY(x<5 AND id>1 FOR x IN j.i)", "j['i']" ], [ "ANY(x<'y' FOR x IN j.s)", "j['s']" ],
 	[ "ANY(x=2.5 FOR x IN j.f)", "j['f']" ], [ "ANY(x>=2.5 AND x<=3.5 FOR x IN j.f)", "j['f']" ], [ "INDEXOF(x=2 FOR x IN j.i)", "j['i']" ] ] as [ $sExpr, $sAttr ] )
 	compare ( 'expr', $sExpr, 'si_any_for', ", $sExpr AS m", 'm=1', $sAttr, 5 );
+echo "si_dup_vals", PHP_EOL;
+foreach ( [ [ "j.i = 2", "j['i']" ], [ "j.s = 'y'", "j['s']" ], [ "j.f = 2.5", "j['f']" ], [ "j.f BETWEEN 0.9 AND 1.1", "j['f']" ] ] as [ $sWhere, $sAttr ] )
+	compare ( 'where', $sWhere, 'si_dup_vals', '', $sWhere, $sAttr, 4 );
+foreach ( [ "j.i = 2", "j.s = 'y'" ] as $sWhere ) {
+	$tRes = run ( "SELECT COUNT(*) c FROM si_dup_vals WHERE $sWhere; SHOW META", 0 );
+	echo json_encode ( [ 'count' => $sWhere, 'c' => (int)$tRes['rows'][0]['c'], 'index' => $tRes['index'] ] ), PHP_EOL;
+}
+echo "si_types", PHP_EOL;
+foreach ( [ [ "int", "= 2" ], [ "int", "= 2.5" ], [ "int", "> 1.5" ], [ "flt", "= 2.5" ], [ "flt", "IN (1,2)" ], [ "flt", "> 1" ], [ "str", "= 'b'" ], [ "str", "> 1" ], [ "intstr", "= 2" ], [ "intstr", "= '2'" ] ] as [ $sKey, $sCond ] )
+	compare ( 'where', "j.$sKey $sCond", 'si_types', '', "j.$sKey $sCond", "j['$sKey']", 4 );
 PHP
 php /tmp/json_si_vs_scan.php
 ––– output –––
@@ -66,6 +88,24 @@ si_any_for
 {"expr":"ANY(x=2.5 FOR x IN j.f)","same":true,"si":false,"ids":[1,2],"total":2}
 {"expr":"ANY(x>=2.5 AND x<=3.5 FOR x IN j.f)","same":true,"si":false,"ids":[1,2,3],"total":3}
 {"expr":"INDEXOF(x=2 FOR x IN j.i)","same":true,"si":false,"ids":[1],"total":1}
+si_dup_vals
+{"where":"j.i = 2","same":true,"si":true,"ids":[1,2],"total":2}
+{"where":"j.s = 'y'","same":true,"si":true,"ids":[1,2,3],"total":3}
+{"where":"j.f = 2.5","same":true,"si":true,"ids":[1,2],"total":2}
+{"where":"j.f BETWEEN 0.9 AND 1.1","same":true,"si":true,"ids":[4],"total":1}
+{"count":"j.i = 2","c":2,"index":"j['i']:Precalc (100%)"}
+{"count":"j.s = 'y'","c":3,"index":"j['s']:Precalc (100%)"}
+si_types
+{"where":"j.int = 2","same":true,"si":true,"ids":[2],"total":1}
+{"where":"j.int = 2.5","same":true,"si":false,"ids":[],"total":0}
+{"where":"j.int > 1.5","same":true,"si":false,"ids":[2,3],"total":9998}
+{"where":"j.flt = 2.5","same":true,"si":true,"ids":[2],"total":1}
+{"where":"j.flt IN (1,2)","same":true,"si":false,"ids":[],"total":0}
+{"where":"j.flt > 1","same":true,"si":false,"ids":[1,2,3],"total":9999}
+{"where":"j.str = 'b'","same":true,"si":true,"ids":[2],"total":1}
+{"where":"j.str > 1","same":true,"si":false,"ids":[],"total":0}
+{"where":"j.intstr = 2","same":true,"si":false,"ids":[2,3],"total":2}
+{"where":"j.intstr = '2'","same":true,"si":false,"ids":[3],"total":1}
 ––– input –––
-mysql -h0 -P9306 -e "DROP TABLE si_any_for;"; rm -f /tmp/json_si_vs_scan.php
+mysql -h0 -P9306 -e "DROP TABLE si_any_for; DROP TABLE si_dup_vals; DROP TABLE si_types;"; rm -f /tmp/json_si_vs_scan.php
 ––– output –––

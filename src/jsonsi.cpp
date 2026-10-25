@@ -157,6 +157,10 @@ public:
 		m_tSchema.resize(0);
 		for ( auto & i : *m_pTypes )
 		{
+			// a key with only nulls and empty arrays is indexed as int, as before
+			if ( i.second.m_eType==JSON_EOF )
+				i.second.m_eType = JSON_INT32;
+
 			if ( !i.second.m_bTypeOk )
 				continue;
 
@@ -262,14 +266,6 @@ private:
 			m_pBuilder->SetAttr ( iAttr, sphF2DW ( (float)fValue ) );
 			break;
 
-		case JSON_STRING:
-			{
-				char szBuf[64];
-				snprintf ( szBuf, 64, "%f", (float)fValue );
-				m_pBuilder->SetAttr ( iAttr, (const uint8_t*)szBuf, strlen(szBuf) );
-			}
-			break;
-
 		default:
 			assert ( 0 && "Internal error on json type conversion");
 			break;
@@ -362,10 +358,16 @@ private:
 		}
 	}
 
-	static ESphJsonType ToWidestType ( ESphJsonType ePrevType, ESphJsonType eNodeType )
+	// numbers widen to the widest numeric type; a key that mixes strings with numbers is not indexed:
+	// a string column would answer numeric filters with string hashes
+	static bool Widen ( ESphJsonType & eType, ESphJsonType eNodeType )
 	{
-		assert ( ePrevType<=JSON_STRING && eNodeType<=JSON_STRING );
-		return Max ( ePrevType, eNodeType );
+		assert ( eType<=JSON_STRING && eNodeType<=JSON_STRING );
+		if ( eType!=JSON_EOF && ( eType==JSON_STRING )!=( eNodeType==JSON_STRING ) )
+			return false;
+
+		eType = Max ( eType, eNodeType );
+		return true;
 	}
 
 	static bool DetermineNodeType ( ESphJsonType & eType, const bson::NodeHandle_t & tNode )
@@ -377,46 +379,38 @@ private:
 		case JSON_INT64:
 		case JSON_DOUBLE:
 		case JSON_STRING:
-			eType = ToWidestType ( eType, eNodeType );
-			break;
+			return Widen ( eType, eNodeType );
 
 		case JSON_TRUE:
 		case JSON_FALSE:
+			return Widen ( eType, JSON_INT32 );
+
 		case JSON_NULL:
-			eType = ToWidestType ( eType, JSON_INT32 );
-			break;
+			return true; // nulls do not decide the type
 
 		case JSON_STRING_VECTOR:
-			eType = ToWidestType ( eType, JSON_STRING );
-			break;
+			return Widen ( eType, JSON_STRING );
 
 		case JSON_INT32_VECTOR:
-			eType = ToWidestType ( eType, JSON_INT32 );
-			break;
+			return Widen ( eType, JSON_INT32 );
 
 		case JSON_INT64_VECTOR:
-			eType = ToWidestType ( eType, JSON_INT64 );
-			break;
+			return Widen ( eType, JSON_INT64 );
 
 		case JSON_DOUBLE_VECTOR:
-			eType = ToWidestType ( eType, JSON_DOUBLE );
-			break;
+			return Widen ( eType, JSON_DOUBLE );
 
 		case JSON_OBJECT:
-			eType = ToWidestType ( eType, JSON_INT32 );
-			break;
+			return Widen ( eType, JSON_INT32 );
 
 		case JSON_MIXED_VECTOR:
 		{
 			const BYTE * p = tNode.first;
 			sphJsonUnpackInt(&p);	// total len
-			if ( sphJsonUnpackInt(&p) )
-				return false;
 
-			// 0-length mixed vectors are supported
-			eType = ToWidestType ( eType, JSON_INT32 );
+			// 0-length mixed vectors are supported and, like nulls, do not decide the type
+			return !sphJsonUnpackInt(&p);
 		}
-		break;
 
 		default:
 			break;

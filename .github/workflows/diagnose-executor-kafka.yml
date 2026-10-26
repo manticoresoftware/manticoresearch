@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/diagnose-executor-kafka.yml'
       - 'scripts/diagnose-executor-kafka.sh'
+      - 'scripts/diagnose-kafka-image-components.sh'
 
 permissions:
   contents: read
@@ -23,3 +24,17 @@ jobs:
         with:
           name: executor-ab-results
           path: executor-ab-results/
+
+  image-components:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: Compare old PHP, old Buddy and old searchd independently
+        run: bash scripts/diagnose-kafka-image-components.sh
+      - name: Upload component comparison
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: executor-component-results
+          path: executor-component-results/

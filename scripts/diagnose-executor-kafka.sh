@@ -211,8 +211,15 @@ for variant in previous-package current-package release-debug; do
     docker exec "$CURRENT_C" mysql -h0 -P9306 -e "$sql"
   done
 
-  run_query "$variant" "$CURRENT_C" show_sources 'SHOW SOURCES;'
-  run_query "$variant" "$CURRENT_C" show_sources_no_semicolon 'SHOW SOURCES'
+  # Reverse the initial query order for the current package to separate semicolon syntax from first-call timing.
+  if [[ "$variant" == current-package ]]; then
+    run_query "$variant" "$CURRENT_C" show_sources_no_semicolon_first 'SHOW SOURCES'
+    run_query "$variant" "$CURRENT_C" show_sources_semicolon_second 'SHOW SOURCES;'
+  else
+    run_query "$variant" "$CURRENT_C" show_sources_semicolon_first 'SHOW SOURCES;'
+    run_query "$variant" "$CURRENT_C" show_sources_no_semicolon_second 'SHOW SOURCES'
+  fi
+  run_query "$variant" "$CURRENT_C" show_sources_semicolon_repeat 'SHOW SOURCES;'
   run_query "$variant" "$CURRENT_C" show_mvs 'SHOW MVS;'
   run_query "$variant" "$CURRENT_C" show_source 'SHOW SOURCE absrc;'
   run_query "$variant" "$CURRENT_C" show_mv 'SHOW MV abview;'

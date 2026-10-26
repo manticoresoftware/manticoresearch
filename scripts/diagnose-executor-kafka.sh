@@ -87,6 +87,7 @@ cat > "$WORK_DIR/trace-buddy.php" <<'PHP'
 <?php
 declare(strict_types=1);
 $queueFile = '/usr/share/manticore/modules/manticore-buddy/src/Plugin/Queue/Payload.php';
+$listFile = '/usr/share/manticore/modules/manticore-buddy/src/Plugin/Queue/Handlers/BaseListHandler.php';
 $requestFile = '/usr/share/manticore/modules/manticore-buddy/vendor/manticoresoftware/buddy-core/src/Network/Request.php';
 $patches = [
     [$queueFile,
@@ -107,6 +108,54 @@ $this->command = strtolower(strtok($this->payload, ' ') ?: '');
             'normalized' => $this->payload,
             'parser_error' => $payload['error']['message'],
         ], JSON_UNESCAPED_SLASHES) . "\n", FILE_APPEND);
+CODE
+    ],
+    [$queueFile,
+     'return SqlModelsHandler::handle($parsedPayload) !== null;',
+     <<<'CODE'
+$matched = SqlModelsHandler::handle($parsedPayload) !== null;
+        file_put_contents('/tmp/buddy-queue-match.log', json_encode([
+            'decision' => $matched,
+            'payload' => $request->payload,
+        ], JSON_UNESCAPED_SLASHES) . "\n", FILE_APPEND);
+        return $matched;
+CODE
+    ],
+    [$queueFile,
+     <<<'CODE'
+if (!$parsedPayload) {
+            return false;
+        }
+CODE,
+     <<<'CODE'
+if (!$parsedPayload) {
+            file_put_contents('/tmp/buddy-queue-match.log', json_encode([
+                'decision' => false,
+                'reason' => 'no parsed payload',
+                'payload' => $request->payload,
+            ], JSON_UNESCAPED_SLASHES) . "\n", FILE_APPEND);
+            return false;
+        }
+CODE
+    ],
+    [$listFile,
+     '$tablePrefix = $this->getTablePrefix();',
+     <<<'CODE'
+$tablePrefix = $this->getTablePrefix();
+        file_put_contents('/tmp/buddy-list-source.log', "HANDLER run for $tablePrefix\n", FILE_APPEND);
+CODE
+    ],
+    [$listFile,
+     'foreach (ResourceTable::list($manticoreClient, $tablePrefix) as $tableName) {',
+     <<<'CODE'
+try {
+                $tables = ResourceTable::list($manticoreClient, $tablePrefix);
+                file_put_contents('/tmp/buddy-list-source.log', "LIST_TABLES $tablePrefix " . json_encode($tables) . "\n", FILE_APPEND);
+            } catch (\Throwable $e) {
+                file_put_contents('/tmp/buddy-list-source.log', "LIST_ERROR $tablePrefix " . $e->getMessage() . "\n", FILE_APPEND);
+                throw $e;
+            }
+            foreach ($tables as $tableName) {
 CODE
     ],
 ];
@@ -227,10 +276,12 @@ for variant in previous-package current-package release-debug; do
 
   docker exec "$CURRENT_C" bash -lc 'tail -n 250 /var/log/manticore/searchd.log' \
     > "$RESULTS_DIR/$variant/searchd-tail.txt" 2>&1 || true
-  docker exec "$CURRENT_C" bash -lc 'cat /tmp/buddy-request-trace.log /tmp/buddy-queue-match.log' \
+  docker exec "$CURRENT_C" bash -lc 'cat /tmp/buddy-request-trace.log /tmp/buddy-queue-match.log /tmp/buddy-list-source.log' \
     > "$RESULTS_DIR/$variant/buddy-trace.txt" 2>&1 || true
   echo "Buddy request/Queue matches ($variant):"
   cat "$RESULTS_DIR/$variant/buddy-trace.txt"
+  echo "Relevant daemon/Buddy log:"
+  grep -iE '(buddy|error|show sources)' "$RESULTS_DIR/$variant/searchd-tail.txt" | tail -n 45 || true
   docker rm -f "$CURRENT_C" >/dev/null
   CURRENT_C=''
 done
@@ -285,10 +336,12 @@ if docker pull "$LEGACY_IMAGE"; then
   fi
   docker exec "$CURRENT_C" bash -lc 'tail -n 300 /var/log/manticore/searchd.log' \
     > "$RESULTS_DIR/$variant/searchd-tail.txt" 2>&1 || true
-  docker exec "$CURRENT_C" bash -lc 'cat /tmp/buddy-request-trace.log /tmp/buddy-queue-match.log' \
+  docker exec "$CURRENT_C" bash -lc 'cat /tmp/buddy-request-trace.log /tmp/buddy-queue-match.log /tmp/buddy-list-source.log' \
     > "$RESULTS_DIR/$variant/buddy-trace.txt" 2>&1 || true
   echo "Buddy request/Queue matches ($variant):"
   cat "$RESULTS_DIR/$variant/buddy-trace.txt"
+  echo "Relevant daemon/Buddy log:"
+  grep -iE '(buddy|error|show sources)' "$RESULTS_DIR/$variant/searchd-tail.txt" | tail -n 45 || true
   docker rm -f "$CURRENT_C" >/dev/null
   CURRENT_C=''
 else

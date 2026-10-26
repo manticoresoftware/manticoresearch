@@ -117,7 +117,7 @@ foreach ($patches as [$path, $before, $after]) {
 PHP
 
 printf 'variant\tfirst_show_sources\tsecond_show_sources\tstartup\n' > "$RESULTS_DIR/summary.tsv"
-for variant in current old-php old-buddy old-searchd; do
+for variant in current old-php old-buddy old-searchd parser-fixed; do
   echo "======== $variant ========"
   mkdir -p "$RESULTS_DIR/$variant"
   CONTAINER="component-test-${SUFFIX}"
@@ -134,6 +134,13 @@ for variant in current old-php old-buddy old-searchd; do
     '
   elif [[ "$variant" == old-searchd ]]; then
     docker cp "$WORK_DIR/searchd-old" "$CONTAINER:/usr/bin/searchd"
+  elif [[ "$variant" == parser-fixed ]]; then
+    docker exec "$CONTAINER" bash -ec '
+      parser=/usr/share/manticore/modules/manticore-buddy/vendor/manticoresoftware/php-sql-parser/src/PHPSQLParser/processors/ShowProcessor.php
+      grep -q "case .VIEWS.;" "$parser"
+      sed -i "s/\(case 'VIEWS'\);/\1:/" "$parser"
+      grep -q "case .VIEWS.:$" "$parser"
+    '
   fi
 
   docker exec "$CONTAINER" bash -lc '

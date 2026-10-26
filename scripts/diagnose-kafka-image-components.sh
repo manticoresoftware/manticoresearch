@@ -138,7 +138,7 @@ for variant in current old-php old-buddy old-searchd parser-fixed; do
     docker exec "$CONTAINER" bash -ec '
       parser=/usr/share/manticore/modules/manticore-buddy/vendor/manticoresoftware/php-sql-parser/src/PHPSQLParser/processors/ShowProcessor.php
       grep -q "case .VIEWS.;" "$parser"
-      sed -i "s/\(case 'VIEWS'\);/\1:/" "$parser"
+      sed -i "/case .VIEWS.;/s/;/:/" "$parser"
       grep -q "case .VIEWS.:$" "$parser"
     '
   fi

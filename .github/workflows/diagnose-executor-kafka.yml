@@ -1,0 +1,25 @@
+name: Diagnose Kafka SHOW queries across Executor builds
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/diagnose-executor-kafka.yml'
+      - 'scripts/diagnose-executor-kafka.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  executor-ab:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: Compare identical Test Kit with three Executor binaries
+        run: bash scripts/diagnose-executor-kafka.sh
+      - name: Upload SQL results and Buddy logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: executor-ab-results
+          path: executor-ab-results/

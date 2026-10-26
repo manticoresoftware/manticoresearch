@@ -75,6 +75,29 @@ $handler = new $handlerClassName($pluginPayload);
 CODE
     ],
     [
+        "$root/src/Lib/QueryProcessor.php",
+        '$hasMatch = $pluginPayloadClass::hasMatch($request);',
+        <<<'CODE'
+file_put_contents('/tmp/qp-trace.log', "CHECK $request->payload => {$plugin['short']}\n", FILE_APPEND);
+                try {
+                    $hasMatch = $pluginPayloadClass::hasMatch($request);
+                    file_put_contents('/tmp/qp-trace.log', "CHECK_RESULT $request->payload => {$plugin['short']} = " . ($hasMatch ? 'true' : 'false') . "\n", FILE_APPEND);
+                } catch (\Throwable $exception) {
+                    file_put_contents('/tmp/qp-trace.log', "CHECK_EXCEPTION $request->payload => {$plugin['short']} = " . get_class($exception) . ': ' . $exception->getMessage() . "\n", FILE_APPEND);
+                    throw $exception;
+                }
+CODE
+    ],
+    [
+        "$root/src/Lib/QueryProcessor.php",
+        '$pluginPayload = $payloadClassName::fromRequest($request);',
+        <<<'CODE'
+file_put_contents('/tmp/qp-trace.log', "FROM_REQUEST_START $request->payload => $pluginName\n", FILE_APPEND);
+        $pluginPayload = $payloadClassName::fromRequest($request);
+        file_put_contents('/tmp/qp-trace.log', "FROM_REQUEST_DONE $request->payload => $pluginName\n", FILE_APPEND);
+CODE
+    ],
+    [
         "$root/src/Plugin/Queue/Handlers/BaseListHandler.php",
         '$tablePrefix = $this->getTablePrefix();',
         <<<'CODE'
@@ -161,8 +184,10 @@ for variant in current old-php old-buddy old-searchd; do
   docker exec "$CONTAINER" bash -lc 'cat /tmp/qp-trace.log' > "$RESULTS_DIR/$variant/dispatch.txt" 2>&1 || true
   docker exec "$CONTAINER" bash -lc 'tail -n 400 /var/log/manticore/searchd.log' \
     > "$RESULTS_DIR/$variant/searchd.log" 2>&1 || true
-  echo "Dispatcher trace:"
-  cat "$RESULTS_DIR/$variant/dispatch.txt"
+  echo "Dispatcher trace for SHOW SOURCES:"
+  grep -E 'SHOW SOURCES|CHECK_EXCEPTION|FROM_REQUEST|SELECTED|CONSTRUCTED|LIST_HANDLER' "$RESULTS_DIR/$variant/dispatch.txt" | tail -n 80 || true
+  echo "Relevant searchd log:"
+  grep -iE 'error|exception|fatal|buddy|swoole|failed' "$RESULTS_DIR/$variant/searchd.log" | tail -n 80 || true
   docker rm -f "$CONTAINER" >/dev/null
   CONTAINER=''
 done

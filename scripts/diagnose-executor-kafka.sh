@@ -83,6 +83,44 @@ foreach (['SHOW SOURCES;', 'SHOW SOURCES', 'SHOW MVS;', 'SHOW SOURCE absrc;', 'S
 }
 PHP
 
+cat > "$WORK_DIR/trace-buddy.php" <<'PHP'
+<?php
+declare(strict_types=1);
+$queueFile = '/usr/share/manticore/modules/manticore-buddy/src/Plugin/Queue/Payload.php';
+$requestFile = '/usr/share/manticore/modules/manticore-buddy/vendor/manticoresoftware/buddy-core/src/Network/Request.php';
+$patches = [
+    [$queueFile,
+     'public static function hasMatch(Request $request): bool {',
+     <<<'CODE'
+public static function hasMatch(Request $request): bool {
+        file_put_contents('/tmp/buddy-queue-match.log', json_encode(['queue_payload'=>$request->payload], JSON_UNESCAPED_SLASHES) . "\n", FILE_APPEND);
+CODE
+    ],
+    [$requestFile,
+     <<<'CODE'
+$this->command = strtolower(strtok($this->payload, ' ') ?: '');
+CODE,
+     <<<'CODE'
+$this->command = strtolower(strtok($this->payload, ' ') ?: '');
+        file_put_contents('/tmp/buddy-request-trace.log', json_encode([
+            'raw' => $payload['message']['body'],
+            'normalized' => $this->payload,
+            'parser_error' => $payload['error']['message'],
+        ], JSON_UNESCAPED_SLASHES) . "\n", FILE_APPEND);
+CODE
+    ],
+];
+foreach ($patches as [$path, $old, $new]) {
+    $contents = file_get_contents($path);
+    if ($contents === false || !str_contains($contents, $old)) {
+        fwrite(STDERR, "Missing patch target in $path\n");
+        exit(1);
+    }
+    file_put_contents($path, str_replace($old, $new, $contents));
+    echo "Instrumented $path\n";
+}
+PHP
+
 printf 'variant\tquery\tstatus\n' > "$RESULTS_DIR/summary.tsv"
 
 run_query() {
@@ -145,6 +183,10 @@ for variant in previous-package current-package release-debug; do
   cat "$RESULTS_DIR/$variant/build-info.txt"
   cat "$RESULTS_DIR/$variant/parser.txt"
 
+  # Instrument Buddy inside this throwaway container, not in source control.
+  docker cp "$WORK_DIR/trace-buddy.php" "$CURRENT_C:/tmp/trace-buddy.php"
+  docker exec "$CURRENT_C" manticore-executor /tmp/trace-buddy.php
+
   docker exec "$CURRENT_C" bash -lc 'stdbuf -oL searchd --logdebugvv >/dev/null 2>&1'
   DB_READY=0
   for _ in $(seq 1 50); do
@@ -178,13 +220,17 @@ for variant in previous-package current-package release-debug; do
 
   docker exec "$CURRENT_C" bash -lc 'tail -n 250 /var/log/manticore/searchd.log' \
     > "$RESULTS_DIR/$variant/searchd-tail.txt" 2>&1 || true
+  docker exec "$CURRENT_C" bash -lc 'cat /tmp/buddy-request-trace.log /tmp/buddy-queue-match.log' \
+    > "$RESULTS_DIR/$variant/buddy-trace.txt" 2>&1 || true
+  echo "Buddy request/Queue matches ($variant):"
+  cat "$RESULTS_DIR/$variant/buddy-trace.txt"
   docker rm -f "$CURRENT_C" >/dev/null
   CURRENT_C=''
 done
 
 # Compare with the Test Kit published for the last passing nightly (2026-10-23).
 # This checks the WHOLE image, not just the Executor binary, including Composer vendors.
-LEGACY_IMAGE='ghcr.io/manticoresoftware/manticoresearch:test-kit-2a3c5736'
+LEGACY_IMAGE='ghcr.io/manticoresoftware/manticoresearch:test-kit-b15e60f4'
 printf '\n========== legacy-image (last green nightly commit) ==========\n'
 if docker pull "$LEGACY_IMAGE"; then
   variant='legacy-image'
@@ -205,6 +251,8 @@ if docker pull "$LEGACY_IMAGE"; then
   docker exec "$CURRENT_C" manticore-executor /tmp/queue-parse.php \
     > "$RESULTS_DIR/$variant/parser.txt" 2>&1 || true
   cat "$RESULTS_DIR/$variant/parser.txt"
+  docker cp "$WORK_DIR/trace-buddy.php" "$CURRENT_C:/tmp/trace-buddy.php"
+  docker exec "$CURRENT_C" manticore-executor /tmp/trace-buddy.php
   docker exec "$CURRENT_C" bash -lc 'stdbuf -oL searchd --logdebugvv >/dev/null 2>&1'
   DB_READY=0
   for _ in $(seq 1 50); do
@@ -230,6 +278,10 @@ if docker pull "$LEGACY_IMAGE"; then
   fi
   docker exec "$CURRENT_C" bash -lc 'tail -n 300 /var/log/manticore/searchd.log' \
     > "$RESULTS_DIR/$variant/searchd-tail.txt" 2>&1 || true
+  docker exec "$CURRENT_C" bash -lc 'cat /tmp/buddy-request-trace.log /tmp/buddy-queue-match.log' \
+    > "$RESULTS_DIR/$variant/buddy-trace.txt" 2>&1 || true
+  echo "Buddy request/Queue matches ($variant):"
+  cat "$RESULTS_DIR/$variant/buddy-trace.txt"
   docker rm -f "$CURRENT_C" >/dev/null
   CURRENT_C=''
 else

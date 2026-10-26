@@ -122,11 +122,7 @@ $matched = SqlModelsHandler::handle($parsedPayload) !== null;
 CODE
     ],
     [$queueFile,
-     <<<'CODE'
-if (!$parsedPayload) {
-            return false;
-        }
-CODE,
+     'if (!$parsedPayload) {',
      <<<'CODE'
 if (!$parsedPayload) {
             file_put_contents('/tmp/buddy-queue-match.log', json_encode([
@@ -134,8 +130,6 @@ if (!$parsedPayload) {
                 'reason' => 'no parsed payload',
                 'payload' => $request->payload,
             ], JSON_UNESCAPED_SLASHES) . "\n", FILE_APPEND);
-            return false;
-        }
 CODE
     ],
     [$listFile,

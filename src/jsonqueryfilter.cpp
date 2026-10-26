@@ -926,6 +926,7 @@ std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructRangeFilter 
 
 	tFilter.m_sAttrName = tColumn.Name();
 	sphColumnToLowercase ( const_cast<char *>( tFilter.m_sAttrName.cstr() ) );
+	SetMvaFilterFunc ( tFilter );
 
 	tFilter.m_bHasEqualMin = false;
 	tFilter.m_bHasEqualMax = false;

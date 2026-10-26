@@ -463,93 +463,63 @@ private:
 	StrVec_t m_dValues;
 };
 
-struct Filter_StringTags_c : IFilter_Str
+void StringTags_c::SetTags ( const CSphString * pRef, int iCount )
 {
-protected:
-	CSphVector<uint64_t> m_dTags;
-	mutable CSphVector<uint64_t> m_dMatchTags;
+	assert ( pRef );
+	assert ( iCount>0 );
 
-public:
-	void SetRefString ( const CSphString * pRef, int iCount ) final
-	{
-		assert ( pRef );
-		assert ( iCount>0 );
+	m_dTags.Resize ( iCount );
 
-		m_dTags.Resize ( iCount );
+	for ( int i = 0; i<iCount; ++i )
+		m_dTags[i] = sphFNV64 ( pRef[i].cstr () );
 
-		for ( int i = 0; i<iCount; ++i )
-			m_dTags[i] = sphFNV64 ( pRef[i].cstr () );
+	m_dTags.Uniq ();
+}
 
-		m_dTags.Uniq ();
-	}
-
-protected:
-	inline void GetMatchTags ( const CSphMatch &tMatch ) const
-	{
-		auto dStr = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
-
-		m_dMatchTags.Resize ( 0 );
-		sphSplitApply ( ( const char * ) dStr.first, dStr.second, [this] ( const char * pTag, int iLen ) {
-			m_dMatchTags.Add ( sphFNV64 ( pTag, iLen, SPH_FNV64_SEED ) );
-		} );
-		m_dMatchTags.Uniq ();
-	}
-};
-
-struct Filter_StringTagsAny_c : Filter_StringTags_c
+bool StringTags_c::Match ( ByteBlob_t tStr, bool bAll ) const
 {
-public:
-	bool Eval ( const CSphMatch &tMatch ) const final
+	m_dMatchTags.Resize ( 0 );
+	sphSplitApply ( ( const char * ) tStr.first, tStr.second, [this] ( const char * pTag, int iLen ) {
+		m_dMatchTags.Add ( sphFNV64 ( pTag, iLen, SPH_FNV64_SEED ) );
+	} );
+	m_dMatchTags.Uniq ();
+
+	// both lists are sorted: walk them together until enough listed tags are found
+	auto pFilter = m_dMatchTags.begin ();
+	auto pQueryTags = m_dTags.begin ();
+	auto pFilterEnd = m_dMatchTags.end ();
+	auto pTagsEnd = m_dTags.end ();
+	int iExpectedTags = bAll ? m_dTags.GetLength() : 1;
+
+	while ( pFilter<pFilterEnd && pQueryTags<pTagsEnd && iExpectedTags>0 )
 	{
-		GetMatchTags ( tMatch );
-
-		auto pFilter = m_dMatchTags.begin ();
-		auto pQueryTags = m_dTags.begin ();
-		auto pFilterEnd = m_dMatchTags.end ();
-		auto pTagsEnd = m_dTags.end ();
-
-		while ( pFilter<pFilterEnd && pQueryTags<pTagsEnd )
+		if ( *pQueryTags<*pFilter )
+			++pQueryTags;
+		else if ( *pFilter<*pQueryTags )
+			++pFilter;
+		else
 		{
-			if ( *pQueryTags<*pFilter )
-				++pQueryTags;
-			else if ( *pFilter<*pQueryTags )
-				++pFilter;
-			else if ( *pQueryTags==*pFilter )
-				return true;
+			--iExpectedTags;
+			++pQueryTags;
+			++pFilter;
 		}
-		return false;
 	}
-};
+	return !iExpectedTags;
+}
 
-struct Filter_StringTagsAll_c : Filter_StringTags_c
+template <bool ALL>
+struct Filter_StringTags_T : IFilter_Str
 {
 public:
-	bool Eval ( const CSphMatch &tMatch ) const final
-	{
-		GetMatchTags ( tMatch );
+	void SetRefString ( const CSphString * pRef, int iCount ) final	{ m_tTags.SetTags ( pRef, iCount ); }
+	bool Eval ( const CSphMatch & tMatch ) const final				{ return m_tTags.Match ( tMatch.FetchAttrData ( m_tLocator, m_pBlobPool ), ALL ); }
 
-		auto pFilter = m_dMatchTags.begin ();
-		auto pQueryTags = m_dTags.begin ();
-		auto pFilterEnd = m_dMatchTags.end ();
-		auto pTagsEnd = m_dTags.end ();
-		int iExpectedTags = m_dTags.GetLength();
-
-		while ( pFilter<pFilterEnd && pQueryTags<pTagsEnd && iExpectedTags>0 )
-		{
-			if ( *pQueryTags<*pFilter )
-				++pQueryTags;
-			else if ( *pFilter<*pQueryTags )
-				++pFilter;
-			else if ( *pQueryTags==*pFilter )
-			{
-				--iExpectedTags;
-				++pQueryTags;
-				++pFilter;
-			}
-		}
-		return !iExpectedTags;
-	}
+private:
+	StringTags_c m_tTags;
 };
+
+using Filter_StringTagsAny_c = Filter_StringTags_T<false>;
+using Filter_StringTagsAll_c = Filter_StringTags_T<true>;
 
 
 struct Filter_And2 final : public ISphFilter
@@ -1346,6 +1316,92 @@ public:
 };
 
 
+// numeric filter (=, IN, ranges) on a json field, plain or in any() / all(): a scalar is checked as before,
+// an array matches when any element (for all(), every element of a non-empty array) matches as a scalar
+// of the same type would, like MVA and json string arrays
+class ExprFilterJsonValue_c : public IFilter_Values
+{
+public:
+	ExprFilterJsonValue_c ( ISphExpr * pJson, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings )
+		: m_pJson ( pJson )
+		, m_tRange ( tFixedSettings )
+		, m_bAll ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ALL )
+	{
+		SafeAddRef ( pJson );
+	}
+
+	void SetBlobStorage ( const BYTE * pBlobPool ) final
+	{
+		m_pBlobPool = pBlobPool;
+		m_pJson->Command ( SPH_EXPR_SET_BLOB_POOL, (void*)pBlobPool );
+	}
+
+	void SetColumnar ( const columnar::Columnar_i * pColumnar ) final	{ m_pJson->Command ( SPH_EXPR_SET_COLUMNAR, (void*)pColumnar ); }
+
+	bool Eval ( const CSphMatch & tMatch ) const final
+	{
+		uint64_t uPacked = m_pJson->Int64Eval ( tMatch );
+		bson::NodeHandle_t tNode { m_pBlobPool + sphJsonUnpackOffset ( uPacked ), sphJsonUnpackType ( uPacked ) };
+		if ( !bson::IsArray ( tNode ) )
+			return EvalValue ( tNode );
+
+		// stop at the first match, or for all() at the first element that does not match; an empty array does not match
+		bool bMatch = false;
+		bson::ForSome ( tNode, [this, &bMatch] ( const bson::NodeHandle_t & tElem )
+		{
+			bMatch = EvalValue ( tElem );
+			return bMatch==m_bAll;
+		} );
+
+		return bMatch;
+	}
+
+private:
+	CSphRefcountedPtr<ISphExpr>	m_pJson;
+	const BYTE *				m_pBlobPool = nullptr;
+	CommonFilterSettings_t		m_tRange;	// json filters keep the settings as given (no attribute type fixup)
+	bool						m_bAll;
+
+	// a scalar or an array element, read as a number the way a json value converts everywhere (bson::Int / bson::Double)
+	bool EvalValue ( const bson::NodeHandle_t & tNode ) const
+	{
+		if ( m_tRange.m_eType==SPH_FILTER_FLOATRANGE )
+			return EvalRange ( (float)bson::Double ( tNode ), m_tRange );
+
+		// an int filter compares a double value as a double: cut to int, 2.5 would be equal to 2
+		double fValue;
+		if ( GetDouble ( tNode, fValue ) )
+		{
+			if ( m_tRange.m_eType==SPH_FILTER_VALUES )
+				return m_tValues.any_of ( [fValue] ( SphAttr_t tValue ) { return (double)tValue==fValue; } );
+
+			return EvalRange ( fValue, m_tRange );
+		}
+
+		int64_t iValue = bson::Int ( tNode );
+		return m_tRange.m_eType==SPH_FILTER_VALUES ? EvalValues ( iValue ) : EvalRange ( iValue, m_tRange );
+	}
+
+	// a json double, or a string that converts to one
+	static bool GetDouble ( const bson::NodeHandle_t & tNode, double & fValue )
+	{
+		if ( bson::IsDouble ( tNode ) )
+		{
+			fValue = bson::Double ( tNode );
+			return true;
+		}
+
+		if ( tNode.second!=JSON_STRING )
+			return false;
+
+		Str_t tStr = bson::RawBlob ( tNode );
+		ESphJsonType eType;
+		int64_t iValue;
+		return sphJsonStringToNumber ( tStr.first, tStr.second, eType, iValue, fValue ) && eType==JSON_DOUBLE;
+	}
+};
+
+
 static std::unique_ptr<ISphFilter> SetupJsonExpr ( CSphRefcountedPtr<ISphExpr> & pExpr, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ESphCollation eCollation )
 {
 	// auto-convert all JSON types except SPH_FILTER_NULL, it needs more info
@@ -1360,25 +1416,25 @@ static std::unique_ptr<ISphFilter> SetupJsonExpr ( CSphRefcountedPtr<ISphExpr> &
 	ISphExpr* pFoo = nullptr;
 	AT_SCOPE_EXIT ( [&pFoo] { if (pFoo) pFoo->Release(); } );
 
+	// ALL('a','b') matches when every listed value is present, as ALL() on string tags does
+	if ( tFixedSettings.m_eType==SPH_FILTER_STRING_LIST && tSettings.m_eMvaFunc==SPH_MVAFUNC_ALL && tSettings.m_dStrings.GetLength()>1 )
+	{
+		auto pAll = std::make_unique<Filter_And>();
+		for ( int i = 0; i<tSettings.m_dStrings.GetLength(); ++i )
+		{
+			CSphRefcountedPtr<ISphExpr> pIn { ExprJsonIn ( tSettings.m_dStrings.Slice ( i, 1 ), pExpr, eCollation ) };
+			pAll->Add ( std::make_unique<ExprFilterProxy_c> ( pIn, SPH_ATTR_INTEGER ) );
+		}
+		return pAll;
+	}
+
 	// IN only checks equality; ordered string comparisons go to the converted field below
 	if ( tFixedSettings.m_eType==SPH_FILTER_STRING_LIST || ( tFixedSettings.m_eType==SPH_FILTER_STRING && tFixedSettings.m_eStrCmpDir==EStrCmpDir::EQ ) )
 		return std::make_unique<ExprFilterProxy_c> ( pFoo = ExprJsonIn ( tSettings.m_dStrings, pExpr, eCollation ), SPH_ATTR_INTEGER );
 
-	if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ANY )
-	{
-		switch ( tFixedSettings.m_eType )
-		{
-		case SPH_FILTER_VALUES:
-			return std::make_unique<ExprFilterProxy_c> ( pFoo = ExprJsonIn ( tSettings.m_dValues, pExpr, eCollation ), SPH_ATTR_INTEGER );
-
-		case SPH_FILTER_RANGE:
-		case SPH_FILTER_FLOATRANGE:
-			return std::make_unique<ExprFilterProxy_c> ( pFoo = ExprJsonRange ( tFixedSettings, pExpr ), SPH_ATTR_INTEGER );
-
-		default:
-			break;
-		}
-	}
+	// numeric filters, plain or in any() / all(), check each element of a json array
+	if ( !bAutoConvert && ( tFixedSettings.m_eType==SPH_FILTER_VALUES || tFixedSettings.m_eType==SPH_FILTER_RANGE || tFixedSettings.m_eType==SPH_FILTER_FLOATRANGE ) )
+		return std::make_unique<ExprFilterJsonValue_c> ( pExpr, tSettings, tFixedSettings );
 
 	if ( !bAutoConvert )
 		pExpr = sphJsonFieldConv(pExpr);
@@ -2048,6 +2104,11 @@ static void TransformForJsonSI ( const CreateFilterContext_t & tCtx, CSphVector<
 				continue;
 			}
 		}
+
+		// an excluding filter on a json key keeps only the documents that have the key, while the secondary
+		// index excludes from all rows and would also return documents without it: leave it to the full scan
+		if ( ( !pAttr || pAttr->m_tLocator.m_bDynamic ) && tFilter.m_bExclude && tFilter.m_eType!=SPH_FILTER_NULL )
+			continue;
 
 		if ( !pAttr || pAttr->m_tLocator.m_bDynamic )
 		{

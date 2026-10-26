@@ -65,6 +65,24 @@ fi
 docker exec "$KAFKA" /opt/kafka/bin/kafka-topics.sh --create \
   --topic executor_ab --partitions 1 --bootstrap-server localhost:9092
 
+cat > "$WORK_DIR/queue-parse.php" <<'PHP'
+<?php
+declare(strict_types=1);
+require '/usr/share/manticore/modules/manticore-buddy/vendor/autoload.php';
+$parser = new \PHPSQLParser\PHPSQLParser();
+foreach (['SHOW SOURCES;', 'SHOW SOURCES', 'SHOW MVS;', 'SHOW SOURCE absrc;', 'SHOW MV abview;'] as $sql) {
+    echo "\nSQL: $sql\n";
+    try {
+        $parsed = $parser->parse($sql);
+        echo 'PARSED: ' . json_encode($parsed, JSON_UNESCAPED_SLASHES) . "\n";
+        $model = \Manticoresearch\Buddy\Base\Plugin\Queue\Models\SqlModelsHandler::handle($parsed);
+        echo 'MODEL: ' . ($model ? get_class($model) : 'NONE') . "\n";
+    } catch (\Throwable $e) {
+        echo 'EXCEPTION: ' . get_class($e) . ': ' . $e->getMessage() . "\n";
+    }
+}
+PHP
+
 printf 'variant\tquery\tstatus\n' > "$RESULTS_DIR/summary.tsv"
 
 run_query() {
@@ -120,7 +138,12 @@ for variant in previous-package current-package release-debug; do
     git -C /usr/share/manticore/modules/manticore-buddy rev-parse HEAD
   ' > "$RESULTS_DIR/$variant/build-info.txt" 2>&1
   docker exec "$CURRENT_C" manticore-executor -m > "$RESULTS_DIR/$variant/modules.txt" 2>&1
+  docker exec "$CURRENT_C" bash -lc 'sha256sum /usr/share/manticore/modules/manticore-buddy/composer.lock /usr/share/manticore/modules/manticore-buddy/vendor/composer/installed.php' >> "$RESULTS_DIR/$variant/build-info.txt" 2>&1 || true
+  docker cp "$WORK_DIR/queue-parse.php" "$CURRENT_C:/tmp/queue-parse.php"
+  docker exec "$CURRENT_C" manticore-executor /tmp/queue-parse.php \
+    > "$RESULTS_DIR/$variant/parser.txt" 2>&1 || true
   cat "$RESULTS_DIR/$variant/build-info.txt"
+  cat "$RESULTS_DIR/$variant/parser.txt"
 
   docker exec "$CURRENT_C" bash -lc 'stdbuf -oL searchd --logdebugvv >/dev/null 2>&1'
   DB_READY=0
@@ -147,6 +170,7 @@ for variant in previous-package current-package release-debug; do
   done
 
   run_query "$variant" "$CURRENT_C" show_sources 'SHOW SOURCES;'
+  run_query "$variant" "$CURRENT_C" show_sources_no_semicolon 'SHOW SOURCES'
   run_query "$variant" "$CURRENT_C" show_mvs 'SHOW MVS;'
   run_query "$variant" "$CURRENT_C" show_source 'SHOW SOURCE absrc;'
   run_query "$variant" "$CURRENT_C" show_mv 'SHOW MV abview;'
@@ -157,6 +181,60 @@ for variant in previous-package current-package release-debug; do
   docker rm -f "$CURRENT_C" >/dev/null
   CURRENT_C=''
 done
+
+# Compare with the Test Kit published for the last passing nightly (2026-10-23).
+# This checks the WHOLE image, not just the Executor binary, including Composer vendors.
+LEGACY_IMAGE='ghcr.io/manticoresoftware/manticoresearch:test-kit-2a3c5736'
+printf '\n========== legacy-image (last green nightly commit) ==========\n'
+if docker pull "$LEGACY_IMAGE"; then
+  variant='legacy-image'
+  mkdir -p "$RESULTS_DIR/$variant"
+  CURRENT_C="executor-ab-manticore-${SUFFIX}"
+  docker run -d --platform linux/amd64 --network "$NETWORK" --name "$CURRENT_C" \
+    --entrypoint bash "$LEGACY_IMAGE" -lc 'sleep infinity' >/dev/null
+  docker exec "$CURRENT_C" bash -lc '
+    searchd --version
+    manticore-executor -v
+    sha256sum /usr/bin/searchd /usr/bin/manticore-executor
+    git -C /usr/share/manticore/modules/manticore-buddy rev-parse HEAD
+    sha256sum /usr/share/manticore/modules/manticore-buddy/composer.lock
+    sha256sum /usr/share/manticore/modules/manticore-buddy/vendor/composer/installed.php
+  ' > "$RESULTS_DIR/$variant/build-info.txt" 2>&1 || true
+  cat "$RESULTS_DIR/$variant/build-info.txt"
+  docker cp "$WORK_DIR/queue-parse.php" "$CURRENT_C:/tmp/queue-parse.php"
+  docker exec "$CURRENT_C" manticore-executor /tmp/queue-parse.php \
+    > "$RESULTS_DIR/$variant/parser.txt" 2>&1 || true
+  cat "$RESULTS_DIR/$variant/parser.txt"
+  docker exec "$CURRENT_C" bash -lc 'stdbuf -oL searchd --logdebugvv >/dev/null 2>&1'
+  DB_READY=0
+  for _ in $(seq 1 50); do
+    if docker exec "$CURRENT_C" mysql -h0 -P9306 -N -e 'SELECT 1' >/dev/null 2>&1; then DB_READY=1; break; fi
+    sleep 1
+  done
+  if [[ "$DB_READY" -ne 1 ]]; then
+    echo 'legacy-image searchd failed to start' >&2
+    docker exec "$CURRENT_C" bash -lc 'tail -n 200 /var/log/manticore/searchd.log' || true
+  else
+    for sql in \
+      "CREATE SOURCE absrc (id bigint, term text) type='kafka' broker_list='${KAFKA}:9092' topic_list='executor_ab' consumer_group='ab_legacy' num_consumers='1' batch=50;" \
+      'CREATE TABLE abdest (id bigint, term text);' \
+      'CREATE MATERIALIZED VIEW abview TO abdest AS SELECT id, term FROM absrc;'; do
+      docker exec "$CURRENT_C" mysql -h0 -P9306 -e "$sql"
+    done
+    run_query "$variant" "$CURRENT_C" show_sources 'SHOW SOURCES;'
+    run_query "$variant" "$CURRENT_C" show_sources_no_semicolon 'SHOW SOURCES'
+    run_query "$variant" "$CURRENT_C" show_mvs 'SHOW MVS;'
+    run_query "$variant" "$CURRENT_C" show_source 'SHOW SOURCE absrc;'
+    run_query "$variant" "$CURRENT_C" show_mv 'SHOW MV abview;'
+    run_query "$variant" "$CURRENT_C" show_mv_vertical 'SHOW MV abview\G;'
+  fi
+  docker exec "$CURRENT_C" bash -lc 'tail -n 300 /var/log/manticore/searchd.log' \
+    > "$RESULTS_DIR/$variant/searchd-tail.txt" 2>&1 || true
+  docker rm -f "$CURRENT_C" >/dev/null
+  CURRENT_C=''
+else
+  echo 'Legacy image tag not accessible: cannot compare the historic Test Kit.' | tee "$RESULTS_DIR/legacy-image-unavailable.txt"
+fi
 
 printf '\n=== FINAL RESULT ===\n'
 column -ts $'\t' "$RESULTS_DIR/summary.tsv" 2>/dev/null || cat "$RESULTS_DIR/summary.tsv"

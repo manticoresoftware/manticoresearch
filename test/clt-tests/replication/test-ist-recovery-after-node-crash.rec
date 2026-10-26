@@ -275,3 +275,9 @@ Port 3306: Node synced
 *************************** 1. row ***************************
 Counter: cluster_test_status
   Value: primary
+––– comment –––
+Cleanup: Remove watchdog from base config to avoid affecting other tests
+––– input –––
+sed -i '/watchdog = 0/d' test/clt-tests/base/searchd-with-flexible-ports.conf; echo $?
+––– output –––
+0

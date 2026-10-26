@@ -237,7 +237,7 @@ done
 
 # Compare with the Test Kit published for the last passing nightly (2026-10-23).
 # This checks the WHOLE image, not just the Executor binary, including Composer vendors.
-LEGACY_IMAGE='ghcr.io/manticoresoftware/manticoresearch:test-kit-b15e60f4'
+LEGACY_IMAGE='ghcr.io/manticoresoftware/manticoresearch:test-kit-b15e60f'
 printf '\n========== legacy-image (last green nightly commit) ==========\n'
 if docker pull "$LEGACY_IMAGE"; then
   variant='legacy-image'

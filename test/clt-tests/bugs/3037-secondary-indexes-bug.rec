@@ -80,3 +80,35 @@ mysql -P9306 -h0 -e "SET GLOBAL secondary_indexes=0; select id,status from task 
 | total_relation | eq                                                                                                                           |
 | time           | %{NUMBER}.%{NUMBER}                                                                                                                        |
 +----------------+------------------------------------------------------------------------------------------------------------------------------+
+––– comment –––
+Issue #5033: an exclude filter answered by the secondary index (!=, NOT IN, NOT BETWEEN) collects the excluded rows in
+a bitmap and inverts it. The last 64 rows of a range were lost when the range ended on a 64-row boundary: the whole
+disk chunk of 8192 rows, or a pseudo-sharding part (OPTION threads=2 splits 8193 rows at rowid 4096). Every query
+forces the secondary index (shown by SHOW META) and must return all rows; `id > 0` keeps COUNT(*) off the
+precalculated count.
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL secondary_indexes=1"; for n in 8192 8193; do manticore-load --quiet --port=9306 --init="DROP TABLE IF EXISTS gh5033_$n; CREATE TABLE gh5033_$n (s string, i int)" --load="INSERT INTO gh5033_$n (id,s,i) VALUES (<increment>,'a',1)" --batch-size=1024 --threads=1 --total=$n > /dev/null && mysql -h0 -P9306 -e "FLUSH RAMCHUNK gh5033_$n"; done; echo ready
+––– output –––
+ready
+––– input –––
+while IFS='|' read -r label q; do
+  printf '%s: %s\n' "$label" "$(mysql -h0 -P9306 --skip-table -NB -e "$q; SHOW META LIKE 'index'" | tr '\t' ' ' | paste -sd' ' -)"
+done <<'EOF'
+last id, s != 'b'|SELECT id FROM gh5033_8192 WHERE s != 'b' ORDER BY id DESC LIMIT 1 /*+ SecondaryIndex(s) */
+count, s != 'b'|SELECT COUNT(*) FROM gh5033_8192 WHERE s != 'b' AND id > 0 OPTION threads=1 /*+ SecondaryIndex(s) */
+count, s NOT IN ('b','c')|SELECT COUNT(*) FROM gh5033_8192 WHERE s NOT IN ('b','c') AND id > 0 OPTION threads=1 /*+ SecondaryIndex(s) */
+count, i != 2|SELECT COUNT(*) FROM gh5033_8192 WHERE i != 2 AND id > 0 OPTION threads=1 /*+ SecondaryIndex(i) */
+count, i NOT BETWEEN 2 AND 3|SELECT COUNT(*) FROM gh5033_8192 WHERE i NOT BETWEEN 2 AND 3 AND id > 0 OPTION threads=1 /*+ SecondaryIndex(i) */
+8193 rows in 2 parts, s != 'b'|SELECT COUNT(*) FROM gh5033_8193 WHERE s != 'b' AND id > 0 OPTION threads=2 /*+ SecondaryIndex(s) */
+EOF
+––– output –––
+last id, s != 'b': 8192 index s:SecondaryIndex (100%)
+count, s != 'b': 8192 index s:SecondaryIndex (100%)
+count, s NOT IN ('b','c'): 8192 index s:SecondaryIndex (100%)
+count, i != 2: 8192 index i:SecondaryIndex (100%)
+count, i NOT BETWEEN 2 AND 3: 8192 index i:SecondaryIndex (100%)
+8193 rows in 2 parts, s != 'b': 8193 index s:SecondaryIndex (100%)
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE gh5033_8192; DROP TABLE gh5033_8193"; echo done
+––– output –––
+done

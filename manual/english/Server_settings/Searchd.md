@@ -645,6 +645,47 @@ diskchunk_flush_write_timeout = 60s
 ```
 <!-- end -->
 
+### docid_lookup_cache_size
+
+Experimental C++ cache for numeric disk document ID lookups. Optional; default
+`0` (disabled). This is a process-wide allocation budget, in bytes:
+
+```ini
+docid_lookup_cache_size = 256m
+```
+
+Disk chunks attempt to build a complete immutable cache before publication.
+Allocation refusal, budget exhaustion, duplicate IDs or cancellation retains
+the compressed reader. Cache allocations, alignment padding and handles count
+against the budget; allocator metadata and process RSS do not. The cache adds
+memory beside existing mapped data and does not change the disk format.
+
+Cache allocation alignment is detected once from the OS (64, 128 or 256 bytes),
+with a 64-byte fallback. The handle padding and alignment slack count against
+the budget. Directory nodes use eight child maxima for a 64-byte cache line
+and sixteen for 128/256-byte lines; the extra directory memory counts against
+the budget. Batch lookup uses temporary stack arrays (512 bytes of array data
+per active batch call on 64-bit builds, plus compiler-generated stack-frame
+overhead). It adds no thread-local scratch storage and does not change
+configured coroutine stack allocations.
+
+Sparse ID value filters and sparse updates can reuse the cache. Dense lists,
+ranges and duplicate-ID chunks keep the original merging path. This experimental
+UPDATE optimization currently accepts nonnegative update IDs. The setting does
+not replace RAM hash maps or UUID indexes. Gains depend on workload and platform.
+
+When a chunk has admitted a complete cache, the planner bounds sparse numeric
+`id IN (...)` result estimates by the number of input values and charges for
+every lookup, including misses. This can select DocidIndex without an SQL hint
+and reduce result storage. Explicit DocidIndex/NO_DocidIndex hints still apply.
+Chunks without a cache keep the previous estimates and lookup policy.
+
+`SHOW STATUS LIKE 'docid_lookup_cache_used_bytes'` reports requested cache bytes,
+and table RAM status includes the cache. Chunk destruction/remapping releases
+storage. Uncached chunks are not automatically retried when budget becomes free;
+there is no LRU or eviction. See `test/docid-cache/README.md` for validation instructions and cache
+behavior.
+
 ### docstore_cache_size
 
 <!-- example conf docstore_cache_size -->

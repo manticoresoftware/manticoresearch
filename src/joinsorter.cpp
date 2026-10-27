@@ -85,7 +85,7 @@ bool ExprHasLeftTableAttrs ( const CSphString & sAttr, const ISphSchema & tLeftS
 			continue;
 		}
 
-		if ( sphIsAlphaOnly(*szAttr) || ( *szAttr>='0' && *szAttr<='9' ) || *szAttr=='.' || *szAttr=='_' )
+		if ( sphIsAlphaOnly(*szAttr) || *szAttr=='.' || *szAttr=='_' )
 		{
 			if ( iPos==MAX_ATTR_NAME_LEN-1 )
 				break;
@@ -2286,7 +2286,7 @@ void JoinSorter_c::AddExpressionItemsToJoinSelectList()
 			{
 				const CSphColumnInfo * pAttr = m_pSorterSchema->GetAttr ( sDep.cstr() );
 				if ( pAttr && pAttr->IsJoined() )
-					AddToJoinSelectList ( sDep );
+					AddToJoinSelectList ( sDep, sDep );
 			}
 			continue;
 		}
@@ -2338,6 +2338,10 @@ void JoinSorter_c::AddBatchedFilterItemsToJoinSelectList()
 
 	for ( auto & i : m_tJoinQuery.m_dFilters )
 	{
+		// only ON filters read these items back, and they are never expressions
+		if ( i.m_eType==SPH_FILTER_EXPRESSION )
+			continue;
+
 		CSphString sAttr;
 		sAttr.SetSprintf ( "%s.%s", GetJoinedIndexName().cstr(), i.m_sAttrName.cstr() );
 

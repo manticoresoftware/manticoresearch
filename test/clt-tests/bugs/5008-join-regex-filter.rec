@@ -2,7 +2,7 @@
 Regression for #5008: expression filters on right-table attributes must be evaluated on the right side for INNER JOIN and after the join for LEFT JOIN.
 ––– block: ../base/start-searchd –––
 ––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS gh5008_chunks; DROP TABLE IF EXISTS gh5008_docs; CREATE TABLE gh5008_docs (path string attribute); CREATE TABLE gh5008_chunks (content text, doc_id bigint); INSERT INTO gh5008_docs (id,path) VALUES (1,'c:/Borges/a.txt'),(2,'gh5008_docs.path'),(300,'c:/borges/c.txt'),(400,'c:/other/path.txt'); INSERT INTO gh5008_chunks (id,content,doc_id) VALUES (1,'one two three',1),(2,'one two',2),(3,'one two four',300),(4,'one two five',400),(5,'one two six',999);"
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS gh5008_chunks; DROP TABLE IF EXISTS gh5008_docs; DROP TABLE IF EXISTS xgh5008_docs; CREATE TABLE gh5008_docs (path string attribute, k int, j json); CREATE TABLE gh5008_chunks (content text, doc_id bigint, j json); CREATE TABLE xgh5008_docs (doc_id bigint); INSERT INTO xgh5008_docs (id,doc_id) VALUES (1,1); INSERT INTO gh5008_docs (id,path,k,j) VALUES (1,'c:/Borges/a.txt',1,'{\"name\":\"doc_id\",\"gh5008_docs\":{\"x\":5},\"x\":7}'),(2,'gh5008_docs.path',0,'{}'),(300,'c:/borges/c.txt',1,'{}'),(400,'c:/other/path.txt',0,'{}'); INSERT INTO gh5008_chunks (id,content,doc_id,j) VALUES (1,'one two three',1,'{\"a\":[\"x\",\"borges\"]}'),(2,'one two',2,'{}'),(3,'one two four',300,'{\"a\":[\"borges\",\"x\"]}'),(4,'one two five',400,'{}'),(5,'one two six',999,'{}');"
 ––– output –––
 ––– comment –––
 Filter the right table using a REGEX expression (the original report).
@@ -44,6 +44,33 @@ mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT gh500
 ––– output –––
 1
 3
+5
+––– comment –––
+An expression filter on both tables (a left JSON indexed by a right attribute) is evaluated after the join.
+––– input –––
+mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT gh5008_chunks.id FROM gh5008_chunks INNER JOIN gh5008_docs ON gh5008_chunks.doc_id=gh5008_docs.id WHERE REGEX(j.a[gh5008_docs.k], 'borges') ORDER BY id ASC;"
+––– output –––
+1
+––– comment –––
+A string literal is not a left-table attribute name: the expression uses only the right table.
+––– input –––
+mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT IN(gh5008_docs.j.name, 'doc_id') AS v FROM gh5008_chunks INNER JOIN gh5008_docs ON gh5008_chunks.doc_id=gh5008_docs.id ORDER BY id ASC;"
+––– output –––
+1
+0
+0
+0
+––– comment –––
+A left table name that ends with the right table name must not hang the query.
+––– input –––
+timeout 10 mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT xgh5008_docs.doc_id FROM xgh5008_docs INNER JOIN gh5008_docs ON xgh5008_docs.doc_id=gh5008_docs.id;"
+––– output –––
+1
+––– comment –––
+A JSON key named like the right table is not a table prefix.
+––– input –––
+mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT gh5008_docs.j.gh5008_docs.x AS v FROM gh5008_chunks INNER JOIN gh5008_docs ON gh5008_chunks.doc_id=gh5008_docs.id WHERE gh5008_chunks.id=1;"
+––– output –––
 5
 ––– comment –––
 The same results with join batching disabled.

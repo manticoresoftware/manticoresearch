@@ -17,6 +17,8 @@ int64_t				GetJoinCacheSize();
 void				SetJoinBatchSize ( int iSize );
 int					GetJoinBatchSize();
 
+enum class JoinExpressionFilter_e { NONE, RIGHT, MIXED };
+JoinExpressionFilter_e ClassifyJoinExpressionFilter ( const CSphFilterSettings & tFilter, const ISphSchema & tSchema, const CSphString & sJoinedIndex, StrVec_t * pDependencies = nullptr );
 CSphVector<std::pair<int,bool>> FetchJoinRightTableFilters ( const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tSchema, const char * szJoinedIndex );
 bool				NeedPostJoinFilterEvaluation ( const CSphQuery & tQuery, const ISphSchema & tSchema );
 bool				NeedPostJoinFilterEvaluation ( const CSphVector<CSphFilterSettings> & dFilters, const CSphString & sJoinIdx, bool bFilterTree, JoinType_e eJoinType, const ISphSchema & tSchema );

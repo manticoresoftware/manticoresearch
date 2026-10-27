@@ -1146,7 +1146,13 @@ LookupReader_c::LookupReader_c ( const BYTE * pData, DWORD uIndexVersion )
 
 std::pair<SphOffset_t,DWORD> LookupReader_c::SetData ( const BYTE * pData, DWORD uIndexVersion )
 {
+#if WITH_BBTREE_DOCID
+	m_pCache.reset();
+#endif
 	m_pData = pData;
+	m_pCheckpoints = nullptr;
+	m_nDocs = m_nDocsPerCheckpoint = m_nCheckpoints = 0;
+	m_tMaxDocID = 0;
 
 	if ( !pData )
 		return { 0, 0 };
@@ -1182,4 +1188,71 @@ void LookupReaderIterator_c::SetData ( const BYTE * pData, DWORD uIndexVersion )
 {
 	LookupReader_c::SetData ( pData, uIndexVersion );
 	SetCheckpoint ( m_pCheckpoints );
+}
+
+
+bool ConfigureDocidLookupCache ( size_t iBytes )
+{
+#if WITH_BBTREE_DOCID
+	bb_docid_set_budget(iBytes);
+	return true;
+#else
+	return false;
+#endif
+}
+
+
+size_t GetDocidLookupCacheUsed()
+{
+#if WITH_BBTREE_DOCID
+	return bb_docid_used();
+#else
+	return 0;
+#endif
+}
+
+
+size_t LookupReader_c::GetCacheBytes() const
+{
+#if WITH_BBTREE_DOCID
+	return m_pCache ? bb_docid_bytes ( m_pCache.get() ) : 0;
+#else
+	return 0;
+#endif
+}
+
+
+bool LookupReader_c::BuildCache ( DWORD uIndexVersion )
+{
+#if WITH_BBTREE_DOCID
+	if ( m_pCache )
+		return true;
+	if ( !m_pData || !m_nDocs )
+		return false;
+
+	std::unique_ptr<void,CacheDeleter_t> pCache ( bb_docid_new() );
+	if ( !pCache )
+		return false;
+	LookupReaderIterator_c tReader ( m_pData, uIndexVersion );
+	DocID_t tDocID;
+	RowID_t tRowID;
+	uint64_t uPrevious = 0;
+	DWORD nRead = 0;
+	while ( tReader.Read ( tDocID, tRowID ) )
+	{
+		// Duplicate IDs may span checkpoints. Keep the compressed reader's
+		// existing choice of RowID rather than imposing map duplicate semantics.
+		if ( nRead && (uint64_t)tDocID<=uPrevious )
+			return false;
+		uPrevious = (uint64_t)tDocID;
+		if ( !bb_docid_insert ( pCache.get(), (uint64_t)tDocID, tRowID ) )
+			return false;
+		if ( !(++nRead & 1023) && sphInterrupted() )
+			return false;
+	}
+	m_pCache = std::move(pCache);
+	return true;
+#else
+	return false;
+#endif
 }

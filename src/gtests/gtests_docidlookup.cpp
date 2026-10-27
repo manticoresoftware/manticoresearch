@@ -233,3 +233,139 @@ TEST_F ( UuidDocidLookupTest, FormatCheckAndUpgrade )
 }
 
 } // namespace
+
+// The cache is optional at build time and disabled at run time by default.
+// These exercise the real file writer/reader, including unsigned ID ordering.
+TEST_F ( UuidDocidLookupTest, BbtreeCacheMatchesReaderAndResets )
+{
+	if ( !ConfigureDocidLookupCache ( 1024*1024 ) )
+		GTEST_SKIP() << "build with WITH_BBTREE_DOCID=ON";
+
+	CSphVector<DocidRowidPair_t> dPairs;
+	for ( RowID_t i=0; i<1025; ++i )
+		dPairs.Add ( { (DocID_t)(i*2), i } );
+	dPairs.Add ( { INT64_MIN, 2000 } );
+	dPairs.Add ( { -1, 2001 } );
+	CSphString sError;
+	ASSERT_TRUE ( WriteDocidLookup ( m_sFile, dPairs, sError ) ) << sError.cstr();
+	CSphMappedBuffer<BYTE> tData;
+	Map ( tData );
+	LookupReader_c tReference ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	LookupReader_c tCached ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	ASSERT_TRUE ( tCached.BuildCache ( UUID_INDEX_VERSION ) );
+	EXPECT_GT ( tCached.GetCacheBytes(), 0U );
+	for ( const auto & tPair : dPairs )
+		EXPECT_EQ ( tCached.Find(tPair.m_tDocID), tReference.Find(tPair.m_tDocID) );
+	for ( DocID_t i=1; i<2050; i+=2 )
+		EXPECT_EQ ( tCached.Find(i), tReference.Find(i) );
+	tCached.SetData ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	EXPECT_EQ ( GetDocidLookupCacheUsed(), 0U );
+	EXPECT_EQ ( tCached.Find(-1), 2001U );
+	ASSERT_TRUE ( tCached.BuildCache ( UUID_INDEX_VERSION ) );
+	tCached.SetData ( nullptr, UUID_INDEX_VERSION );
+	EXPECT_EQ ( tCached.Find(0), INVALID_ROWID );
+	EXPECT_EQ ( tCached.GetCacheBytes(), 0U );
+	EXPECT_EQ ( GetDocidLookupCacheUsed(), 0U );
+	ConfigureDocidLookupCache(0);
+}
+
+
+TEST_F ( UuidDocidLookupTest, BbtreeCacheBudgetFailureKeepsCompressedReader )
+{
+	if ( !ConfigureDocidLookupCache(1024) )
+		GTEST_SKIP() << "build with WITH_BBTREE_DOCID=ON";
+	CSphVector<DocidRowidPair_t> dPairs;
+	for ( RowID_t i=0; i<10000; ++i )
+		dPairs.Add ( { (DocID_t)(i*2), i } );
+	CSphString sError;
+	ASSERT_TRUE ( WriteDocidLookup ( m_sFile, dPairs, sError ) ) << sError.cstr();
+	CSphMappedBuffer<BYTE> tData;
+	Map ( tData );
+	LookupReader_c tReader ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	EXPECT_FALSE ( tReader.BuildCache ( UUID_INDEX_VERSION ) );
+	EXPECT_EQ ( tReader.GetCacheBytes(), 0U );
+	EXPECT_EQ ( GetDocidLookupCacheUsed(), 0U );
+	for ( const auto & tPair : dPairs )
+		EXPECT_EQ ( tReader.Find(tPair.m_tDocID), tPair.m_tRowID );
+	ConfigureDocidLookupCache(0);
+}
+
+
+TEST_F ( UuidDocidLookupTest, BbtreeCacheSharesBudgetAcrossReaders )
+{
+	if ( !ConfigureDocidLookupCache ( 1024*1024 ) )
+		GTEST_SKIP() << "build with WITH_BBTREE_DOCID=ON";
+	WriteNumericLookup();
+	CSphMappedBuffer<BYTE> tData;
+	Map ( tData );
+	LookupReader_c tFirst ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	LookupReader_c tSecond ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	ASSERT_TRUE ( tFirst.BuildCache ( UUID_INDEX_VERSION ) );
+	const size_t iBytes = tFirst.GetCacheBytes();
+	ConfigureDocidLookupCache(iBytes);
+	EXPECT_FALSE ( tSecond.BuildCache ( UUID_INDEX_VERSION ) );
+	EXPECT_EQ ( GetDocidLookupCacheUsed(), iBytes );
+	EXPECT_EQ ( tFirst.Find(22), 1U );
+	EXPECT_EQ ( tSecond.Find(22), 1U );
+	tFirst.SetData ( nullptr, UUID_INDEX_VERSION );
+	EXPECT_EQ ( GetDocidLookupCacheUsed(), 0U );
+	EXPECT_TRUE ( tSecond.BuildCache ( UUID_INDEX_VERSION ) );
+	tSecond.SetData ( nullptr, UUID_INDEX_VERSION );
+	EXPECT_EQ ( GetDocidLookupCacheUsed(), 0U );
+	ConfigureDocidLookupCache(0);
+}
+
+
+TEST_F ( UuidDocidLookupTest, BbtreeCacheDisabledDoesNotAllocate )
+{
+	ConfigureDocidLookupCache(0);
+	WriteNumericLookup();
+	CSphMappedBuffer<BYTE> tData;
+	Map ( tData );
+	LookupReader_c tReader ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	EXPECT_FALSE ( tReader.BuildCache ( UUID_INDEX_VERSION ) );
+	EXPECT_EQ ( tReader.GetCacheBytes(), 0U );
+	EXPECT_EQ ( GetDocidLookupCacheUsed(), 0U );
+	EXPECT_EQ ( tReader.Find(11), 0U );
+}
+
+
+TEST_F ( UuidDocidLookupTest, BbtreeCacheDeclinesDuplicatesAcrossCheckpoints )
+{
+	if ( !ConfigureDocidLookupCache ( 1024*1024 ) )
+		GTEST_SKIP() << "build with WITH_BBTREE_DOCID=ON";
+	CSphVector<DocidRowidPair_t> dPairs;
+	for ( RowID_t i=0; i<200; ++i )
+		dPairs.Add ( { 42, i } );
+	CSphString sError;
+	ASSERT_TRUE ( WriteDocidLookup ( m_sFile, dPairs, sError ) ) << sError.cstr();
+	CSphMappedBuffer<BYTE> tData;
+	Map ( tData );
+	LookupReader_c tReference ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	LookupReader_c tCached ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	EXPECT_FALSE ( tCached.BuildCache ( UUID_INDEX_VERSION ) );
+	EXPECT_EQ ( tCached.Find(42), tReference.Find(42) );
+	EXPECT_EQ ( GetDocidLookupCacheUsed(), 0U );
+	ConfigureDocidLookupCache(0);
+}
+
+
+TEST_F ( UuidDocidLookupTest, BbtreeCacheReadsLegacyV70 )
+{
+	if ( !ConfigureDocidLookupCache ( 1024*1024 ) )
+		GTEST_SKIP() << "build with WITH_BBTREE_DOCID=ON";
+	WriteNumericLookup();
+	DowngradeToV70();
+	{
+		CSphMappedBuffer<BYTE> tData;
+		Map ( tData );
+		LookupReader_c tReader ( tData.GetReadPtr(), UUID_INDEX_VERSION-1 );
+		ASSERT_TRUE ( tReader.BuildCache ( UUID_INDEX_VERSION-1 ) );
+		EXPECT_EQ ( tReader.Find(11), 0U );
+		EXPECT_EQ ( tReader.Find(22), 1U );
+		EXPECT_EQ ( tReader.Find(33), 2U );
+		EXPECT_EQ ( tReader.Find(44), INVALID_ROWID );
+	}
+	EXPECT_EQ ( GetDocidLookupCacheUsed(), 0U );
+	ConfigureDocidLookupCache(0);
+}

@@ -10432,6 +10432,7 @@ bool CSphIndex_VLN::PreallocDocidLookup()
 	if ( bUuidLinked )
 		m_tUuidLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), tUuidEntriesOffset, nDocs );
 
+	m_tLookupReader.BuildCache(m_uVersion);
 	return true;
 }
 
@@ -12728,7 +12729,7 @@ void CSphIndex_VLN::GetStatus ( CSphIndexStatus* pRes ) const
 		pRes->m_iMappedResident += pRes->m_iMappedResidentHits;
 	}
 
-	pRes->m_iRamUse = sizeof(CSphIndex_VLN) + m_dFieldLens.GetLengthBytes() + pRes->m_iMappedResident;
+	pRes->m_iRamUse = sizeof(CSphIndex_VLN) + m_dFieldLens.GetLengthBytes() + pRes->m_iMappedResident + m_tLookupReader.GetCacheBytes();
 	pRes->m_iDiskUse = 0;
 
 	CSphVector<IndexFileExt_t> dExts = sphGetExts();

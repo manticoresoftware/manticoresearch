@@ -17,6 +17,8 @@ message ( STATUS "Inside directory src..." )
 #		LIB_VERSION
 #		)
 
+include ( GetBBTree )
+
 # columnar and secondary modules
 include ( GetColumnar )
 target_link_libraries ( lextra INTERFACE columnar::columnar_api columnar::secondary_api columnar::knn_api )

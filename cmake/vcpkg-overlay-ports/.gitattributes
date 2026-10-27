@@ -1,0 +1,3 @@
+# Preserve upstream unified-diff context, including space-prefixed blank lines.
+openssl/**/*.patch -whitespace
+openssl/**/*.diff -whitespace

@@ -7,7 +7,6 @@ if (NOT TARGET benchmark::benchmark_main)
 endif ()
 
 add_executable ( gmanticorebench EXCLUDE_FROM_ALL
-		docidlookup.cpp
 		geodist.cpp
 		functions.cpp
 		text.cpp
@@ -26,6 +25,6 @@ target_link_libraries ( gmanticorebench
 		daemon
 		lmanticore
 		lsearchd
-		searchd_ssl
+		stub_ssl
 		benchmark::benchmark )
 

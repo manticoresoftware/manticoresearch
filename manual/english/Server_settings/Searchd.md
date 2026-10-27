@@ -645,34 +645,6 @@ diskchunk_flush_write_timeout = 60s
 ```
 <!-- end -->
 
-### docid_lookup_cache_size
-
-Maximum requested allocation bytes for an experimental, server-wide cache of
-numeric document ID to disk row ID point lookups. Optional; default `0` (disabled).
-Requires a native Unix build configured with `-DWITH_BBTREE_DOCID=ON`.
-
-```ini
-docid_lookup_cache_size = 256m
-```
-
-Each disk chunk attempts to build a complete cache when loaded, before it becomes
-available to readers. Chunks that exceed the shared budget, fail allocation, or
-contain duplicate numeric IDs continue using the compressed lookup reader. A
-partial cache is discarded. This is a startup allocation budget, not an LRU cache;
-uncached chunks are not automatically retried when other chunks are unloaded.
-
-The cache adds memory to the existing mapped `.spt` data and leaves its format
-unchanged. Memory is released with the owning chunk or when its lookup data is
-remapped. Header upgrades that remap the lookup fall back to the compressed
-reader. `SHOW STATUS LIKE 'docid_lookup_cache_used_bytes'` reports live requested
-cache storage, including allocator pages and handles, excluding allocator overhead
-and process RSS. Per-table RAM status includes the cache.
-
-This setting targets internal point lookups such as disk attribute updates and
-document deletion. It does not replace SQL ID filter/range iterators, RAM-chunk
-hash tables, UUID lookup, full-text indexes, or vector indexes. General SQL
-speedups should not be inferred from point-lookup microbenchmarks.
-
 ### docstore_cache_size
 
 <!-- example conf docstore_cache_size -->

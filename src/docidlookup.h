@@ -14,15 +14,6 @@
 #include "secondaryindex.h"
 #include "uuid_docid.h"
 
-#if WITH_BBTREE_DOCID
-#include "bbtree/ffi.h"
-#include <memory>
-#endif
-
-// The process-wide budget defaults to zero. False means the backend is absent.
-bool ConfigureDocidLookupCache ( size_t iBytes );
-size_t GetDocidLookupCacheUsed();
-
 class CSphWriter;
 
 #pragma pack( push, 4 )
@@ -94,17 +85,8 @@ public:
 
 	std::pair<SphOffset_t,DWORD> SetData ( const BYTE * pData, DWORD uIndexVersion );
 
-	// Build before publishing the reader. On refusal the compressed reader stays
-	// active. SetData invalidates the cache when a chunk is replaced/remapped.
-	bool BuildCache ( DWORD uIndexVersion );
-	size_t GetCacheBytes() const;
-
 	inline RowID_t Find ( DocID_t tDocID ) const
 	{
-#if WITH_BBTREE_DOCID
-		if ( m_pCache )
-			return bb_docid_find ( m_pCache.get(), (uint64_t)tDocID );
-#endif
 		if ( !m_pCheckpoints || (uint64_t)tDocID<(uint64_t)m_pCheckpoints->m_tBaseDocID || (uint64_t)tDocID>(uint64_t)m_tMaxDocID )
 			return INVALID_ROWID;
 
@@ -140,13 +122,6 @@ public:
 	}
 
 protected:
-#if WITH_BBTREE_DOCID
-	struct CacheDeleter_t
-	{
-		void operator() ( void * pCache ) const { bb_docid_free(pCache); }
-	};
-	std::unique_ptr<void,CacheDeleter_t> m_pCache;
-#endif
 	DWORD							m_nDocs {0};
 	DWORD							m_nDocsPerCheckpoint {0};
 	int								m_nCheckpoints {0};

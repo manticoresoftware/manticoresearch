@@ -44,7 +44,6 @@
 #include "joinsorter.h"
 #include "schematransform.h"
 #include "skip_cache.h"
-#include "docidlookup.h"
 #include "jieba.h"
 #include "sphinxexcerpt.h"
 #include "sphinxquery/xqparser.h"
@@ -2945,7 +2944,6 @@ void BuildStatus ( VectorLike & dStatus )
 	dStatus.MatchTupletf ( "qcache_cached_queries", "%d", s.m_iCachedQueries );
 	dStatus.MatchTupletf ( "qcache_used_bytes", "%l", s.m_iUsedBytes );
 	dStatus.MatchTupletf ( "qcache_hits", "%l", s.m_iHits );
-	dStatus.MatchTupletf ( "docid_lookup_cache_used_bytes", "%l", (int64_t)GetDocidLookupCacheUsed() );
 
 	// clusters
 	ReplicateClustersStatus ( dStatus );
@@ -16002,12 +16000,6 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 
 	if ( hSearchd("shutdown_timeout") )
 		g_iShutdownTimeoutUs = hSearchd.GetUsTime64S ( "shutdown_timeout", 60000000);
-
-	int64_t iDocidCache = hSearchd.GetSize64 ( "docid_lookup_cache_size", 0 );
-	if ( iDocidCache<0 )
-		sphDie ( "docid_lookup_cache_size must not be negative" );
-	if ( !ConfigureDocidLookupCache((size_t)iDocidCache) && iDocidCache )
-		sphDie ( "docid_lookup_cache_size requires a build with WITH_BBTREE_DOCID=ON" );
 
 	g_iDocstoreCache = hSearchd.GetSize64 ( "docstore_cache_size", 16777216 );
 	g_iSkipCache = hSearchd.GetSize64 ( "skiplist_cache_size", 67108864 );

@@ -25,3 +25,25 @@ index s:ColumnarScan (100%)
 ––– input –––
 sql "DROP TABLE t;"
 ––– output –––
+––– comment –––
+Issue #5047: when every row of a block passes (here a constant string, so a const block of its hash), the analyzer
+filled the row ids of a subblock four at a time and restarted the last n%4 from the first one. Only the last subblock
+of a chunk can be partial: 8197 rows leave 5. Intersected with the id analyzer the filter stopped after the first row
+of that subblock (8193 instead of 8197); on its own it returned id 8193 twice and lost 8197. One INSERT keeps
+rowid = id-1; chunks under 8192 rows get no analyzers.
+––– input –––
+{ echo "CREATE TABLE t2 (s STRING) engine='columnar';"; echo "INSERT INTO t2 (id,s) VALUES $(printf "(%d,'a')," $(seq 1 8197) | sed 's/,$//');"; echo "FLUSH RAMCHUNK t2;"; } | mysql -h0 -P9306 && echo ready
+––– output –––
+ready
+––– input –––
+sql "SELECT COUNT(*) FROM t2 WHERE s='a' AND id>0 OPTION threads=1 /*+ ColumnarScan(s,id) */; SHOW META LIKE 'index';" | tr '\t' ' '
+––– output –––
+8197
+index id:ColumnarScan (100%), $s_HASH:ColumnarScan (100%)
+––– input –––
+sql "SELECT id FROM t2 WHERE s='a' AND id>0 ORDER BY id DESC LIMIT 5 OPTION threads=1 /*+ NO_ColumnarScan(id) */; SHOW META LIKE 'index';" | tr '\t' ' ' | paste -sd' ' -
+––– output –––
+8197 8196 8195 8194 8193 index $s_HASH:ColumnarScan (100%)
+––– input –––
+sql "DROP TABLE t2;"
+––– output –––

@@ -11,6 +11,7 @@
 //
 
 #include "indexformat.h"
+#include "diskqword.h"
 
 #if WITH_RE2
 #include <string>
@@ -138,23 +139,6 @@ struct DiskExpandedPayload_t
 	int			m_iHits;
 	uint64_t	m_uDoclistOff;
 	int			m_iDoclistHint;
-};
-
-
-struct Slice64_t
-{
-	uint64_t	m_uOff;
-	int			m_iLen;
-};
-
-
-struct DiskSubstringPayload_t : public ISphSubstringPayload
-{
-	explicit DiskSubstringPayload_t ( int iDoclists )
-		: m_dDoclist ( iDoclists )
-	{}
-
-	CSphFixedVector<Slice64_t>	m_dDoclist;
 };
 
 

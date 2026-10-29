@@ -51,6 +51,7 @@ void DiskIndexQwordTraits_c::SetDocReader ( DataReaderFactory_c * pReader )
 		return;
 
 	m_rdDoclist = pReader->MakeReader ( m_pDocsBuf, MINIBUFFER_LEN );
+	OnDocReaderChanged();
 }
 
 
@@ -60,6 +61,7 @@ void DiskIndexQwordTraits_c::SetHitReader ( DataReaderFactory_c * pReader )
 		return;
 
 	m_rdHitlist = pReader->MakeReader ( m_pHitsBuf, MINIBUFFER_LEN );
+	OnHitReaderChanged();
 }
 
 

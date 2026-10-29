@@ -33,11 +33,8 @@ public:
 	virtual SphWordID_t	UnzipWordid() = 0;
 	virtual void		Reset () = 0;
 
-	// window access for batched decoding: expose the buffered bytes at the current position without consuming them,
-	// topping the buffer up when fewer than iMinBytes are available. Returns the window length; 0 means "use the byte API"
-	virtual int			GetWindow ( const BYTE *& pData, int iMinBytes ) { pData = nullptr; return 0; }
-	// consume bytes previously exposed by GetWindow
-	virtual void		Advance ( int iBytes ) { assert ( 0 && "Advance() without GetWindow()" ); }
+	// for memory-mapped readers: the whole map, so that a qword can decode from raw pointers; null otherwise
+	virtual const BYTE * GetMapBase ( SphOffset_t & iSize ) const { iSize = 0; return nullptr; }
 };
 
 
@@ -63,6 +60,7 @@ public:
 	virtual SphOffset_t			GetPos () const = 0;
 	virtual void				SeekTo ( SphOffset_t ) = 0;
 	virtual FileBlockReader_i *	MakeReader ( BYTE * pBuf, int iSize ) = 0;
+	virtual bool				IsMapped () const = 0;
 	virtual void				SetProfile ( QueryProfile_c * ) {}
 
 protected:

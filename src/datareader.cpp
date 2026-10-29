@@ -73,19 +73,10 @@ public:
 		m_pPointer = m_pBase;
 	}
 
-	int GetWindow ( const BYTE *& pData, int /*iMinBytes*/ ) final
+	const BYTE * GetMapBase ( SphOffset_t & iSize ) const final
 	{
-		pData = m_pPointer;
-		int64_t iLeft = ( m_pBase + m_iSize ) - m_pPointer;
-		if ( iLeft<=0 )
-			return 0;
-		return ( iLeft>INT_MAX ) ? INT_MAX : (int)iLeft;
-	}
-
-	void Advance ( int iBytes ) final
-	{
-		assert ( iBytes>=0 && m_pPointer+iBytes<=m_pBase+m_iSize );
-		m_pPointer += iBytes;
+		iSize = m_iSize;
+		return m_pBase;
 	}
 
 protected:
@@ -193,8 +184,6 @@ public:
 	DWORD		UnzipInt() final		{ return FileReader_c::UnzipInt(); }
 	uint64_t	UnzipOffset() final		{ return FileReader_c::UnzipOffset(); }
 	void		Reset() final			{ FileReader_c::Reset(); }
-	int			GetWindow ( const BYTE *& pData, int iMinBytes ) final { return FileReader_c::PeekBuffer ( pData, iMinBytes ); }
-	void		Advance ( int iBytes ) final	{ FileReader_c::AdvanceBuffer ( iBytes ); }
 
 protected:
 	explicit DirectFileReader_c ( BYTE * pBuf, int iSize, const char * szFileName )
@@ -222,6 +211,11 @@ public:
 	uint64_t GetMappedsize () const final
 	{
 		return 0;
+	}
+
+	bool IsMapped () const final
+	{
+		return false;
 	}
 
 	uint64_t GetCoresize () const final
@@ -290,6 +284,11 @@ public:
 	uint64_t GetMappedsize () const final
 	{
 		return m_tBackendFile.GetLengthBytes();
+	}
+
+	bool IsMapped () const final
+	{
+		return true;
 	}
 
 	uint64_t GetCoresize () const final

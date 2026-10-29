@@ -39,10 +39,6 @@ public:
 	SphOffset_t		m_uHitPosition = 0;
 	CSphMatch		m_tDoc;			///< current match (partial)
 
-	FileBlockReaderPtr_c	m_rdDoclist;	///< my doclist accessor
-	FileBlockReaderPtr_c	m_rdHitlist;	///< my hitlist accessor
-
-
 					DiskIndexQwordTraits_c ( bool bUseMini, bool bExcluded );
 
 	void			SetDocReader ( DataReaderFactory_c * pReader );
@@ -50,7 +46,20 @@ public:
 	void			ResetDecoderState();
 	virtual bool	Setup ( const DiskIndexQwordSetup_c * pSetup ) = 0;
 
+	// reader positioning for setup, merge and check code; the templated qword routes these to its reader policy
+	virtual void		SeekDocReader ( SphOffset_t iPos, int iHint )	{ m_rdDoclist->SeekTo ( iPos, iHint ); }
+	virtual void		SeekHitReader ( SphOffset_t iPos, int iHint )	{ m_rdHitlist->SeekTo ( iPos, iHint ); }
+	virtual SphOffset_t	GetDocReaderPos() const							{ return m_rdDoclist->GetPos(); }
+	virtual SphOffset_t	GetHitReaderPos() const							{ return m_rdHitlist->GetPos(); }
+
 protected:
+	FileBlockReaderPtr_c	m_rdDoclist;	///< my doclist accessor; outside code positions it through SeekDocReader/GetDocReaderPos
+	FileBlockReaderPtr_c	m_rdHitlist;	///< my hitlist accessor; outside code positions it through SeekHitReader/GetHitReaderPos
+
+	// called after SetDocReader/SetHitReader replaced the corresponding reader
+	virtual void	OnDocReaderChanged() {}
+	virtual void	OnHitReaderChanged() {}
+
 	Hitpos_t		m_uInlinedHit {0};
 	DWORD			m_uHitState = 0;
 	Hitpos_t		m_iHitPos {EMPTY_HIT};	///< current hit postition, from hitlist

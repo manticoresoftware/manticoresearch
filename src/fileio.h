@@ -113,24 +113,6 @@ public:
 		return iChunk;
 	}
 
-	// peek at the buffered bytes at the current position without consuming them;
-	// tops the buffer up (once) when fewer than iMinBytes are available; returns the window length
-	inline int PeekBuffer ( const BYTE *& pData, int iMinBytes )
-	{
-		if ( m_iBuffUsed-m_iBuffPos<iMinBytes && !m_bError )
-			UpdateCache();
-
-		pData = m_pBuff + m_iBuffPos;
-		return m_iBuffUsed-m_iBuffPos;
-	}
-
-	// consume bytes previously exposed by PeekBuffer
-	inline void AdvanceBuffer ( int iBytes )
-	{
-		assert ( iBytes>=0 && m_iBuffPos+iBytes<=m_iBuffUsed );
-		m_iBuffPos += iBytes;
-	}
-
 	SphOffset_t				GetFilesize() const;
 
 #if TRACE_UNZIP

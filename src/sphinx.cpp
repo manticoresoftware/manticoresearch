@@ -289,8 +289,57 @@ private:
 	bool SetupWithCrc ( const DiskIndexQwordTraits_c& tWord, DictEntry_t& tRes ) const;
 };
 
+/// reader policies for DiskIndexQword_c: one decoding interface over the virtual block reader (buffered file access,
+/// one virtual call per value) or over raw pointers into the memory map (mmap access, the optimized path)
+struct BlockReader_t
+{
+	static constexpr bool IS_RAW = false;
+	FileBlockReader_i *	m_pReader = nullptr;	// owned by DiskIndexQwordTraits_c
+
+	void			Attach ( FileBlockReader_i * pReader )			{ m_pReader = pReader; }
+	void			SeekTo ( SphOffset_t iPos, int iHint )			{ m_pReader->SeekTo ( iPos, iHint ); }
+	SphOffset_t		GetPos() const									{ return m_pReader->GetPos(); }
+	RowID_t			UnzipRowid()									{ return m_pReader->UnzipRowid(); }
+	DWORD			UnzipInt()										{ return m_pReader->UnzipInt(); }
+	SphOffset_t		UnzipOffset()									{ return m_pReader->UnzipOffset(); }
+};
+
+
+struct RawReader_t
+{
+	static constexpr bool IS_RAW = true;
+	const BYTE *	m_pBase = nullptr;
+	const BYTE *	m_pCur = nullptr;
+	const BYTE *	m_pEnd = nullptr;
+
+	void Attach ( FileBlockReader_i * pReader )
+	{
+		SphOffset_t iSize = 0;
+		m_pBase = pReader ? pReader->GetMapBase ( iSize ) : nullptr;
+		m_pEnd = m_pBase + iSize;
+		m_pCur = m_pBase + ( pReader ? pReader->GetPos() : 0 );
+	}
+
+	void			SeekTo ( SphOffset_t iPos, int )				{ m_pCur = m_pBase + iPos; }
+	SphOffset_t		GetPos() const									{ return m_pCur - m_pBase; }
+	FORCE_INLINE bool	Has ( int iBytes ) const					{ return m_pEnd-m_pCur>=iBytes; }
+	FORCE_INLINE BYTE	GetByteChecked()							{ return m_pCur<m_pEnd ? *m_pCur++ : 0; }
+
+	// bounds-checked decoding, used for hitlist entries and for the last bytes of the map;
+	// bulk doclist decoding goes through DocCursor_t instead. A 32-bit varint takes at most 5 bytes
+	FORCE_INLINE DWORD UnzipInt()
+	{
+		if ( Has ( 5 ) )
+			return UnzipIntBE ( m_pCur );
+		return UnzipValueBE<DWORD> ( [this]() { return GetByteChecked(); } );
+	}
+	FORCE_INLINE RowID_t		UnzipRowid()	{ return UnzipInt(); }
+	FORCE_INLINE SphOffset_t	UnzipOffset()	{ return UnzipValueBE<SphOffset_t> ( [this]() { return GetByteChecked(); } ); }
+};
+
+
 /// query word from the searcher's point of view
-template < bool INLINE_HITS, bool DISABLE_HITLIST_SEEK >
+template < bool INLINE_HITS, bool DISABLE_HITLIST_SEEK, typename READER >
 class DiskIndexQword_c : public DiskIndexQwordTraits_c
 {
 public:
@@ -315,13 +364,19 @@ public:
 			m_rdDoclist->Reset ();
 		if ( m_rdHitlist )
 			m_rdHitlist->Reset ();
+		AttachReaders();
 		ResetDecoderState();
 	}
+
+	void		SeekDocReader ( SphOffset_t iPos, int iHint ) final	{ m_tDocs.SeekTo ( iPos, iHint ); }
+	void		SeekHitReader ( SphOffset_t iPos, int iHint ) final	{ m_tHits.SeekTo ( iPos, iHint ); }
+	SphOffset_t	GetDocReaderPos() const final						{ return m_tDocs.GetPos(); }
+	SphOffset_t	GetHitReaderPos() const final						{ return m_tHits.GetPos(); }
 
 	void GetHitlistEntry ()
 	{
 		assert ( !m_bHitlistOver );
-		DWORD iDelta = m_rdHitlist->UnzipInt ();
+		DWORD iDelta = m_tHits.UnzipInt();
 		if ( iDelta )
 		{
 			m_iHitPos += iDelta;
@@ -344,17 +399,24 @@ public:
 		if ( bRewound || m_tDoc.m_tRowID==INVALID_ROWID )
 			ReadNext();
 
-		while ( m_tDoc.m_tRowID < tRowID )
+		if constexpr ( READER::IS_RAW )
 		{
-			DocCursor_t tCursor;
-			if ( OpenCursor ( tCursor ) )
+			while ( m_tDoc.m_tRowID < tRowID )
 			{
-				do
-					DecodeNext ( tCursor );
-				while ( m_tDoc.m_tRowID < tRowID && tCursor.Has() );
-				CloseCursor ( tCursor );
-			} else
-				DecodeNext ( *m_rdDoclist );
+				DocCursor_t tCursor;
+				if ( OpenCursor ( tCursor ) )
+				{
+					do
+						DecodeNext ( tCursor );
+					while ( m_tDoc.m_tRowID < tRowID && tCursor.Has() );
+					CloseCursor ( tCursor );
+				} else
+					DecodeNext ( m_tDocs ); // bounds-checked tail of the map
+			}
+		} else
+		{
+			while ( m_tDoc.m_tRowID < tRowID )
+				DecodeNext ( m_tDocs );
 		}
 
 		return m_tDoc.m_tRowID;
@@ -404,10 +466,10 @@ public:
 
 		assert(m_pSkipData);
 		const SkiplistEntry_t & t = m_pSkipData->m_dSkiplist[m_iSkipListBlock];
-		if ( t.m_iOffset<=m_rdDoclist->GetPos() )
+		if ( t.m_iOffset<=m_tDocs.GetPos() )
 			return false;
 
-		m_rdDoclist->SeekTo ( t.m_iOffset, -1 );
+		m_tDocs.SeekTo ( t.m_iOffset, -1 );
 		m_tDoc.m_tRowID = t.m_tBaseRowIDPlus1-1;
 		m_uHitPosition = m_iHitlistPos = t.m_iBaseHitlistPos;
 
@@ -423,28 +485,41 @@ public:
 	int GetNextDocs ( QwordDoc_t * pDocs, int iMax ) override
 	{
 		int iGot = 0;
-		while ( iGot<iMax )
+		if constexpr ( READER::IS_RAW )
 		{
-			DocCursor_t tCursor;
-			if ( OpenCursor ( tCursor ) )
+			while ( iGot<iMax )
 			{
-				while ( iGot<iMax && tCursor.Has() )
+				DocCursor_t tCursor;
+				if ( OpenCursor ( tCursor ) )
 				{
-					DecodeNext ( tCursor );
-					if ( m_tDoc.m_tRowID==INVALID_ROWID )
+					while ( iGot<iMax && tCursor.Has() )
 					{
-						CloseCursor ( tCursor );
-						return iGot;
+						DecodeNext ( tCursor );
+						if ( m_tDoc.m_tRowID==INVALID_ROWID )
+						{
+							CloseCursor ( tCursor );
+							return iGot;
+						}
+
+						StoreDoc ( pDocs[iGot++] );
 					}
+					CloseCursor ( tCursor );
+				} else
+				{
+					DecodeNext ( m_tDocs ); // bounds-checked tail of the map
+					if ( m_tDoc.m_tRowID==INVALID_ROWID )
+						return iGot;
 
 					StoreDoc ( pDocs[iGot++] );
 				}
-				CloseCursor ( tCursor );
-			} else
+			}
+		} else
+		{
+			while ( iGot<iMax )
 			{
-				DecodeNext ( *m_rdDoclist );
+				DecodeNext ( m_tDocs );
 				if ( m_tDoc.m_tRowID==INVALID_ROWID )
-					return iGot;
+					break;
 
 				StoreDoc ( pDocs[iGot++] );
 			}
@@ -464,9 +539,9 @@ public:
 			m_uHitState = 0;
 			m_iHitPos = EMPTY_HIT;
 			if constexpr ( DISABLE_HITLIST_SEEK )
-				assert ( m_rdHitlist->GetPos()==uOff ); // make sure we're where caller thinks we are.
+				assert ( m_tHits.GetPos()==uOff ); // make sure we're where caller thinks we are.
 			else
-				m_rdHitlist->SeekTo ( uOff, READ_NO_SIZE_HINT );
+				m_tHits.SeekTo ( uOff, READ_NO_SIZE_HINT );
 		}
 #ifndef NDEBUG
 		m_bHitlistOver = false;
@@ -506,17 +581,28 @@ public:
 
 private:
 	int m_iSkipListBlock = -1;
+	READER m_tDocs;
+	READER m_tHits;
+
+	void AttachReaders()
+	{
+		m_tDocs.Attach ( m_rdDoclist );
+		m_tHits.Attach ( m_rdHitlist );
+	}
+
+	void OnDocReaderChanged() final { m_tDocs.Attach ( m_rdDoclist ); }
+	void OnHitReaderChanged() final { m_tHits.Attach ( m_rdHitlist ); }
 
 	// upper bound of one encoded doclist entry: inline layout is delta(5) + hits(5) + first(5) + field(5) | hitpos delta(10),
 	// the non-inline one is delta(5) + hitlist delta(10) + fields(5) + hits(5). A window of this size decodes one entry
 	// without bounds checks
 	static const int MAX_POSTING_BYTES = 25;
 
-	// raw byte source over the reader's window; same decoding interface as FileBlockReader_i
+	// raw flavour only: a stack-local copy of the map pointer for the duration of a decode loop, so that the
+	// compiler keeps it in a register; same decoding interface as the reader policies
 	struct DocCursor_t
 	{
 		const BYTE *	m_pCur = nullptr;
-		const BYTE *	m_pStart = nullptr;
 		const BYTE *	m_pEnd = nullptr;
 
 		FORCE_INLINE bool			Has() const		{ return m_pEnd-m_pCur>=MAX_POSTING_BYTES; }
@@ -525,22 +611,19 @@ private:
 		FORCE_INLINE SphOffset_t	UnzipOffset()	{ return UnzipOffsetBE ( m_pCur ); }
 	};
 
+	// raw flavour only: false when fewer than MAX_POSTING_BYTES remain, then the caller decodes through
+	// the policy's bounds-checked path instead
 	FORCE_INLINE bool OpenCursor ( DocCursor_t & tCursor )
 	{
-		const BYTE * pData = nullptr;
-		int iLen = m_rdDoclist->GetWindow ( pData, MAX_POSTING_BYTES );
-		if ( iLen<MAX_POSTING_BYTES )
-			return false;
-
-		tCursor.m_pCur = tCursor.m_pStart = pData;
-		tCursor.m_pEnd = pData + iLen;
-		return true;
+		tCursor.m_pCur = m_tDocs.m_pCur;
+		tCursor.m_pEnd = m_tDocs.m_pEnd;
+		return tCursor.Has();
 	}
 
 	FORCE_INLINE void CloseCursor ( DocCursor_t & tCursor )
 	{
-		assert ( tCursor.m_pCur>=tCursor.m_pStart && tCursor.m_pCur<=tCursor.m_pEnd );
-		m_rdDoclist->Advance ( int ( tCursor.m_pCur-tCursor.m_pStart ) );
+		assert ( tCursor.m_pCur<=tCursor.m_pEnd );
+		m_tDocs.m_pCur = tCursor.m_pCur;
 	}
 
 	FORCE_INLINE void StoreDoc ( QwordDoc_t & tDoc ) const
@@ -595,13 +678,17 @@ private:
 
 	inline void ReadNext()
 	{
-		DocCursor_t tCursor;
-		if ( OpenCursor ( tCursor ) )
+		if constexpr ( READER::IS_RAW )
 		{
-			DecodeNext ( tCursor );
-			CloseCursor ( tCursor );
+			DocCursor_t tCursor;
+			if ( OpenCursor ( tCursor ) )
+			{
+				DecodeNext ( tCursor );
+				CloseCursor ( tCursor );
+			} else
+				DecodeNext ( m_tDocs ); // bounds-checked tail of the map
 		} else
-			DecodeNext ( *m_rdDoclist );
+			DecodeNext ( m_tDocs );
 	}
 
 private:
@@ -612,18 +699,18 @@ private:
 DiskIndexQwordTraits_c * sphCreateDiskIndexQword ( bool bInlineHits )
 {
 	if ( bInlineHits )
-		return new DiskIndexQword_c<true,false> ( false, false, 0 );
+		return new DiskIndexQword_c<true,false,BlockReader_t> ( false, false, 0 );
 
-	return new DiskIndexQword_c<false,false> ( false, false, 0 );
+	return new DiskIndexQword_c<false,false,BlockReader_t> ( false, false, 0 );
 }
 
 /////////////////////////////////////////////////////////////////////////////
 
 #define WITH_QWORD(INDEX, NO_SEEK, NAME, ACTION)										\
 do if ( (( const CSphIndex_VLN *)INDEX)->m_tSettings.m_eHitFormat==SPH_HIT_FORMAT_INLINE )	\
-		{ using NAME = DiskIndexQword_c < true, NO_SEEK >; ACTION; }					\
+		{ using NAME = DiskIndexQword_c < true, NO_SEEK, BlockReader_t >; ACTION; }		\
 	else																				\
-		{ using NAME = DiskIndexQword_c < false, NO_SEEK >; ACTION; }					\
+		{ using NAME = DiskIndexQword_c < false, NO_SEEK, BlockReader_t >; ACTION; }	\
 while(0)
 
 /////////////////////////////////////////////////////////////////////////////
@@ -645,10 +732,10 @@ struct DiskSubstringPayload_t : public ISphSubstringPayload
 };
 
 
-template < bool INLINE_HITS >
-class DiskPayloadQword_c : public DiskIndexQword_c<INLINE_HITS, false>
+template < bool INLINE_HITS, typename READER >
+class DiskPayloadQword_c : public DiskIndexQword_c<INLINE_HITS, false, READER>
 {
-	typedef DiskIndexQword_c<INLINE_HITS, false> BASE;
+	typedef DiskIndexQword_c<INLINE_HITS, false, READER> BASE;
 
 public:
 	DiskPayloadQword_c ( const DiskSubstringPayload_t * pPayload, bool bExcluded, DataReaderFactory_c * pDoclist, DataReaderFactory_c * pHitlist, int64_t iIndexId )
@@ -699,7 +786,7 @@ private:
 		int iHint = m_pPayload->m_dDoclist[m_iDoclist].m_iLen;
 		m_iDoclist++;
 
-		this->m_rdDoclist->SeekTo ( uDocOff, iHint );
+		this->SeekDocReader ( uDocOff, iHint );
 	}
 
 	const DiskSubstringPayload_t *	m_pPayload;
@@ -7029,7 +7116,7 @@ namespace QwordIteration
 		tQword.m_iHitlistPos = 0;
 
 		if_const ( QWORD::is_worddict::value )
-			tQword.m_rdDoclist->SeekTo ( tReader.m_iDoclistOffset, tReader.m_iHint );
+			tQword.SeekDocReader ( tReader.m_iDoclistOffset, tReader.m_iHint );
 	}
 
 	template<typename QWORD>
@@ -7076,10 +7163,10 @@ namespace QwordIteration
 	inline void ConfigureQword ( QWORD & tQword, DataReaderFactory_c * pHits, DataReaderFactory_c * pDocs, int iDynamic )
 	{
 		tQword.SetHitReader ( pHits );
-		tQword.m_rdHitlist->SeekTo ( 1, READ_NO_SIZE_HINT );
+		tQword.SeekHitReader ( 1, READ_NO_SIZE_HINT );
 
 		tQword.SetDocReader ( pDocs );
-		tQword.m_rdDoclist->SeekTo ( 1, READ_NO_SIZE_HINT );
+		tQword.SeekDocReader ( 1, READ_NO_SIZE_HINT );
 
 		tQword.m_tDoc.Reset ( iDynamic );
 	}
@@ -9610,17 +9697,32 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) const
 {
+	const bool bInline = m_pIndex->GetSettings().m_eHitFormat==SPH_HIT_FORMAT_INLINE;
+	// raw-pointer decoding when both lists are memory-mapped, buffered block reading otherwise
+	const bool bRaw = m_pDoclist && m_pHitlist && m_pDoclist->IsMapped() && m_pHitlist->IsMapped();
+	const int64_t iIndexId = m_pIndex->GetIndexId();
+
 	if ( !tWord.m_pPayload )
 	{
-		WITH_QWORD ( m_pIndex, false, Qword, return new Qword ( tWord.m_bExpanded, tWord.m_bExcluded, m_pIndex->GetIndexId() ) );
-	} else
-	{
-		if ( m_pIndex->GetSettings().m_eHitFormat==SPH_HIT_FORMAT_INLINE )
-			return new DiskPayloadQword_c<true> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, m_pIndex->GetIndexId() );
-		else
-			return new DiskPayloadQword_c<false> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, m_pIndex->GetIndexId() );
+		if ( bInline )
+			return bRaw
+				? (ISphQword *) new DiskIndexQword_c<true,false,RawReader_t> ( tWord.m_bExpanded, tWord.m_bExcluded, iIndexId )
+				: (ISphQword *) new DiskIndexQword_c<true,false,BlockReader_t> ( tWord.m_bExpanded, tWord.m_bExcluded, iIndexId );
+
+		return bRaw
+			? (ISphQword *) new DiskIndexQword_c<false,false,RawReader_t> ( tWord.m_bExpanded, tWord.m_bExcluded, iIndexId )
+			: (ISphQword *) new DiskIndexQword_c<false,false,BlockReader_t> ( tWord.m_bExpanded, tWord.m_bExcluded, iIndexId );
 	}
-	return NULL;
+
+	auto * pPayload = (const DiskSubstringPayload_t *)tWord.m_pPayload;
+	if ( bInline )
+		return bRaw
+			? (ISphQword *) new DiskPayloadQword_c<true,RawReader_t> ( pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, iIndexId )
+			: (ISphQword *) new DiskPayloadQword_c<true,BlockReader_t> ( pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, iIndexId );
+
+	return bRaw
+		? (ISphQword *) new DiskPayloadQword_c<false,RawReader_t> ( pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, iIndexId )
+		: (ISphQword *) new DiskPayloadQword_c<false,BlockReader_t> ( pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, iIndexId );
 }
 
 
@@ -9770,7 +9872,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 			}
 		}
 
-		tWord.m_rdDoclist->SeekTo ( tRes.m_iDoclistOffset, tRes.m_iDoclistHint );
+		tWord.SeekDocReader ( tRes.m_iDoclistOffset, tRes.m_iDoclistHint );
 		tWord.SetHitReader ( m_pHitlist );
 	}
 

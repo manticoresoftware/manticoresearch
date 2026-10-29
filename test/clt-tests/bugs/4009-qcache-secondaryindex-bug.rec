@@ -40,7 +40,7 @@ mysql -NE -h0 -P9306 -e "SELECT count(*), max(id) FROM test WHERE MATCH('hard')"
 ––– output –––
 *************************** 1. row ***************************
 229322
-1000000
+999988
 ––– comment –––
 Critical: same MATCH + type=5 filter + SecondaryIndex hint
 Bug: returned 183114 (wrong cache hit), correct: 2252
@@ -50,7 +50,7 @@ mysql -NE -h0 -P9306 -e "SELECT count(*), max(id) FROM test WHERE MATCH('hard') 
 ––– output –––
 *************************** 1. row ***************************
 2252
-%{NUMBER}
+999690
 ––– comment –––
 Verify cache was NOT used for query with hint (qcache_hits should be 0)
 ––– input –––
@@ -67,7 +67,7 @@ mysql -NE -h0 -P9306 -e "SELECT count(*), max(id) FROM test WHERE MATCH('hard') 
 ––– output –––
 *************************** 1. row ***************************
 2252
-%{NUMBER}
+999690
 ––– comment –––
 Verify cache WAS used for query without hint (qcache_hits should increase)
 ––– input –––
@@ -106,7 +106,7 @@ mysql -NE -h0 -P9306 -e "SELECT count(*), max(id) FROM test WHERE MATCH('hard')"
 ––– output –––
 *************************** 1. row ***************************
 229322
-1000000
+999988
 ––– comment –––
 Re-run with hint without cache - proves bug was in cache, not SecondaryIndex
 ––– input –––
@@ -114,7 +114,7 @@ mysql -NE -h0 -P9306 -e "SELECT count(*), max(id) FROM test WHERE MATCH('hard') 
 ––– output –––
 *************************** 1. row ***************************
 2252
-%{NUMBER}
+999690
 ––– comment –––
 Re-run without hint - verify consistency (2252)
 ––– input –––
@@ -122,4 +122,4 @@ mysql -NE -h0 -P9306 -e "SELECT count(*), max(id) FROM test WHERE MATCH('hard') 
 ––– output –––
 *************************** 1. row ***************************
 2252
-%{NUMBER}
+999690

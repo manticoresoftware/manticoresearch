@@ -1,0 +1,47 @@
+––– comment –––
+A single-filter COUNT(*) can be answered from the secondary index by summing the row counts of the matching values
+(and taking them from all rows for an excluding filter). That counts each document once only for a single-value
+attribute or one value of an MVA / JSON key: for several values or a range a document holding two of them was counted
+twice, and ALL(mva) NOT IN (...) could go below zero and wrap to 4294957296. Such counts now go the normal way.
+Docs 1..5 below; 10000 padding docs tags=(1,2), u=99, j.k=99.
+––– block: ../base/start-searchd –––
+––– input –––
+manticore-load --quiet --json --port=9306 --init="SET GLOBAL auto_optimize=0; DROP TABLE IF EXISTS si_count; CREATE TABLE si_count (tags multi, u int, j JSON secondary_index='1');" --load="INSERT INTO si_count (id,tags,u,j) VALUES (<increment>,(1,2),99,'{\"k\":99}')" --batch-size=1000 --threads=2 --total=10005 > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "REPLACE INTO si_count VALUES (1,(1,2),1,'{\"k\":1}'), (2,(2),2,'{\"k\":2}'), (3,(3),3,'{\"k\":3}'), (4,(),4,'{\"k\":null}'), (5,(1,2,3),5,'{}'); FLUSH RAMCHUNK si_count;" && echo ready
+––– output –––
+ready
+––– input –––
+cat > /tmp/si_count.php <<'PHP'
+<?php
+function run ( $sQuery ) {
+	$tCtx = stream_context_create ( [ 'http' => [ 'method' => 'POST', 'header' => 'Content-Type: application/x-www-form-urlencoded', 'content' => http_build_query ( [ 'query' => $sQuery ] ) ] ] );
+	return json_decode ( file_get_contents ( 'http://localhost:9308/sql?mode=raw', false, $tCtx ), true );
+}
+foreach ( [ [ "ANY(tags) = 2", "tags" ], [ "ANY(tags) IN (1,2)", "tags" ], [ "ANY(tags) BETWEEN 1 AND 2", "tags" ], [ "ALL(tags) != 2", "tags" ], [ "ALL(tags) NOT IN (1,2)", "tags" ],
+	[ "j.k = 2", "j['k']" ], [ "j.k IN (1,2)", "j['k']" ], [ "j.k > 1", "j['k']" ], [ "u IN (1,2)", "u" ], [ "u > 1", "u" ] ] as [ $sWhere, $sAttr ] ) {
+	$dRes = run ( "SELECT COUNT(*) c FROM si_count WHERE $sWhere; SHOW META" );
+	$dMeta = array_column ( $dRes[1]['data'], 'Value', 'Variable_name' );
+	$dScan = run ( "SELECT COUNT(*) c FROM si_count WHERE $sWhere AND id>0 /*+ No_SecondaryIndex($sAttr) */" );
+	$iCount = (int)$dRes[0]['data'][0]['c'];
+	$iScan = (int)$dScan[0]['data'][0]['c'];
+	echo json_encode ( [ 'where' => $sWhere, 'count' => $iCount, 'fast' => strpos ( $dMeta['index'] ?? '', 'Precalc' )!==false, 'same' => $iCount===$iScan ] ), PHP_EOL;
+}
+PHP
+php /tmp/si_count.php
+––– output –––
+{"where":"ANY(tags) = 2","count":10003,"fast":true,"same":true}
+{"where":"ANY(tags) IN (1,2)","count":10003,"fast":false,"same":true}
+{"where":"ANY(tags) BETWEEN 1 AND 2","count":10003,"fast":false,"same":true}
+{"where":"ALL(tags) != 2","count":2,"fast":true,"same":true}
+{"where":"ALL(tags) NOT IN (1,2)","count":2,"fast":false,"same":true}
+{"where":"j.k = 2","count":1,"fast":true,"same":true}
+{"where":"j.k IN (1,2)","count":2,"fast":false,"same":true}
+{"where":"j.k > 1","count":10002,"fast":false,"same":true}
+{"where":"u IN (1,2)","count":2,"fast":true,"same":true}
+{"where":"u > 1","count":10004,"fast":true,"same":true}
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE si_count;"; rm -f /tmp/si_count.php
+––– output –––

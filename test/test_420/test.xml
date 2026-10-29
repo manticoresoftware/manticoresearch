@@ -326,6 +326,82 @@ $typesRow = $typesRes->fetch_assoc();
 $results[] = "types row: " . json_encode($typesRow, JSON_UNESCAPED_SLASHES);
 $selectTypes->close();
 
+$emptyTypes = $mysqli->prepare("UPDATE ps_types SET m = (?VEC?), m64 = (?VEC?), vec = (?VEC?) WHERE id = ?");
+if (!$emptyTypes) {
+    $results[] = "Prepare types empty update failed: {$mysqli->error}";
+}
+$emptyM = "";
+$emptyM64 = "";
+$emptyVec = "";
+$emptyTypes->bind_param("sssi", $emptyM, $emptyM64, $emptyVec, $typeId);
+try {
+    if ($emptyTypes->execute()) {
+        $results[] = "empty vector/mva update ok";
+    } else {
+        $results[] = "empty vector/mva update failed: {$emptyTypes->error}";
+    }
+} catch (Throwable $e) {
+    $results[] = "empty vector/mva update failed: " . $e->getMessage();
+}
+$emptyTypes->close();
+
+$selectEmpty = $mysqli->prepare("SELECT id, m, m64, vec FROM ps_types WHERE id = ?");
+if (!$selectEmpty) {
+    $results[] = "Prepare types empty select failed: {$mysqli->error}";
+}
+$selectEmpty->bind_param("i", $typeId);
+if (!$selectEmpty->execute()) {
+    $results[] = "Execute types empty select failed: {$selectEmpty->error}";
+}
+$results[] = "types row after empty update: " . json_encode($selectEmpty->get_result()->fetch_assoc(), JSON_UNESCAPED_SLASHES);
+$selectEmpty->close();
+
+// mysqli can't send a negative length-encoded param length, so use a raw COM_STMT_EXECUTE
+$rawPacket = function ($fp) {
+    $header = "";
+    while (strlen($header) < 4) {
+        $part = fread($fp, 4 - strlen($header));
+        if ($part === false || $part === "")
+            return false;
+        $header .= $part;
+    }
+    $size = unpack("V", substr($header, 0, 3) . "\0")[1];
+    $data = "";
+    while (strlen($data) < $size) {
+        $part = fread($fp, $size - strlen($data));
+        if ($part === false || $part === "")
+            return false;
+        $data .= $part;
+    }
+    return $data;
+};
+$rawSend = function ($fp, $seq, $payload) {
+    fwrite($fp, substr(pack("V", strlen($payload)), 0, 3) . chr($seq) . $payload);
+};
+$rawExecute = function ($name, $query, $type, $value) use ($sockStr, $rawPacket, $rawSend) {
+    $fp = @stream_socket_client("tcp://$sockStr", $errno, $errstr, 5);
+    if (!$fp)
+        return "$name: connect failed";
+    stream_set_timeout($fp, 5);
+    $rawPacket($fp); // greeting
+    $rawSend($fp, 1, pack("VVC", 0x200, 1 << 24, 33) . str_repeat("\0", 23) . "test\0\0");
+    $rawPacket($fp); // OK
+    $rawSend($fp, 0, "\x16" . $query);
+    $stmt = unpack("Vid/vcolumns/vparams", substr($rawPacket($fp), 1, 8));
+    for ($i = 0; $i < $stmt["params"] + 1 + $stmt["columns"] + ($stmt["columns"] ? 1 : 0); $i++)
+        $rawPacket($fp); // param and column definitions with their EOFs
+    $rawSend($fp, 0, "\x17" . pack("VCV", $stmt["id"], 0, 1) . "\x00\x01" . chr($type) . "\x00" . $value);
+    $reply = $rawPacket($fp);
+    fclose($fp);
+    if ($reply === false)
+        return "$name: no reply";
+    return $name . ($reply[0] === "\xff" ? ": rejected" : ($reply[0] === "\x00" ? ": ok" : ": result set"));
+};
+$negative = "\xfe" . str_repeat("\xff", 8);
+$results[] = $rawExecute("decimal-negative", "SELECT id FROM ps_types WHERE MATCH(?)", 0x00, $negative);
+$results[] = $rawExecute("string-negative", "SELECT id FROM ps_types WHERE MATCH(?)", 0xfd, $negative);
+$results[] = $rawExecute("vector-negative", "UPDATE ps_types SET m = (?VEC?) WHERE id = 1", 0xfd, $negative);
+
 $results[] =  "Mode check: autocommit off and rollback (may be unsupported).";
 $mysqli->autocommit(false);
 $txStmt = $mysqli->prepare("INSERT INTO ps_test (id, title, price) VALUES (?, ?, ?)");

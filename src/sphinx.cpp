@@ -1825,6 +1825,8 @@ uint64_t CSphFilterSettings::GetHash() const
 				h = sphFNV64cont ( m_dStrings[iString].cstr(), h );
 			if ( m_eMvaFunc!=SPH_MVAFUNC_NONE )
 				h = sphFNV64 ( &m_eMvaFunc, sizeof ( m_eMvaFunc ), h );
+			if ( m_eStrCmpDir!=EStrCmpDir::EQ )
+				h = sphFNV64 ( &m_eStrCmpDir, sizeof ( m_eStrCmpDir ), h );
 		break;
 		case SPH_FILTER_NULL:
 			break;
@@ -3721,11 +3723,31 @@ int64_t	CSphIndex_VLN::GetCountDistinct ( const CSphString & sAttr, CSphString &
 	if ( m_tDeadRowMap.HasDead() )
 		return -1;
 
+	// a json key is counted like any expression: nulls skipped, strings compared with case;
+	// its secondary index keeps nulls as 0 and strings by a case-insensitive hash
 	sModifiedAttr = sAttr;
-	if ( !m_tSchema.GetAttr ( sAttr.cstr() ) && sphJsonNameSplit ( sAttr.cstr() ) )
-		sModifiedAttr = UnifyJsonFieldName(sAttr);
+	const CSphColumnInfo * pAttr = m_tSchema.GetAttr ( sAttr.cstr() );
+	if ( !pAttr || pAttr->m_eAttrType==SPH_ATTR_JSON )
+		return -1;
 
 	return m_tSI.GetCountDistinct(sModifiedAttr);
+}
+
+
+// COUNT(*) from the secondary index sums the row counts of the matching values (and takes them from all rows
+// for an excluding filter). That counts each document once only for a single-value attribute or one value of an MVA;
+// a json key may hold arrays, and its excluding filter must skip documents without the key
+static bool IsExactSICount ( const CSphFilterSettings & tFilter, const CSphColumnInfo * pAttr )
+{
+	bool bJson = !pAttr || pAttr->m_eAttrType==SPH_ATTR_JSON;
+	if ( !bJson && !IsMvaAttr ( pAttr->m_eAttrType ) )
+		return true;
+
+	bool bOneValue = ( tFilter.m_eType==SPH_FILTER_VALUES && tFilter.GetNumValues()==1 )
+		|| ( tFilter.m_eType==SPH_FILTER_STRING_LIST && tFilter.m_dStrings.GetLength()==1 )
+		|| tFilter.m_eType==SPH_FILTER_STRING;
+
+	return bOneValue && !( bJson && tFilter.m_bExclude );
 }
 
 
@@ -3747,6 +3769,9 @@ int64_t CSphIndex_VLN::GetCountFilter ( const CSphFilterSettings & tFilter, CSph
 	}
 
 	if ( !tCtx.IsEnabled_SI(tModifiedFilter) )
+		return -1;
+
+	if ( !IsExactSICount ( tModifiedFilter, m_tSchema.GetAttr ( tModifiedFilter.m_sAttrName.cstr() ) ) )
 		return -1;
 
 	common::Filter_t tColumnarFilter;

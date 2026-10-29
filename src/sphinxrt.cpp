@@ -4121,6 +4121,8 @@ bool RtIndex_c::MergeSegmentsStep ( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.Seri
 
 		StartRoutine();
 		Coro::Go ( [this, eMergeAction]() REQUIRES ( m_tWorkers.SerialChunkAccess() ) {
+			auto pDesc = PublishSystemInfo ( "SAVE DISK CHUNK" );
+			pDesc->m_dCrashIndex = FromSz ( GetName() );
 			SaveDiskChunk ( false, eMergeAction == CheckMerge_e::FLUSH_EM );
 			StopRoutine();
 		}, m_tWorkers.SerialChunkAccess() );
@@ -4209,6 +4211,8 @@ void RtIndex_c::RunMergeSegmentsWorker()
 			if ( eVal==MergeSeg_e::EXIT )
 				return;
 
+			auto pDesc = PublishSystemInfo ( "RT MERGE" );
+			pDesc->m_dCrashIndex = FromSz ( GetName() );
 			if ( MergeSegmentsStep ( eVal ) )
 				StartMergeSegments ( MergeSeg_e::NEWSEG, false );
 		}
@@ -4424,6 +4428,8 @@ void RtIndex_c::ConditionalDiskChunk ( )
 	{
 		StartRoutine();
 		auto tResetSegMergeWorking = AtScopeExit ( [this] { StopRoutine(); } );
+		auto pDesc = PublishSystemInfo ( "SAVE DISK CHUNK" );
+		pDesc->m_dCrashIndex = FromSz ( GetName() );
 		// count how many docs are in segments now not saved
 		int64_t iAliveNonSavingDocs = 0;
 		for (const auto& pSeg : *m_tRtChunks.RamSegs())
@@ -11763,6 +11769,7 @@ bool RtIndex_c::StartOptimize ( OptimizeTask_t tTask )
 	Threads::StartJob ( [tTask = std::move ( tTask ), this] () {
 		// want to track optimize only at work
 		auto pDesc = PublishSystemInfo ( "OPTIMIZE" );
+		pDesc->m_dCrashIndex = FromSz ( GetName() );
 		Optimize ( std::move ( tTask ) );
 		StopRoutine();
 	} );

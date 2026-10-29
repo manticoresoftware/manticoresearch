@@ -534,11 +534,30 @@ bool QueueCreator_c::SetupDistinctAttr()
 			return false;
 		}
 
-		CSphColumnInfo tExprCol ( sDistinctKey.cstr(), SPH_ATTR_JSON_FIELD_PTR );
-		tExprCol.m_eStage = SPH_EVAL_SORTER;
-		tExprCol.m_uAttrFlags = CSphColumnInfo::ATTR_JOINED;
-		m_pSorterSchema->AddAttr ( tExprCol, true );
-		iDistinct = m_pSorterSchema->GetAttrIndex ( tExprCol.m_sName.cstr() );
+		if ( m_tSettings.m_pJoinArgs )
+		{
+			// a key of a joined json attribute is filled by the join sorter
+			CSphColumnInfo tExprCol ( sDistinctKey.cstr(), SPH_ATTR_JSON_FIELD_PTR );
+			tExprCol.m_eStage = SPH_EVAL_SORTER;
+			tExprCol.m_uAttrFlags = CSphColumnInfo::ATTR_JOINED;
+			m_pSorterSchema->AddAttr ( tExprCol, true );
+		} else
+		{
+			// a json key of this table is computed like the same key in the select list ("j.k AS x, COUNT(DISTINCT x)")
+			CSphColumnInfo tExprCol ( sDistinctKey.cstr(), SPH_ATTR_NONE );
+			ExprParseArgs_t tExprArgs;
+			tExprArgs.m_pAttrType = &tExprCol.m_eAttrType;
+			tExprArgs.m_eCollation = m_tQuery.m_eCollation;
+			tExprArgs.m_pEvalStage = &tExprCol.m_eStage;
+			tExprCol.m_pExpr = sphExprParse ( sDistinctKey.cstr(), *m_pSorterSchema, m_sError, tExprArgs );
+			if ( !tExprCol.m_pExpr )
+				return Err ( "parse error: %s", m_sError.cstr() );
+
+			SelectExprEvalStage ( tExprCol );
+			m_pSorterSchema->AddAttr ( tExprCol, true );
+		}
+
+		iDistinct = m_pSorterSchema->GetAttrIndex ( sDistinctKey.cstr() );
 	}
 
 	const auto & tDistinctAttr = tSchema.GetAttr(iDistinct);
@@ -548,7 +567,7 @@ bool QueueCreator_c::SetupDistinctAttr()
 	if ( tDistinctAttr.IsColumnar() )
 		m_tGroupSorterSettings.m_pDistinctFetcher = CreateColumnarDistinctFetcher ( tDistinctAttr.m_sName, tDistinctAttr.m_eAttrType, m_tQuery.m_eCollation );
 	else
-		m_tGroupSorterSettings.m_pDistinctFetcher = CreateDistinctFetcher ( tDistinctAttr.m_sName, tDistinctAttr.m_tLocator, tDistinctAttr.m_eAttrType );
+		m_tGroupSorterSettings.m_pDistinctFetcher = CreateDistinctFetcher ( tDistinctAttr.m_sName, tDistinctAttr.m_tLocator, tDistinctAttr.m_eAttrType, m_tQuery.m_eCollation );
 
 	m_bJoinedGroupSort |= IsJoinAttr(tDistinctAttr.m_sName);
 
@@ -2854,6 +2873,15 @@ bool QueueCreator_c::SetupGroupConcatHelperStorage()
 
 bool QueueCreator_c::CanCalcFastCountDistinct() const
 {
+	// the count comes from secondary indexes, which hash strings with the default collation
+	int iDistinctAttr = GetGroupDistinctAttrIndex();
+	if ( iDistinctAttr>=0 && m_tQuery.m_eCollation!=SPH_COLLATION_DEFAULT )
+	{
+		ESphAttr eType = m_pSorterSchema->GetAttr(iDistinctAttr).m_eAttrType;
+		if ( eType==SPH_ATTR_STRING || eType==SPH_ATTR_STRINGPTR )
+			return false;
+	}
+
 	bool bHasAggregates = PredictAggregates();
 	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && !m_tQuery.HasKnn() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }
@@ -2861,6 +2889,11 @@ bool QueueCreator_c::CanCalcFastCountDistinct() const
 
 bool QueueCreator_c::CanCalcFastCountFilter() const
 {
+	// the count comes from secondary indexes, which hash strings with the default collation
+	const auto & dFilters = m_tQuery.m_dFilters;
+	if ( dFilters.GetLength()==1 && ( dFilters[0].m_eType==SPH_FILTER_STRING || dFilters[0].m_eType==SPH_FILTER_STRING_LIST ) && m_tQuery.m_eCollation!=SPH_COLLATION_DEFAULT )
+		return false;
+
 	bool bHasAggregates = PredictAggregates();
 	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.GetLength()==1 && m_tQuery.m_sQuery.IsEmpty() && !m_tQuery.HasKnn() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }

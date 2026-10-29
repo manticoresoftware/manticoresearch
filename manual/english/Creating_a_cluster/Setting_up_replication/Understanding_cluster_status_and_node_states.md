@@ -42,7 +42,7 @@ SHOW STATUS LIKE 'cluster_%_node_state';
 
 - **`synced`** - Normal operation
 - **`joining`** - Node joining cluster (temporary)
-- **`donor`** - Helping another node join (temporary)
+- **`donor`** - Helping another node join (temporary). Writes to the cluster's tables on this node wait until the transfer is finished, see [Joining a replication cluster](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md#Joining-a-replication-cluster)
 - **`closed`** - Node stopped
 - **`destroyed`** - Node crashed, needs restart
 

@@ -450,7 +450,10 @@ static bool ConfigRead ( const CSphString& sConfigPath, CSphVector<ClusterDesc_t
 
 	int iSize = (int)tConfigFile.GetFilesize();
 	if ( !iSize )
-		return true;
+	{
+		sError = "file is empty";
+		return false;
+	}
 
 	CSphFixedVector<char> dJsonText ( iSize + 2 );
 	auto iRead = (int64_t)sphReadThrottled ( tConfigFile.GetFD(), dJsonText.begin(), iSize );
@@ -559,36 +562,51 @@ static bool ConfigWrite ( const CSphString & sConfigPath, const CSphVector<Clust
 
 	tOut.FinishBlocks();
 
-	CSphString sNew, sOld;
-	auto & sCur = sConfigPath;
-	sNew.SetSprintf ( "%s.new", sCur.cstr() );
-	sOld.SetSprintf ( "%s.old", sCur.cstr() );
+	CSphString sNew;
+	sNew.SetSprintf ( "%s.new", sConfigPath.cstr() );
 
-	CSphWriter tConfigFile;
-	if ( !tConfigFile.OpenFile ( sNew, sError ) )
+	CSphAutofile tNewFile;
+	if ( tNewFile.Open ( sNew, SPH_O_NEW, sError, true )<0 )
 		return false;
 
-	tConfigFile.PutString ( (Str_t)tOut );
 	assert ( bson::ValidateJson ( tOut.cstr() ) );
-	tConfigFile.CloseFile();
-	if ( tConfigFile.IsError() )
+	if ( !sphWriteThrottled ( tNewFile.GetFD(), tOut.cstr(), tOut.GetLength(), sNew.cstr(), sError ) )
 		return false;
 
-	if ( sphIsReadable ( sCur, nullptr ) && rename ( sCur.cstr(), sOld.cstr() ) )
+#if _WIN32
+	int iSyncResult = _commit ( tNewFile.GetFD() );
+#else
+	int iSyncResult = ::fsync ( tNewFile.GetFD() );
+#endif
+	if ( iSyncResult )
 	{
-		sError.SetSprintf ( "failed to rename current to old, '%s'->'%s', error '%s'", sCur.cstr(), sOld.cstr(), strerror(errno) );
+		sError.SetSprintf ( "failed to sync JSON config '%s': %s", sNew.cstr(), strerrorm(errno) );
 		return false;
 	}
 
-	if ( rename ( sNew.cstr(), sCur.cstr() ) )
+#if !_WIN32
+	CSphAutofile tDir;
+	if ( tDir.Open ( g_sDataDir, SPH_O_READ, sError )<0 )
+		return false;
+#endif
+
+	// Replacing the file directly keeps the previous config available until the new one is ready.
+	tNewFile.SetPersistent();
+	tNewFile.Close();
+
+	if ( sph::rename ( sNew.cstr(), sConfigPath.cstr() ) )
 	{
-		sError.SetSprintf ( "failed to rename new to current, '%s'->'%s', error '%s'", sNew.cstr(), sCur.cstr(), strerror(errno) );
-		if ( sphIsReadable ( sOld, nullptr ) && rename ( sOld.cstr(), sCur.cstr() ) )
-			sError.SetSprintf ( "%s, rollback failed too", sError.cstr() );
+		sError.SetSprintf ( "failed to replace JSON config '%s': %s", sConfigPath.cstr(), strerrorm(errno) );
+		unlink ( sNew.cstr() );
 		return false;
 	}
 
-	unlink ( sOld.cstr() );
+#if !_WIN32
+	// The new config is already in use, and an error here would make CREATE roll back the table.
+	// Without the directory sync, a power loss can only bring back the previous config.
+	if ( ::fsync ( tDir.GetFD() ) )
+		sphWarning ( "failed to sync JSON config directory '%s' after replacing the config: %s", g_sDataDir.cstr(), strerrorm(errno) );
+#endif
 
 	sphLogDebug ( "config saved, tables %d, clusters %d", dIndexes.GetLength(), dClusters.GetLength() );
 
@@ -622,6 +640,8 @@ void ConfigureAndPreloadConfiglessIndexes ( int & iValidIndexes, int & iCounter 
 	{
 		CSphString sError;
 		StrVec_t dWarnings;
+		auto pDesc = PublishSystemInfo ( "PRELOAD" );
+		pDesc->m_dCrashIndex = FromStr ( tIndex.m_sName );
 		ESphAddIndex eAdd = ConfiglessPreloadIndex ( tIndex, dWarnings, sError );
 		iValidIndexes += ( eAdd==ADD_ERROR ? 0 : 1 );
 		iCounter += ( eAdd== ADD_NEEDLOAD ? 1 : 0 );
@@ -797,7 +817,7 @@ bool SaveConfigInt ( CSphString & sError )
 
 	if ( !ConfigWrite ( g_sConfigPath, dClusters, dIndexes, sError ) )
 	{
-		sphWarning ( "%s", TlsMsg::szError() );
+		sphWarning ( "%s", sError.cstr() );
 		return false;
 	}
 

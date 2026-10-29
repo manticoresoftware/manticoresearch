@@ -803,5 +803,54 @@ select * from dist_gr2 facet gid facet tag;;
 }
 </query>
 
+<!-- regression query_string with only negated terms returned the inverse result (gh5041) -->
+<query endpoint="json/search">
+{
+  "table": "test2",
+  "query": { "query_string": "-trevize" },
+  "options": { "not_terms_only_allowed": 1 }
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "table": "test2",
+  "query": { "query_string": "-trevize -bander" },
+  "options": { "not_terms_only_allowed": 1 }
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "table": "test2",
+  "query":{
+    "bool":{
+      "must":[
+        {"query_string":"-trevize"},
+        {"match":{"_all":"speak"}}
+      ]
+    }
+  },
+  "options": { "not_terms_only_allowed": 1 }
+}
+</query>
+
+<!-- regression bool with only must_not ignored the per-request not_terms_only_allowed (gh5041) -->
+<query endpoint="json/search">
+{
+  "table": "test2",
+  "query": { "bool": { "must_not": [ {"match":{"_all":"trevize"}} ] } },
+  "options": { "not_terms_only_allowed": 1 }
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "table": "test2",
+  "query": { "bool": { "must_not": [ {"match":{"_all":"trevize"}}, {"query_string":"bander"} ] } },
+  "options": { "not_terms_only_allowed": 1 }
+}
+</query>
+
 </queries>
 </test>

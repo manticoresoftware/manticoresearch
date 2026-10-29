@@ -60,7 +60,7 @@ CSphString GetStringAddr ( const ListenerDesc_t& tListen )
 template<Resolve_e> struct Wait_T
 {
 	inline static constexpr int m_dMultipliers[] { 1, 1, 1 };
-	inline static int m_iTimeoutMs = ReplicationTimeoutAnyNode();
+	static int TimeoutMs() { return ReplicationTimeoutAnyNode(); }
 	inline static constexpr int m_iMultipliers = sizeof ( m_dMultipliers ) / sizeof ( int );
 };
 
@@ -68,9 +68,22 @@ template<>
 struct Wait_T<Resolve_e::SLOW>
 {
 	inline static constexpr int m_dMultipliers[] { 1, 2, 2, 3, 3, 4, 4, 6, 6, 10, 10, 20, 30, 40, 50, 60, 70, 100, 100, 100 };
-	inline static int m_iTimeoutMs = ReplicationFileRetryDelay();
+	// read on each call: the config is loaded after static init; 0 keeps the default 500 ms
+	static int TimeoutMs()
+	{
+		int iDelayMs = ReplicationRetryDelay();
+		return iDelayMs>0 ? iDelayMs : 500;
+	}
 	inline static constexpr int m_iMultipliers = sizeof ( m_dMultipliers ) / sizeof ( int );
 };
+
+int SlowRetryDelayMs ( int iAttempt )
+{
+	using Wait = Wait_T<Resolve_e::SLOW>;
+	if ( iAttempt<0 || iAttempt>=Wait::m_iMultipliers )
+		return -1;
+	return Wait::TimeoutMs() * Wait::m_dMultipliers[iAttempt];
+}
 
 // get nodes of specific type from string
 template<typename PROC, Resolve_e EWAIT>
@@ -88,24 +101,30 @@ public:
 
 		int64_t tmStart = sphMicroTimer();
 
+		// the first attempt, then a retry after each pause of the schedule
 		int iRetry = 0;
-		for ( int iMultiplier : Wait_T<EWAIT>::m_dMultipliers )
+		while ( true )
 		{
 			if ( dNodes.all_of ( [this] ( const auto& sNode ) { return PROC::SetNode ( sNode.cstr() ); } ) )
+				return PROC::IsValid() || TlsMsg::Err ( "%s; in %d retries within %.3f sec", TlsMsg::szError(), iRetry, ( sphMicroTimer() - tmStart ) / 1000000.0f );
+
+			PROC::ResetNodes();
+			if ( iRetry==Wait_T<EWAIT>::m_iMultipliers ) // no pause after the last retry
 				break;
 
+			int iWaitMs = Wait_T<EWAIT>::TimeoutMs() * Wait_T<EWAIT>::m_dMultipliers[iRetry];
 			++iRetry;
-			sphLogDebugRpl ( "retry %d, wait %.3f sec; error: %s", iRetry, ( Wait_T<EWAIT>::m_iTimeoutMs * iMultiplier ) / 1000.0f, TlsMsg::szError() );
+			sphLogDebugRpl ( "retry %d, wait %.3f sec; error: %s", iRetry, iWaitMs / 1000.0f, TlsMsg::szError() );
 			if ( sphInterrupted() )
 				return false;
 
-			PROC::ResetNodes();
 			TlsMsg::ResetErr();
 			// should wait and retry for DNS set
-			Threads::Coro::SleepMsec ( Wait_T<EWAIT>::m_iTimeoutMs * iMultiplier );
+			Threads::Coro::SleepMsec ( iWaitMs );
 		}
 
-		return PROC::IsValid() || TlsMsg::Err ( "%s; in %d retries within %.3f sec", TlsMsg::szError(), iRetry, ( sphMicroTimer() - tmStart ) / 1000000.0f );
+		// all retries failed, the nodes list stays empty; TLS holds the reason of the last attempt
+		return TlsMsg::Err ( "%s; in %d retries within %.3f sec", TlsMsg::MoveToString().cstr(), iRetry, ( sphMicroTimer() - tmStart ) / 1000000.0f );
 	}
 
 	bool ProcessNodes ( const char* szNodes )
@@ -123,11 +142,13 @@ class AgentDescIterator_c
 {
 	VecAgentDesc_t& m_dNodes;
 	bool m_bValid = true;
+	bool m_bSkipOwn = true;
 
 public:
 
-	explicit AgentDescIterator_c ( VecAgentDesc_t& dNodes )
+	AgentDescIterator_c ( VecAgentDesc_t& dNodes, bool bSkipOwn )
 		: m_dNodes { dNodes }
+		, m_bSkipOwn { bSkipOwn }
 	{}
 
 	[[nodiscard]] bool IsValid() const noexcept { return m_bValid; }
@@ -141,7 +162,7 @@ public:
 	bool SetNode ( const CSphString& sNode )
 	{
 		// filter out own address to do not query itself
-		if ( MyIncomingApiAddrBeginsWith ( sNode.cstr() ) )
+		if ( m_bSkipOwn && MyIncomingApiAddrBeginsWith ( sNode.cstr() ) )
 			return true;
 
 		TLS_MSG_STRING ( sError );
@@ -171,23 +192,47 @@ public:
 };
 
 template<Resolve_e eSpeed>
-inline static void ProcessNodes ( const VecTraits_T<CSphString>& dNodes, VecAgentDesc_t& dApiNodes )
+inline static void ProcessNodes ( const VecTraits_T<CSphString>& dNodes, VecAgentDesc_t& dApiNodes, bool bSkipOwn )
 {
-	ISphDescIterator_T<AgentDescIterator_c, eSpeed> tIt { dApiNodes };
+	ISphDescIterator_T<AgentDescIterator_c, eSpeed> tIt { dApiNodes, bSkipOwn };
 	tIt.ProcessNodes ( dNodes );
 }
 
-VecAgentDesc_t GetDescAPINodes ( const VecTraits_T<CSphString>& dNodes, Resolve_e eSpeed )
+VecAgentDesc_t GetDescAPINodes ( const VecTraits_T<CSphString>& dNodes, Resolve_e eSpeed, bool bSkipOwn )
 {
 	TlsMsg::ResetErr();
 	VecAgentDesc_t dApiNodes;
 	if ( eSpeed == Resolve_e::QUICK )
-		ProcessNodes<Resolve_e::QUICK> ( dNodes, dApiNodes );
+		ProcessNodes<Resolve_e::QUICK> ( dNodes, dApiNodes, bSkipOwn );
 	else
-		ProcessNodes<Resolve_e::SLOW> ( dNodes, dApiNodes );
+		ProcessNodes<Resolve_e::SLOW> ( dNodes, dApiNodes, bSkipOwn );
 	if ( TlsMsg::HasErr() )
 		sphLogDebugRpl ( "node parse error: %s", TlsMsg::szError() );
 	return dApiNodes;
+}
+
+VecAgentDesc_t GetDescAPINodesEach ( const VecTraits_T<CSphString> & dNodes, const CSphString & sCluster, bool bSkipOwn )
+{
+	VecAgentDesc_t dDesc;
+	CSphString sFirstError;
+	ARRAY_FOREACH ( i, dNodes )
+	{
+		VecAgentDesc_t dNode = GetDescAPINodes ( dNodes.Slice ( i, 1 ), Resolve_e::QUICK, bSkipOwn );
+		if ( TlsMsg::HasErr() )
+		{
+			CSphString sError = TlsMsg::MoveToString();
+			sphWarning ( "cluster '%s': node '%s' is skipped, this node cannot resolve it: %s", sCluster.cstr(), dNodes[i].cstr(), sError.cstr() );
+			if ( sFirstError.IsEmpty() )
+				sFirstError = sError;
+		}
+		for ( const auto & tDesc : dNode )
+			dDesc.Add().CloneFrom ( tDesc );
+	}
+
+	TlsMsg::ResetErr();
+	if ( dDesc.IsEmpty() && !sFirstError.IsEmpty() )
+		TlsMsg::Err ( "%s", sFirstError.cstr() );
+	return dDesc;
 }
 
 

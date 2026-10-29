@@ -139,10 +139,14 @@ jobs:
           path: cache
       - name: Run mysql
         run: |
-          C:\PROGRA~1\MySQL\"MySQL Server 8.0"\bin\mysqld.exe --initialize-insecure
-          C:\PROGRA~1\MySQL\"MySQL Server 8.0"\bin\mysqld.exe --install mysql
+          # the runner image decides the MySQL version (8.0 until 2026-10, then 8.4): take the newest installed one
+          $bin = (Get-ChildItem "C:\Program Files\MySQL\MySQL Server *\bin" | Select-Object -Last 1).FullName
+          if ( -not $bin ) { throw "MySQL Server not found in C:\Program Files\MySQL" }
+          & "$bin\mysqld.exe" --initialize-insecure
+          & "$bin\mysqld.exe" --install mysql
           net start mysql
-          mysql -e "create user 'test'@'localhost' IDENTIFIED WITH mysql_native_password BY ''; create database test; create database test1; create database test2; create database test3; create database test4; create database test5; create database test6; create database test7; create database test8; create database test9; grant all on test.* to 'test'@'localhost'; grant all on test1.* to 'test'@'localhost'; grant all on test2.* to 'test'@'localhost'; grant all on test3.* to 'test'@'localhost'; grant all on test4.* to 'test'@'localhost'; grant all on test5.* to 'test'@'localhost'; grant all on test6.* to 'test'@'localhost'; grant all on test7.* to 'test'@'localhost'; grant all on test8.* to 'test'@'localhost'; grant all on test9.* to 'test'@'localhost'; flush privileges;" -uroot
+          # the default auth plugin: MySQL 8.4 does not load mysql_native_password
+          & "$bin\mysql.exe" -e "create user 'test'@'localhost' IDENTIFIED BY ''; create database test; create database test1; create database test2; create database test3; create database test4; create database test5; create database test6; create database test7; create database test8; create database test9; grant all on test.* to 'test'@'localhost'; grant all on test1.* to 'test'@'localhost'; grant all on test2.* to 'test'@'localhost'; grant all on test3.* to 'test'@'localhost'; grant all on test4.* to 'test'@'localhost'; grant all on test5.* to 'test'@'localhost'; grant all on test6.* to 'test'@'localhost'; grant all on test7.* to 'test'@'localhost'; grant all on test8.* to 'test'@'localhost'; grant all on test9.* to 'test'@'localhost'; flush privileges;" -uroot
       # TODO: Uncomment the below if there's no more OpenSSL in the runner like it happened in Sep 2023 (https://github.com/actions/runner-images/issues/8344)
       # - name: Install OpenSSL
       #   run: powershell.exe ./.github/workflows/Install-OpenSSL.ps1

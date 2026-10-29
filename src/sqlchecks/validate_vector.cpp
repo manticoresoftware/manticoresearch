@@ -59,7 +59,9 @@ inline int yylex ( YYSTYPE * lvalp, SqlParameterValidator_c * pParser )
 
 bool ValidateVector ( Str_t sQuery, CSphString& sError )
 {
-	assert ( IsFilled ( sQuery ) );
+	if ( !IsFilled ( sQuery ) )
+		return true; // empty list, as in ()
+
 	SqlParameterValidator_c tParser { sQuery.first, &sError };
 
 	char * sEnd = const_cast<char *>( sQuery.first+sQuery.second );

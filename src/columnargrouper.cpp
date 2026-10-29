@@ -532,7 +532,8 @@ void DistinctFetcherColumnarString_T<HASH>::SetColumnar ( const columnar::Column
 	assert(pColumnar);
 	columnar::IteratorHints_t tHints;
 	columnar::IteratorCapabilities_t tCapabilities;
-	tHints.m_bNeedStringHashes = true;
+	// stored hashes are calculated with the default collation
+	tHints.m_bNeedStringHashes = std::is_same_v<HASH, LibcCIHash_fn>;
 
 	std::string sError; // fixme! report errors
 	m_pIterator = CreateColumnarIterator ( pColumnar, m_sName.cstr(), sError, tHints, &tCapabilities );

@@ -40,6 +40,7 @@ void DoPreread ()
 		if ( sphInterrupted() )
 			break;
 
+		pDesc->m_dCrashIndex = FromStr ( sName );
 		auto pServed = GetServed ( sName );
 		if ( !pServed || pServed->m_eType==IndexType_e::TEMPLATE )
 			continue;
@@ -61,6 +62,7 @@ void DoPreread ()
 		sd::extend30s();
 	}
 
+	pDesc->m_dCrashIndex = {};
 	int64_t tmFinished = sphMicroTimer () - tmStart;
 	sphInfo ( "preread %d tables in %0.3f sec", iRead, float ( tmFinished ) / 1000000.0f );
 	g_tPrereadFinished.SetEvent ();

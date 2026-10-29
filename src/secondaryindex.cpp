@@ -388,6 +388,7 @@ public:
 private:
 	CSphQueue<typename BASE::IteratorState_t*, typename BASE::IteratorState_t> m_tMerge;
 	int			m_iRowsLeft = INT_MAX;
+	RowID_t		m_tLastRowID = INVALID_ROWID;
 
 	FORCE_INLINE void AdvanceQueue ( typename BASE::IteratorState_t * pState );
 };
@@ -434,17 +435,16 @@ bool RowidIterator_Union_T<T,ROWID_LIMITS>::GetNextRowIdBlock ( RowIdBlock_t & d
 	RowID_t * pRowIdMax = pRowIdStart + Min ( BASE::m_dCollected.GetLength()-1, m_iRowsLeft );
 	RowID_t * pRowID = pRowIdStart;
 
-	RowID_t tLastRowID = INVALID_ROWID;
 	while ( pRowID<pRowIdMax && m_tMerge.GetLength()>1 )
 	{
 		auto pState = m_tMerge.Root();
 		m_tMerge.Pop();
 
 		RowID_t tCurRowID = *pState->m_pRowID;
-		if ( tCurRowID!=tLastRowID ) // skip all items with the same row-id
+		if ( tCurRowID!=m_tLastRowID ) // skip all items with the same row-id
 			*pRowID++ = tCurRowID;
 
-		tLastRowID = tCurRowID;
+		m_tLastRowID = tCurRowID;
 		AdvanceQueue(pState);
 	}
 
@@ -454,7 +454,12 @@ bool RowidIterator_Union_T<T,ROWID_LIMITS>::GetNextRowIdBlock ( RowIdBlock_t & d
 		do
 		{
 			while ( pRowID<pRowIdMax && pState->m_pRowID<pState->m_pRowIDMax )
-				*pRowID++ = *pState->m_pRowID++;
+			{
+				RowID_t tCurRowID = *pState->m_pRowID++;
+				if ( tCurRowID!=m_tLastRowID )
+					*pRowID++ = tCurRowID;
+				m_tLastRowID = tCurRowID;
+			}
 		}
 		while ( pState->m_pRowID>=pState->m_pRowIDMax && pState->WarmupDocs() );
 
@@ -1255,7 +1260,16 @@ bool SIContainer_c::Load ( const CSphString & sFile, bool bMmap, CSphString & sE
 	if ( !pIndex )
 		return false;
 
-	m_dIndexes.Add ( { std::unique_ptr<SI::Index_i>(pIndex) } );
+	auto & tInfo = m_dIndexes.Add();
+	tInfo.m_pIndex = std::unique_ptr<SI::Index_i>(pIndex);
+
+	std::vector<SI::IndexAttrInfo_t> dAttrs;
+	pIndex->GetAttrInfo(dAttrs);
+	tInfo.m_dAttrTypes.Reset ( (int64_t)dAttrs.size() );
+	ARRAY_FOREACH ( i, tInfo.m_dAttrTypes )
+		tInfo.m_dAttrTypes[i] = { dAttrs[i].m_sName.c_str(), dAttrs[i].m_eType };
+
+	tInfo.m_dAttrTypes.Sort ( bind ( &AttrType_t::m_sName ) );
 	return true;
 }
 
@@ -1370,6 +1384,22 @@ bool SIContainer_c::IsEnabled ( const CSphString & sAttr ) const
 	for ( auto & i : m_dIndexes )
 		if ( i.m_pIndex->IsEnabled ( sAttr.cstr() ) )
 			return true;
+
+	return false;
+}
+
+
+bool SIContainer_c::GetAttrType ( const CSphString & sAttr, common::AttrType_e & eType ) const
+{
+	for ( const auto & i : m_dIndexes )
+	{
+		const AttrType_t * pFound = std::lower_bound ( i.m_dAttrTypes.begin(), i.m_dAttrTypes.end(), sAttr, [] ( const AttrType_t & tAttr, const CSphString & sName ) { return tAttr.m_sName<sName; } );
+		if ( pFound!=i.m_dAttrTypes.end() && pFound->m_sName==sAttr )
+		{
+			eType = pFound->m_eType;
+			return true;
+		}
+	}
 
 	return false;
 }

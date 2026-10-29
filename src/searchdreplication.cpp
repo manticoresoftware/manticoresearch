@@ -37,6 +37,7 @@
 #include "replication/grastate.h"
 #include "replication/cluster_binlog.h"
 #include "replication/cluster_sst_progress.h"
+#include "replication/cluster_check_node.h"
 
 #if !_WIN32
 // MAC-specific header
@@ -464,10 +465,18 @@ bool ReplicationCluster_t::Init()
 
 bool ReplicationCluster_t::Connect ( BOOTSTRAP_E eBootStrap )
 {
+	// no DNS lookup here: Galera resolves the names itself and skips the ones it cannot resolve,
+	// while a lookup here drops the whole list for one such name
+	StrVec_t dNodes = FilterViewNodesByProto ( Proto_e::REPLICATION, false );
+
+	// an empty list makes Galera start a new cluster
+	if ( dNodes.IsEmpty() && eBootStrap!=BOOTSTRAP_E::YES && !GetViewNodes().IsEmpty() )
+		return TlsMsg::Err ( "cluster '%s', no replication address in nodes '%s'", m_sName.cstr(), Vec2Str ( GetViewNodes() ).cstr() );
+
 	StringBuilder_c sNodes;
 	sNodes << g_sGcommPrefix;
 	sNodes.StartBlock ( "," );
-	FilterViewNodesByProto ( Proto_e::REPLICATION ).Apply ( [&sNodes] ( const CSphString& sNode ) { sNodes << sNode; } );
+	dNodes.Apply ( [&sNodes] ( const CSphString& sNode ) { sNodes << sNode; } );
 
 	sphLogDebugRpl ( "nodes '%s'", sNodes.cstr() );
 	if ( g_eLogLevel >= SPH_LOG_RPL_DEBUG ) {
@@ -1850,6 +1859,10 @@ static bool PrepareNodesAndInitCluster ( ReplicationCluster_t & tCluster, BOOTST
 		dNodes = GetNodeListFromRemotes ( tCluster );
 		if ( dNodes.IsEmpty() )
 			return false;
+
+		// the donor connects to this node for the state transfer; fail here, before Galera starts, if a node cannot
+		if ( !CheckRemotesReachThisNode ( tCluster, dNodes ) )
+			return false;
 	}
 
 	if ( !tCluster.Init () )
@@ -1857,7 +1870,7 @@ static bool PrepareNodesAndInitCluster ( ReplicationCluster_t & tCluster, BOOTST
 
 	tCluster.SetViewNodes ( std::move ( dNodes ) );
 	if ( !bKeepClusterNodes )
-		tCluster.m_dClusterNodes = tCluster.FilterViewNodesByProto ();
+		tCluster.m_dClusterNodes = tCluster.FilterViewNodesByProto ( Proto_e::SPHINX, false ); // no DNS: one name that does not resolve must not empty the list
 	return true;
 }
 
@@ -2537,7 +2550,7 @@ bool GloballyDeleteCluster ( const CSphString & sCluster, CSphString & sError ) 
 		return false;
 	}
 
-	auto dNodes = pCluster->FilterViewNodesByProto();
+	auto dNodes = pCluster->FilterViewNodesByProto ( Proto_e::SPHINX, false ); // no DNS: the send skips a name that does not resolve
 	SendClusterDeleteToNodes ( dNodes, sCluster, pCluster->m_sUser );
 	bool bOk = ClusterDeleteUnlocked ( sCluster );
 	bOk &= SaveConfigInt ( sError );
@@ -3193,9 +3206,10 @@ static bool ApplyClusterNodesSnapshot ( ReplicationCluster_t * pCluster, StrVec_
 	TlsMsg::ResetErr();
 
 	uint64_t uWasNodes = CalcNodesHash ( pCluster->m_dClusterNodes );
-	pCluster->m_dClusterNodes = FilterNodesByProto ( dNodes, Proto_e::SPHINX );
+	StrVec_t dClusterNodes = FilterNodesByProto ( dNodes, Proto_e::SPHINX, false ); // no DNS: one name that does not resolve must not empty the list
 	if ( TlsMsg::HasErr() )
 		return TlsMsg::Err ( "cluster '%s', invalid nodes, error: %s", pCluster->m_sName.cstr(), TlsMsg::szError() );
+	pCluster->m_dClusterNodes = std::move ( dClusterNodes );
 
 	bool bSaveConf = ( bSaveAlways || ( uWasNodes!=CalcNodesHash ( pCluster->m_dClusterNodes ) ) );
 	if ( !bSaveConf )

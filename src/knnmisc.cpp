@@ -1817,7 +1817,7 @@ static KNNVecDistCalc_c * GetKnnDistCalc ( const ISphSchema * pSchema )
 class RescoreSorter_c : public ISphMatchSorter
 {
 public:
-			RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, int64_t iRescoreLimit, bool bBlobLocked );
+			RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, int64_t iRescoreLimit, int iResultLimit, bool bBlobLocked );
 
 	bool	Push ( const CSphMatch & tEntry ) final							{ return m_pSorter->Push(tEntry); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) override	{ for ( auto & i : dMatches ) m_pSorter->Push(i); }
@@ -1858,6 +1858,7 @@ private:
 	std::unique_ptr<ISphMatchSorter> m_pSorter;
 	CSphRefcountedPtr<ISphMatchComparator> m_pComp;
 	int64_t							m_iRescoreLimit = 0;	// max ( k*oversampling, limit+offset )
+	int								m_iResultLimit = 0;
 	bool							m_bBlobLocked = false;	// access_blob_attrs=mlock: nothing to prefetch for the rowwise rescore
 	bool							m_bRescored = false;
 
@@ -1865,10 +1866,11 @@ private:
 };
 
 
-RescoreSorter_c::RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, int64_t iRescoreLimit, bool bBlobLocked )
+RescoreSorter_c::RescoreSorter_c ( ISphMatchSorter * pSorter, CSphRefcountedPtr<ISphMatchComparator> pComp, int64_t iRescoreLimit, int iResultLimit, bool bBlobLocked )
 	: m_pSorter ( pSorter )
 	, m_pComp ( std::move ( pComp ) )
 	, m_iRescoreLimit ( iRescoreLimit )
+	, m_iResultLimit ( iResultLimit )
 	, m_bBlobLocked ( bBlobLocked )
 {}
 
@@ -1973,8 +1975,11 @@ int RescoreSorter_c::Flatten ( CSphMatch * pTo )
 	MatchSortRescore_fn tRescore ( m_pComp, m_pSorter->GetState() );
 	sphSort ( dMatches.Begin(), dMatches.GetLength(), tRescore, MatchSortAccessor_t() );
 
-	for ( auto & i : dMatches )
-		Swap ( i, *pTo++ );
+	iCopied = Min ( iCopied, m_iResultLimit );
+	for ( int i = 0; i < iCopied; i++ )
+		Swap ( dMatches[i], *pTo++ );
+	for ( int i = iCopied; i < dMatches.GetLength(); i++ )
+		m_pSorter->GetSchema()->FreeDataPtrs ( dMatches[i] );
 
 	return iCopied;
 }
@@ -2018,7 +2023,7 @@ void RescoreSorter_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn f
 
 ISphMatchSorter * RescoreSorter_c::Clone() const
 {
-	auto pClone = new RescoreSorter_c ( m_pSorter->Clone(), m_pComp, m_iRescoreLimit, m_bBlobLocked );
+	auto pClone = new RescoreSorter_c ( m_pSorter->Clone(), m_pComp, m_iRescoreLimit, m_iResultLimit, m_bBlobLocked );
 	CloneTo(pClone);
 	return pClone;
 }
@@ -2032,7 +2037,7 @@ void RescoreSorter_c::CloneTo ( ISphMatchSorter * pTrg ) const
 }
 
 
-ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings, ESphSortFunc eMatchFunc, int64_t iResultWindow, bool bBlobLocked )
+ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings, ESphSortFunc eMatchFunc, int64_t iResultWindow, int iResultLimit, bool bBlobLocked )
 {
 	if ( tSettings.m_sAttr.IsEmpty() || !tSettings.m_bRescore )
 		return pSorter;
@@ -2041,7 +2046,7 @@ ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnS
 	if ( !pComp )
 		return nullptr;
 
-	return new RescoreSorter_c ( pSorter, std::move ( pComp ), Max ( tSettings.GetRequestedDocs(), iResultWindow ), bBlobLocked );
+	return new RescoreSorter_c ( pSorter, std::move ( pComp ), Max ( tSettings.GetRequestedDocs(), iResultWindow ), iResultLimit, bBlobLocked );
 }
 
 

@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>KNN rescore candidates with explicit max_matches</name>
+
+<requires>
+	<knn/>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+<skip_db/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<custom_test><![CDATA[
+$connection = ConnectQL();
+if ( $connection===false )
+	throw new RuntimeException ( 'Cannot connect to searchd' );
+
+$execute = function ( string $sql ) use ( $connection ): void {
+	if ( $connection->query($sql)!==true )
+		throw new RuntimeException ( "$sql: {$connection->error}" );
+};
+
+$selectIds = function ( string $sql ) use ( $connection ): array {
+	$result = $connection->query($sql);
+	if ( $result===false )
+		throw new RuntimeException ( "$sql: {$connection->error}" );
+	$ids = array_column ( $result->fetch_all(MYSQLI_ASSOC), 'id' );
+	$result->free();
+	return $ids;
+};
+
+$results = array();
+$checkIds = function ( string $label, array $expected, array $actual, int $count ) use ( &$results ): void {
+	sort ( $expected, SORT_NUMERIC );
+	sort ( $actual, SORT_NUMERIC );
+	$results[$label] = count($expected)===$count && count($actual)===$count && $expected===$actual;
+};
+
+// Hash coordinates give the same pseudo-random fixture on every PHP version without changing the global RNG.
+$vector = function ( int $id ): string {
+	$coordinates = unpack ( 'n*', hash ( 'sha256', "knn-rescore:$id", true ) );
+	$values = array();
+	foreach ( $coordinates as $coordinate )
+		$values[] = sprintf ( '%.7f', ($coordinate-32768)/32768 );
+	return '(' . implode ( ',', $values ) . ')';
+};
+
+$rows = array();
+$shards = array ( array(), array() );
+for ( $id = 1; $id<=2000; $id++ )
+{
+	$row = "($id," . $vector($id) . ')';
+	$rows[] = $row;
+	$shards[$id%2][] = $row;
+}
+$anchor = $vector(2001);
+
+global $sd_address, $sd_port;
+foreach ( array ( '1bit', 'none' ) as $quantization )
+{
+	$settings = $quantization==='none' ? '' : " quantization='$quantization'";
+	foreach ( array ( 'rescore_full', 'rescore_s1', 'rescore_s2' ) as $table )
+		$execute ( "CREATE TABLE $table (vec float_vector knn_type='hnsw' knn_dims='16' hnsw_similarity='cosine'$settings)" );
+
+	foreach ( array ( 'rescore_full' => $rows, 'rescore_s1' => $shards[0], 'rescore_s2' => $shards[1] ) as $table => $data )
+	{
+		foreach ( array_chunk ( $data, 200 ) as $batch )
+			$execute ( "INSERT INTO $table (id,vec) VALUES " . implode ( ',', $batch ) );
+		// RAM vectors already have exact distances; flush so this exercises the HNSW candidate queue.
+		$execute ( "FLUSH RAMCHUNK $table" );
+	}
+
+	$execute ( "CREATE TABLE rescore_local TYPE='distributed' local='rescore_s1' local='rescore_s2'" );
+	$execute ( "CREATE TABLE rescore_agent TYPE='distributed' agent='$sd_address:$sd_port:rescore_s1' agent='$sd_address:$sd_port:rescore_s2'" );
+	$execute ( "CREATE TABLE rescore_remote TYPE='distributed' agent='$sd_address:$sd_port:rescore_full'" );
+
+	foreach ( array ( 100, 400, 1000 ) as $k )
+	{
+		$idsByTable = array();
+		foreach ( array ( 'rescore_full', 'rescore_local', 'rescore_agent', 'rescore_remote' ) as $table )
+		{
+			$sql = "SELECT id, knn_dist() FROM $table WHERE knn(vec,$k,$anchor,{ef=2000,oversampling=3.0,rescore=1,early_termination=0}) ORDER BY knn_dist() ASC, id ASC LIMIT $k";
+			$uncapped = $selectIds($sql);
+			$idsByTable[$table] = $uncapped;
+			$checkIds ( "$quantization $table k=$k", $uncapped, $selectIds ( "$sql OPTION max_matches=$k" ), $k );
+			if ( $table==='rescore_agent' )
+				$checkIds ( "$quantization local/agent k=$k", $idsByTable['rescore_local'], $uncapped, $k );
+			if ( $table==='rescore_remote' )
+				$checkIds ( "$quantization direct/remote k=$k", $idsByTable['rescore_full'], $uncapped, $k );
+		}
+	}
+
+	foreach ( array ( 'rescore_full', 'rescore_local', 'rescore_agent', 'rescore_remote' ) as $table )
+	{
+		$sql = "SELECT id, knn_dist() FROM $table WHERE knn(vec,100,$anchor,{ef=2000,oversampling=3.0,rescore=1,early_termination=0}) ORDER BY knn_dist() ASC, id ASC";
+		$uncapped = $selectIds ( "$sql LIMIT 100" );
+		$checkIds ( "$quantization $table result cap", array_slice ( $uncapped, 0, 25 ), $selectIds ( "$sql LIMIT 100 OPTION max_matches=25" ), 25 );
+		$checkIds ( "$quantization $table offset cap", array_slice ( $uncapped, 10, 15 ), $selectIds ( "$sql LIMIT 10,100 OPTION max_matches=25" ), 15 );
+
+		$sql = "SELECT id, knn_dist() FROM $table WHERE knn(vec,100,$anchor,{ef=2000,oversampling=3.0,rescore=0,early_termination=0}) ORDER BY knn_dist() ASC, id ASC LIMIT 100";
+		$checkIds ( "$quantization $table rescore=0", $selectIds($sql), $selectIds ( "$sql OPTION max_matches=100" ), 100 );
+	}
+
+	foreach ( array ( 'rescore_local', 'rescore_agent', 'rescore_remote', 'rescore_full', 'rescore_s1', 'rescore_s2' ) as $table )
+		$execute ( "DROP TABLE $table" );
+}
+$connection->close();
+]]></custom_test>
+
+</test>

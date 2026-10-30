@@ -8859,9 +8859,33 @@ RowIteratorsWithEstimates_t CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( C
 	if ( dColumnarFilters.empty() || ( dColumnarFilters.size()==1 && dColumnarFilters[0].m_sName=="@rowid" ) )
 		return {};
 
+	// MCL evaluates block min/max only for the attributes of the filters passed to it,
+	// so the removed filters must not be in the block tester: their min/max were never read
+	CSphVector<CSphFilterSettings> dPassedFilters;
+	CreateFilterContext_t tPassedCtx;
+	if ( !dToDelete.empty() )
+	{
+		for ( size_t i = 0; i < dFilterMap.size(); i++ )
+			if ( dFilterMap[i]!=-1 )
+				dPassedFilters.Add ( dFilters[i] );
+
+		tPassedCtx.m_pFilters		= &dPassedFilters;
+		tPassedCtx.m_pMatchSchema	= &tSchema;
+		tPassedCtx.m_pIndexSchema	= &m_tSchema;
+		tPassedCtx.m_pBlobPool		= m_tBlobAttrs.GetReadPtr();
+		tPassedCtx.m_pColumnar		= m_pColumnar.get();
+		tPassedCtx.m_eCollation		= eCollation;
+		tPassedCtx.m_pHistograms	= m_pHistograms;
+		tPassedCtx.m_iTotalDocs		= m_iDocinfo;
+
+		CSphString sError, sTesterWarning;
+		if ( !sphCreateFilters ( tPassedCtx, sError, sTesterWarning ) || !tPassedCtx.m_pFilter )
+			return {};
+	}
+
 	std::vector<int> dDeletedFilters;
 	std::vector<common::BlockIterator_i *> dIterators;
-	dIterators = m_pColumnar->CreateAnalyzerOrPrefilter ( dColumnarFilters, dDeletedFilters, *pFilter );
+	dIterators = m_pColumnar->CreateAnalyzerOrPrefilter ( dColumnarFilters, dDeletedFilters, tPassedCtx.m_pFilter ? *tPassedCtx.m_pFilter : *pFilter );
 	if ( dIterators.empty() )
 		return {};
 

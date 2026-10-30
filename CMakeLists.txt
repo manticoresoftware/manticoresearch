@@ -406,6 +406,7 @@ with_get ( jieba "Jieba" "Chinese text segmentation tool" )
 set ( OPENSSL_USE_STATIC_LIBS ON )
 include ( GetSSL )
 with_menu_comp ( OpenSSL SSL "OpenSSL" "for encrypted networking" )
+include ( CheckOpenSSLVersion )
 win_install_c ( OpenSSL SSL daemon )
 
 trace ( OpenSSL::Crypto )

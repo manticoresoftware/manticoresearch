@@ -8856,6 +8856,12 @@ RowIteratorsWithEstimates_t CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( C
 	for ( int i = (int)dToDelete.size()-1; i>=0; i-- )
 		dColumnarFilters.erase ( dColumnarFilters.begin() + dToDelete[i] );
 
+	// MCL reports created analyzers by their index in the shortened list; the kept filters keep their order
+	int iKept = 0;
+	for ( auto & i : dFilterMap )
+		if ( i!=-1 )
+			i = iKept++;
+
 	if ( dColumnarFilters.empty() || ( dColumnarFilters.size()==1 && dColumnarFilters[0].m_sName=="@rowid" ) )
 		return {};
 

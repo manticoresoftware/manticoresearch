@@ -69,3 +69,29 @@ index p:ColumnarScan (100%)
 ––– input –––
 sql "DROP TABLE t3;"
 ––– output –––
+––– comment –––
+Also #5057: the kept filters kept their positions from before that removal, while the columnar library reports the
+analyzers it created by position in the shortened list. With x=5 on a secondary index first, y NOT BETWEEN (the int
+analyzer refuses excluded ranges, so y stays a per-row filter) took the mark of the z analyzer and was dropped: id 105
+came back, 100 rows instead of 99, no hints needed. Without y, z kept a zero estimate and led the intersection.
+––– input –––
+{ echo "CREATE TABLE t4 (x INT, y INT, z INT) engine='columnar';"; echo "INSERT INTO t4 (id,x,y,z) VALUES $(seq 1 10000 | awk '{printf "%s(%d,%d,%d,%d)", (NR>1?",":""), $1, $1%100, $1, $1}');"; echo "FLUSH RAMCHUNK t4;"; } | mysql -h0 -P9306 && echo ready
+––– output –––
+ready
+––– input –––
+sql "SELECT COUNT(*) FROM t4 WHERE x=5 AND y NOT BETWEEN 100 AND 200 AND z>=0 OPTION threads=1; SHOW META LIKE 'index';" | tr '\t' ' '
+––– output –––
+99
+index x:SecondaryIndex (100%), z:ColumnarScan (100%)
+––– input –––
+sql "SELECT id FROM t4 WHERE x=5 AND y NOT BETWEEN 100 AND 200 AND z>=0 ORDER BY id ASC LIMIT 3 OPTION threads=1 /*+ SecondaryIndex(x) ColumnarScan(y,z) */;" | paste -sd' ' -
+––– output –––
+5 205 305
+––– input –––
+sql "SELECT COUNT(*) FROM t4 WHERE x=5 AND z>=0 OPTION threads=1; SHOW META LIKE 'index';" | tr '\t' ' '
+––– output –––
+100
+index x:SecondaryIndex (100%), z:ColumnarScan (100%)
+––– input –––
+sql "DROP TABLE t4;"
+––– output –––

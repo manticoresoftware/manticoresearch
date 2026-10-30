@@ -47,3 +47,51 @@ sql "SELECT id FROM t2 WHERE s='a' AND id>0 ORDER BY id DESC LIMIT 5 OPTION thre
 ––– input –––
 sql "DROP TABLE t2;"
 ––– output –––
+––– comment –––
+Issue #5057: a columnar filter left to per-row checks (its ColumnarScan disabled) next to a ColumnarScan of another
+attribute. The block min/max test of the scan still had that filter, but the columnar library reads min/max only for
+the attributes of the scan filters, so the filter saw min=max=0 (c, before p) or a slot past the end (z, after p):
+c=1 returned 0 rows, z=1 lost some or all of them.
+––– input –––
+{ echo "CREATE TABLE t3 (c INT, p BIGINT, z INT) engine='columnar';"; echo "INSERT INTO t3 (id,c,p,z) VALUES $(seq 1 8200 | awk '{printf "%s(%d,1,%d,%d)", (NR>1?",":""), $1, $1, $1%2}');"; echo "FLUSH RAMCHUNK t3;"; } | mysql -h0 -P9306 && echo ready
+––– output –––
+ready
+––– input –––
+sql "SELECT COUNT(*) FROM t3 WHERE p>0 AND c=1 OPTION threads=1 /*+ ColumnarScan(p) NO_ColumnarScan(c) NO_SecondaryIndex(c) */; SHOW META LIKE 'index';" | tr '\t' ' '
+––– output –––
+8200
+index p:ColumnarScan (100%)
+––– input –––
+sql "SELECT COUNT(*) FROM t3 WHERE p>0 AND z=1 OPTION threads=1 /*+ ColumnarScan(p) NO_ColumnarScan(z) NO_SecondaryIndex(z) */; SHOW META LIKE 'index';" | tr '\t' ' '
+––– output –––
+4100
+index p:ColumnarScan (100%)
+––– input –––
+sql "DROP TABLE t3;"
+––– output –––
+––– comment –––
+Also #5057: the kept filters kept their positions from before that removal, while the columnar library reports the
+analyzers it created by position in the shortened list. With x=5 on a secondary index first, y NOT BETWEEN (the int
+analyzer refuses excluded ranges, so y stays a per-row filter) took the mark of the z analyzer and was dropped: id 105
+came back, 100 rows instead of 99, no hints needed. Without y, z kept a zero estimate and led the intersection.
+––– input –––
+{ echo "CREATE TABLE t4 (x INT, y INT, z INT) engine='columnar';"; echo "INSERT INTO t4 (id,x,y,z) VALUES $(seq 1 10000 | awk '{printf "%s(%d,%d,%d,%d)", (NR>1?",":""), $1, $1%100, $1, $1}');"; echo "FLUSH RAMCHUNK t4;"; } | mysql -h0 -P9306 && echo ready
+––– output –––
+ready
+––– input –––
+sql "SELECT COUNT(*) FROM t4 WHERE x=5 AND y NOT BETWEEN 100 AND 200 AND z>=0 OPTION threads=1; SHOW META LIKE 'index';" | tr '\t' ' '
+––– output –––
+99
+index x:SecondaryIndex (100%), z:ColumnarScan (100%)
+––– input –––
+sql "SELECT id FROM t4 WHERE x=5 AND y NOT BETWEEN 100 AND 200 AND z>=0 ORDER BY id ASC LIMIT 3 OPTION threads=1 /*+ SecondaryIndex(x) ColumnarScan(y,z) */;" | paste -sd' ' -
+––– output –––
+5 205 305
+––– input –––
+sql "SELECT COUNT(*) FROM t4 WHERE x=5 AND z>=0 OPTION threads=1; SHOW META LIKE 'index';" | tr '\t' ' '
+––– output –––
+100
+index x:SecondaryIndex (100%), z:ColumnarScan (100%)
+––– input –––
+sql "DROP TABLE t4;"
+––– output –––

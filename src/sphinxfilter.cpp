@@ -2680,8 +2680,8 @@ static bool CreateFilterTree ( CreateFilterContext_t & tCtx, CSphString & sError
 	if ( !pFilter )
 		return false;
 
-	// weight filter phase only on match path
-	if ( bWeight && tCtx.m_bScan )
+	// weight is known only after ranking, and the tree can't be evaluated in parts, so it goes to the weight filter phase as a whole
+	if ( bWeight )
 		tCtx.m_pWeightFilter = std::move ( pFilter );
 	else
 		tCtx.m_pFilter = std::move ( pFilter );

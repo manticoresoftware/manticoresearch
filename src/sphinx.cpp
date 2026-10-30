@@ -8656,7 +8656,7 @@ bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryCo
 			tMatch.m_tRowID = i;
 			tMatch.m_pStatic = fnToStatic(i);
 
-			// early filter only (no late filters in full-scan because of no @weight)
+			// early filter; a filter tree that depends on weight is checked after CalcSort
 			if constexpr ( HAS_FILTER_CALC )
 				tCtx.CalcFilter(tMatch);
 
@@ -8675,7 +8675,19 @@ bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryCo
 				tMatch.m_iWeight = ( sphRand() & 0xffff ) * iIndexWeight;
 
 			if constexpr ( HAS_SORT_CALC )
+			{
 				tCtx.CalcSort(tMatch);
+
+				// a filter tree that depends on weight
+				if ( tCtx.m_pWeightFilter && !tCtx.m_pWeightFilter->Eval(tMatch) )
+				{
+					if constexpr ( HAS_FILTER_CALC )
+						tCtx.FreeDataFilter ( tMatch );
+
+					tCtx.FreeDataSort ( tMatch );
+					continue;
+				}
+			}
 
 			bool bNewMatch = false;
 			if constexpr  ( SINGLE_SORTER )
@@ -8726,7 +8738,8 @@ template <typename ITERATOR, typename TO_STATIC>
 bool RunFullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryContext & tCtx, CSphQueryResultMeta & tMeta, const VecTraits_T<ISphMatchSorter *>& dSorters, CSphMatch & tMatch, int iCutoff, bool bRandomize, int iIndexWeight, int64_t tmMaxTimer )
 {
 	bool bHasFilterCalc = !tCtx.m_dCalcFilter.IsEmpty();
-	bool bHasSortCalc = !tCtx.m_dCalcSort.IsEmpty();
+	// the weight filter reads sort-stage values, so it is checked right after CalcSort
+	bool bHasSortCalc = !tCtx.m_dCalcSort.IsEmpty() || !!tCtx.m_pWeightFilter;
 	bool bHasFilter = !!tCtx.m_pFilter;
 	bool bHasTimer = tmMaxTimer>0;
 	bool bHasCutoff = iCutoff!=-1;
@@ -9452,7 +9465,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	bool bCutoffHit =  false;
 	if ( pIterator )
 	{
-		if ( iCutoff>=0 && !tCtx.m_pFilter )
+		if ( iCutoff>=0 && !tCtx.m_pFilter && !tCtx.m_pWeightFilter )
 			pIterator->SetCutoff(iCutoff);
 
 		bCutoffHit = RunFullscanOnIterator ( pIterator.get(), tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );

@@ -1837,7 +1837,9 @@ bool JoinSorter_c::SetupRightFilters ( CSphString & sError )
 			return false;
 		}
 
-		m_tMixedFilter.SetFilter ( tCtx.m_pFilter );
+		// post-join, weight is already computed, so weight filters go here too
+		std::unique_ptr<ISphFilter> pFilter = sphJoinFilters ( std::move ( tCtx.m_pFilter ), std::move ( tCtx.m_pWeightFilter ) );
+		m_tMixedFilter.SetFilter ( pFilter );
 		return true;
 	}
 

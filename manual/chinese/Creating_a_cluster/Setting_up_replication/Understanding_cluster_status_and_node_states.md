@@ -42,7 +42,7 @@ SHOW STATUS LIKE 'cluster_%_node_state';
 
 - **`synced`** - 正常运行
 - **`joining`** - 节点正在加入集群（临时状态）
-- **`donor`** - 正在帮助另一台节点加入（临时状态）
+- **`donor`** - 正在帮助另一个节点加入集群（临时状态）。此节点上对集群表的写入操作将等待传输完成后再执行，详见[加入复制集群](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md#Joining-a-replication-cluster)
 - **`closed`** - 节点已停止
 - **`destroyed`** - 节点已崩溃，需要重启
 

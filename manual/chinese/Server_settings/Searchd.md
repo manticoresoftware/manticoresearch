@@ -294,14 +294,16 @@ knn_parallel_build = 4
 ### knn_rescore_prefetch
 
 <!-- example conf knn_rescore_prefetch -->
-此设置控制 Manticore 是否在对所有 KNN 候选项进行[重评分](../Searching/KNN.md)之前，要求操作系统一次性读取它们的全精度向量。它适用于保存在[列式存储](../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)中并通过内存映射读取的向量属性；这是列式属性的默认[访问模式](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files)（`access_columnar_attrs = mmap`）。
+此设置控制 Manticore 是否在对所有 KNN 候选项[重新评分](../Searching/KNN.md)之前，请求操作系统一次性读取它们的全精度向量。它适用于通过内存映射读取的向量属性，涵盖两种[存储方式](../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)：使用 `access_blob_attrs = mmap` 或 `mmap_preread` 的行式属性，以及使用 `access_columnar_attrs = mmap` 的列式属性，后者是列式属性的默认[访问模式](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files)。
 
 如果不预取，不在内存中的候选向量只会在距离计算进行到它时才从磁盘读取。向量会逐个读取，而且每次读取还会带入查询并不需要的相邻数据。启用预取后，会在计算任何距离之前一次性请求读取所有候选项，因此这些读取可以并行执行，并且只读取包含候选向量的数据。只要向量必须从磁盘读取，这就能让 KNN 查询快数倍：例如重启之后，或表中的向量无法全部放入可用内存时。
+
+在行式存储中，每行的所有属性都存放在一起，只有读取行头后，才能确定向量在行内的位置。因此，系统会分两轮并行读取：先读取所有候选行的行头，再读取向量。读取向量时仅读取向量本身的字节，不读取该行的其他属性。列式存储将向量属性存放在独立文件中，因此只需一轮读取。
 
 在预取之前，Manticore 会检查一部分候选向量样本是否已经在内存中。如果已在内存中，则跳过预取，因此对于已完全缓存的数据，无论此设置开启还是关闭，查询速度都相同。此设置不会改变搜索结果。
 
 限制：
-* 它对行式存储中的向量属性以及使用 `access_columnar_attrs = file` 的列式属性无效。
+* 此设置对使用 `access_columnar_attrs = file` 的列式属性，以及使用 `access_blob_attrs = mlock` 的行式属性无效；后者始终驻留在内存中。
 * 它在 Windows 上无效。
 * 在 Linux 上，缓存向量检查依赖操作系统报告文件的哪些部分位于内存中，而系统只会对 `searchd` 用户拥有或允许其写入的文件报告这些信息。如果表文件属于其他用户，并且对 `searchd` 是只读的（例如，由在不同账户下运行的 `indexer` 构建的普通表），这些向量会始终被报告为已缓存，因此预取永远不会执行。
 
@@ -1387,6 +1389,8 @@ pseudo_sharding = 0
 ### replication_retry_delay
 
 此设置是以毫秒为单位的整数（或 [special_suffixes](../Server_settings/Special_suffixes.md)），指定在复制失败时 Manticore 重试查询远程节点之前的延迟。只有在指定了非零值时，这个值才有意义。默认值为 500。
+
+此设置也是尝试解析集群节点名称时的基础重试间隔，例如供体节点向正在加入集群的节点发送数据时：Manticore 会尝试 21 次，重试间隔逐次延长，总等待时间约为此间隔的 621 倍（使用默认值时约为 5 分钟）。
 
 ### qcache_max_bytes
 

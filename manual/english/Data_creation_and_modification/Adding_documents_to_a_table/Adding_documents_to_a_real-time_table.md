@@ -1006,6 +1006,12 @@ When Manticore publishes a disk chunk to the target table, a row in that chunk r
 
 behaves like `insert`; it does not fail merely because the ID already exists.
 
+#### Memory and disk usage
+
+A direct-to-disk load does not collect its documents in the memory of `searchd`. Each `INSERT` statement, or each part of a `/bulk` request body (about 32 KiB when the request has the `shared` parameter), is converted to CSV and passed to an `indexer` process over a pipe right away. `indexer` builds the chunk the same way as a plain table: it collects data in memory up to its [mem_limit](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#mem_limit), fixed at the default 128 MB, flushes it to temporary files and, after the last row, merges them into the disk chunk. So the memory a load needs does not grow with its size: each `indexer` process takes its `mem_limit` plus its [write buffers](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#write_buffer) and the process itself, roughly 200 MB in total. A `SET bulk_import` session or a `/bulk` request runs one `indexer`, a load with `shared=N` runs N; add the statement or request part being processed.
+
+As with a plain table (see [inplace_enable](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#inplace_enable)), the intermediate data in the temporary files is comparable in size to the finished chunk. Both are written to the table's staging directory, next to the table files, so at the peak the disk that holds the table needs free space for about twice the size of the new chunk. When the chunk is published, its files are renamed into the table without copying. See [Staging files and cleanup](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Staging-files-and-cleanup).
+
 #### Staging files and cleanup
 
 Manticore removes the current staging directory after a normal `COMMIT`, `ROLLBACK`, mode disable, or session close. A Shared pool keeps its staging directories until it is committed or cancelled; closing connections does not remove them. A daemon or host crash can leave an abandoned staging directory behind. A later direct-to-disk load creates a new uniquely named directory and does not reuse or attach files left by the crashed load.

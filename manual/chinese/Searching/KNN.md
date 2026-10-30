@@ -710,6 +710,13 @@ POST /search
 * **`MAX_CHUNKS` 会丢弃文本。** 超出上限时，剩余部分会合并到最后一个保留的 chunk 中，而该 chunk 随后会超过 `MAX_TOKENS`，在嵌入时被截断到模型的输入窗口。表面上不会留下可见空缺，但尾部内容已经丢失。
 * **本地模型和远程模型的分块方式不同。** 本地模型按模型真实的 token 切分。远程 API 模型（OpenAI、Voyage、Jina）没有本地分词器，因此改用保守的字节估算，所以相同的文本和设置会生成与本地模型不同数量的 chunk。
 
+对于 `fixed`、`recursive` 和 `sentence` 策略，Manticore 还会记录每个分块向量对应的原文片段，以便在 KNN 匹配结果中显示实际匹配的文本。为此，可使用 [HIGHLIGHT()](../Searching/Highlighting.md#knn_chunk) 的 `knn_chunk` 选项：包含全文查询时，仅在匹配的分块内高亮显示；不包含全文查询时，则返回分块本身。分块信息会在刷盘、合并和重启后保留，精确重评分时也会同步更新距离和对应的分块。分块跟踪要求存储源字段（默认已启用）。此功能推出前写入的行不包含分块信息，因此高亮时会回退到整个字段；升级后插入或替换的行则会记录分块信息。
+
+```sql
+SELECT id, knn_dist(), HIGHLIGHT({knn_chunk=1},'body')
+FROM articles WHERE knn(chunks, 5, 'certificate rotation');
+```
+
 目前还不支持对基于模型的 `float_vector_array` 使用 `ALTER TABLE ... ADD COLUMN`，也不支持对其执行 `ALTER TABLE ... REBUILD EMBEDDINGS`；现有行无法回填，因此该列会一直为空。请在建表时直接声明这类列。对于 `float_vector` 列则都能正常工作，包括 `mean`。
 
 <!-- example chunking -->

@@ -1,10 +1,5 @@
 # Changelog
 
-## Version Dev
-
-### New Features and Improvements
-* 🆕 Added testing for Grafana version 13.3.
-
 ## Version 29.9.0
 **Released**: September 11th 2026
 

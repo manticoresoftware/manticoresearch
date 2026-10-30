@@ -55,12 +55,14 @@ struct SelectIteratorCtx_t
 	int										m_iThreads = 1;
 	bool									m_bCalcPushCost = true;
 	bool									m_bFromIterator = false;
+	bool									m_bHasDocidCache = false;
 	float									m_fDocsLeft = 1.0f;
 
 			SelectIteratorCtx_t ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, const HistogramContainer_c * pHistograms, columnar::Columnar_i * pColumnar, const SIContainer_c & tSI, int iCutoff, int64_t iTotalDocs, int iThreads );
 
 	bool	IsEnabled_SI ( const CSphFilterSettings & tFilter ) const;
 	bool	IsEnabled_Analyzer ( const CSphFilterSettings & tFilter ) const;
+	bool	IsCachedDocidLookup ( const CSphFilterSettings & tFilter ) const;
 	void	IgnorePushCost() { m_bCalcPushCost = false; }
 };
 

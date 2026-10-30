@@ -686,6 +686,11 @@ static void FetchHistogramInfo ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, con
 		tSIInfo.m_iTotalValues = pHistogram->GetNumValues();
 		tSIInfo.m_iRsetEstimate = tSIInfo.m_bUsable ? tEstimate.m_iTotal : tSIInfo.m_iTotalValues;
 		tSIInfo.m_bHasHistograms = true;
+		// A complete cache proves that this chunk has unique numeric IDs.
+		// Coarse histogram buckets cannot make an IN list match more rows
+		// than it has values. Do not apply this bound to duplicate-ID chunks.
+		if ( tSIInfo.m_bUsable && tCtx.IsCachedDocidLookup(tFilter) )
+			tSIInfo.m_iRsetEstimate = Min ( tSIInfo.m_iRsetEstimate, int64_t(tFilter.GetNumValues()) );
 	}
 }
 

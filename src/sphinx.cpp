@@ -2571,6 +2571,51 @@ RowsToUpdateData_t CSphIndex_VLN::Update_CollectRowPtrs ( const UpdateContext_t 
 		return dRowsToUpdate;
 
 	dSorted.Sort ( Lesser ( [&dDocids] ( int a, int b ) { return dDocids[a]<dDocids[b]; } ) );
+	// SQL/API updates resolve IDs again after collecting them. Sparse updates
+	// can use the complete unique-ID cache instead of decoding lookup blocks.
+	// Keep the same sorted order and first occurrence for repeated update IDs.
+	// The existing signed-sorted update merge needs a separate negative-ID audit;
+	// leave that input on its existing path in this experiment.
+	if ( m_tLookupReader.HasCache() && DocidLookupCache_c::IsSparse ( dSorted.GetLength(), uint64_t(m_iDocinfo) ) && dDocids[dSorted[0]]>=0 )
+	{
+		dRowsToUpdate.Reserve(dSorted.GetLength());
+		if ( dSorted.GetLength()>=DocidLookupCache_c::BATCH_SIZE )
+		{
+			uint64_t dIDs[DocidLookupCache_c::BATCH_SIZE];
+			RowID_t dRows[DocidLookupCache_c::BATCH_SIZE];
+			int dUpdates[DocidLookupCache_c::BATCH_SIZE];
+			int i = 0;
+			while ( i<dSorted.GetLength() )
+			{
+				int nBatch = 0;
+				while ( i<dSorted.GetLength() && nBatch<DocidLookupCache_c::BATCH_SIZE )
+				{
+					int iUpdate = dSorted[i++];
+					DocID_t tDocID = dDocids[iUpdate];
+					if ( i>1 && tDocID==dDocids[dSorted[i-2]] )
+						continue;
+					dIDs[nBatch] = (uint64_t)tDocID;
+					dUpdates[nBatch++] = iUpdate;
+				}
+				m_tLookupReader.FindBatch ( dIDs, dRows, nBatch );
+				for ( int j=0; j<nBatch; ++j )
+					if ( dRows[j]!=INVALID_ROWID && !m_tDeadRowMap.IsSet(dRows[j]) )
+						dRowsToUpdate.Add ( { dRows[j], dUpdates[j] } );
+			}
+			return dRowsToUpdate;
+		}
+		for ( int i=0; i<dSorted.GetLength(); ++i )
+		{
+			int iUpdate = dSorted[i];
+			DocID_t tDocID = dDocids[iUpdate];
+			if ( i && tDocID==dDocids[dSorted[i-1]] )
+				continue;
+			RowID_t tRowID = m_tLookupReader.Find(tDocID);
+			if ( tRowID!=INVALID_ROWID && !m_tDeadRowMap.IsSet(tRowID) )
+				dRowsToUpdate.Add ( { tRowID, iUpdate } );
+		}
+		return dRowsToUpdate;
+	}
 	DocIdIndexReader_c tSortedReader ( dSorted, dDocids );
 	LookupReaderIterator_c tLookupReader ( m_tDocidLookup.GetReadPtr(), m_uVersion );
 	Intersect ( tLookupReader, tSortedReader, [&dRowsToUpdate, this] ( RowID_t tRowID, DocID_t, DocIdIndexReader_c& tSortedReader )
@@ -3561,6 +3606,7 @@ CSphVector<SecondaryIndexInfo_t> CSphIndex_VLN::GetEnabledIndexes ( const CSphQu
 
 	StrVec_t dWarnings;
 	SelectIteratorCtx_t tCtx ( tQuery, tQuery.m_dFilters, m_tSchema, m_tSchema, m_pHistograms, m_pColumnar.get(), m_tSI, iCutoff, m_iDocinfo, iThreads );
+	tCtx.m_bHasDocidCache = m_tLookupReader.HasCache();
 	return SelectIterators ( tCtx, fCost, dWarnings );
 }
 
@@ -8921,6 +8967,7 @@ bool CSphIndex_VLN::SelectIteratorsFT ( const CSphQuery & tQuery, const CSphVect
 
 	// always do single-thread estimates here
 	SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, dFilters, m_tSchema, tSorterSchema, m_pHistograms, m_pColumnar.get(), m_tSI, iCutoff, m_iDocinfo, 1 );
+	tSelectIteratorCtx.m_bHasDocidCache = m_tLookupReader.HasCache();
 	tSelectIteratorCtx.IgnorePushCost();
 	float fBestCost = FLT_MAX;
 	dSIInfo = SelectIterators ( tSelectIteratorCtx, fBestCost, dWarnings );
@@ -9056,6 +9103,7 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 	if ( bPlanForKNNIterator )
 	{
 		SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, dFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_tSI, iCutoff, m_iDocinfo, 1 );
+		tSelectIteratorCtx.m_bHasDocidCache = m_tLookupReader.HasCache();
 		tSelectIteratorCtx.m_bFromIterator = true;
 
 		int iRequestedKNNDocs = Min ( tQuery.SingleKnnSettings().GetRequestedDocs(), m_iDocinfo );
@@ -9071,6 +9119,7 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 			// b. Run this with the same number of docs and number of threads as in GetPseudoShardingMetric()
 			// For now we use approach b) as it is simpler
 			SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, dFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_tSI, iCutoff, m_iDocinfo, iThreads );
+			tSelectIteratorCtx.m_bHasDocidCache = m_tLookupReader.HasCache();
 			dSIInfo = SelectIterators ( tSelectIteratorCtx, fBestCost, dWarnings );
 		}
 		else
@@ -9168,7 +9217,7 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	dSIIterators = m_tSI.CreateSecondaryIndexIterator ( dSIInfo, dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), iCutoff, bUseSICache, tMeta.m_sWarning );
 
 	// lookup-by-id (.SPT) iterators
-	dLookupIterators = CreateLookupIterator ( dSIInfo, dFilters, m_tDocidLookup.GetReadPtr(), m_uVersion, RowID_t(m_iDocinfo) );
+	dLookupIterators = CreateLookupIterator ( dSIInfo, dFilters, m_tDocidLookup.GetReadPtr(), m_uVersion, RowID_t(m_iDocinfo), &m_tLookupReader );
 
 	// try to spawn analyzers or prefilters from columnar storage
 	// if we already created an iterator at prev stage, we need to recreate filters here,
@@ -10432,6 +10481,7 @@ bool CSphIndex_VLN::PreallocDocidLookup()
 	if ( bUuidLinked )
 		m_tUuidLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), tUuidEntriesOffset, nDocs );
 
+	m_tLookupReader.BuildCache(m_uVersion);
 	return true;
 }
 
@@ -12728,7 +12778,7 @@ void CSphIndex_VLN::GetStatus ( CSphIndexStatus* pRes ) const
 		pRes->m_iMappedResident += pRes->m_iMappedResidentHits;
 	}
 
-	pRes->m_iRamUse = sizeof(CSphIndex_VLN) + m_dFieldLens.GetLengthBytes() + pRes->m_iMappedResident;
+	pRes->m_iRamUse = sizeof(CSphIndex_VLN) + m_dFieldLens.GetLengthBytes() + pRes->m_iMappedResident + m_tLookupReader.GetCacheBytes();
 	pRes->m_iDiskUse = 0;
 
 	CSphVector<IndexFileExt_t> dExts = sphGetExts();

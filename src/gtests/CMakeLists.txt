@@ -7,6 +7,8 @@ if (NOT TARGET GTest::gmock_main)
 endif ()
 
 set ( GTESTS_SRC
+		gtests_docidcache.cpp
+		gtests_docidplanner.cpp
 		gtests_docidlookup.cpp
 		gtests_rtstuff.cpp
 		gtests_text.cpp

@@ -8923,6 +8923,9 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 		if ( tCtx.m_pFilter )
 			tCtx.m_pFilter->SetColumnar(pColumnar);
 
+		if ( tCtx.m_pWeightFilter )
+			tCtx.m_pWeightFilter->SetColumnar(pColumnar);
+
 		// storing segment in matches tag for finding strings attrs offset later, biased against default zero
 		int iTag = iSeg+1;
 		if ( tCtx.GetPackedFactor() & SPH_FACTOR_ENABLE )

@@ -1,0 +1,56 @@
+––– comment –––
+Issue #5055: a filter tree (OR, NOT) with a leaf on a WEIGHT() alias ran before ranking, when the alias was not
+computed yet: s>=1 returned nothing and s<1 returned rows. All three docs match 'hat', so s=2 for each of them.
+Row-wise and columnar tables, RAM chunk and disk chunk.
+––– input –––
+sql() { mysql -h0 -P9306 --skip-table --batch --raw --skip-column-names -e "$1"; }; q() { echo "$1: $2 = [$(sql "SELECT id, IF(WEIGHT()>0,2,0) AS s FROM $1 WHERE MATCH('hat') AND $2 ORDER BY id ASC" | cut -f1 | paste -sd' ' -)]"; }
+––– output –––
+––– block: ../base/start-searchd –––
+––– input –––
+for t in t tc; do sql "CREATE TABLE $t (name text, status string, kind string)$([ $t = tc ] && echo " engine='columnar'"); INSERT INTO $t (id, name, status, kind) VALUES (1,'red hat','delisted','equity'),(2,'hat trick','delisted','prediction'),(3,'blue hat','active','equity')"; done; echo ready
+––– output –––
+ready
+––– input –––
+checks() { for t in t tc; do q $t "(status!='active' OR kind='futures') AND s>=1"; q $t "(status!='active' OR kind='futures') AND s<1"; q $t "NOT (status='active' AND kind!='futures') AND s>=1"; q $t "(s>=1 OR kind='futures')"; q $t "(s<1 OR status='active')"; done; }; checks
+––– output –––
+t: (status!='active' OR kind='futures') AND s>=1 = [1 2]
+t: (status!='active' OR kind='futures') AND s<1 = []
+t: NOT (status='active' AND kind!='futures') AND s>=1 = [1 2]
+t: (s>=1 OR kind='futures') = [1 2 3]
+t: (s<1 OR status='active') = [3]
+tc: (status!='active' OR kind='futures') AND s>=1 = [1 2]
+tc: (status!='active' OR kind='futures') AND s<1 = []
+tc: NOT (status='active' AND kind!='futures') AND s>=1 = [1 2]
+tc: (s>=1 OR kind='futures') = [1 2 3]
+tc: (s<1 OR status='active') = [3]
+––– input –––
+sql "FLUSH RAMCHUNK t; FLUSH RAMCHUNK tc"; checks
+––– output –––
+t: (status!='active' OR kind='futures') AND s>=1 = [1 2]
+t: (status!='active' OR kind='futures') AND s<1 = []
+t: NOT (status='active' AND kind!='futures') AND s>=1 = [1 2]
+t: (s>=1 OR kind='futures') = [1 2 3]
+t: (s<1 OR status='active') = [3]
+tc: (status!='active' OR kind='futures') AND s>=1 = [1 2]
+tc: (status!='active' OR kind='futures') AND s<1 = []
+tc: NOT (status='active' AND kind!='futures') AND s>=1 = [1 2]
+tc: (s>=1 OR kind='futures') = [1 2 3]
+tc: (s<1 OR status='active') = [3]
+––– comment –––
+JOIN. A LEFT JOIN with a right-table filter evaluates all filters after the join, where the weight filter was dropped
+(a flat s>=3 returned every row); the tree must keep working there. An INNER JOIN with left-table filters only
+leaves the tree on the left table.
+––– input –––
+sql "CREATE TABLE t2 (x int); INSERT INTO t2 (id, x) VALUES (1,1),(2,2),(3,3)"; j() { echo "$1 = [$(sql "SELECT t.id, IF(WEIGHT()>0,2,0) AS s FROM t $1 ORDER BY t.id ASC" | cut -f1 | paste -sd' ' -)]"; }; echo ready
+––– output –––
+ready
+––– input –––
+j "LEFT JOIN t2 ON t2.id=t.id WHERE MATCH('hat') AND t2.x>0 AND s>=3"; j "LEFT JOIN t2 ON t2.id=t.id WHERE MATCH('hat') AND (t2.x>1 OR t.status='x') AND s>=1"; j "LEFT JOIN t2 ON t2.id=t.id WHERE MATCH('hat') AND (t2.x>1 OR t.status='x') AND s>=3"; j "INNER JOIN t2 ON t2.id=t.id WHERE MATCH('hat') AND (t.status!='active' OR t.kind='futures') AND s>=1"
+––– output –––
+LEFT JOIN t2 ON t2.id=t.id WHERE MATCH('hat') AND t2.x>0 AND s>=3 = []
+LEFT JOIN t2 ON t2.id=t.id WHERE MATCH('hat') AND (t2.x>1 OR t.status='x') AND s>=1 = [2 3]
+LEFT JOIN t2 ON t2.id=t.id WHERE MATCH('hat') AND (t2.x>1 OR t.status='x') AND s>=3 = []
+INNER JOIN t2 ON t2.id=t.id WHERE MATCH('hat') AND (t.status!='active' OR t.kind='futures') AND s>=1 = [1 2]
+––– input –––
+sql "DROP TABLE t; DROP TABLE tc; DROP TABLE t2"
+––– output –––

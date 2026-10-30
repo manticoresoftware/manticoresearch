@@ -20,6 +20,8 @@
 #include "lz4/lz4hc.h"
 #include "sphinxint.h"
 
+#include <atomic>
+
 
 enum BlockFlags_e : BYTE
 {
@@ -374,6 +376,7 @@ private:
 	CSphOrderedHash<CSphReader *, HashKey_t, HashKey_t, 1024> m_tHash;
 
 	static DocstoreReaders_c * m_pReaders;
+	static std::atomic<uint64_t> m_uGeneration;
 
 	static const int MIN_READER_BUFFER_SIZE = 32768;
 	static const int MAX_READER_BUFFER_SIZE = 262144;
@@ -384,6 +387,8 @@ private:
 
 
 DocstoreReaders_c * DocstoreReaders_c::m_pReaders = nullptr;
+// Process lifetime prevents stale TLS entries surviving registry recreation.
+std::atomic<uint64_t> DocstoreReaders_c::m_uGeneration { 1 };
 
 
 bool DocstoreReaders_c::HashKey_t::operator == ( const HashKey_t & tKey ) const
@@ -401,6 +406,7 @@ DWORD DocstoreReaders_c::HashKey_t::Hash ( const HashKey_t & tKey )
 
 DocstoreReaders_c::~DocstoreReaders_c()
 {
+	m_uGeneration.fetch_add ( 1, std::memory_order_release );
 	for ( auto & tDocstore : m_tHash )
 		SafeDelete ( tDocstore.second );
 }
@@ -428,14 +434,31 @@ void DocstoreReaders_c::CreateReader ( int64_t iSessionId, int64_t iIndexId, con
 
 	Verify ( m_tHash.Add ( pReader, {iSessionId, iIndexId} ) );
 	m_iTotalReaderSize += iBufferSize;
+	m_uGeneration.fetch_add ( 1, std::memory_order_release );
 }
 
 
 CSphReader * DocstoreReaders_c::GetReader ( int64_t iSessionId, int64_t iIndexId )
 {
+	struct LastReader_t
+	{
+		int64_t m_iSessionId = 0;
+		int64_t m_iIndexId = 0;
+		uint64_t m_uGeneration = 0;
+		CSphReader * m_pReader = nullptr;
+	};
+	static thread_local LastReader_t tLast;
+	const auto uGeneration = m_uGeneration.load ( std::memory_order_acquire );
+	if ( tLast.m_uGeneration==uGeneration && tLast.m_iSessionId==iSessionId && tLast.m_iIndexId==iIndexId )
+		return tLast.m_pReader;
+
+	// Borrow only: session/index lifetime protects the returned reader, as it
+	// already does after the lock is released. TLS never retains reader buffers.
 	ScopedMutex_t tLock(m_tLock);
 	CSphReader ** ppReader = m_tHash ( { iSessionId, iIndexId } );
-	return ppReader ? *ppReader : nullptr;
+	// Capture the generation under the lock, including for negative lookups.
+	tLast = { iSessionId, iIndexId, m_uGeneration.load ( std::memory_order_relaxed ), ppReader ? *ppReader : nullptr };
+	return tLast.m_pReader;
 }
 
 
@@ -444,6 +467,7 @@ void DocstoreReaders_c::Delete ( CSphReader * pReader, const HashKey_t tKey )
 	m_iTotalReaderSize -= pReader->GetBufferSize();
 	assert ( m_iTotalReaderSize>=0 );
 
+	m_uGeneration.fetch_add ( 1, std::memory_order_release );
 	SafeDelete(pReader);
 	m_tHash.Delete(tKey);
 }
@@ -482,6 +506,7 @@ void DocstoreReaders_c::DeleteByIndexId ( int64_t iIndexId )
 void DocstoreReaders_c::Init ()
 {
 	assert(!m_pReaders);
+	m_uGeneration.fetch_add ( 1, std::memory_order_release );
 	m_pReaders = new DocstoreReaders_c;
 }
 

@@ -9288,6 +9288,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 
 	if ( m_bSetupReaders )
 	{
+		PrefetchDoclist ( tRes.m_iDoclistOffset, tRes.m_iDoclistHint );
 		tWord.SetDocReader ( m_pDoclist );
 
 		// read in skiplist

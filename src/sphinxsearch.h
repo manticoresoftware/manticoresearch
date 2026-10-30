@@ -113,6 +113,8 @@ public:
 	virtual int					GetNextDocs ( QwordDoc_t * pDocs, int iMax );
 	virtual void				SeekHitlist ( SphOffset_t uOff ) = 0;
 	virtual Hitpos_t			GetNextHit () = 0;
+	virtual bool				WantHitPrefetch() { return false; }
+	virtual void				PrefetchHits ( const SphOffset_t * pOffsets, const DWORD * pHits, int iCount ) {}
 	virtual void				CollectHitMask ();
 	virtual void				Reset();
 

@@ -262,10 +262,12 @@ protected:
 	{
 		SphOffset_t	m_tHitlistOffset;
 		RowID_t		m_tRowID;
+		DWORD		m_uHits;	///< hit count of the document, sizes the hitlist prefetch
 	};
 
 	int					FillDocsBatched ( StoredHit_t * & pStoredHit );
 	int					FillDocsWideFields ( StoredHit_t * & pStoredHit );
+	void				PrefetchMatchedHits ( const ExtDoc_t * pMatched, const StoredHit_t * pStoredHit ) const;
 
 	ISphQword *			m_pQword = nullptr;
 	FieldMask_t			m_dQueriedFields;	///< accepted fields mask
@@ -567,6 +569,7 @@ private:
 	FORCE_INLINE void	MergeHits3 ( const StoredMultiHit_t & tStoredHit );
 
 	void				InitHitMerge ( HitInfo_t & tHitInfo, int iNode, const StoredMultiHit_t & tStoredHit );
+	void				PrefetchMatchedHits ( const ExtDoc_t * pMatched, const StoredMultiHit_t * pStoredHit ) const;
 	void				DoHitMerge ( RowID_t tRowID, HitInfo_t & tLeft, HitInfo_t & tRight );
 	void				DoHitMerge ( RowID_t tRowID, HitInfo_t & tHit1, HitInfo_t & tHit2, HitInfo_t & tHit3 );
 	void				CopyHits ( RowID_t tRowID, HitInfo_t & tHitInfo, int iNode );
@@ -2152,6 +2155,7 @@ int ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::FillDocsBatched ( StoredHit_t * & pS
 			{
 				pStoredHit->m_tHitlistOffset = tSrc.m_iHitlistPos;
 				pStoredHit->m_tRowID = tDoc.m_tRowID;
+				pStoredHit->m_uHits = tSrc.m_uMatchHits;
 				pStoredHit++;
 			}
 		}
@@ -2213,6 +2217,7 @@ int ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::FillDocsWideFields ( StoredHit_t * &
 		{
 			pStoredHit->m_tHitlistOffset = m_pQword->m_iHitlistPos;
 			pStoredHit->m_tRowID = tDoc.m_tRowID;
+			pStoredHit->m_uHits = m_pQword->m_uMatchHits;
 			pStoredHit++;
 		}
 	}
@@ -2278,6 +2283,33 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 	return ReturnDocsChunk ( iDoc, "term", m_pQword->m_sDictWord.cstr() );
 }
 
+// let the OS fetch the hitlists of the matched documents in one go before CollectHits walks them one by one;
+// pStoredHit is the first stored hit of the current chunk, the matched docs and the stored hits are both in rowid order
+template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
+void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::PrefetchMatchedHits ( const ExtDoc_t * pMatched, const StoredHit_t * pStoredHit ) const
+{
+	if ( !m_pQword->WantHitPrefetch() )
+		return;
+
+	SphOffset_t dOffsets[MAX_BLOCK_DOCS];
+	DWORD dHits[MAX_BLOCK_DOCS];
+	int iToPrefetch = 0;
+	for ( const ExtDoc_t * pDoc = pMatched; HasDocs(pDoc) && iToPrefetch<MAX_BLOCK_DOCS; pDoc++ )
+	{
+		while ( pStoredHit->m_tRowID < pDoc->m_tRowID )
+			pStoredHit++;
+
+		if ( pStoredHit->m_tRowID!=pDoc->m_tRowID )
+			continue;
+
+		dOffsets[iToPrefetch] = pStoredHit->m_tHitlistOffset;
+		dHits[iToPrefetch++] = pStoredHit->m_uHits;
+	}
+
+	m_pQword->PrefetchHits ( dOffsets, dHits, iToPrefetch );
+}
+
+
 template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
 void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::CollectHits ( const ExtDoc_t * pMatched )
 {
@@ -2286,6 +2318,8 @@ void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::CollectHits ( const ExtDoc_t * pMat
 
 	m_dStoredHits.Add().m_tRowID = INVALID_ROWID;
 	StoredHit_t * pStoredHit = m_dStoredHits.Begin();
+
+	PrefetchMatchedHits ( pMatched, pStoredHit );
 
 	for ( ; HasDocs(pMatched); pMatched++ )
 	{
@@ -3532,6 +3566,34 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MergeHitsN ( const Stored
 	}
 }
 
+// one hitlist prefetch request per term for the matched documents, before CollectHits walks them one by one;
+// hit counts are not stored here, so each document gets one page. pStoredHit is the first stored hit of the chunk
+template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::PrefetchMatchedHits ( const ExtDoc_t * pMatched, const StoredMultiHit_t * pStoredHit ) const
+{
+	ARRAY_FOREACH ( iNode, m_dNodes )
+	{
+		if ( !m_dNodes[iNode].m_pQword->WantHitPrefetch() )
+			continue;
+
+		SphOffset_t dOffsets[MAX_BLOCK_DOCS];
+		int iToPrefetch = 0;
+		const StoredMultiHit_t * pScan = pStoredHit;
+		for ( const ExtDoc_t * pDoc = pMatched; HasDocs(pDoc) && iToPrefetch<MAX_BLOCK_DOCS; pDoc++ )
+		{
+			while ( pScan->m_tRowID < pDoc->m_tRowID )
+				pScan++;
+
+			if ( pScan->m_tRowID!=pDoc->m_tRowID )
+				continue;
+
+			dOffsets[iToPrefetch++] = pScan->m_dHitlistOffsets[iNode];
+		}
+
+		m_dNodes[iNode].m_pQword->PrefetchHits ( dOffsets, nullptr, iToPrefetch );
+	}
+}
+
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
 void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CollectHits ( const ExtDoc_t * pMatched )
 {
@@ -3540,6 +3602,8 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CollectHits ( const ExtDo
 
 	m_dStoredHits.Add().m_tRowID = INVALID_ROWID;
 	StoredMultiHit_t * pStoredHit = m_dStoredHits.Begin();
+
+	PrefetchMatchedHits ( pMatched, pStoredHit );
 
 	for ( ; HasDocs(pMatched); pMatched++ )
 	{

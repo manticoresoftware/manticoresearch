@@ -23,6 +23,9 @@
 #include "sphinxquery/xqparser.h"
 #include "indexfiles.h"
 #include "fastcount.h"
+#include "diskqword.h"
+#include "datareader.h"
+#include "std/mm.h"
 
 #include <gmock/gmock.h>
 
@@ -748,6 +751,86 @@ TEST_F ( RT, SendVsMerge )
 	SafeDelete ( pSrc );
 	pTok = nullptr; // owned and deleted by index
 	});
+}
+
+
+TEST ( PrefetchGate, PowerOfTwoSchedule )
+{
+	PrefetchGate_t tGate;
+	CSphVector<int> dProbes;
+	for ( int i = 0; i < 40; i++ )
+		if ( tGate.ShouldProbe() )
+			dProbes.Add ( i );
+
+	// zero and the powers of two
+	ASSERT_EQ ( dProbes.GetLength(), 7 );
+	int dExpected[] = { 0, 1, 2, 4, 8, 16, 32 };
+	for ( int i = 0; i < 7; i++ )
+		EXPECT_EQ ( dProbes[i], dExpected[i] );
+
+	// a miss restarts the schedule
+	tGate.OnMiss();
+	EXPECT_TRUE ( tGate.ShouldProbe() );
+	EXPECT_TRUE ( tGate.ShouldProbe() );
+	EXPECT_TRUE ( tGate.ShouldProbe() );
+	EXPECT_FALSE ( tGate.ShouldProbe() );
+	EXPECT_TRUE ( tGate.ShouldProbe() );
+}
+
+
+TEST ( PrefetchGate, FactoryPrefetch )
+{
+	// a mapped factory answers prefetch requests inside the file and ignores the rest; a file factory never issues anything
+	CSphString sFile = "prefetch_test.bin"; // in the working directory, like the other scratch files of this suite
+	{
+		CSphAutofile tFile;
+		CSphString sError;
+		ASSERT_TRUE ( tFile.Open ( sFile, SPH_O_NEW, sError )>=0 ) << sError.cstr();
+		CSphFixedVector<BYTE> dData ( 1<<20 );
+		dData.Fill ( 0x7f );
+		ASSERT_TRUE ( sphWrite ( tFile.GetFD(), dData.Begin(), dData.GetLengthBytes() ) );
+	}
+
+	CSphString sError;
+	CSphRefcountedPtr<DataReaderFactory_c> pMapped ( NewProxyReader ( sFile, sError, DataReaderFactory_c::DOCS, 256*1024, FileAccess_e::MMAP ) );
+	ASSERT_TRUE ( pMapped ) << sError.cstr();
+	EXPECT_TRUE ( pMapped->IsMapped() );
+	pMapped->Prefetch ( 0, 65536 );					// may or may not issue, must not crash
+	pMapped->Prefetch ( (1<<20)-100, 1<<20 );		// clipped to the file
+	EXPECT_FALSE ( pMapped->Prefetch ( 1<<20, 10 ) );	// past the end
+	EXPECT_FALSE ( pMapped->Prefetch ( 0, 0 ) );
+
+	// several ranges at once, some of them outside the file
+	FileRange_t dRanges[4] = { { 0, 4096 }, { 500000, 8192 }, { 1<<20, 10 }, { 0, 0 } };
+	pMapped->Prefetch ( dRanges, 4 );
+	FileRange_t dBad[2] = { { 1<<20, 10 }, { -5, 10 } };
+	EXPECT_FALSE ( pMapped->Prefetch ( dBad, 2 ) );
+	EXPECT_FALSE ( pMapped->Prefetch ( nullptr, 0 ) );
+
+	// a resident first range must not hide cold ranges later in the batch: touch the first page, then ask for the
+	// first page plus a far one. Whether the far page is resident depends on the platform (fresh mapping on Windows:
+	// no; page cache on Linux after the write: yes), so the expectation is computed from the same probe
+	{
+		CSphRefcountedPtr<FileBlockReader_i> pReader ( pMapped->MakeReader ( nullptr, 0 ) );
+		pReader->SeekTo ( 0, 0 );
+		EXPECT_EQ ( pReader->GetByte(), 0x7f );
+		SphOffset_t iSize = 0;
+		const BYTE * pBase = pReader->GetMapBase ( iSize );
+		ASSERT_TRUE ( pBase );
+		const SphOffset_t iFar = 900*1024;
+		const bool bFarResident = mmresident ( pBase+iFar, 4096 );
+		FileRange_t dMixed[2] = { { 0, 4096 }, { iFar, 4096 } };
+		EXPECT_EQ ( pMapped->Prefetch ( dMixed, 2 ), !bFarResident );
+	}
+
+	CSphRefcountedPtr<DataReaderFactory_c> pFile ( NewProxyReader ( sFile, sError, DataReaderFactory_c::DOCS, 256*1024, FileAccess_e::FILE ) );
+	ASSERT_TRUE ( pFile ) << sError.cstr();
+	EXPECT_FALSE ( pFile->IsMapped() );
+	EXPECT_FALSE ( pFile->Prefetch ( 0, 65536 ) );
+
+	pMapped = nullptr;
+	pFile = nullptr;
+	::unlink ( sFile.cstr() );
 }
 
 

@@ -55,6 +55,7 @@ public:
 protected:
 	FileBlockReaderPtr_c	m_rdDoclist;	///< my doclist accessor; outside code positions it through SeekDocReader/GetDocReaderPos
 	FileBlockReaderPtr_c	m_rdHitlist;	///< my hitlist accessor; outside code positions it through SeekHitReader/GetHitReaderPos
+	DataReaderFactory_c *	m_pHitFactory = nullptr;	///< the hitlist's factory (owned by the index), for prefetch requests
 
 	// called after SetDocReader/SetHitReader replaced the corresponding reader
 	virtual void	OnDocReaderChanged() {}

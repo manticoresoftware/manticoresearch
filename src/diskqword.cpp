@@ -22,6 +22,38 @@ DiskIndexQwordSetup_c::DiskIndexQwordSetup_c ( DataReaderFactoryPtr_c pDoclist, 
 {}
 
 
+// the hint is the dictionary's estimate of the list length; unknown or long lists get the head only
+static SphOffset_t PrefetchBytes ( int iHint )
+{
+	return ( iHint>0 && iHint<=PREFETCH_WHOLE_DOCLIST_BYTES ) ? iHint : PREFETCH_DOCLIST_HEAD_BYTES;
+}
+
+
+void DiskIndexQwordSetup_c::PrefetchDoclist ( SphOffset_t iOff, int iHint ) const
+{
+	if ( !m_pDoclist || !m_pDoclist->IsMapped() || !m_tPrefetchGate.ShouldProbe() )
+		return;
+
+	if ( m_pDoclist->Prefetch ( iOff, PrefetchBytes ( iHint ) ) )
+		m_tPrefetchGate.OnMiss();
+}
+
+
+void DiskIndexQwordSetup_c::PrefetchPayload ( const DiskSubstringPayload_t & tPayload ) const
+{
+	if ( !m_pDoclist || !m_pDoclist->IsMapped() || tPayload.m_dDoclist.IsEmpty() || !m_tPrefetchGate.ShouldProbe() )
+		return;
+
+	// every slice in one request; the factory probes the first one and lets the OS coalesce the rest
+	CSphFixedVector<FileRange_t> dRanges ( tPayload.m_dDoclist.GetLength() );
+	ARRAY_FOREACH ( i, dRanges )
+		dRanges[i] = { (SphOffset_t)tPayload.m_dDoclist[i].m_uOff, PrefetchBytes ( tPayload.m_dDoclist[i].m_iLen ) };
+
+	if ( m_pDoclist->Prefetch ( dRanges.Begin(), dRanges.GetLength() ) )
+		m_tPrefetchGate.OnMiss();
+}
+
+
 DiskIndexQwordTraits_c * sphCreateDiskIndexQword ( bool bInlineHits )
 {
 	if ( bInlineHits )
@@ -51,6 +83,9 @@ ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) cons
 	}
 
 	auto * pPayload = (const DiskSubstringPayload_t *)tWord.m_pPayload;
+	if ( m_bSetupReaders )
+		PrefetchPayload ( *pPayload );
+
 	if ( bInline )
 		return bRaw
 			? (ISphQword *) new DiskPayloadQword_c<true,RawReader_t> ( pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, iIndexId )

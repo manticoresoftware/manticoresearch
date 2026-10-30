@@ -62,6 +62,7 @@ void DiskIndexQwordTraits_c::SetHitReader ( DataReaderFactory_c * pReader )
 		return;
 
 	m_rdHitlist = pReader->MakeReader ( m_pHitsBuf, MINIBUFFER_LEN );
+	m_pHitFactory = pReader;
 	OnHitReaderChanged();
 }
 

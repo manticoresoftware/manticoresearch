@@ -19,6 +19,39 @@
 // on-disk query word: the term reader over doclists and hitlists of a plain index or an RT disk chunk,
 // its setup helper, and the reader policies (buffered file access vs raw pointers into the memory map)
 
+/// prefetch gate: a residency probe and readahead request are issued only when the counter is zero or a power
+/// of two, and a cache miss resets it. A cold query therefore prefetches every term while a warm one stops
+/// probing after a few terms
+struct PrefetchGate_t
+{
+	DWORD	m_uCounter = 0;
+
+	bool	ShouldProbe()	{ DWORD u = m_uCounter++; return ( u & ( u-1 ) )==0; }
+	void	OnMiss()		{ m_uCounter = 0; }
+};
+
+/// doclists up to this size are prefetched whole, longer ones only at the start; kernel readahead takes over
+/// once sequential reads begin
+static const int PREFETCH_WHOLE_DOCLIST_BYTES = 256*1024;
+static const int PREFETCH_DOCLIST_HEAD_BYTES = 64*1024;
+
+
+/// a doclist slice of an expanded term
+struct Slice64_t
+{
+	uint64_t	m_uOff;
+	int			m_iLen;
+};
+
+struct DiskSubstringPayload_t : public ISphSubstringPayload
+{
+	explicit DiskSubstringPayload_t ( int iDoclists )
+		: m_dDoclist ( iDoclists )
+	{}
+	CSphFixedVector<Slice64_t>	m_dDoclist;
+};
+
+
 /// everything required to setup search term
 class DiskIndexQwordSetup_c final : public ISphQwordSetup
 {
@@ -30,7 +63,13 @@ public:
 	bool				Setup ( ISphQword * ) const;
 	ISphQword *			ScanSpawn ( int iAtomPos ) const final;
 
+	/// bring the start of a term's doclist into memory before the first decode, subject to the gate
+	void				PrefetchDoclist ( SphOffset_t iOff, int iHint ) const;
+	/// the same for every doclist slice of an expanded term, in one request
+	void				PrefetchPayload ( const DiskSubstringPayload_t & tPayload ) const;
+
 private:
+	mutable PrefetchGate_t		m_tPrefetchGate;	// one per query and chunk, since the setup object is
 	DataReaderFactoryPtr_c		m_pDoclist;
 	DataReaderFactoryPtr_c		m_pHitlist;
 	const BYTE *				m_pSkips;
@@ -122,6 +161,33 @@ public:
 
 		AttachReaders();
 		ResetDecoderState();
+	}
+
+	bool WantHitPrefetch() final
+	{
+		return m_pHitFactory && m_pHitFactory->IsMapped() && m_tHitGate.ShouldProbe();
+	}
+
+	void PrefetchHits ( const SphOffset_t * pOffsets, const DWORD * pHits, int iCount ) final
+	{
+		if ( !m_pHitFactory || iCount<=0 )
+			return;
+
+		// exactly the hitlists about to be seeked to: inlined single hits live in the doclist and need nothing;
+		// a document's range is sized from its hit count (a couple of bytes per hit), bounded, or one page when unknown
+		CSphFixedVector<FileRange_t> dRanges ( iCount );
+		int iRanges = 0;
+		for ( int i = 0; i < iCount; i++ )
+		{
+			if ( pOffsets[i]>>63 )
+				continue; // inline hit: no hitlist bytes to prefetch.
+
+			SphOffset_t iLen = pHits ? Min ( Max ( (SphOffset_t)pHits[i]*2 + 16, (SphOffset_t)256 ), (SphOffset_t)PREFETCH_DOCLIST_HEAD_BYTES ) : (SphOffset_t)4096;
+			dRanges[iRanges++] = { pOffsets[i], iLen };
+		}
+
+		if ( iRanges && m_pHitFactory->Prefetch ( dRanges.Begin(), iRanges ) )
+			m_tHitGate.OnMiss();
 	}
 
 	void		SeekDocReader ( SphOffset_t iPos, int iHint ) final	{ m_tDocs.SeekTo ( iPos, iHint ); }
@@ -339,6 +405,7 @@ private:
 	int m_iSkipListBlock = -1;
 	READER m_tDocs;
 	READER m_tHits;
+	PrefetchGate_t m_tHitGate;	// one per term: hitlist prefetch requests per CollectHits call follow the same schedule as doclists
 
 	void AttachReaders()
 	{
@@ -460,23 +527,6 @@ do if ( (( const CSphIndex_VLN *)INDEX)->m_tSettings.m_eHitFormat==SPH_HIT_FORMA
 	else																				\
 		{ using NAME = DiskIndexQword_c < false, NO_SEEK, BlockReader_t >; ACTION; }	\
 while(0)
-
-/////////////////////////////////////////////////////////////////////////////
-
-struct Slice64_t
-{
-	uint64_t	m_uOff;
-	int			m_iLen;
-};
-
-struct DiskSubstringPayload_t : public ISphSubstringPayload
-{
-	explicit DiskSubstringPayload_t ( int iDoclists )
-		: m_dDoclist ( iDoclists )
-	{}
-	CSphFixedVector<Slice64_t>	m_dDoclist;
-};
-
 
 template < bool INLINE_HITS, typename READER >
 class DiskPayloadQword_c : public DiskIndexQword_c<INLINE_HITS, false, READER>

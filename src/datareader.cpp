@@ -9,6 +9,7 @@
 //
 
 #include "datareader.h"
+#include "std/mm.h"
 #include "sphinxint.h"
 #include "fileutils.h"
 
@@ -278,7 +279,7 @@ public:
 	{
 		SetValid ( m_tBackendFile.Setup ( sFile, sError ) );
 		if ( eAccess==FileAccess_e::MLOCK )
-			m_tBackendFile.MemLock( sError );
+			m_bLocked = m_tBackendFile.MemLock( sError );
 	}
 
 	uint64_t GetMappedsize () const final
@@ -289,6 +290,48 @@ public:
 	bool IsMapped () const final
 	{
 		return true;
+	}
+
+	bool Prefetch ( const FileRange_t * pRanges, int iRanges ) final
+	{
+		if ( m_bLocked || !pRanges || iRanges<=0 )
+			return false;
+
+		// clip to the file, drop empty ranges
+		const SphOffset_t iSize = m_tBackendFile.GetLength64();
+		const BYTE * pBase = m_tBackendFile.GetReadPtr();
+		CSphVector<MemRange_t> dRanges;
+		dRanges.Reserve ( iRanges );
+		for ( int i = 0; i < iRanges; i++ )
+		{
+			const FileRange_t & tRange = pRanges[i];
+			if ( tRange.m_iOff<0 || tRange.m_iOff>=iSize || tRange.m_iLen<=0 )
+				continue;
+
+			dRanges.Add ( { pBase + tRange.m_iOff, (size_t)Min ( tRange.m_iLen, iSize-tRange.m_iOff ) } );
+		}
+
+		if ( dRanges.IsEmpty() || !AnyNotResident ( dRanges ) )
+			return false;
+
+		mmprefetch ( dRanges.Begin(), dRanges.GetLength() );
+		return true;
+	}
+
+	static bool AnyNotResident ( const VecTraits_T<MemRange_t> & dRanges )
+	{
+		const int iLast = dRanges.GetLength()-1;
+		const int dSample[3] = { 0, iLast/2, iLast };
+		for ( int i = 0; i < 3; i++ )
+		{
+			if ( i && dSample[i]==dSample[i-1] )
+				continue;
+
+			if ( !mmresident ( dRanges[dSample[i]].m_pData, dRanges[dSample[i]].m_uLen ) )
+				return true;
+		}
+
+		return false;
 	}
 
 	uint64_t GetCoresize () const final
@@ -327,6 +370,7 @@ protected:
 private:
 	CSphMappedBuffer<BYTE>	m_tBackendFile;
 	SphOffset_t				m_iPos = 0;
+	bool					m_bLocked = false;	// mlocked maps are resident by definition, nothing to prefetch
 };
 
 //////////////////////////////////////////////////////////////////////////

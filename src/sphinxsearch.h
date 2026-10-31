@@ -53,6 +53,16 @@ struct SkipData_t
 class RtIndex_c;
 struct RtGuard_t;
 
+// one decoded doclist entry, for batched term reads
+struct QwordDoc_t
+{
+	RowID_t		m_tRowID;
+	DWORD		m_uFields;		///< low 32 bits of the match field mask
+	DWORD		m_uMatchHits;
+	SphOffset_t	m_iHitlistPos;
+};
+
+
 /// term, searcher view
 class ISphQword
 {
@@ -98,14 +108,30 @@ public:
 	virtual RowID_t				AdvanceTo ( RowID_t tRowID );
 	virtual bool				HintRowID ( RowID_t ) { return false; }
 	virtual const CSphMatch &	GetNextDoc() = 0;
+	// fill up to iMax entries; returns fewer than iMax only at the end of the doclist;
+	// leaves the qword positioned on the last returned entry, as if GetNextDoc() had returned it
+	virtual int					GetNextDocs ( QwordDoc_t * pDocs, int iMax );
 	virtual void				SeekHitlist ( SphOffset_t uOff ) = 0;
 	virtual Hitpos_t			GetNextHit () = 0;
+	virtual bool				WantHitPrefetch() { return false; }
+	virtual void				PrefetchHits ( const SphOffset_t * pOffsets, const DWORD * pHits, int iCount ) {}
 	virtual void				CollectHitMask ();
 	virtual void				Reset();
 
 	int							GetAtomPos() const;
 
 	virtual bool SetupScan ( const RtIndex_c * pIndex, int iSegment, const RtGuard_t& tGuard ) { return false; }
+};
+
+
+/// Concrete type of an ordinary (non-payload) qword spawned by a setup.
+enum class QwordType_e
+{
+	GENERIC,
+	DISK_INLINE_RAW,
+	DISK_PLAIN_RAW,
+	DISK_INLINE_BLOCK,
+	DISK_PLAIN_BLOCK
 };
 
 
@@ -131,6 +157,8 @@ public:
 
 	virtual ~ISphQwordSetup () {}
 
+	virtual QwordType_e				GetQwordType() const { return QwordType_e::GENERIC; }
+
 	virtual ISphQword *					QwordSpawn ( const XQKeyword_t & tWord ) const = 0;
 	virtual bool						QwordSetup ( ISphQword * pQword ) const = 0;
 	inline void SetDict ( DictRefPtr_c pDict )
@@ -145,11 +173,16 @@ public:
 };
 
 /// generic ranker interface
+class DeadRowMap_Disk_c;
+
 class ISphRanker : public ISphExtra
 {
 public:
 	virtual CSphMatch *			GetMatchesBuffer() = 0;
 	virtual int					GetMatches () = 0;
+
+	/// count matching docs without building matches; -1 means the ranker can not do it
+	virtual int64_t				CountDocs ( const DeadRowMap_Disk_c * ) { return -1; }
 	virtual void				Reset ( const ISphQwordSetup & tSetup ) = 0;
 	virtual bool				IsCache() const { return false; }
 	virtual void				FinalizeCache ( const ISphSchema & ) {}

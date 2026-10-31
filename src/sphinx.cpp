@@ -20,6 +20,7 @@
 #include "sphinxexpr.h"
 #include "sphinxfilter.h"
 #include "sphinxint.h"
+#include "fastcount.h"
 #include "sphinxsearch.h"
 #include "searchnode.h"
 #include "sphinxjson.h"
@@ -35,6 +36,7 @@
 #include "docstore.h"
 #include "global_idf.h"
 #include "indexformat.h"
+#include "diskqword.h"
 #include "indexcheck.h"
 #include "coroutine.h"
 #include "columnarlib.h"
@@ -257,348 +259,6 @@ bool sphSplitRankerCall ( const CSphString & sRanker, CSphString & sName, CSphSt
 
 /////////////////////////////////////////////////////////////////////
 
-/// everything required to setup search term
-class DiskIndexQwordSetup_c final : public ISphQwordSetup
-{
-public:
-	DiskIndexQwordSetup_c ( DataReaderFactoryPtr_c pDoclist, DataReaderFactoryPtr_c pHitlist, const BYTE * pSkips, int iSkiplistBlockSize, bool bSetupReaders, RowID_t iRowsCount )
-		: m_pDoclist ( std::move ( pDoclist ) )
-		, m_pHitlist ( std::move ( pHitlist ) )
-		, m_pSkips ( pSkips )
-		, m_iSkiplistBlockSize ( iSkiplistBlockSize )
-		, m_bSetupReaders ( bSetupReaders )
-		, m_iRowsCount ( iRowsCount )
-	{}
-
-	ISphQword *			QwordSpawn ( const XQKeyword_t & tWord ) const final;
-	bool				QwordSetup ( ISphQword * ) const final;
-	bool				Setup ( ISphQword * ) const;
-	ISphQword *			ScanSpawn ( int iAtomPos ) const final;
-
-private:
-	DataReaderFactoryPtr_c		m_pDoclist;
-	DataReaderFactoryPtr_c		m_pHitlist;
-	const BYTE *				m_pSkips;
-	int							m_iSkiplistBlockSize = 0;
-	bool						m_bSetupReaders = false;
-	RowID_t						m_iRowsCount = INVALID_ROWID;
-
-private:
-	bool SetupWithWrd ( const DiskIndexQwordTraits_c& tWord, DictEntry_t& tRes ) const;
-	bool SetupWithCrc ( const DiskIndexQwordTraits_c& tWord, DictEntry_t& tRes ) const;
-};
-
-/// query word from the searcher's point of view
-template < bool INLINE_HITS, bool DISABLE_HITLIST_SEEK >
-class DiskIndexQword_c : public DiskIndexQwordTraits_c
-{
-public:
-	DiskIndexQword_c ( bool bUseMinibuffer, bool bExcluded, int64_t iIndexId )
-		: DiskIndexQwordTraits_c ( bUseMinibuffer, bExcluded )
-		, m_iIndexId ( iIndexId )
-	{}
-
-	~DiskIndexQword_c()
-	{
-		if ( m_bSkipFromCache )
-		{
-			SkipCache::Release ( { m_iIndexId, m_uWordID } );
-			m_pSkipData = nullptr;
-			m_bSkipFromCache = false;
-		}
-	}
-
-	void Reset () final
-	{
-		if ( m_rdDoclist )
-			m_rdDoclist->Reset ();
-		if ( m_rdHitlist )
-			m_rdHitlist->Reset ();
-		ResetDecoderState();
-	}
-
-	void GetHitlistEntry ()
-	{
-		assert ( !m_bHitlistOver );
-		DWORD iDelta = m_rdHitlist->UnzipInt ();
-		if ( iDelta )
-		{
-			m_iHitPos += iDelta;
-		} else
-		{
-			m_iHitPos = EMPTY_HIT;
-#ifndef NDEBUG
-			m_bHitlistOver = true;
-#endif
-		}
-	}
-
-
-	RowID_t AdvanceTo ( RowID_t tRowID ) final
-	{
-		if ( m_tDoc.m_tRowID!=INVALID_ROWID && tRowID<=m_tDoc.m_tRowID )
-			return m_tDoc.m_tRowID;
-
-		bool bRewound = HintRowID (tRowID);
-		if ( bRewound || m_tDoc.m_tRowID==INVALID_ROWID )
-			ReadNext();
-
-		while ( m_tDoc.m_tRowID < tRowID )
-			ReadNext();
-
-		return m_tDoc.m_tRowID;
-	}
-
-
-	bool HintRowID ( RowID_t tRowID ) final
-	{
-		// tricky bit
-		// FindSpan() will match a block where tBaseRowIDPlus1[i] <= tRowID < tBaseRowIDPlus1[i+1]
-		// meaning that the subsequent ids decoded will be strictly > RefValue
-		// meaning that if previous (!) block ends with tRowID exactly,
-		// and we use tRowID itself as RefValue, that document gets lost!
-
-		// first check if we're still inside the last block
-		if ( m_iSkipListBlock==-1 )
-		{
-			if ( !m_pSkipData )
-				return true;
-
-			m_iSkipListBlock = FindSpan ( m_pSkipData->m_dSkiplist, tRowID );
-			if ( m_iSkipListBlock<0 )
-				return false;
-		}
-		else
-		{
-			assert(m_pSkipData);
-			const auto & dSkiplist = m_pSkipData->m_dSkiplist;
-
-			if ( m_iSkipListBlock < dSkiplist.GetLength()-1 )
-			{
-				int iNextBlock = m_iSkipListBlock+1;
-				RowID_t tNextBlockRowID = dSkiplist[iNextBlock].m_tBaseRowIDPlus1;
-				if ( tRowID>=tNextBlockRowID )
-				{
-					auto dSkips = VecTraits_T<SkiplistEntry_t> ( &dSkiplist[iNextBlock], dSkiplist.GetLength()-iNextBlock );
-					m_iSkipListBlock = FindSpan ( dSkips, tRowID );
-					if ( m_iSkipListBlock<0 )
-						return false;
-
-					m_iSkipListBlock += iNextBlock;
-				}
-			}
-			else // we're already at our last block, no need to search
-				return false;
-		}
-
-		assert(m_pSkipData);
-		const SkiplistEntry_t & t = m_pSkipData->m_dSkiplist[m_iSkipListBlock];
-		if ( t.m_iOffset<=m_rdDoclist->GetPos() )
-			return false;
-
-		m_rdDoclist->SeekTo ( t.m_iOffset, -1 );
-		m_tDoc.m_tRowID = t.m_tBaseRowIDPlus1-1;
-		m_uHitPosition = m_iHitlistPos = t.m_iBaseHitlistPos;
-
-		return true;
-	}
-
-	const CSphMatch & GetNextDoc() override
-	{
-		ReadNext();
-		return m_tDoc;
-	}
-
-	void SeekHitlist ( SphOffset_t uOff ) final
-	{
-		if ( uOff >> 63 )
-		{
-			m_uHitState = 1;
-			m_uInlinedHit = (DWORD)uOff; // truncate high dword
-		} else
-		{
-			m_uHitState = 0;
-			m_iHitPos = EMPTY_HIT;
-			if constexpr ( DISABLE_HITLIST_SEEK )
-				assert ( m_rdHitlist->GetPos()==uOff ); // make sure we're where caller thinks we are.
-			else
-				m_rdHitlist->SeekTo ( uOff, READ_NO_SIZE_HINT );
-		}
-#ifndef NDEBUG
-		m_bHitlistOver = false;
-#endif
-	}
-
-	Hitpos_t GetNextHit () final
-	{
-		assert ( m_bHasHitlist );
-		switch ( m_uHitState )
-		{
-		case 0: // read hit from hitlist
-			GetHitlistEntry ();
-			return m_iHitPos;
-
-		case 1: // return inlined hit
-			m_uHitState = 2;
-			return m_uInlinedHit;
-
-		case 2: // return end-of-hitlist marker after inlined hit
-#ifndef NDEBUG
-			m_bHitlistOver = true;
-#endif
-			m_uHitState = 0;
-			return EMPTY_HIT;
-		}
-		sphDie ( "INTERNAL ERROR: impossible hit emitter state" );
-		return EMPTY_HIT;
-	}
-
-	bool Setup ( const DiskIndexQwordSetup_c * pSetup ) override
-	{
-		return pSetup->Setup ( this );
-	}
-
-	using is_worddict =  std::integral_constant<bool, !DISABLE_HITLIST_SEEK>;
-
-private:
-	int m_iSkipListBlock = -1;
-
-	inline void ReadNext()
-	{
-		RowID_t uDelta = m_rdDoclist->UnzipRowid();
-		if ( uDelta )
-		{
-			m_bAllFieldsKnown = false;
-			m_tDoc.m_tRowID += uDelta;
-
-			if_const ( INLINE_HITS )
-			{
-				m_uMatchHits = m_rdDoclist->UnzipInt();
-				const DWORD uFirst = m_rdDoclist->UnzipInt();
-				if ( m_uMatchHits==1 && m_bHasHitlist )
-				{
-					DWORD uField = m_rdDoclist->UnzipInt(); // field and end marker
-					m_iHitlistPos = uFirst | ( uField << 23 ) | ( U64C(1)<<63 );
-					m_dQwordFields.UnsetAll();
-					// want to make sure bad field data not cause crash
-					m_dQwordFields.Set ( ( uField >> 1 ) & ( (DWORD)SPH_MAX_FIELDS-1 ) );
-					m_bAllFieldsKnown = true;
-				} else
-				{
-					m_dQwordFields.Assign32 ( uFirst );
-					m_uHitPosition += m_rdDoclist->UnzipOffset();
-					m_iHitlistPos = m_uHitPosition;
-				}
-			} else
-			{
-				SphOffset_t iDeltaPos = m_rdDoclist->UnzipOffset();
-				assert ( iDeltaPos>=0 );
-
-				m_iHitlistPos += iDeltaPos;
-
-				m_dQwordFields.Assign32 ( m_rdDoclist->UnzipInt() );
-				m_uMatchHits = m_rdDoclist->UnzipInt();
-			}
-		} else
-			m_tDoc.m_tRowID = INVALID_ROWID;
-	}
-
-private:
-	int64_t m_iIndexId = 0;
-};
-
-
-DiskIndexQwordTraits_c * sphCreateDiskIndexQword ( bool bInlineHits )
-{
-	if ( bInlineHits )
-		return new DiskIndexQword_c<true,false> ( false, false, 0 );
-
-	return new DiskIndexQword_c<false,false> ( false, false, 0 );
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
-#define WITH_QWORD(INDEX, NO_SEEK, NAME, ACTION)										\
-do if ( (( const CSphIndex_VLN *)INDEX)->m_tSettings.m_eHitFormat==SPH_HIT_FORMAT_INLINE )	\
-		{ using NAME = DiskIndexQword_c < true, NO_SEEK >; ACTION; }					\
-	else																				\
-		{ using NAME = DiskIndexQword_c < false, NO_SEEK >; ACTION; }					\
-while(0)
-
-/////////////////////////////////////////////////////////////////////////////
-
-// duplicated in sphinxformat.cpp
-struct Slice64_t
-{
-	uint64_t	m_uOff;
-	int			m_iLen;
-};
-
-// duplicated in sphinxformat.cpp
-struct DiskSubstringPayload_t : public ISphSubstringPayload
-{
-	explicit DiskSubstringPayload_t ( int iDoclists )
-		: m_dDoclist ( iDoclists )
-	{}
-	CSphFixedVector<Slice64_t>	m_dDoclist;
-};
-
-
-template < bool INLINE_HITS >
-class DiskPayloadQword_c : public DiskIndexQword_c<INLINE_HITS, false>
-{
-	typedef DiskIndexQword_c<INLINE_HITS, false> BASE;
-
-public:
-	DiskPayloadQword_c ( const DiskSubstringPayload_t * pPayload, bool bExcluded, DataReaderFactory_c * pDoclist, DataReaderFactory_c * pHitlist, int64_t iIndexId )
-		: BASE ( true, bExcluded, iIndexId )
-	{
-		m_pPayload = pPayload;
-		this->m_iDocs = m_pPayload->m_iTotalDocs;
-		this->m_iHits = m_pPayload->m_iTotalHits;
-		m_iDoclist = 0;
-
-		this->SetDocReader ( pDoclist );
-		this->SetHitReader ( pHitlist );
-	}
-
-	const CSphMatch & GetNextDoc() final
-	{
-		const CSphMatch & tMatch = BASE::GetNextDoc();
-		assert ( &tMatch==&this->m_tDoc );
-		if ( tMatch.m_tRowID==INVALID_ROWID && m_iDoclist<m_pPayload->m_dDoclist.GetLength() )
-		{
-			BASE::ResetDecoderState();
-			SetupReader();
-			BASE::GetNextDoc();
-			assert ( this->m_tDoc.m_tRowID!=INVALID_ROWID );
-		}
-
-		return this->m_tDoc;
-	}
-
-	bool Setup ( const DiskIndexQwordSetup_c * ) final
-	{
-		if ( m_iDoclist>=m_pPayload->m_dDoclist.GetLength() )
-			return false;
-
-		SetupReader();
-		return true;
-	}
-
-private:
-	void SetupReader ()
-	{
-		uint64_t uDocOff = m_pPayload->m_dDoclist[m_iDoclist].m_uOff;
-		int iHint = m_pPayload->m_dDoclist[m_iDoclist].m_iLen;
-		m_iDoclist++;
-
-		this->m_rdDoclist->SeekTo ( uDocOff, iHint );
-	}
-
-	const DiskSubstringPayload_t *	m_pPayload;
-	int								m_iDoclist;
-};
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -1453,6 +1113,7 @@ private:
 
 	bool						ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tXQ, DictRefPtr_c pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const;
 	bool						RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, bool bCloneDict, const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResult & tResult, VecTraits_T<ISphMatchSorter*> & dSorters, const XQQuery_t & tParsed, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
+	bool						TryFastTermCount ( CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter*> & dSorters, const XQKeyword_t & tWord, const DictRefPtr_c & pDict, const CSphMultiQueryArgs & tArgs ) const;
 
 	template <bool ROWID_LIMITS>
 	bool						ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResultMeta & tMeta, const VecTraits_T<ISphMatchSorter *> & dSorters, CSphMatch & tMatch, int iCutoff, bool bRandomize, int iIndexWeight, int64_t tmMaxTimer, const RowIdBoundaries_t * pBoundaries = nullptr ) const;
@@ -6922,7 +6583,7 @@ namespace QwordIteration
 		tQword.m_iHitlistPos = 0;
 
 		if_const ( QWORD::is_worddict::value )
-			tQword.m_rdDoclist->SeekTo ( tReader.m_iDoclistOffset, tReader.m_iHint );
+			tQword.SeekDocReader ( tReader.m_iDoclistOffset, tReader.m_iHint );
 	}
 
 	template<typename QWORD>
@@ -6969,10 +6630,10 @@ namespace QwordIteration
 	inline void ConfigureQword ( QWORD & tQword, DataReaderFactory_c * pHits, DataReaderFactory_c * pDocs, int iDynamic )
 	{
 		tQword.SetHitReader ( pHits );
-		tQword.m_rdHitlist->SeekTo ( 1, READ_NO_SIZE_HINT );
+		tQword.SeekHitReader ( 1, READ_NO_SIZE_HINT );
 
 		tQword.SetDocReader ( pDocs );
-		tQword.m_rdDoclist->SeekTo ( 1, READ_NO_SIZE_HINT );
+		tQword.SeekDocReader ( 1, READ_NO_SIZE_HINT );
 
 		tQword.m_tDoc.Reset ( iDynamic );
 	}
@@ -9544,21 +9205,6 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 //////////////////////////////////////////////////////////////////////////////
 
-ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) const
-{
-	if ( !tWord.m_pPayload )
-	{
-		WITH_QWORD ( m_pIndex, false, Qword, return new Qword ( tWord.m_bExpanded, tWord.m_bExcluded, m_pIndex->GetIndexId() ) );
-	} else
-	{
-		if ( m_pIndex->GetSettings().m_eHitFormat==SPH_HIT_FORMAT_INLINE )
-			return new DiskPayloadQword_c<true> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, m_pIndex->GetIndexId() );
-		else
-			return new DiskPayloadQword_c<false> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, m_pIndex->GetIndexId() );
-	}
-	return NULL;
-}
-
 
 bool DiskIndexQwordSetup_c::QwordSetup ( ISphQword * pWord ) const
 {
@@ -9685,6 +9331,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 
 	if ( m_bSetupReaders )
 	{
+		PrefetchDoclist ( tRes.m_iDoclistOffset, tRes.m_iDoclistHint );
 		tWord.SetDocReader ( m_pDoclist );
 
 		// read in skiplist
@@ -9706,7 +9353,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 			}
 		}
 
-		tWord.m_rdDoclist->SeekTo ( tRes.m_iDoclistOffset, tRes.m_iDoclistHint );
+		tWord.SeekDocReader ( tRes.m_iDoclistOffset, tRes.m_iDoclistHint );
 		tWord.SetHitReader ( m_pHitlist );
 	}
 
@@ -12070,6 +11717,74 @@ bool CSphIndex_VLN::RunParsedMultiQuery ( int iStackNeed, DictRefPtr_c & pDict, 
 		});
 }
 
+// single-term count(*) answered from the dictionary doc count; false means the regular path must run
+bool CSphIndex_VLN::TryFastTermCount ( CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter*> & dSorters, const XQKeyword_t & tWord, const DictRefPtr_c & pDict, const CSphMultiQueryArgs & tArgs ) const
+{
+	// dictionary doc counts include killed rows; such chunks take the regular path
+	if ( !m_bPassedAlloc || m_tDeadRowMap.HasDead() )
+		return false;
+
+	auto & tMeta = *tResult.m_pMeta;
+	QueryProfile_c * pProfile = tMeta.m_pProfile;
+	int64_t tmQueryStart = sphMicroTimer();
+	auto tmCpuQueryStart = sphTaskCpuTimer();
+	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
+	if ( pProfile )
+		eOldState = pProfile->Switch ( SPH_QSTATE_FAST_COUNT );
+
+	tMeta.m_bBigram = ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE );
+
+	int64_t iDocs = 0;
+	int64_t iHits = 0;
+	CSphString sDictWord;
+	WITH_QWORD ( this, false, Qword,
+	{
+		// no readers: Setup() does the checkpoint search and the dictionary lookup only
+		DiskIndexQwordSetup_c tTermSetup ( DataReaderFactoryPtr_c{}, DataReaderFactoryPtr_c{}, m_tSkiplists.GetReadPtr(), m_tSettings.m_iSkiplistBlockSize, false, RowID_t(m_iDocinfo) );
+		tTermSetup.SetDict ( pDict );
+		tTermSetup.m_pIndex = this;
+
+		Qword tQword ( false, false, m_iIndexId );
+		SetupFastCountQword ( tQword, tWord, pDict, tTermSetup.m_tKeywordBuf );
+		if ( tQword.m_uWordID )
+			tTermSetup.QwordSetup ( &tQword );
+
+		iDocs = tQword.m_iDocs;
+		iHits = tQword.m_iHits;
+		sDictWord = tQword.m_sDictWord;
+	});
+
+	// same keyword stats the ranker would have produced
+	tMeta.AddStat ( sDictWord, iDocs, iHits );
+
+	if ( iDocs>0 )
+	{
+		for ( auto * pSorter : dSorters )
+		{
+			pSorter->SetBlobPool ( m_tBlobAttrs.GetReadPtr() );
+			pSorter->SetColumnar ( m_pColumnar.get() );
+		}
+
+		PushFastCountMatch ( dSorters, GetRawAttrs(), tArgs.m_iTag, tArgs.m_iIndexWeight, iDocs );
+	}
+
+	RecordFastCount ( tMeta, "FastCount" );
+	PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), tArgs.m_bFinalizeSorters, pProfile, tArgs.m_bModifySorterSchemas );
+
+	tResult.m_pBlobPool = m_tBlobAttrs.GetReadPtr();
+	tResult.m_pDocstore = m_pDocstore ? this : nullptr;
+	tResult.m_pColumnar = m_pColumnar.get();
+
+	tMeta.AddQueryTimeUs ( sphMicroTimer() - tmQueryStart );
+	tMeta.m_iCpuTime += sphTaskCpuTimer() - tmCpuQueryStart;
+
+	if ( pProfile )
+		pProfile->Switch ( eOldState );
+
+	return true;
+}
+
+
 /// one regular query vs many sorters (like facets, or similar for common-tree optimization)
 bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs ) const
 {
@@ -12157,6 +11872,9 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	if ( !tParsed.m_sParseWarning.IsEmpty() )
 		tMeta.m_sWarning = tParsed.m_sParseWarning;
 
+	// single-term count(*) fast path
+	const bool bFastTermCount = IsFastTermCountQuery ( tQuery, dSorters, tArgs ) && !m_tDeadRowMap.HasDead() && GetFastTermCountKeyword ( tParsed.m_pRoot, m_tSchema );
+
 	// transform query if needed (quorum transform, etc.)
 	SwitchProfile ( pProfile, SPH_QSTATE_TRANSFORMS );
 	TransformExtendedQueryArgs_t tTranformArgs { GetBooleanSimplify ( tQuery ), tParsed.m_bNeedPhraseTransform, this };
@@ -12186,6 +11904,14 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	int iStackNeed = ConsiderStack ( tParsed.m_pRoot, tMeta.m_sError );
 	if ( !iStackNeed  )
 		return false;
+
+	// answered from the dictionary; no pseudo-sharding split (that would add @rowid filters)
+	if ( bFastTermCount )
+	{
+		const XQKeyword_t * pWord = GetFastTermCountKeyword ( tParsed.m_pRoot, m_tSchema );
+		if ( pWord && TryFastTermCount ( tResult, dSorters, *pWord, pDict, tArgs ) )
+			return true;
+	}
 
 	if ( tArgs.m_iThreads>1 )
 		return SplitQuery (
@@ -12515,9 +12241,18 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 	// bind weights
 	tCtx.BindWeights ( tQuery, m_tSchema, tMeta.m_sWarning );
 
+	// count-only query: the node tree matches, nothing is ranked or turned into matches
+	const bool bRanklessCount = IsRanklessCountQuery ( tQuery, dSorters, tArgs ) && TreeAllowsRanklessCount ( tXQ );
+	QueryExecutionSettings_t tRankerSettings = tQuerySettings;
+	if ( bRanklessCount )
+	{
+		tRankerSettings.m_eRanker = SPH_RANK_NONE;
+		tCtx.m_bSkipQCache = true;
+	}
+
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tXQ, tQuery, tQuerySettings, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
+	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tXQ, tQuery, tRankerSettings, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
 	if ( !pRanker )
 		return false;
 
@@ -12621,6 +12356,19 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 
 	int iIndex = bUseKlist*64 + bHaveRandom*32 + bUseFactors*16 + bHasSortCalc*8 + bHasWeightFilter*4 + bHasFilterCalc*2 + bHasCutoff;
 
+	bool bCounted = false;
+	if ( bRanklessCount )
+	{
+		int64_t iCount = pRanker->CountDocs ( bUseKlist ? &m_tDeadRowMap : nullptr );
+		if ( iCount>=0 )
+		{
+			PushFastCountMatch ( dSorters, GetRawAttrs(), iMyTag, tArgs.m_iIndexWeight, iCount );
+			RecordFastCount ( tMeta, "RanklessCount" );
+			bCounted = true;
+		}
+	}
+
+	if ( !bCounted )
 	switch ( iIndex )
 	{
 #define DECL_FNSCAN( _, n, params ) case n: MatchExtended<!!(n&64), !!(n&32), !!(n&16), !!(n&8), !!(n&4), !!(n&2), !!(n&1)> params; break;

@@ -32,11 +32,22 @@ public:
 	virtual RowID_t		UnzipRowid() = 0;
 	virtual SphWordID_t	UnzipWordid() = 0;
 	virtual void		Reset () = 0;
+
+	// for memory-mapped readers: the whole map, so that a qword can decode from raw pointers; null otherwise
+	virtual const BYTE * GetMapBase ( SphOffset_t & iSize ) const { iSize = 0; return nullptr; }
 };
 
 
 using FileBlockReaderPtr_c = CSphRefcountedPtr<FileBlockReader_i>;
 class QueryProfile_c;
+
+/// a byte range of the backing file
+struct FileRange_t
+{
+	SphOffset_t	m_iOff = 0;
+	SphOffset_t	m_iLen = 0;
+};
+
 
 // producer of readers from file or filemap
 class DataReaderFactory_c : public ISphRefcountedMT
@@ -57,6 +68,12 @@ public:
 	virtual SphOffset_t			GetPos () const = 0;
 	virtual void				SeekTo ( SphOffset_t ) = 0;
 	virtual FileBlockReader_i *	MakeReader ( BYTE * pBuf, int iSize ) = 0;
+	virtual bool				IsMapped () const = 0;
+	// ask the OS to bring ranges of a mapped file into memory; returns true when a read was actually issued,
+	// false when a sample of the ranges (first, middle, last) is resident already, the map is locked, or the
+	// backend is not a map
+	virtual bool				Prefetch ( const FileRange_t * pRanges, int iRanges ) { return false; }
+	bool						Prefetch ( SphOffset_t iOff, SphOffset_t iLen ) { FileRange_t tRange { iOff, iLen }; return Prefetch ( &tRange, 1 ); }
 	virtual void				SetProfile ( QueryProfile_c * ) {}
 
 protected:

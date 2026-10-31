@@ -21,6 +21,7 @@
 #include "columnarlib.h"
 #include "dict/dict_entry.h"
 #include "client_task_info.h"
+#include "killlist.h"
 
 #include <math.h>
 bool operator < ( const SkiplistEntry_t & a, RowID_t b )	{ return a.m_tBaseRowIDPlus1<b; }
@@ -66,6 +67,26 @@ RowID_t	ISphQword::AdvanceTo ( RowID_t tRowID )
 	while ( tFoundRowID < tRowID );
 
 	return tFoundRowID;
+}
+
+
+int ISphQword::GetNextDocs ( QwordDoc_t * pDocs, int iMax )
+{
+	int iGot = 0;
+	while ( iGot<iMax )
+	{
+		const CSphMatch & tMatch = GetNextDoc();
+		if ( tMatch.m_tRowID==INVALID_ROWID )
+			break;
+
+		QwordDoc_t & tDoc = pDocs[iGot++];
+		tDoc.m_tRowID = tMatch.m_tRowID;
+		tDoc.m_uFields = m_dQwordFields.GetMask32();
+		tDoc.m_uMatchHits = m_uMatchHits;
+		tDoc.m_iHitlistPos = m_iHitlistPos;
+	}
+
+	return iGot;
 }
 
 
@@ -229,6 +250,7 @@ public:
 								ExtRanker_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings );
 
 	virtual const ExtDoc_t *	GetFilteredDocs ();
+	int64_t						CountDocs ( const DeadRowMap_Disk_c * pDeadRows ) override;
 };
 
 
@@ -1213,6 +1235,44 @@ const ExtDoc_t * ExtRanker_T<USE_BM25>::GetFilteredDocs ()
 
 
 //////////////////////////////////////////////////////////////////////////
+
+template <bool USE_BM25>
+int64_t ExtRanker_T<USE_BM25>::CountDocs ( const DeadRowMap_Disk_c * pDeadRows )
+{
+	if ( !m_pRoot )
+		return 0;
+
+	CSphScopedProfile tProf ( m_pCtx->m_pProfile, SPH_QSTATE_FAST_COUNT );
+
+	// the node tree decides the match; only attribute filters need a row, and nothing needs a CSphMatch
+	const bool bFilter = m_pCtx->m_pFilter || !m_pCtx->m_dCalcFilter.IsEmpty();
+	int64_t iCount = 0;
+	while ( true )
+	{
+		const ExtDoc_t * pDoc = m_pRoot->GetDocsChunk();
+		if ( !pDoc )
+			break;
+
+		for ( ; pDoc->m_tRowID!=INVALID_ROWID; pDoc++ )
+		{
+			if ( pDeadRows && pDeadRows->IsSet ( pDoc->m_tRowID ) )
+				continue;
+
+			if ( bFilter )
+			{
+				m_tTestMatch.m_tRowID = pDoc->m_tRowID;
+				m_tTestMatch.m_pStatic = nullptr;
+				if ( m_pIndex->EarlyReject ( m_pCtx, m_tTestMatch ) )
+					continue;
+			}
+
+			iCount++;
+		}
+	}
+
+	return iCount;
+}
+
 
 template < bool USE_BM25 >
 int ExtRanker_WeightSum_c<USE_BM25>::GetMatches ()

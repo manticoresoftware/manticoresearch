@@ -1221,6 +1221,13 @@ POST /sql?mode=raw -d "SELECT count(*) FROM taxi1 WHERE tip_amount = 5; SHOW MET
 
 <!-- end -->
 
+The same `index` variable also reports when a `SELECT COUNT(*)` with a `MATCH()` clause was answered without ranking:
+
+* `fulltext:FastCount` - a single plain term over all indexed fields was counted from the dictionary, without reading the posting list. This requires a chunk without deleted rows and no attribute filters.
+* `fulltext:RanklessCount` - the full-text tree was walked and the matching documents were counted directly, without ranking or building matches. Attribute filters are applied during the walk. Queries that need the ranker, such as those with zones or a `WEIGHT()` filter, still take the regular path.
+
+The percentage shows the share of disk chunks and RAM segments that used the path; a chunk with deleted rows can only use `RanklessCount`.
+
 ## SHOW META for PQ tables
 
 <!-- example show meta PQ -->

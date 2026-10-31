@@ -16,6 +16,9 @@
 
 #if _WIN32
 #include <cstdlib>
+#include <windows.h>
+#define PSAPI_VERSION 2
+#include <psapi.h>
 
 void* mmalloc ( size_t uSize, Mode_e, Share_e )
 {
@@ -46,11 +49,74 @@ bool mmunlock ( void* pMem, size_t uSize )
 	return VirtualUnlock ( pMem, uSize ) != 0;
 }
 
-void mmprefetch ( const MemRange_t *, int ) {}
-
-bool mmresident ( const void *, size_t )
+// PrefetchVirtualMemory exists since Windows 8; resolve it at run time so that the binary still loads on older systems
+void mmprefetch ( const MemRange_t * pRanges, int iRanges )
 {
-	return false;
+	if ( !pRanges || iRanges<=0 )
+		return;
+
+	struct RangeEntry_t { PVOID m_pAddress; SIZE_T m_uBytes; }; // layout of WIN32_MEMORY_RANGE_ENTRY
+	using PrefetchFn_t = BOOL ( WINAPI * ) ( HANDLE, ULONG_PTR, RangeEntry_t *, ULONG );
+	static PrefetchFn_t pfnPrefetch = (PrefetchFn_t) GetProcAddress ( GetModuleHandleA ( "kernel32.dll" ), "PrefetchVirtualMemory" );
+	if ( !pfnPrefetch )
+		return;
+
+	const int BATCH = 64;
+	RangeEntry_t dEntries[BATCH];
+	int iBatch = 0;
+	for ( int i = 0; i < iRanges; i++ )
+	{
+		if ( !pRanges[i].m_pData || !pRanges[i].m_uLen )
+			continue;
+
+		dEntries[iBatch].m_pAddress = (PVOID)pRanges[i].m_pData;
+		dEntries[iBatch].m_uBytes = pRanges[i].m_uLen;
+		if ( ++iBatch==BATCH )
+		{
+			pfnPrefetch ( GetCurrentProcess(), iBatch, dEntries, 0 );
+			iBatch = 0;
+		}
+	}
+
+	if ( iBatch )
+		pfnPrefetch ( GetCurrentProcess(), iBatch, dEntries, 0 );
+}
+
+// a page counts as resident when it is valid in this process' working set; a page that sits in the system
+// file cache but has not been touched through this mapping yet reports as missing, so a prefetch may be
+// issued for it, which is cheap
+bool mmresident ( const void * pData, size_t uLen )
+{
+	if ( !pData || !uLen )
+		return false;
+
+	static const size_t uPage = []() { SYSTEM_INFO tInfo; GetSystemInfo ( &tInfo ); return (size_t)tInfo.dwPageSize; }();
+	const uintptr_t uMask = ~( (uintptr_t)uPage-1 );
+	uintptr_t uStart = (uintptr_t)pData & uMask;
+	const uintptr_t uEnd = ( (uintptr_t)pData + uLen + uPage - 1 ) & uMask;
+
+	const size_t MAX_PAGES = 64;
+	PSAPI_WORKING_SET_EX_INFORMATION dInfo[MAX_PAGES];
+	while ( uStart<uEnd )
+	{
+		size_t uPages = ( uEnd-uStart )/uPage;
+		if ( uPages>MAX_PAGES )
+			uPages = MAX_PAGES;
+
+		for ( size_t i = 0; i < uPages; i++ )
+			dInfo[i].VirtualAddress = (PVOID)( uStart + i*uPage );
+
+		if ( !QueryWorkingSetEx ( GetCurrentProcess(), dInfo, (DWORD)( uPages*sizeof ( dInfo[0] ) ) ) )
+			return false;
+
+		for ( size_t i = 0; i < uPages; i++ )
+			if ( !dInfo[i].VirtualAttributes.Valid )
+				return false;
+
+		uStart += uPages*uPage;
+	}
+
+	return true;
 }
 
 #else

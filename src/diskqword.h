@@ -59,6 +59,7 @@ public:
 						DiskIndexQwordSetup_c ( DataReaderFactoryPtr_c pDoclist, DataReaderFactoryPtr_c pHitlist, const BYTE * pSkips, int iSkiplistBlockSize, bool bSetupReaders, RowID_t iRowsCount );
 
 	ISphQword *			QwordSpawn ( const XQKeyword_t & tWord ) const final;
+	QwordType_e			GetQwordType() const final;
 	bool				QwordSetup ( ISphQword * ) const final;
 	bool				Setup ( ISphQword * ) const;
 	ISphQword *			ScanSpawn ( int iAtomPos ) const final;
@@ -137,6 +138,11 @@ template < bool INLINE_HITS, bool DISABLE_HITLIST_SEEK, typename READER >
 class DiskIndexQword_c : public DiskIndexQwordTraits_c
 {
 public:
+	static constexpr QwordType_e QWORD_TYPE = DISABLE_HITLIST_SEEK ? QwordType_e::GENERIC
+		: READER::IS_RAW
+			? ( INLINE_HITS ? QwordType_e::DISK_INLINE_RAW : QwordType_e::DISK_PLAIN_RAW )
+			: ( INLINE_HITS ? QwordType_e::DISK_INLINE_BLOCK : QwordType_e::DISK_PLAIN_BLOCK );
+
 	DiskIndexQword_c ( bool bUseMinibuffer, bool bExcluded, int64_t iIndexId )
 		: DiskIndexQwordTraits_c ( bUseMinibuffer, bExcluded )
 		, m_iIndexId ( iIndexId )

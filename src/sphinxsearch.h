@@ -124,6 +124,17 @@ public:
 };
 
 
+/// Concrete type of an ordinary (non-payload) qword spawned by a setup.
+enum class QwordType_e
+{
+	GENERIC,
+	DISK_INLINE_RAW,
+	DISK_PLAIN_RAW,
+	DISK_INLINE_BLOCK,
+	DISK_PLAIN_BLOCK
+};
+
+
 /// term setup, searcher view
 class CSphQueryNodeCache;
 class ISphZoneCheck;
@@ -145,6 +156,8 @@ public:
 	bool					m_bHasWideFields { false };
 
 	virtual ~ISphQwordSetup () {}
+
+	virtual QwordType_e				GetQwordType() const { return QwordType_e::GENERIC; }
 
 	virtual ISphQword *					QwordSpawn ( const XQKeyword_t & tWord ) const = 0;
 	virtual bool						QwordSetup ( ISphQword * pQword ) const = 0;

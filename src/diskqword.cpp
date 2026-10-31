@@ -63,35 +63,41 @@ DiskIndexQwordTraits_c * sphCreateDiskIndexQword ( bool bInlineHits )
 }
 
 
-ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) const
+QwordType_e DiskIndexQwordSetup_c::GetQwordType() const
 {
 	const bool bInline = m_pIndex->GetSettings().m_eHitFormat==SPH_HIT_FORMAT_INLINE;
-	// raw-pointer decoding when both lists are memory-mapped, buffered block reading otherwise
+	// Use the actual factories: mixed file/mmap access must keep the block reader.
 	const bool bRaw = m_pDoclist && m_pHitlist && m_pDoclist->IsMapped() && m_pHitlist->IsMapped();
+	if ( bRaw )
+		return bInline ? QwordType_e::DISK_INLINE_RAW : QwordType_e::DISK_PLAIN_RAW;
+	return bInline ? QwordType_e::DISK_INLINE_BLOCK : QwordType_e::DISK_PLAIN_BLOCK;
+}
+
+
+template <bool INLINE_HITS, typename READER>
+static ISphQword * SpawnDiskQword ( const XQKeyword_t & tWord, DataReaderFactory_c * pDoclist, DataReaderFactory_c * pHitlist, int64_t iIndexId )
+{
+	if ( tWord.m_pPayload )
+		return new DiskPayloadQword_c<INLINE_HITS,READER> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, pDoclist, pHitlist, iIndexId );
+
+	return new DiskIndexQword_c<INLINE_HITS,false,READER> ( tWord.m_bExpanded, tWord.m_bExcluded, iIndexId );
+}
+
+
+ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) const
+{
+	if ( tWord.m_pPayload && m_bSetupReaders )
+		PrefetchPayload ( *(const DiskSubstringPayload_t *)tWord.m_pPayload );
+
 	const int64_t iIndexId = m_pIndex->GetIndexId();
-
-	if ( !tWord.m_pPayload )
+	switch ( GetQwordType() )
 	{
-		if ( bInline )
-			return bRaw
-				? (ISphQword *) new DiskIndexQword_c<true,false,RawReader_t> ( tWord.m_bExpanded, tWord.m_bExcluded, iIndexId )
-				: (ISphQword *) new DiskIndexQword_c<true,false,BlockReader_t> ( tWord.m_bExpanded, tWord.m_bExcluded, iIndexId );
-
-		return bRaw
-			? (ISphQword *) new DiskIndexQword_c<false,false,RawReader_t> ( tWord.m_bExpanded, tWord.m_bExcluded, iIndexId )
-			: (ISphQword *) new DiskIndexQword_c<false,false,BlockReader_t> ( tWord.m_bExpanded, tWord.m_bExcluded, iIndexId );
+	case QwordType_e::DISK_INLINE_RAW:   return SpawnDiskQword<true,RawReader_t> ( tWord, m_pDoclist, m_pHitlist, iIndexId );
+	case QwordType_e::DISK_PLAIN_RAW:    return SpawnDiskQword<false,RawReader_t> ( tWord, m_pDoclist, m_pHitlist, iIndexId );
+	case QwordType_e::DISK_INLINE_BLOCK: return SpawnDiskQword<true,BlockReader_t> ( tWord, m_pDoclist, m_pHitlist, iIndexId );
+	case QwordType_e::DISK_PLAIN_BLOCK:  return SpawnDiskQword<false,BlockReader_t> ( tWord, m_pDoclist, m_pHitlist, iIndexId );
+	default:
+		assert ( 0 && "Unexpected disk qword type" );
+		return nullptr;
 	}
-
-	auto * pPayload = (const DiskSubstringPayload_t *)tWord.m_pPayload;
-	if ( m_bSetupReaders )
-		PrefetchPayload ( *pPayload );
-
-	if ( bInline )
-		return bRaw
-			? (ISphQword *) new DiskPayloadQword_c<true,RawReader_t> ( pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, iIndexId )
-			: (ISphQword *) new DiskPayloadQword_c<true,BlockReader_t> ( pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, iIndexId );
-
-	return bRaw
-		? (ISphQword *) new DiskPayloadQword_c<false,RawReader_t> ( pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, iIndexId )
-		: (ISphQword *) new DiskPayloadQword_c<false,BlockReader_t> ( pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, iIndexId );
 }

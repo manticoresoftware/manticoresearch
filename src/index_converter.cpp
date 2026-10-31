@@ -2570,15 +2570,21 @@ int main ( int argc, char ** argv )
 		sphDie ( "failed to init charset alias table: %s", sError.cstr() );
 
 	const CSphConfigType * pIndexes = nullptr;
+	CSphConfig hConfig;
+	CSphConfigType hEmptyIndexes;
+	pIndexes = &hEmptyIndexes;
 	if ( !sConfig.IsEmpty() )
 	{
-		CSphConfig hConfig = sphLoadConfig ( sConfig, true );
+		hConfig = sphLoadConfig ( sConfig, true );
 		pIndexes = hConfig ( "index" );
 
 		if ( ( bAll || !sIndexName.IsEmpty() ) && !pIndexes )
 			sphDie ( "no tables found in config" );
 
 		sphConfigureCommon ( hConfig );
+	} else if ( bAll )
+	{
+		sphDie ( "--all requires --config; converting all indexes from --path is not supported" );
 	}
 
 	int iConvertedCount = 0;

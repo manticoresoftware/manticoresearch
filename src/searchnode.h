@@ -13,6 +13,7 @@
 #define _searchnode_
 
 #include "sphinxquery/sphinxquery.h"
+#include "postingwindow.h"
 
 
 enum
@@ -60,6 +61,34 @@ struct ExtHit_t;
 struct ExtDoc_t;
 struct RowIdBoundaries_t;
 
+// A transient, aligned rowid window. Only count-only roots expose this capability.
+// A single contributing clause may return sorted, unique row batches instead of
+// constructing a bitmap. Several batches may share a base; a base never mixes
+// row batches and bitmaps. Storage is owned by the producer until its next call.
+struct CountWindow_t
+{
+	static constexpr int ROWS = PostingWindow_t::ROWS;
+	static constexpr int WORDS = ROWS/32;
+
+	RowID_t			m_tBase = 0;
+	DWORD			m_dBits[WORDS] = {};
+	const RowID_t *	m_pRows = nullptr; // non-null: use rows; bitmap is undefined
+	int				m_iRows = 0;
+};
+
+class CountWindowIterator_i
+{
+public:
+	virtual ~CountWindowIterator_i() = default;
+	// Mutable until the next call; null means EOF (or interruption).
+	virtual CountWindow_t * NextWindow() = 0;
+};
+
+class ExtNode_i;
+
+// Caller must guarantee disk qwords and an eligible count-only query.
+ExtNode_i * CreateWindowOrCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds );
+
 /// generic match streamer
 class ExtNode_i
 {
@@ -71,6 +100,7 @@ public:
 	static ExtNode_i *			Create ( ISphQword * pQword, const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25, bool bRowidLimits );
 	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const ISphQwordSetup & tSetup, DictRefPtr_c pZonesDict, bool bUseBM25, bool bRowidLimits );
 
+	virtual CountWindowIterator_i * GetCountWindows() { return nullptr; }
 	virtual void				Reset ( const ISphQwordSetup & tSetup ) = 0;
 	virtual void				HintRowID ( RowID_t tRowID ) = 0;
 	virtual const ExtDoc_t *	GetDocsChunk() = 0;

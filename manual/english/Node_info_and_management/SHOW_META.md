@@ -1226,7 +1226,9 @@ The same `index` variable also reports when a `SELECT COUNT(*)` with a `MATCH()`
 * `fulltext:FastCount` - a single plain term over all indexed fields was counted from the dictionary, without reading the posting list. This requires a chunk without deleted rows and no attribute filters.
 * `fulltext:RanklessCount` - the full-text tree was walked and the matching documents were counted directly, without ranking or building matches. Attribute filters are applied during the walk. Queries that need the ranker, such as those with zones or a `WEIGHT()` filter, still take the regular path.
 
-The percentage shows the share of disk chunks and RAM segments that used the path; a chunk with deleted rows can only use `RanklessCount`.
+* `fulltext:WindowOrCount` - the experimental disk OR-count executor counted matching rows by windows, using bitmap unions or direct row batches for single-clause ranges, and applying deleted-row checks and attribute filters. It is currently enabled only with the internal `MANTICORE_WINDOW_OR=1` benchmark environment setting. Unsupported trees and secondary-index wrappers use `RanklessCount`.
+
+The percentage shows the share of disk chunks and RAM segments that used the path. Chunks with deleted rows cannot use dictionary `FastCount`; they use `RanklessCount` or, for eligible disk OR counts, `WindowOrCount`.
 
 ## SHOW META for PQ tables
 

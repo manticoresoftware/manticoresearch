@@ -994,6 +994,410 @@ static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordS
 	return pWord;
 }
 
+// Count-only union over disk qwords. The root can expose whole windows to the
+// ranker, or enumerate rows when a secondary-index iterator wraps it.
+class ExtWindowOr_c final : public ExtNode_c, public CountWindowIterator_i
+{
+	struct Term_t
+	{
+		std::unique_ptr<ISphQword>			m_pWord;
+		std::unique_ptr<PostingWindow_i>	m_pCursor;
+		RowID_t								m_tNext = INVALID_ROWID;
+	};
+
+public:
+	struct Leaf_t
+	{
+		const XQKeyword_t * m_pWord;
+		DWORD m_uFields;
+	};
+
+	ExtWindowOr_c ( const VecTraits_T<Leaf_t> & dLeaves, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds )
+		: ExtNode_c ( tSetup.m_iMaxTimer )
+		, m_dTerms ( dLeaves.GetLength() )
+		, m_pWarning ( tSetup.m_pWarning )
+		, m_pStats ( tSetup.m_pStats )
+	{
+		ARRAY_FOREACH ( i, m_dTerms )
+		{
+			auto & tTerm = m_dTerms[i];
+			tTerm.m_pWord.reset ( CreateQueryWord ( *dLeaves[i].m_pWord, tSetup ) );
+			tTerm.m_pCursor = CreateBufferedPostingWindow ( *tTerm.m_pWord, dLeaves[i].m_uFields, CursorContext() );
+		}
+
+		if ( pBounds )
+			SetRowidBoundaries ( *pBounds );
+	}
+
+	CountWindowIterator_i * GetCountWindows() override { return this; }
+	CountWindow_t * NextWindow() override
+	{
+		assert ( !m_bAdapter );
+		m_bDirect = true;
+		return FillWindow();
+	}
+
+	const ExtDoc_t * GetDocsChunk() override
+	{
+		assert ( !m_bDirect );
+		m_bAdapter = true;
+
+		if ( !CheckInterrupted() )
+			return nullptr;
+
+		int iDocs = 0;
+		while ( iDocs<MAX_BLOCK_DOCS-1 )
+		{
+			if ( m_iWord==CountWindow_t::WORDS )
+			{
+				if ( !FillWindow() )
+					break;
+
+				m_iWord = 0;
+				m_iRow = 0;
+			}
+
+			if ( m_tWindow.m_pRows )
+			{
+				if ( m_iRow==m_tWindow.m_iRows )
+				{
+					m_iWord = CountWindow_t::WORDS;
+					continue;
+				}
+
+				const RowID_t tRow = m_tWindow.m_pRows[m_iRow++];
+				if ( tRow>=m_tBounds.m_tMinRowID && tRow<=m_tBounds.m_tMaxRowID )
+					m_dDocs[iDocs++] = { tRow, 0, 0.0f };
+
+				continue;
+			}
+
+			DWORD & uBits = m_tWindow.m_dBits[m_iWord];
+			if ( !uBits )
+			{
+				++m_iWord;
+				continue;
+			}
+
+			const int iBit = sphLog2 ( uBits & ( DWORD(0)-uBits ) )-1;
+			uBits &= uBits-1;
+			const RowID_t tRow = m_tWindow.m_tBase + m_iWord*32 + iBit;
+			if ( tRow>=m_tBounds.m_tMinRowID && tRow<=m_tBounds.m_tMaxRowID )
+				m_dDocs[iDocs++] = { tRow, 0, 0.0f };
+		}
+
+		return ReturnDocsChunk ( iDocs, "window-or-count" );
+	}
+
+	void HintRowID ( RowID_t tRow ) override
+	{
+		m_tBounds.m_tMinRowID = Max ( m_tBounds.m_tMinRowID, tRow );
+
+		// The adapter may still own rows from an already decoded window.
+		if ( uint64_t(tRow)>=uint64_t(m_tWindow.m_tBase)+CountWindow_t::ROWS )
+			m_iWord = CountWindow_t::WORDS;
+	}
+
+	void SetRowidBoundaries ( const RowIdBoundaries_t & tBounds ) override
+	{
+		m_tInitialBounds = m_tBounds = tBounds;
+		HintRowID ( tBounds.m_tMinRowID );
+	}
+
+	void Reset ( const ISphQwordSetup & tSetup ) override
+	{
+		SetMaxTimeout ( tSetup.m_iMaxTimer );
+		m_pWarning = tSetup.m_pWarning;
+		m_pStats = tSetup.m_pStats;
+		m_bStopped = m_bDirect = m_bAdapter = false;
+		m_iWord = CountWindow_t::WORDS;
+		m_iSingleTerm = -1;
+		m_iRow = 0;
+		m_tWindow.m_pRows = nullptr;
+		m_tWindow.m_iRows = 0;
+		m_tBounds = m_tInitialBounds;
+
+		for ( auto & tTerm : m_dTerms )
+		{
+			tTerm.m_pWord->Reset();
+			const bool bHasDocs = tSetup.QwordSetup ( tTerm.m_pWord.get() );
+			tTerm.m_pCursor->Reset ( bHasDocs, CursorContext() );
+			tTerm.m_tNext = INVALID_ROWID;
+		}
+	}
+
+	int GetQwords ( ExtQwordsHash_t & hWords ) override
+	{
+		int iMax = -1;
+		for ( const auto & tTerm : m_dTerms )
+		{
+			const auto & tWord = *tTerm.m_pWord;
+			iMax = Max ( iMax, tWord.m_iAtomPos );
+			auto * pExisting = hWords ( tWord.m_sWord );
+			if ( pExisting )
+			{
+				pExisting->m_iQueryPos = Min ( pExisting->m_iQueryPos, tWord.m_iAtomPos );
+				continue;
+			}
+
+			ExtQword_t tInfo;
+			tInfo.m_sWord = tWord.m_sWord;
+			tInfo.m_sDictWord = tWord.m_sDictWord;
+			tInfo.m_iDocs = tWord.m_iDocs;
+			tInfo.m_iHits = tWord.m_iHits;
+			tInfo.m_iQueryPos = tWord.m_iAtomPos;
+			tInfo.m_fIDF = -1.0f;
+			tInfo.m_fBoost = tWord.m_fBoost;
+			tInfo.m_bExpanded = false;
+			tInfo.m_bExcluded = false;
+			hWords.Add ( tInfo, tWord.m_sWord );
+		}
+
+		return iMax;
+	}
+
+	void SetQwordsIDF ( const ExtQwordsHash_t & ) override {}
+	void GetTerms ( const ExtQwordsHash_t & hWords, CSphVector<TermPos_t> & dTerms ) const override
+	{
+		for ( const auto & tTerm : m_dTerms )
+		{
+			const auto & tWord = *tTerm.m_pWord;
+			dTerms.Add ( { (WORD)hWords[tWord.m_sWord].m_iQueryPos, (WORD)tWord.m_iAtomPos } );
+		}
+	}
+
+	bool GotHitless() override { return false; }
+	uint64_t GetWordID() const override { return 0; } // root-only, never used as a quorum child
+	void SetCollectHits() override { assert ( false && "count-only node" ); }
+	void DebugDump ( int iLevel ) override
+	{
+		DebugIndent ( iLevel );
+		printf ( "ExtWindowOr (count only, %d terms)\n", m_dTerms.GetLength() );
+	}
+
+	NodeEstimate_t Estimate ( int64_t iTotalDocs ) const override
+	{
+		// Preserve the legacy OR estimate until a measured window cost model is available.
+		NodeEstimate_t tResult { 0.0f, 0, 0 };
+		for ( const auto & tTerm : m_dTerms )
+		{
+			const int64_t iDocs = tTerm.m_pWord->m_iDocs;
+			const int64_t iIntersection = iTotalDocs ? int64_t ( float(tResult.m_iDocs)/iTotalDocs*float(iDocs) ) : 0;
+			tResult.m_fCost += float(iDocs)*COST_SCALE*55.0f;
+			if ( tResult.m_iTerms )
+				tResult.m_fCost += float(tResult.m_iDocs+iDocs)*COST_SCALE*10.0f;
+			tResult.m_iDocs += iDocs-iIntersection;
+			++tResult.m_iTerms;
+		}
+		return tResult;
+	}
+
+private:
+	CSphFixedVector<Term_t> m_dTerms;
+	CountWindow_t			m_tWindow;
+	RowIdBoundaries_t		m_tBounds;
+	RowIdBoundaries_t		m_tInitialBounds;
+	CSphString *			m_pWarning = nullptr;
+	CSphQueryStats *		m_pStats = nullptr;
+	int						m_iWord	= CountWindow_t::WORDS;
+	RowID_t					m_dSingleRows[128];
+	int						m_iRow = 0;
+	int						m_iSingleTerm = -1;
+	uint64_t				m_uSingleEnd = 0;
+	bool					m_bStopped = false;
+	bool					m_bDirect = false;
+	bool					m_bAdapter = false;
+
+	void CollectHits ( const ExtDoc_t * ) override { assert ( false && "count-only node" ); }
+
+	bool CheckInterrupted()
+	{
+		if ( m_bStopped )
+			return false;
+
+		const char * sWarning = nullptr;
+		if ( TimeExceeded() )
+			sWarning = "query time exceeded max_query_time";
+
+		else if ( sph::TimeExceeded ( m_iCheckTimePoint ) )
+		{
+			if ( g_bInterruptNow )
+				sWarning = "Server shutdown in progress";
+			else if ( session::GetKilled() )
+				sWarning = "query was killed";
+			else
+				Threads::Coro::RescheduleAndKeepCrashQuery();
+		}
+		if ( !sWarning )
+			return true;
+
+		if ( m_pWarning )
+			*m_pWarning = sWarning;
+
+		m_bStopped = true;
+		return false;
+	}
+
+	PostingWindowContext_t CursorContext()
+	{
+		return { this, [] ( void * pContext ) { return static_cast<ExtWindowOr_c *>(pContext)->CheckInterrupted(); }, m_pStats };
+	}
+
+	PostingWindow_t WindowRange() const
+	{
+		return { m_tWindow.m_tBase, Max ( m_tWindow.m_tBase, m_tBounds.m_tMinRowID ),
+			Min ( uint64_t(m_tWindow.m_tBase)+CountWindow_t::ROWS, uint64_t(m_tBounds.m_tMaxRowID)+1 ) };
+	}
+
+	CountWindow_t * FillSingleTerm()
+	{
+		const auto tRange = WindowRange();
+		if ( tRange.m_tMin>=tRange.m_uEnd ) // a hint skipped the remaining range
+		{
+			m_iSingleTerm = -1;
+			return nullptr;
+		}
+
+		auto & tTerm = m_dTerms[m_iSingleTerm];
+		const auto tResult = tTerm.m_pCursor->ReadRows ( tRange, m_dSingleRows, 128 );
+		tTerm.m_tNext = tResult.m_tNext;
+		m_bStopped |= tResult.m_bStopped;
+		m_tWindow.m_pRows = m_dSingleRows;
+		m_tWindow.m_iRows = tResult.m_iRows;
+		if ( tResult.m_tNext==INVALID_ROWID || uint64_t(tResult.m_tNext)>=m_uSingleEnd )
+			m_iSingleTerm = -1;
+
+		return !m_bStopped && m_tWindow.m_iRows ? &m_tWindow : nullptr;
+	}
+
+	CountWindow_t * FillWindow()
+	{
+		while ( CheckInterrupted() )
+		{
+			if ( m_iSingleTerm>=0 )
+			{
+				if ( auto * pRows = FillSingleTerm() )
+					return pRows;
+
+				if ( m_bStopped )
+					return nullptr;
+			}
+			RowID_t tFirst = INVALID_ROWID;
+			for ( auto & tTerm : m_dTerms )
+			{
+				const auto tResult = tTerm.m_pCursor->AdvanceTo(m_tBounds.m_tMinRowID);
+				tTerm.m_tNext = tResult.m_tNext;
+				m_bStopped |= tResult.m_bStopped;
+				if ( m_bStopped ) return nullptr;
+				tFirst = Min ( tFirst, tTerm.m_tNext );
+			}
+
+			if ( tFirst==INVALID_ROWID || tFirst>m_tBounds.m_tMaxRowID )
+				return nullptr;
+
+			m_tWindow.m_tBase = tFirst & ~(RowID_t(CountWindow_t::ROWS)-1);
+			const auto tRange = WindowRange();
+			const uint64_t uEnd = tRange.m_uEnd;
+			int iContributors = 0;
+			ARRAY_FOREACH ( i, m_dTerms )
+			{
+				const auto & tTerm = m_dTerms[i];
+				// Each cursor retains its first unread candidate. A clause
+				// outside this window cannot contribute before uEnd. Field masks may
+				// overestimate contributors, which only forgoes the shortcut.
+				if ( tTerm.m_tNext!=INVALID_ROWID && uint64_t(tTerm.m_tNext)<uEnd )
+				{
+					m_iSingleTerm = i;
+					if ( ++iContributors==2 )
+						break;
+				}
+			}
+
+			if ( iContributors==1 )
+			{
+				m_uSingleEnd = uEnd;
+				continue; // stream rows without clearing, setting or scanning a bitmap
+			}
+
+			m_iSingleTerm = -1;
+			m_tWindow.m_pRows = nullptr;
+			m_tWindow.m_iRows = 0;
+			memset ( m_tWindow.m_dBits, 0, sizeof(m_tWindow.m_dBits) );
+			bool bAny = false;
+			for ( auto & tTerm : m_dTerms )
+			{
+				if ( tTerm.m_tNext==INVALID_ROWID || uint64_t(tTerm.m_tNext)>=uEnd )
+					continue;
+
+				const auto tResult = tTerm.m_pCursor->FillOr ( tRange, m_tWindow.m_dBits );
+				tTerm.m_tNext = tResult.m_tNext;
+				m_bStopped |= tResult.m_bStopped;
+				if ( m_bStopped )
+					return nullptr;
+
+				bAny |= tResult.m_iRows!=0;
+			}
+
+			if ( m_bStopped )
+				return nullptr;
+
+			if ( bAny )
+				return &m_tWindow;
+		}
+
+		return nullptr;
+	}
+};
+
+// Check the whole transformed tree before creating any readers. Field specs on
+// boolean parents have already been propagated by the parser; like Create(),
+// use each leaf's effective mask (a nested explicit spec can override it).
+static bool CollectWindowOrLeaves ( const XQNode_t * pNode, CSphVector<ExtWindowOr_c::Leaf_t> & dLeaves, int iDepth=0 )
+{
+	if ( !pNode || iDepth>64 || pNode->m_bVirtuallyPlain || pNode->m_bNotWeighted || pNode->m_iAtomPos!=-1
+		|| pNode->m_dSpec.m_iFieldMaxPos || pNode->m_dSpec.m_bZoneSpan || !pNode->m_dSpec.m_dZones.IsEmpty() )
+		return false;
+
+	if ( !pNode->dChildren().IsEmpty() )
+	{
+		if ( pNode->GetOp()!=SPH_QUERY_OR || !pNode->dWords().IsEmpty() )
+			return false;
+
+		for ( const auto * pChild : pNode->dChildren() )
+			if ( !CollectWindowOrLeaves ( pChild, dLeaves, iDepth+1 ) )
+				return false;
+
+		return true;
+	}
+	if ( pNode->GetOp()!=SPH_QUERY_OR && !(pNode->GetOp()==SPH_QUERY_AND && pNode->dWords().GetLength()==1) )
+		return false;
+
+	for ( const auto & tWord : pNode->dWords() )
+	{
+		if ( dLeaves.GetLength()==32 || tWord.m_bFieldStart || tWord.m_bFieldEnd || tWord.m_pPayload
+			|| tWord.m_bExpanded || tWord.m_bExcluded || tWord.m_bRegex || tWord.m_iBlendedGroup!=-1 || tWord.m_sWord.IsEmpty() )
+			return false;
+
+		dLeaves.Add ( { &tWord, pNode->m_dSpec.m_dFieldMask.GetMask32() } );
+	}
+
+	return !pNode->dWords().IsEmpty();
+}
+
+ExtNode_i * CreateWindowOrCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds )
+{
+	if ( !tSetup.m_pIndex || tSetup.m_pIndex->GetMatchSchema().GetFieldsCount()>32
+		|| tSetup.m_pIndex->GetSettings().m_eHitless!=SPH_HITLESS_NONE )
+		return nullptr;
+
+	CSphVector<ExtWindowOr_c::Leaf_t> dLeaves;
+	if ( !CollectWindowOrLeaves ( pNode, dLeaves ) || dLeaves.GetLength()<2 )
+		return nullptr;
+
+	return new ExtWindowOr_c ( dLeaves, tSetup, pBounds );
+}
+
+
 struct AtomPosQWord_fn
 {
 	bool operator () ( ISphQword * ) const { return true; }

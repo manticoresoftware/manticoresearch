@@ -12209,7 +12209,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tXQ, tQuery, tRankerSettings, tMeta, tTermSetup, tCtx, tMaxSorterSchema );
+	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tXQ, tQuery, tRankerSettings, tMeta, tTermSetup, tCtx, tMaxSorterSchema, bRanklessCount );
 	if ( !pRanker )
 		return false;
 
@@ -12320,7 +12320,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 		if ( iCount>=0 )
 		{
 			PushFastCountMatch ( dSorters, GetRawAttrs(), iMyTag, tArgs.m_iIndexWeight, iCount );
-			RecordFastCount ( tMeta, "RanklessCount" );
+			RecordFastCount ( tMeta, pRanker->UsedCountWindows() ? "WindowOrCount" : "RanklessCount" );
 			bCounted = true;
 		}
 	}

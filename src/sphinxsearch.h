@@ -171,6 +171,7 @@ public:
 	/// count matching docs without building matches; -1 means the ranker can not do it
 	virtual int64_t				CountDocs ( const DeadRowMap_Disk_c * ) { return -1; }
 	virtual void				Reset ( const ISphQwordSetup & tSetup ) = 0;
+	virtual bool				UsedCountWindows() const { return false; }
 	virtual bool				IsCache() const { return false; }
 	virtual void				FinalizeCache ( const ISphSchema & ) {}
 
@@ -178,7 +179,7 @@ public:
 };
 
 /// factory
-std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResultMeta & tMeta, const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx, const ISphSchema & tSorterSchema );
+std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResultMeta & tMeta, const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx, const ISphSchema & tSorterSchema, bool bDiskCount = false );
 
 class QwordScan_c : public ISphQword
 {

@@ -41,7 +41,7 @@ struct PostingProbeResult_t
 struct PostingWindowContext_t
 {
 	void * m_pContext = nullptr;
-	bool (*m_fnContinue) ( void * ) = nullptr; // checked at entry and before refills
+	bool (*m_fnContinue) ( void * ) = nullptr; // checked at entry and at bounded decode intervals
 	CSphQueryStats * m_pStats = nullptr;
 };
 

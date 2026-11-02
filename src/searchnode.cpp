@@ -1164,7 +1164,7 @@ public:
 		{
 			auto & tTerm = m_dTerms[i];
 			tTerm.m_pWord.reset ( CreateQueryWord ( *dLeaves[i].m_pWord, tSetup ) );
-			tTerm.m_pCursor = CreateBufferedPostingWindow ( *tTerm.m_pWord, dLeaves[i].m_uFields, CursorContext() );
+			tTerm.m_pCursor = tTerm.m_pWord->CreatePostingWindow ( dLeaves[i].m_uFields, CursorContext() );
 		}
 
 		if ( pBounds )

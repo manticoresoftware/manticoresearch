@@ -350,6 +350,11 @@ public:
 		return iGot;
 	}
 
+	std::unique_ptr<PostingWindow_i> CreatePostingWindow ( DWORD uFields, const PostingWindowContext_t & tContext ) override
+	{
+		return std::make_unique<DirectPostingWindow_c> ( *this, uFields, tContext );
+	}
+
 	void SeekHitlist ( SphOffset_t uOff ) final
 	{
 		if ( uOff >> 63 )
@@ -514,6 +519,182 @@ private:
 			DecodeNext ( m_tDocs );
 	}
 
+	// Exclusive membership cursor over this decoder. Keep one decoded candidate in
+	// the qword itself; bulk output never constructs intermediate QwordDoc records.
+	class DirectPostingWindow_c final : public PostingWindow_i
+	{
+	public:
+		DirectPostingWindow_c ( DiskIndexQword_c & tWord, DWORD uFields, const PostingWindowContext_t & tContext )
+			: m_tWord(tWord)
+			, m_uFields(uFields)
+		{
+			Reset ( tWord.m_iDocs!=0, tContext );
+		}
+
+		PostingWindowResult_t AdvanceTo ( RowID_t tMin ) override
+		{
+			Drain ( tMin, [] ( RowID_t ) { return false; } );
+			return Result();
+		}
+
+		PostingWindowResult_t FillOr ( const PostingWindow_t & tWindow, DWORD * pBits ) override
+		{
+			return Consume ( tWindow, PostingWindow_t::ROWS, [=] ( RowID_t tRow, int ) {
+				const DWORD uOffset = tRow-tWindow.m_tBase;
+				pBits[uOffset>>5] |= DWORD(1)<<(uOffset&31);
+			} );
+		}
+
+		PostingWindowResult_t ReadRows ( const PostingWindow_t & tWindow, RowID_t * pRows, int iCapacity ) override
+		{
+			assert ( iCapacity>0 );
+			return Consume ( tWindow, iCapacity, [=] ( RowID_t tRow, int i ) { pRows[i] = tRow; } );
+		}
+
+		PostingProbeResult_t Probe ( RowID_t tRow ) override
+		{
+			bool bMatch = false;
+			Drain ( tRow, [&] ( RowID_t tCandidate ) {
+				bMatch = tCandidate==tRow && MatchesFields();
+				return tCandidate==tRow && !bMatch;
+			} );
+			return { Result(), bMatch };
+		}
+
+		void Reset ( bool bHasDocs, const PostingWindowContext_t & tContext ) override
+		{
+			m_tContext = tContext;
+			m_bPending = false;
+			m_bEOF = !bHasDocs;
+			m_bStopped = false;
+		}
+
+	private:
+		DiskIndexQword_c &		m_tWord;
+		const DWORD				m_uFields;
+		PostingWindowContext_t	m_tContext;
+		bool					m_bPending = false;
+		bool					m_bEOF = false;
+		bool					m_bStopped = false;
+
+		bool MatchesFields() const { return (m_tWord.m_dQwordFields.GetMask32() & m_uFields)!=0; }
+
+		bool CheckContinue()
+		{
+			if ( !m_bStopped && m_tContext.m_fnContinue && !m_tContext.m_fnContinue(m_tContext.m_pContext) )
+				m_bStopped = true;
+
+			return !m_bStopped;
+		}
+
+		PostingWindowResult_t Result ( int iRows=0 ) const
+		{
+			return { m_bPending ? m_tWord.m_tDoc.m_tRowID : INVALID_ROWID, iRows, m_bStopped };
+		}
+
+		// Process the retained posting, then decode directly from tSrc, discarding rows below tMin.
+		// For each remaining row, fnVisit returns true to consume it or false to stop and retain it.
+		// Return true when the visitor stops or EOF is reached; false after 128 decoded postings or
+		// when the raw cursor reaches the checked tail. Drain then synchronizes the reader and checks interruption.
+		template<typename SRC, typename VISIT>
+		bool DrainSource ( SRC & tSrc, RowID_t tMin, VISIT fnVisit, int & iDecoded )
+		{
+			for ( ;; )
+			{
+				if ( !m_bPending )
+				{
+					if ( iDecoded==128 )
+						return false;
+
+					if constexpr ( std::is_same_v<SRC,DocCursor_t> )
+						if ( !tSrc.Has() )
+							return false;
+
+					m_tWord.DecodeNext(tSrc);
+					if ( m_tWord.m_tDoc.m_tRowID==INVALID_ROWID )
+					{
+						m_bEOF = true;
+						return true;
+					}
+
+					++iDecoded;
+					m_bPending = true;
+				}
+
+				const RowID_t tRow = m_tWord.m_tDoc.m_tRowID;
+				if ( tRow>=tMin && !fnVisit(tRow) )
+					return true;
+
+				m_bPending = false;
+			}
+		}
+
+		// Advance towards tMin using skip hints, then visit postings until fnVisit stops, EOF or interruption.
+		// Preserve any retained candidate at or above tMin. Run DrainSource in bounded groups using the
+		// appropriate reader, synchronizing the raw cursor and updating decode stats before continuation checks.
+		template<typename VISIT>
+		void Drain ( RowID_t tMin, VISIT fnVisit )
+		{
+			if ( !CheckContinue() || m_bEOF )
+				return;
+
+			if ( tMin && (!m_bPending || m_tWord.m_tDoc.m_tRowID<tMin) )
+			{
+				// Only discard a retained candidate below the requested lower bound.
+				m_bPending = false;
+				m_tWord.HintRowID(tMin);
+				if ( m_tContext.m_pStats )
+					++m_tContext.m_pStats->m_iSkips;
+			}
+
+			while ( CheckContinue() )
+			{
+				int iDecoded = 0;
+				bool bDone;
+				if constexpr ( READER::IS_RAW )
+				{
+					DocCursor_t tCursor;
+					if ( m_tWord.OpenCursor(tCursor) )
+					{
+						bDone = DrainSource ( tCursor, tMin, fnVisit, iDecoded );
+						m_tWord.CloseCursor(tCursor);
+					} else
+						bDone = DrainSource ( m_tWord.m_tDocs, tMin, fnVisit, iDecoded ); // checked map tail
+				} else
+					bDone = DrainSource ( m_tWord.m_tDocs, tMin, fnVisit, iDecoded );
+
+				if ( m_tContext.m_pStats )
+					m_tContext.m_pStats->m_iFetchedDocs += iDecoded;
+
+				if ( bDone )
+					return;
+			}
+		}
+
+		template<typename WRITE>
+		PostingWindowResult_t Consume ( const PostingWindow_t & tWindow, int iCapacity, WRITE fnWrite )
+		{
+			assert ( tWindow.m_tBase<=tWindow.m_tMin && tWindow.m_tMin<=tWindow.m_uEnd );
+			assert ( tWindow.m_uEnd<=uint64_t(tWindow.m_tBase)+PostingWindow_t::ROWS );
+			assert ( tWindow.m_uEnd<=uint64_t(INVALID_ROWID)+1 );
+
+			int iRows = 0;
+			Drain ( tWindow.m_tMin, [&] ( RowID_t tRow ) {
+				if ( uint64_t(tRow)>=tWindow.m_uEnd )
+					return false;
+				if ( !MatchesFields() )
+					return true;
+				if ( iRows==iCapacity )
+					return false;
+
+				// Ordinary disk doclists have strictly increasing rowids.
+				fnWrite ( tRow, iRows++ );
+				return true;
+			} );
+			return Result(iRows);
+		}
+	};
+
 private:
 	int64_t m_iIndexId = 0;
 };
@@ -564,6 +745,11 @@ public:
 	int GetNextDocs ( QwordDoc_t * pDocs, int iMax ) final
 	{
 		return ISphQword::GetNextDocs ( pDocs, iMax ); // goes through GetNextDoc(), which chains the doclists
+	}
+
+	std::unique_ptr<PostingWindow_i> CreatePostingWindow ( DWORD uFields, const PostingWindowContext_t & tContext ) final
+	{
+		return ISphQword::CreatePostingWindow ( uFields, tContext ); // preserve doclist chaining
 	}
 
 	bool Setup ( const DiskIndexQwordSetup_c * ) final

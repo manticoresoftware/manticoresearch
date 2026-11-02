@@ -22,7 +22,6 @@
 #include "dict/dict_entry.h"
 #include "client_task_info.h"
 #include "killlist.h"
-#include "std/env.h"
 #include "std/bitmap/bitmap.h"
 
 #include <math.h>
@@ -4784,10 +4783,7 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 
 	RankerSettings_t tRankerSettings;
 	tRankerSettings.m_bSkipQCache = tCtx.m_bSkipQCache;
-	// Enabled by default; retain an opt-out for Linux comparisons and admission tuning.
-	// Cached once per process; no public SQL option and no effect on non-count callers.
-	static const bool bWindowOr = env_bool ( "MANTICORE_WINDOW_OR" ).value_or(true);
-	tRankerSettings.m_bCountWindows = bDiskCount && bWindowOr && tQuerySettings.m_eRanker==SPH_RANK_NONE;
+	tRankerSettings.m_bCountWindows = bDiskCount && tQuerySettings.m_eRanker==SPH_RANK_NONE;
 
 	// can we serve this from cache?
 	QcacheEntryRefPtr_t pCached;

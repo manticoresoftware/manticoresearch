@@ -201,8 +201,9 @@ searchd
 	select count(*) from tr where match('error'); show meta like 'docs%';
 	select count(*), max(gid) from tr where match('error'); show meta like 'docs%';
 	delete from tr where id=10;
-	select count(*) from tr where match('error | failed'); show meta;
-	select count(*), max(gid) from tr where match('error | failed'); show meta;
+	<!-- window counting on disk and rankless counting in RAM have shard-dependent index shares; compare counts and term stats -->
+	select count(*) from tr where match('error | failed'); show meta like 'docs%';
+	select count(*), max(gid) from tr where match('error | failed'); show meta like 'docs%';
 	flush ramchunk tr;
 	optimize table tr option sync=1, cutoff=1;
 	select count(*) from tr where match('error failed'); show meta;

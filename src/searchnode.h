@@ -64,7 +64,8 @@ struct RowIdBoundaries_t;
 // A transient, aligned rowid window. Only count-only roots expose this capability.
 // A single contributing clause may return sorted, unique row batches instead of
 // constructing a bitmap. Several batches may share a base; a base never mixes
-// row batches and bitmaps. Storage is owned by the producer until its next call.
+// row batches and bitmaps. Storage is owned by the producer until NextWindow or
+// Reset; hints, bounds changes and CheckContinue must preserve returned storage.
 struct CountWindow_t
 {
 	static constexpr int ROWS = PostingWindow_t::ROWS;
@@ -82,29 +83,23 @@ public:
 	virtual ~CountWindowIterator_i() = default;
 	// Mutable until the next call; null means EOF (or interruption).
 	virtual CountWindow_t * NextWindow() = 0;
+	// Also checked while an adapter drains an already produced window.
+	virtual bool CheckContinue() = 0;
 };
 
 class ExtNode_i;
 
-// Caller must guarantee disk qwords and an eligible count-only query.
-ExtNode_i * CreateWindowOrCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds );
-
-/// generic match streamer
-class ExtNode_i
+// Lifecycle and metadata shared by document and window producers.
+class QueryNode_i
 {
 public:
-	virtual						~ExtNode_i () {}
+	virtual						~QueryNode_i() = default;
 
-	static ExtNode_i *			Create ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25, const RowIdBoundaries_t * pBoundaries );
-	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25, bool bRowidLimits );
-	static ExtNode_i *			Create ( ISphQword * pQword, const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25, bool bRowidLimits );
-	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const ISphQwordSetup & tSetup, DictRefPtr_c pZonesDict, bool bUseBM25, bool bRowidLimits );
-
+	// Capabilities describe this node, never an unfiltered descendant.
+	virtual ExtNode_i *			GetDocsNode() { return nullptr; }
 	virtual CountWindowIterator_i * GetCountWindows() { return nullptr; }
 	virtual void				Reset ( const ISphQwordSetup & tSetup ) = 0;
 	virtual void				HintRowID ( RowID_t tRowID ) = 0;
-	virtual const ExtDoc_t *	GetDocsChunk() = 0;
-	virtual const ExtHit_t *	GetHits ( const ExtDoc_t * pDocs ) = 0;
 
 	virtual int					GetQwords ( ExtQwordsHash_t & hQwords ) = 0;
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords ) = 0;
@@ -115,7 +110,6 @@ public:
 	virtual uint64_t			GetWordID () const = 0;			///< for now, only used for duplicate keyword checks in quorum operator
 	virtual void 				SetAtomPos ( int iPos ) = 0;
 	virtual int					GetAtomPos() const = 0;
-	virtual void				SetCollectHits() {}				// call this if ranker needs hits
 	virtual NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const = 0;
 	virtual void				SetRowidBoundaries ( const RowIdBoundaries_t & tBoundaries ) = 0;
 
@@ -123,6 +117,43 @@ public:
 	virtual bool				TimeExceeded() const = 0;
 	virtual int64_t				GetMaxTimeout() const = 0;
 };
+
+// Existing document/hit producers retain their document interface.
+class ExtNode_i : public QueryNode_i
+{
+public:
+	static ExtNode_i *			Create ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25, const RowIdBoundaries_t * pBoundaries );
+	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25, bool bRowidLimits );
+	static ExtNode_i *			Create ( ISphQword * pQword, const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25, bool bRowidLimits );
+	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const ISphQwordSetup & tSetup, DictRefPtr_c pZonesDict, bool bUseBM25, bool bRowidLimits );
+
+	ExtNode_i *					GetDocsNode() final { return this; }
+
+	virtual const ExtDoc_t *	GetDocsChunk() = 0;
+	virtual const ExtHit_t *	GetHits ( const ExtDoc_t * pDocs ) = 0;
+	virtual void				SetCollectHits() {}
+};
+
+// Count/membership-only producer; no document or hit iteration interface.
+class WindowNode_i : public QueryNode_i, public CountWindowIterator_i
+{
+public:
+	CountWindowIterator_i *		GetCountWindows() final { return this; }
+};
+
+class WindowDocsAdapter_i : public ExtNode_i
+{
+public:
+	// Recover the source after Reset and detaching the adapter from its consumer.
+	// Does not rewind a partially consumed window; invalidates adapter buffers.
+	virtual std::unique_ptr<QueryNode_i> ReleaseSource() = 0;
+};
+
+// Caller must guarantee disk qwords and an eligible count-only query.
+WindowNode_i * CreateWindowOrCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds );
+
+// Takes exclusive ownership of a window-only source; exposes no window capability.
+std::unique_ptr<WindowDocsAdapter_i> CreateWindowDocsAdapter ( std::unique_ptr<QueryNode_i> pSource );
 
 class RowidIterator_i;
 std::unique_ptr<ExtNode_i> CreatePseudoFTNode ( ExtNode_i * pNode, RowidIterator_i * pIterator );

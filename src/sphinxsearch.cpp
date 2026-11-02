@@ -191,8 +191,10 @@ public:
 	int							m_iMaxQpos = 0;						///< max in-query pos among all keywords, including dupes; for ranker state functors
 
 protected:
-	std::unique_ptr<ExtNode_i>	m_pRoot;
-	ExtNode_i *					m_pOriginalRoot = nullptr;			///< set if we replace the
+	std::unique_ptr<QueryNode_i>	m_pRoot;
+	ExtNode_i *					m_pOriginalRoot = nullptr;	// owned by the SI wrapper until Reset
+	WindowDocsAdapter_i *		m_pWindowAdapter = nullptr;	// optional adapter below the SI wrapper
+	ExtNode_i *					m_pDocsRoot = nullptr;		// current document capability, not owned
 	const ExtDoc_t *			m_pDoclist = nullptr;
 	const ExtHit_t *			m_pHitlist = nullptr;
 	ExtDoc_t					m_dMyDocs[MAX_BLOCK_DOCS];			///< my local documents pool; for filtering
@@ -229,8 +231,18 @@ protected:
 		{
 		case EXTRA_SET_ITERATOR:
 			assert ( !m_pOriginalRoot );
-			m_pOriginalRoot = m_pRoot.release();
+			if ( m_pRoot->GetCountWindows() )
+			{
+				auto pAdapter = CreateWindowDocsAdapter ( std::move(m_pRoot) );
+				m_pWindowAdapter = pAdapter.get();
+				m_pRoot = std::move(pAdapter);
+			}
+
+			m_pOriginalRoot = m_pRoot->GetDocsNode();
+			assert ( m_pOriginalRoot );
+			m_pRoot.release();
 			m_pRoot = CreatePseudoFTNode ( m_pOriginalRoot, (RowidIterator_i*)*ppResult );
+			m_pDocsRoot = m_pRoot->GetDocsNode();
 			// if SI iterator created - disable caching; only qcache or SI could work at the time
 			DisableCaching();
 			return true;
@@ -260,8 +272,8 @@ public:
 private:
 	int64_t						CountDocsWindowed ( CountWindowIterator_i & tWindows, const DeadRowMap_Disk_c * pDeadRows, bool bFilter );
 	int64_t						CountDocsWindowless ( const DeadRowMap_Disk_c * pDeadRows, bool bFilter );
-	int64_t						CountWindowRows ( const CountWindow_t & tWindow, const DeadRowMap_Disk_c * pDeadRows, bool bFilter );
-	int64_t						CountWindowBitmap ( CountWindow_t & tWindow, const DeadRowMap_Disk_c * pDeadRows, bool bFilter );
+	bool						CountWindowRows ( CountWindowIterator_i & tWindows, const CountWindow_t & tWindow, const DeadRowMap_Disk_c * pDeadRows, bool bFilter, int64_t & iCount );
+	bool						CountWindowBitmap ( CountWindowIterator_i & tWindows, CountWindow_t & tWindow, const DeadRowMap_Disk_c * pDeadRows, bool bFilter, int64_t & iCount );
 };
 
 
@@ -687,8 +699,9 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup,
 		m_pRoot.reset ( CreateWindowOrCountNode ( tXQ.m_pRoot, tSetup, pBounds ) );
 	if ( !m_pRoot )
 		m_pRoot.reset ( ExtNode_i::Create ( tXQ.m_pRoot, tSetup, bUseBM25, pBounds ) );
-	if ( m_pRoot && tSettings.m_bCollectHits )
-		m_pRoot->SetCollectHits();
+	m_pDocsRoot = m_pRoot ? m_pRoot->GetDocsNode() : nullptr;
+	if ( m_pDocsRoot && tSettings.m_bCollectHits )
+		m_pDocsRoot->SetCollectHits();
 
 #if SPH_TREE_DUMP
 	if ( m_pRoot )
@@ -775,9 +788,19 @@ void ExtRanker_c::Reset ( const ISphQwordSetup & tSetup )
 		// pseudo-fulltext nodes forget about their underlying nodes after Reset()
 		// so deleting m_pRoot deletes only pseudo-FT nodes and keeps the original tree
 		m_pRoot.reset();
-		m_pRoot = std::unique_ptr<ExtNode_i>(m_pOriginalRoot);
+		std::unique_ptr<ExtNode_i> pOriginal ( m_pOriginalRoot );
 		m_pOriginalRoot = nullptr;
+		if ( m_pWindowAdapter )
+		{
+			// The adapter was reset by the wrapper; recover its window-only source.
+			m_pRoot = m_pWindowAdapter->ReleaseSource();
+			m_pWindowAdapter = nullptr;
+		}
+		else
+			m_pRoot = std::move(pOriginal);
 	}
+
+	m_pDocsRoot = m_pRoot ? m_pRoot->GetDocsNode() : nullptr;
 
 	ARRAY_FOREACH ( i, m_dZones )
 	{
@@ -1201,7 +1224,7 @@ const ExtDoc_t * ExtRanker_T<USE_BM25>::GetFilteredDocs ()
 	{
 		// get another chunk
 		SwitchProfile ( m_pCtx->m_pProfile, SPH_QSTATE_GET_DOCS );
-		const ExtDoc_t * pCand = m_pRoot->GetDocsChunk();
+		const ExtDoc_t * pCand = m_pDocsRoot->GetDocsChunk();
 		if ( !pCand )
 		{
 			SwitchProfile ( m_pCtx->m_pProfile, SPH_QSTATE_RANK );
@@ -1278,10 +1301,12 @@ int64_t ExtRanker_T<USE_BM25>::CountDocsWindowed ( CountWindowIterator_i & tWind
 	int64_t iCount = 0;
 	while ( auto * pWindow = tWindows.NextWindow() )
 	{
-		if ( pWindow->m_pRows )
-			iCount += CountWindowRows ( *pWindow, pDeadRows, bFilter );
-		else
-			iCount += CountWindowBitmap ( *pWindow, pDeadRows, bFilter );
+		// Helpers retain accepted rows in iCount even when interrupted mid-window.
+		const bool bComplete = pWindow->m_pRows
+			? CountWindowRows ( tWindows, *pWindow, pDeadRows, bFilter, iCount )
+			: CountWindowBitmap ( tWindows, *pWindow, pDeadRows, bFilter, iCount );
+		if ( !bComplete )
+			break;
 	}
 
 	return iCount;
@@ -1289,14 +1314,19 @@ int64_t ExtRanker_T<USE_BM25>::CountDocsWindowed ( CountWindowIterator_i & tWind
 
 
 template <bool USE_BM25>
-int64_t ExtRanker_T<USE_BM25>::CountWindowRows ( const CountWindow_t & tWindow, const DeadRowMap_Disk_c * pDeadRows, bool bFilter )
+bool ExtRanker_T<USE_BM25>::CountWindowRows ( CountWindowIterator_i & tWindows, const CountWindow_t & tWindow, const DeadRowMap_Disk_c * pDeadRows, bool bFilter, int64_t & iCount )
 {
 	if ( !bFilter && (!pDeadRows || !pDeadRows->HasDead()) )
-		return tWindow.m_iRows;
+	{
+		iCount += tWindow.m_iRows;
+		return true;
+	}
 
-	int64_t iCount = 0;
 	for ( int i=0; i<tWindow.m_iRows; ++i )
 	{
+		if ( bFilter && !(i&31) && !tWindows.CheckContinue() )
+			return false;
+
 		const RowID_t tRow = tWindow.m_pRows[i];
 		if ( pDeadRows && pDeadRows->IsSet(tRow) )
 			continue;
@@ -1311,22 +1341,28 @@ int64_t ExtRanker_T<USE_BM25>::CountWindowRows ( const CountWindow_t & tWindow, 
 		++iCount;
 	}
 
-	return iCount;
+	return true;
 }
 
 
 template <bool USE_BM25>
-int64_t ExtRanker_T<USE_BM25>::CountWindowBitmap ( CountWindow_t & tWindow, const DeadRowMap_Disk_c * pDeadRows, bool bFilter )
+bool ExtRanker_T<USE_BM25>::CountWindowBitmap ( CountWindowIterator_i & tWindows, CountWindow_t & tWindow, const DeadRowMap_Disk_c * pDeadRows, bool bFilter, int64_t & iCount )
 {
 	if ( pDeadRows )
 		pDeadRows->MaskAlive ( tWindow.m_tBase, tWindow.m_dBits, CountWindow_t::WORDS );
 
 	if ( !bFilter )
-		return bitmap::Count ( tWindow.m_dBits, CountWindow_t::WORDS );
+	{
+		iCount += bitmap::Count ( tWindow.m_dBits, CountWindow_t::WORDS );
+		return true;
+	}
 
-	int64_t iCount = 0;
 	for ( int i=0; i<CountWindow_t::WORDS; ++i )
 	{
+		// One word bounds uninterrupted filtering to at most 32 rows.
+		if ( !tWindows.CheckContinue() )
+			return false;
+
 		DWORD uBits = tWindow.m_dBits[i];
 		while ( uBits )
 		{
@@ -1339,7 +1375,7 @@ int64_t ExtRanker_T<USE_BM25>::CountWindowBitmap ( CountWindow_t & tWindow, cons
 		}
 	}
 
-	return iCount;
+	return true;
 }
 
 
@@ -1349,7 +1385,7 @@ int64_t ExtRanker_T<USE_BM25>::CountDocsWindowless ( const DeadRowMap_Disk_c * p
 	int64_t iCount = 0;
 	while ( true )
 	{
-		const ExtDoc_t * pDoc = m_pRoot->GetDocsChunk();
+		const ExtDoc_t * pDoc = m_pDocsRoot->GetDocsChunk();
 		if ( !pDoc )
 			break;
 
@@ -1504,7 +1540,7 @@ int ExtRanker_State_T<STATE,USE_BM25>::GetMatches ()
 		if ( !pDocs )
 			return 0;
 
-		pHlist = RankerGetHits ( pProfile, this->m_pRoot.get(), pDocs );
+		pHlist = RankerGetHits ( pProfile, this->m_pDocsRoot, pDocs );
 	}
 
 	if ( !pHitBase )
@@ -1571,7 +1607,7 @@ int ExtRanker_State_T<STATE,USE_BM25>::GetMatches ()
 				break;
 
 			// we do, get some hits with proper profile
-			pHlist = RankerGetHits ( pProfile, this->m_pRoot.get(), pDocs );
+			pHlist = RankerGetHits ( pProfile, this->m_pDocsRoot, pDocs );
 		}
 
 		// skip until next good doc/hit pair
@@ -2522,7 +2558,7 @@ public:
 		}
 	}
 
-	void SetTermDupes ( const ExtQwordsHash_t & hQwords, int iMaxQpos, const ExtNode_i * pRoot )
+	void SetTermDupes ( const ExtQwordsHash_t & hQwords, int iMaxQpos, const QueryNode_i * pRoot )
 	{
 		if ( !pRoot )
 			return;
@@ -4748,9 +4784,9 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 
 	RankerSettings_t tRankerSettings;
 	tRankerSettings.m_bSkipQCache = tCtx.m_bSkipQCache;
-	// Experimental opt-in until dense/sparse Linux measurements establish admission.
+	// Enabled by default; retain an opt-out for Linux comparisons and admission tuning.
 	// Cached once per process; no public SQL option and no effect on non-count callers.
-	static const bool bWindowOr = env_bool ( "MANTICORE_WINDOW_OR" ).value_or(false);
+	static const bool bWindowOr = env_bool ( "MANTICORE_WINDOW_OR" ).value_or(true);
 	tRankerSettings.m_bCountWindows = bDiskCount && bWindowOr && tQuerySettings.m_eRanker==SPH_RANK_NONE;
 
 	// can we serve this from cache?

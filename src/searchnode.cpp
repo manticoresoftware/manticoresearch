@@ -994,9 +994,151 @@ static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordS
 	return pWord;
 }
 
-// Count-only union over disk qwords. The root can expose whole windows to the
-// ranker, or enumerate rows when a secondary-index iterator wraps it.
-class ExtWindowOr_c final : public ExtNode_c, public CountWindowIterator_i
+// Adapts any count-window producer to sorted, count-only document chunks.
+// The source is exclusively owned and its window capability is not forwarded.
+class WindowDocsAdapter_c final : public WindowDocsAdapter_i
+{
+public:
+	explicit WindowDocsAdapter_c ( std::unique_ptr<QueryNode_i> pSource )
+		: m_pSource ( std::move(pSource) )
+		, m_pWindows ( m_pSource->GetCountWindows() )
+	{
+		assert ( m_pWindows && !m_pSource->GetDocsNode() );
+	}
+
+	const ExtDoc_t * GetDocsChunk() override
+	{
+		if ( !m_pWindows->CheckContinue() )
+			return nullptr;
+
+		int iDocs = 0;
+		while ( iDocs<MAX_BLOCK_DOCS-1 )
+		{
+			if ( !m_pWindow )
+			{
+				m_pWindow = m_pWindows->NextWindow();
+				if ( !m_pWindow )
+					break;
+
+				m_iWord = 0;
+				m_iRow = 0;
+			}
+
+			RowID_t tRow;
+			if ( m_pWindow->m_pRows )
+			{
+				if ( m_iRow==m_pWindow->m_iRows )
+				{
+					m_pWindow = nullptr;
+					continue;
+				}
+
+				tRow = m_pWindow->m_pRows[m_iRow++];
+			}
+			else
+			{
+				while ( m_iWord<CountWindow_t::WORDS && !m_pWindow->m_dBits[m_iWord] )
+					++m_iWord;
+
+				if ( m_iWord==CountWindow_t::WORDS )
+				{
+					m_pWindow = nullptr;
+					continue;
+				}
+
+				DWORD & uBits = m_pWindow->m_dBits[m_iWord];
+				const int iBit = sphLog2 ( uBits & ( DWORD(0)-uBits ) )-1;
+				uBits &= uBits-1;
+				tRow = m_pWindow->m_tBase + m_iWord*32 + iBit;
+			}
+
+			if ( tRow>=m_tBounds.m_tMinRowID && tRow<=m_tBounds.m_tMaxRowID )
+				m_dDocs[iDocs++] = { tRow, 0, 0.0f };
+		}
+
+		m_dDocs[iDocs].m_tRowID = INVALID_ROWID;
+
+#if QDEBUG
+		PrintDocsChunk ( iDocs, GetAtomPos(), m_dDocs, "window-adapter", this );
+#endif
+		return iDocs ? m_dDocs : nullptr;
+	}
+
+	void Reset ( const ISphQwordSetup & tSetup ) override
+	{
+		m_pWindow = nullptr;
+		m_iWord = m_iRow = 0;
+		m_tBounds = m_tInitialBounds;
+		m_pSource->Reset(tSetup);
+	}
+
+	void HintRowID ( RowID_t tRow ) override
+	{
+		m_tBounds.m_tMinRowID = Max ( m_tBounds.m_tMinRowID, tRow );
+		// Retain any buffered rows at or above the hint, including row batches.
+		if ( m_pWindow && uint64_t(tRow)>=uint64_t(m_pWindow->m_tBase)+CountWindow_t::ROWS )
+			m_pWindow = nullptr;
+
+		m_pSource->HintRowID(tRow);
+	}
+
+	void SetRowidBoundaries ( const RowIdBoundaries_t & tBounds ) override
+	{
+		m_tInitialBounds = m_tBounds = tBounds;
+		HintRowID(tBounds.m_tMinRowID);
+		m_pSource->SetRowidBoundaries(tBounds);
+	}
+
+	std::unique_ptr<QueryNode_i> ReleaseSource() override
+	{
+		m_pWindow = nullptr;
+		m_pWindows = nullptr;
+		return std::move(m_pSource);
+	}
+
+	int		GetQwords ( ExtQwordsHash_t & hWords ) override { return m_pSource->GetQwords(hWords); }
+	void	SetQwordsIDF ( const ExtQwordsHash_t & hWords ) override { m_pSource->SetQwordsIDF(hWords); }
+	void	GetTerms ( const ExtQwordsHash_t & hWords, CSphVector<TermPos_t> & dTerms ) const override { m_pSource->GetTerms ( hWords, dTerms ); }
+	bool	GotHitless() override { return m_pSource->GotHitless(); }
+	int		GetDocsCount() const override { return m_pSource->GetDocsCount(); }
+	int		GetHitsCount() const override { return 0; }
+	uint64_t GetWordID() const override { return m_pSource->GetWordID(); }
+	void	SetAtomPos ( int iPos ) override { m_pSource->SetAtomPos(iPos); }
+	int		GetAtomPos() const override { return m_pSource->GetAtomPos(); }
+	NodeEstimate_t Estimate ( int64_t iTotalDocs ) const override { return m_pSource->Estimate(iTotalDocs); }
+	bool	TimeExceeded() const override { return m_pSource->TimeExceeded(); }
+	int64_t	GetMaxTimeout() const override { return m_pSource->GetMaxTimeout(); }
+
+	const ExtHit_t * GetHits ( const ExtDoc_t * ) override { assert ( false && "count-only adapter" ); return nullptr; }
+	void	SetCollectHits() override { assert ( false && "count-only adapter" ); }
+
+	void DebugDump ( int iLevel ) override
+	{
+		DebugIndent(iLevel);
+		printf ( "WindowDocsAdapter\n" );
+		m_pSource->DebugDump(iLevel+1);
+	}
+
+private:
+	std::unique_ptr<QueryNode_i> m_pSource;
+	CountWindowIterator_i *	m_pWindows;
+	CountWindow_t *			m_pWindow = nullptr;
+	RowIdBoundaries_t		m_tBounds;
+	RowIdBoundaries_t		m_tInitialBounds;
+	int						m_iWord = 0;
+	int						m_iRow = 0;
+	ExtDoc_t				m_dDocs[MAX_BLOCK_DOCS];
+};
+
+
+std::unique_ptr<WindowDocsAdapter_i> CreateWindowDocsAdapter ( std::unique_ptr<QueryNode_i> pSource )
+{
+	return std::make_unique<WindowDocsAdapter_c> ( std::move(pSource) );
+}
+
+
+// Count-only union over disk qwords. Document consumers use WindowDocsAdapter_c.
+class ExtWindowOr_c final : public WindowNode_i
 {
 	struct Term_t
 	{
@@ -1013,10 +1155,10 @@ public:
 	};
 
 	ExtWindowOr_c ( const VecTraits_T<Leaf_t> & dLeaves, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds )
-		: ExtNode_c ( tSetup.m_iMaxTimer )
-		, m_dTerms ( dLeaves.GetLength() )
+		: m_dTerms ( dLeaves.GetLength() )
 		, m_pWarning ( tSetup.m_pWarning )
 		, m_pStats ( tSetup.m_pStats )
+		, m_iMaxTimer ( tSetup.m_iMaxTimer )
 	{
 		ARRAY_FOREACH ( i, m_dTerms )
 		{
@@ -1029,74 +1171,13 @@ public:
 			SetRowidBoundaries ( *pBounds );
 	}
 
-	CountWindowIterator_i * GetCountWindows() override { return this; }
-	CountWindow_t * NextWindow() override
-	{
-		assert ( !m_bAdapter );
-		m_bDirect = true;
-		return FillWindow();
-	}
-
-	const ExtDoc_t * GetDocsChunk() override
-	{
-		assert ( !m_bDirect );
-		m_bAdapter = true;
-
-		if ( !CheckInterrupted() )
-			return nullptr;
-
-		int iDocs = 0;
-		while ( iDocs<MAX_BLOCK_DOCS-1 )
-		{
-			if ( m_iWord==CountWindow_t::WORDS )
-			{
-				if ( !FillWindow() )
-					break;
-
-				m_iWord = 0;
-				m_iRow = 0;
-			}
-
-			if ( m_tWindow.m_pRows )
-			{
-				if ( m_iRow==m_tWindow.m_iRows )
-				{
-					m_iWord = CountWindow_t::WORDS;
-					continue;
-				}
-
-				const RowID_t tRow = m_tWindow.m_pRows[m_iRow++];
-				if ( tRow>=m_tBounds.m_tMinRowID && tRow<=m_tBounds.m_tMaxRowID )
-					m_dDocs[iDocs++] = { tRow, 0, 0.0f };
-
-				continue;
-			}
-
-			DWORD & uBits = m_tWindow.m_dBits[m_iWord];
-			if ( !uBits )
-			{
-				++m_iWord;
-				continue;
-			}
-
-			const int iBit = sphLog2 ( uBits & ( DWORD(0)-uBits ) )-1;
-			uBits &= uBits-1;
-			const RowID_t tRow = m_tWindow.m_tBase + m_iWord*32 + iBit;
-			if ( tRow>=m_tBounds.m_tMinRowID && tRow<=m_tBounds.m_tMaxRowID )
-				m_dDocs[iDocs++] = { tRow, 0, 0.0f };
-		}
-
-		return ReturnDocsChunk ( iDocs, "window-or-count" );
-	}
-
-	void HintRowID ( RowID_t tRow ) override
-	{
-		m_tBounds.m_tMinRowID = Max ( m_tBounds.m_tMinRowID, tRow );
-
-		// The adapter may still own rows from an already decoded window.
-		if ( uint64_t(tRow)>=uint64_t(m_tWindow.m_tBase)+CountWindow_t::ROWS )
-			m_iWord = CountWindow_t::WORDS;
-	}
+	CountWindow_t *		NextWindow() override					{ return FillWindow(); }
+	bool				CheckContinue() override				{ return CheckInterrupted(); }
+	void				SetAtomPos ( int iPos ) override		{ m_iAtomPos = iPos; }
+	int					GetAtomPos() const override				{ return m_iAtomPos; }
+	bool				TimeExceeded() const override			{ return sph::TimeExceeded(m_iMaxTimer); }
+	int64_t				GetMaxTimeout() const override			{ return m_iMaxTimer; }
+	void				HintRowID ( RowID_t tRow ) override		{ m_tBounds.m_tMinRowID = Max ( m_tBounds.m_tMinRowID, tRow ); }
 
 	void SetRowidBoundaries ( const RowIdBoundaries_t & tBounds ) override
 	{
@@ -1106,13 +1187,11 @@ public:
 
 	void Reset ( const ISphQwordSetup & tSetup ) override
 	{
-		SetMaxTimeout ( tSetup.m_iMaxTimer );
+		m_iMaxTimer = tSetup.m_iMaxTimer;
 		m_pWarning = tSetup.m_pWarning;
 		m_pStats = tSetup.m_pStats;
-		m_bStopped = m_bDirect = m_bAdapter = false;
-		m_iWord = CountWindow_t::WORDS;
+		m_bStopped = false;
 		m_iSingleTerm = -1;
-		m_iRow = 0;
 		m_tWindow.m_pRows = nullptr;
 		m_tWindow.m_iRows = 0;
 		m_tBounds = m_tInitialBounds;
@@ -1168,7 +1247,6 @@ public:
 
 	bool GotHitless() override { return false; }
 	uint64_t GetWordID() const override { return 0; } // root-only, never used as a quorum child
-	void SetCollectHits() override { assert ( false && "count-only node" ); }
 	void DebugDump ( int iLevel ) override
 	{
 		DebugIndent ( iLevel );
@@ -1199,16 +1277,13 @@ private:
 	RowIdBoundaries_t		m_tInitialBounds;
 	CSphString *			m_pWarning = nullptr;
 	CSphQueryStats *		m_pStats = nullptr;
-	int						m_iWord	= CountWindow_t::WORDS;
 	RowID_t					m_dSingleRows[128];
-	int						m_iRow = 0;
 	int						m_iSingleTerm = -1;
 	uint64_t				m_uSingleEnd = 0;
 	bool					m_bStopped = false;
-	bool					m_bDirect = false;
-	bool					m_bAdapter = false;
-
-	void CollectHits ( const ExtDoc_t * ) override { assert ( false && "count-only node" ); }
+	int						m_iAtomPos = 0;
+	int64_t					m_iMaxTimer;
+	const int64_t &			m_iCheckTimePoint { Threads::Coro::GetNextTimePointUS() };
 
 	bool CheckInterrupted()
 	{
@@ -1384,7 +1459,7 @@ static bool CollectWindowOrLeaves ( const XQNode_t * pNode, CSphVector<ExtWindow
 	return !pNode->dWords().IsEmpty();
 }
 
-ExtNode_i * CreateWindowOrCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds )
+WindowNode_i * CreateWindowOrCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds )
 {
 	if ( !tSetup.m_pIndex || tSetup.m_pIndex->GetMatchSchema().GetFieldsCount()>32
 		|| tSetup.m_pIndex->GetSettings().m_eHitless!=SPH_HITLESS_NONE )

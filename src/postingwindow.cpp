@@ -134,21 +134,31 @@ private:
 			return Result();
 
 		int iRows = 0;
-		while ( EnsureCandidate(tWindow.m_tMin) && uint64_t(m_dBatch[m_iPos].m_tRowID)<tWindow.m_uEnd )
+		while ( EnsureCandidate(tWindow.m_tMin) )
 		{
-			const auto & tDoc = m_dBatch[m_iPos];
-			if ( !(tDoc.m_uFields & m_uFields) || tDoc.m_tRowID==m_tLastEmitted )
+			// Sorted rows in this batch already meet the lower bound.
+			while ( m_iPos<m_iLength )
 			{
+				const auto & tDoc = m_dBatch[m_iPos];
+				const RowID_t tRow = tDoc.m_tRowID;
+				if ( tRow==INVALID_ROWID || uint64_t(tRow)>=tWindow.m_uEnd )
+					return Result(iRows);
+
+				if ( !(tDoc.m_uFields & m_uFields) || tRow==m_tLastEmitted )
+				{
+					++m_iPos;
+					continue;
+				}
+
+				if ( iRows==iCapacity )
+					return Result(iRows);
+
+				fnWrite ( tRow, iRows++ );
+				m_tLastEmitted = tRow;
 				++m_iPos;
-				continue;
 			}
 
-			if ( iRows==iCapacity )
-				break;
-
-			fnWrite ( tDoc.m_tRowID, iRows++ );
-			m_tLastEmitted = tDoc.m_tRowID;
-			++m_iPos;
+			// Refill even at capacity: an empty batch alone does not mean EOF.
 		}
 
 		return Result(iRows);

@@ -15,10 +15,13 @@
 #include "tokenizer/tokenizer.h"
 #include "dict/dict_base.h"
 #include "searchnode.h"
+#include "querycontext.h"
+#include "client_task_info.h"
 #include "killlist.h"
 #include "secondaryindex.h"
 #include "coroutine.h"
 #include "mini_timer.h"
+#include "std/env.h"
 #include <algorithm>
 #include <set>
 #include <vector>
@@ -30,7 +33,19 @@ using Docs_t = std::vector<QwordDoc_t>;
 class WindowTestQword_c final : public ISphQword
 {
 public:
-	explicit WindowTestQword_c ( const Docs_t & dDocs ) : m_dDocs ( dDocs ) {}
+	explicit WindowTestQword_c ( const Docs_t & dDocs, int * pLiveQwords=nullptr )
+		: m_dDocs(dDocs)
+		, m_pLiveQwords(pLiveQwords)
+	{
+		if ( m_pLiveQwords )
+			++*m_pLiveQwords;
+	}
+
+	~WindowTestQword_c() override
+	{
+		if ( m_pLiveQwords )
+			--*m_pLiveQwords;
+	}
 	const CSphMatch & GetNextDoc() override { ADD_FAILURE() << "expected batched decode"; return m_tMatch; }
 	void SeekHitlist ( SphOffset_t ) override { ADD_FAILURE() << "count must not read hits"; }
 	Hitpos_t GetNextHit() override { ADD_FAILURE() << "count must not read hits"; return 0; }
@@ -56,15 +71,17 @@ public:
 private:
 	size_t m_iPos = 0;
 	CSphMatch m_tMatch;
+	int * m_pLiveQwords;
 };
 
 class WindowTestSetup_c final : public ISphQwordSetup
 {
 public:
 	Docs_t m_dAlpha, m_dBeta, m_dEmpty;
+	mutable int m_iLiveQwords = 0;
 	ISphQword * QwordSpawn ( const XQKeyword_t & tWord ) const override
 	{
-		return new WindowTestQword_c ( tWord.m_sWord=="alpha" ? m_dAlpha : tWord.m_sWord=="beta" ? m_dBeta : m_dEmpty );
+		return new WindowTestQword_c ( tWord.m_sWord=="alpha" ? m_dAlpha : tWord.m_sWord=="beta" ? m_dBeta : m_dEmpty, &m_iLiveQwords );
 	}
 	bool QwordSetup ( ISphQword * pWord ) const override
 	{
@@ -100,7 +117,66 @@ private:
 	size_t m_iPos = 0;
 };
 
-std::vector<RowID_t> ReadWindows ( ExtNode_i & tNode )
+// A window producer independent of OR/posting cursors, used to verify adaptation.
+class AdapterTestWindow_c final : public WindowNode_i
+{
+public:
+	AdapterTestWindow_c ( bool & bContinue, int & iDestroyed )
+		: m_bContinue(bContinue)
+		, m_iDestroyed(iDestroyed)
+	{
+		for ( int i=0; i<256; ++i )
+			m_dRows[i] = i;
+	}
+
+	~AdapterTestWindow_c() override { ++m_iDestroyed; }
+	bool CheckContinue() override { return m_bContinue; }
+	CountWindow_t * NextWindow() override
+	{
+		if ( !CheckContinue() || m_iWindow==2 )
+			return nullptr;
+
+		m_tWindow = {};
+		if ( m_iWindow++==0 )
+		{
+			m_tWindow.m_pRows = m_dRows;
+			m_tWindow.m_iRows = 256;
+		}
+		else
+		{
+			m_tWindow.m_tBase = 4096;
+			for ( int i=0; i<8; ++i )
+				m_tWindow.m_dBits[i] = ~DWORD(0);
+		}
+
+		return &m_tWindow;
+	}
+
+	void Reset ( const ISphQwordSetup & ) override { m_iWindow = 0; }
+	void HintRowID ( RowID_t ) override {}
+	void SetRowidBoundaries ( const RowIdBoundaries_t & ) override {}
+	int GetQwords ( ExtQwordsHash_t & ) override { return 0; }
+	void SetQwordsIDF ( const ExtQwordsHash_t & ) override {}
+	void GetTerms ( const ExtQwordsHash_t &, CSphVector<TermPos_t> & ) const override {}
+	bool GotHitless() override { return false; }
+	uint64_t GetWordID() const override { return 0; }
+	void SetAtomPos ( int iPos ) override { m_iAtomPos = iPos; }
+	int GetAtomPos() const override { return m_iAtomPos; }
+	NodeEstimate_t Estimate ( int64_t ) const override { return { 1.0f, 512, 1 }; }
+	void DebugDump ( int ) override {}
+	bool TimeExceeded() const override { return !m_bContinue; }
+	int64_t GetMaxTimeout() const override { return 0; }
+
+private:
+	bool & m_bContinue;
+	int & m_iDestroyed;
+	int m_iWindow = 0;
+	int m_iAtomPos = 0;
+	CountWindow_t m_tWindow;
+	RowID_t m_dRows[256];
+};
+
+std::vector<RowID_t> ReadWindows ( QueryNode_i & tNode )
 {
 	std::vector<RowID_t> dResult;
 	while ( auto * pWindow = tNode.GetCountWindows()->NextWindow() )
@@ -161,7 +237,7 @@ TEST ( WindowCount, BufferedUnionHintsResetAndBounds )
 		tRoot.AddDirtyWord ( { "beta", 2 } );
 		tRoot.AddDirtyWord ( { "alpha", 3 } );
 		tRoot.AddDirtyWord ( { "absent", 4 } );
-		std::unique_ptr<ExtNode_i> pNode ( CreateWindowOrCountNode ( &tRoot, tSetup, nullptr ) );
+		std::unique_ptr<QueryNode_i> pNode ( CreateWindowOrCountNode ( &tRoot, tSetup, nullptr ) );
 		ASSERT_TRUE ( pNode );
 		ASSERT_TRUE ( pNode->GetCountWindows() );
 		const std::vector<RowID_t> dAll ( dExpected.begin(), dExpected.end() );
@@ -174,16 +250,20 @@ TEST ( WindowCount, BufferedUnionHintsResetAndBounds )
 		EXPECT_EQ ( hWords["alpha"].m_iDocs, tSetup.m_dAlpha.size() );
 		EXPECT_EQ ( hWords["alpha"].m_iQueryPos, 1 );
 
-		pNode->Reset ( tSetup );
-		EXPECT_EQ ( ReadChunks ( *pNode ), dAll );
+		auto pAdapter = CreateWindowDocsAdapter ( std::move(pNode) );
+		EXPECT_EQ ( pAdapter->GetCountWindows(), nullptr );
+		pAdapter->Reset ( tSetup );
+		EXPECT_EQ ( ReadChunks ( *pAdapter ), dAll );
 		for ( RowID_t tHint : { RowID_t(31), RowID_t(127), RowID_t(4095), RowID_t(4096), RowID_t(8193), INVALID_ROWID-1, INVALID_ROWID } )
 		{
-			pNode->Reset ( tSetup );
-			ASSERT_TRUE ( pNode->GetDocsChunk() ); // retained window and lookahead batches
-			pNode->HintRowID ( tHint );
+			pAdapter->Reset ( tSetup );
+			ASSERT_TRUE ( pAdapter->GetDocsChunk() ); // retained window and lookahead batches
+			pAdapter->HintRowID ( tHint );
 			const RowID_t tFloor = Max ( tHint, dAll[MAX_BLOCK_DOCS-2]+1 );
-			EXPECT_EQ ( ReadChunks ( *pNode ), std::vector<RowID_t> ( dExpected.lower_bound(tFloor), dExpected.end() ) );
+			EXPECT_EQ ( ReadChunks ( *pAdapter ), std::vector<RowID_t> ( dExpected.lower_bound(tFloor), dExpected.end() ) );
 		}
+
+		pNode = pAdapter->ReleaseSource();
 
 		pNode->Reset ( tSetup );
 		RowIdBoundaries_t tBounds { 127, 4096 };
@@ -202,8 +282,8 @@ TEST ( WindowCount, BufferedUnionHintsResetAndBounds )
 			tIterator.m_dRows.push_back(i);
 			if ( dExpected.count(i) ) dIntersection.push_back(i);
 		}
-		std::unique_ptr<ExtNode_i> pWrappedNode ( CreateWindowOrCountNode ( &tRoot, tSetup, nullptr ) );
-		auto pWrapper = CreatePseudoFTNode ( pWrappedNode.release(), &tIterator );
+		std::unique_ptr<QueryNode_i> pWrappedNode ( CreateWindowOrCountNode ( &tRoot, tSetup, nullptr ) );
+		auto pWrapper = CreatePseudoFTNode ( CreateWindowDocsAdapter ( std::move(pWrappedNode) ).release(), &tIterator );
 		EXPECT_EQ ( pWrapper->GetCountWindows(), nullptr );
 		EXPECT_EQ ( ReadChunks ( *pWrapper ), dIntersection );
 
@@ -215,7 +295,7 @@ TEST ( WindowCount, BufferedUnionHintsResetAndBounds )
 		EXPECT_EQ ( CreateWindowOrCountNode ( &tRoot, tSetup, nullptr ), nullptr );
 		tRoot.ResetWords();
 		for ( int i=0; i<32; ++i ) tRoot.AddDirtyWord ( { "absent", i+1 } );
-		std::unique_ptr<ExtNode_i> pEmpty ( CreateWindowOrCountNode ( &tRoot, tSetup, nullptr ) );
+		std::unique_ptr<QueryNode_i> pEmpty ( CreateWindowOrCountNode ( &tRoot, tSetup, nullptr ) );
 		ASSERT_TRUE ( pEmpty );
 		EXPECT_TRUE ( ReadWindows ( *pEmpty ).empty() );
 		tRoot.AddDirtyWord ( { "absent", 33 } );
@@ -226,7 +306,7 @@ TEST ( WindowCount, BufferedUnionHintsResetAndBounds )
 		tRoot.AddDirtyWord ( { "beta", 2 } );
 		tSetup.m_pWarning = &sError;
 		tSetup.m_iMaxTimer = sph::MicroTimer()-10000;
-		std::unique_ptr<ExtNode_i> pExpired ( CreateWindowOrCountNode ( &tRoot, tSetup, nullptr ) );
+		std::unique_ptr<QueryNode_i> pExpired ( CreateWindowOrCountNode ( &tRoot, tSetup, nullptr ) );
 		ASSERT_TRUE ( pExpired );
 		EXPECT_TRUE ( ReadWindows ( *pExpired ).empty() );
 		EXPECT_STREQ ( sError.cstr(), "query time exceeded max_query_time" );
@@ -274,7 +354,7 @@ TEST ( WindowCount, SingleClauseRowsMixedWithBitmaps )
 		tRoot.AddDirtyWord ( { "alpha", 1 } );
 		tRoot.AddDirtyWord ( { "beta", 2 } );
 		tRoot.AddDirtyWord ( { "absent", 3 } );
-		std::unique_ptr<ExtNode_i> pNode ( CreateWindowOrCountNode ( &tRoot, tSetup, nullptr ) );
+		std::unique_ptr<QueryNode_i> pNode ( CreateWindowOrCountNode ( &tRoot, tSetup, nullptr ) );
 		ASSERT_TRUE(pNode);
 		const std::vector<RowID_t> dAll ( dExpected.begin(), dExpected.end() );
 		EXPECT_EQ ( ReadWindows(*pNode), dAll );
@@ -297,22 +377,26 @@ TEST ( WindowCount, SingleClauseRowsMixedWithBitmaps )
 			}
 		EXPECT_EQ ( iBitmaps, 1 );
 
-		pNode->Reset(tSetup);
-		EXPECT_EQ ( ReadChunks(*pNode), dAll );
+		auto pAdapter = CreateWindowDocsAdapter ( std::move(pNode) );
+		pAdapter->Reset(tSetup);
+		EXPECT_EQ ( ReadChunks(*pAdapter), dAll );
 		for ( RowID_t tHint : { RowID_t(31), RowID_t(127), RowID_t(128), RowID_t(511), RowID_t(4096), RowID_t(8193), INVALID_ROWID-1, INVALID_ROWID } )
 		{
-			pNode->Reset(tSetup);
-			ASSERT_TRUE ( pNode->GetDocsChunk() );
-			pNode->HintRowID(tHint);
+			pAdapter->Reset(tSetup);
+			ASSERT_TRUE ( pAdapter->GetDocsChunk() );
+			pAdapter->HintRowID(tHint);
 			const RowID_t tFloor = Max ( tHint, dAll[MAX_BLOCK_DOCS-2]+1 );
-			EXPECT_EQ ( ReadChunks(*pNode), std::vector<RowID_t> ( dExpected.lower_bound(tFloor), dExpected.end() ) );
+			EXPECT_EQ ( ReadChunks(*pAdapter), std::vector<RowID_t> ( dExpected.lower_bound(tFloor), dExpected.end() ) );
 		}
+		pNode = pAdapter->ReleaseSource();
+
 		pNode->Reset(tSetup);
 		pNode->SetRowidBoundaries ( { 127, 8300 } );
 		const std::vector<RowID_t> dBounded ( dExpected.lower_bound(127), dExpected.upper_bound(8300) );
 		EXPECT_EQ ( ReadWindows(*pNode), dBounded );
 		pNode->Reset(tSetup);
-		EXPECT_EQ ( ReadChunks(*pNode), dBounded );
+		pAdapter = CreateWindowDocsAdapter ( std::move(pNode) );
+		EXPECT_EQ ( ReadChunks(*pAdapter), dBounded );
 
 		WindowTestIterator_c tIterator;
 		std::vector<RowID_t> dIntersection;
@@ -321,8 +405,8 @@ TEST ( WindowCount, SingleClauseRowsMixedWithBitmaps )
 			tIterator.m_dRows.push_back(i);
 			if ( dExpected.count(i) ) dIntersection.push_back(i);
 		}
-		std::unique_ptr<ExtNode_i> pUnwrapped ( CreateWindowOrCountNode ( &tRoot, tSetup, nullptr ) );
-		auto pWrapper = CreatePseudoFTNode ( pUnwrapped.release(), &tIterator );
+		std::unique_ptr<QueryNode_i> pUnwrapped ( CreateWindowOrCountNode ( &tRoot, tSetup, nullptr ) );
+		auto pWrapper = CreatePseudoFTNode ( CreateWindowDocsAdapter ( std::move(pUnwrapped) ).release(), &tIterator );
 		EXPECT_EQ ( pWrapper->GetCountWindows(), nullptr );
 		EXPECT_EQ ( ReadChunks(*pWrapper), dIntersection );
 	} );
@@ -398,6 +482,35 @@ TEST ( PostingWindow, SharedCursorProbeRowsAndBitmap )
 	EXPECT_EQ ( tWord.m_iHintCalls, 1 ); // new target beyond any retained postings
 	EXPECT_FALSE ( p->Probe(200).m_bMatch );
 	EXPECT_TRUE ( p->Probe(201).m_bMatch );
+}
+
+TEST ( PostingWindow, RowCapacityAtBatchBoundaryRetainsLookahead )
+{
+	for ( int iDocs : { 128, 129, 256, 300 } )
+	{
+		SCOPED_TRACE(iDocs);
+		Docs_t dDocs;
+		for ( RowID_t i=0; i<RowID_t(iDocs); ++i )
+			dDocs.push_back ( { i, 1, 1, 0 } );
+		WindowTestQword_c tWord(dDocs);
+		tWord.m_iDocs = iDocs;
+		auto p = CreateBufferedPostingWindow ( tWord, 1, {} );
+
+		RowID_t dRows[128];
+		int iConsumed = 0;
+		while ( iConsumed<iDocs )
+		{
+			const auto tRows = p->ReadRows ( { 0, 0, 4096 }, dRows, 128 );
+			const int iExpected = std::min ( 128, iDocs-iConsumed );
+			ASSERT_EQ ( tRows.m_iRows, iExpected );
+			EXPECT_FALSE ( tRows.m_bStopped );
+			for ( int i=0; i<iExpected; ++i )
+				EXPECT_EQ ( dRows[i], RowID_t(iConsumed+i) );
+			iConsumed += iExpected;
+			EXPECT_EQ ( tRows.m_tNext, iConsumed<iDocs ? RowID_t(iConsumed) : INVALID_ROWID );
+		}
+		EXPECT_EQ ( p->ReadRows ( { 0, 0, 4096 }, dRows, 128 ).m_iRows, 0 );
+	}
 }
 
 TEST ( PostingWindow, BoundsEmptyAndInterruption )
@@ -492,4 +605,265 @@ TEST ( WindowCount, DeadMapPartialWindow )
 		for ( auto uBits : dBits ) EXPECT_EQ ( uBits, 0u );
 	}
 	::unlink ( sFile.cstr() );
+}
+TEST ( WindowCount, RankerRestoresWindowSourceAfterSI )
+{
+	if ( !env_bool ( "MANTICORE_WINDOW_OR" ).value_or(true) )
+		GTEST_SKIP() << "Window counting explicitly disabled by MANTICORE_WINDOW_OR";
+
+	Threads::CallCoroutine ( [] {
+		WindowTestSetup_c tSetup;
+		CSphString sError;
+		CSphDictSettings tDictSettings;
+		tDictSettings.SetDictFormat(DictFormat_e::CRC);
+		auto pTok = Tokenizer::Detail::CreateUTF8Tokenizer();
+		auto pDict = sphCreateDictionaryCRC ( tDictSettings, nullptr, pTok, "window-ranker-test", false, 32, nullptr, sError );
+		ASSERT_TRUE ( pDict ) << sError.cstr();
+		tSetup.SetDict(pDict);
+		auto pIndex = sphCreateIndexPhrase ( "window-ranker-test", "unused-window-index" );
+		pIndex->SetDictionary(pDict);
+		tSetup.m_pIndex = pIndex.get();
+		for ( RowID_t i=0; i<300; ++i )
+		{
+			tSetup.m_dAlpha.push_back ( { i, 1, 1, 0 } );
+			if ( i<100 )
+				tSetup.m_dBeta.push_back ( { i, 1, 1, 0 } );
+		}
+		for ( RowID_t i=4096; i<4396; ++i )
+			tSetup.m_dBeta.push_back ( { i, 1, 1, 0 } );
+
+		XQLimitSpec_t tSpec;
+		XQQuery_t tXQ;
+		tXQ.m_pRoot = new XQNode_t(tSpec);
+		tXQ.m_pRoot->SetOp(SPH_QUERY_OR);
+		tXQ.m_pRoot->AddDirtyWord ( { "alpha", 1 } );
+		tXQ.m_pRoot->AddDirtyWord ( { "beta", 2 } );
+		CSphQuery tQuery;
+		QueryExecutionSettings_t tSettings;
+		tSettings.m_eRanker = SPH_RANK_NONE;
+		CSphQueryContext tContext ( tQuery, tSettings );
+		tContext.m_bSkipQCache = true;
+		tContext.m_iTotalDocs = tContext.m_iIndexTotalDocs = 4500;
+		tSetup.m_pCtx = &tContext;
+		CSphQueryResultMeta tMeta;
+		auto pRanker = sphCreateRanker ( tXQ, tQuery, tSettings, tMeta, tSetup, tContext, pIndex->GetMatchSchema(), true );
+		ASSERT_TRUE ( pRanker ) << tMeta.m_sError.cstr();
+		ASSERT_TRUE ( pRanker->UsedCountWindows() );
+		EXPECT_EQ ( pRanker->CountDocs(nullptr), 600 );
+
+		// Each SI wrapper owns the adapter. Reset must recover a window-only root,
+		// ready for a different chunk to use either direct counting or another SI.
+		for ( int iPass=0; iPass<3; ++iPass )
+		{
+			pRanker->Reset(tSetup);
+			WindowTestIterator_c tIterator;
+			int iExpected = 0;
+			for ( RowID_t i=0; i<4500; i+=7 )
+			{
+				tIterator.m_dRows.push_back(i);
+				iExpected += i<300 || (i>=4096 && i<4396);
+			}
+			RowidIterator_i * pIterator = &tIterator;
+			ASSERT_TRUE ( pRanker->ExtraData ( EXTRA_SET_ITERATOR, (void**)&pIterator ) );
+			EXPECT_FALSE ( pRanker->UsedCountWindows() );
+			EXPECT_EQ ( pRanker->CountDocs(nullptr), iExpected );
+			pRanker->Reset(tSetup);
+			EXPECT_TRUE ( pRanker->UsedCountWindows() );
+			EXPECT_EQ ( pRanker->CountDocs(nullptr), 600 );
+			EXPECT_EQ ( tSetup.m_iLiveQwords, 2 );
+		}
+
+		pRanker->Reset(tSetup);
+		RowIdBoundaries_t tBounds { 100, 4200 };
+		ASSERT_TRUE ( pRanker->ExtraData ( EXTRA_SET_BOUNDARIES, (void**)&tBounds ) );
+		EXPECT_EQ ( pRanker->CountDocs(nullptr), 305 );
+		pRanker->Reset(tSetup);
+		EXPECT_EQ ( pRanker->CountDocs(nullptr), 305 );
+
+		// Destruction with an attached SI must also destroy the adapter and source.
+		pRanker->Reset(tSetup);
+		WindowTestIterator_c tIterator;
+		tIterator.m_dRows = { 100, 4096, 4200 };
+		RowidIterator_i * pIterator = &tIterator;
+		ASSERT_TRUE ( pRanker->ExtraData ( EXTRA_SET_ITERATOR, (void**)&pIterator ) );
+		tBounds = { 4096, 4199 };
+		ASSERT_TRUE ( pRanker->ExtraData ( EXTRA_SET_BOUNDARIES, (void**)&tBounds ) );
+		EXPECT_EQ ( pRanker->CountDocs(nullptr), 1 );
+		pRanker->Reset(tSetup);
+		EXPECT_TRUE ( pRanker->UsedCountWindows() );
+		EXPECT_EQ ( pRanker->CountDocs(nullptr), 104 );
+
+		pRanker->Reset(tSetup);
+		WindowTestIterator_c tFinalIterator;
+		tFinalIterator.m_dRows = { 4096 };
+		pIterator = &tFinalIterator;
+		ASSERT_TRUE ( pRanker->ExtraData ( EXTRA_SET_ITERATOR, (void**)&pIterator ) );
+		EXPECT_EQ ( pRanker->CountDocs(nullptr), 1 );
+		pRanker.reset();
+		EXPECT_EQ ( tSetup.m_iLiveQwords, 0 );
+	} );
+}
+TEST ( WindowCount, GenericAdapterRetainedRowsAndOwnership )
+{
+	WindowTestSetup_c tSetup;
+	bool bContinue = true;
+	int iDestroyed = 0;
+	auto pSource = std::make_unique<AdapterTestWindow_c> ( bContinue, iDestroyed );
+	auto * pIdentity = pSource.get();
+	EXPECT_EQ ( pSource->GetDocsNode(), nullptr );
+	auto pAdapter = CreateWindowDocsAdapter ( std::move(pSource) );
+	EXPECT_EQ ( pAdapter->GetDocsNode(), pAdapter.get() );
+	EXPECT_EQ ( pAdapter->GetCountWindows(), nullptr );
+	pAdapter->SetAtomPos(7);
+	EXPECT_EQ ( pIdentity->GetAtomPos(), 7 );
+	EXPECT_EQ ( pAdapter->Estimate(1000).m_iDocs, 512 );
+
+	ASSERT_TRUE ( pAdapter->GetDocsChunk() );
+	// Interruption must be checked even though most of the first window remains.
+	bContinue = false;
+	EXPECT_EQ ( pAdapter->GetDocsChunk(), nullptr );
+	bContinue = true;
+	pAdapter->Reset(tSetup);
+	ASSERT_TRUE ( pAdapter->GetDocsChunk() );
+	pAdapter->SetRowidBoundaries ( { 100, 4200 } );
+	std::vector<RowID_t> dExpected;
+	for ( RowID_t i=100; i<256; ++i )
+		dExpected.push_back(i);
+	for ( RowID_t i=4096; i<=4200; ++i )
+		dExpected.push_back(i);
+	EXPECT_EQ ( ReadChunks(*pAdapter), dExpected );
+	pAdapter->Reset(tSetup);
+	EXPECT_EQ ( ReadChunks(*pAdapter), dExpected );
+
+	pAdapter->Reset(tSetup);
+	ASSERT_TRUE ( pAdapter->GetDocsChunk() );
+	pAdapter->HintRowID(4190);
+	dExpected.clear();
+	for ( RowID_t i=4190; i<=4200; ++i )
+		dExpected.push_back(i);
+	EXPECT_EQ ( ReadChunks(*pAdapter), dExpected );
+
+	pAdapter->Reset(tSetup);
+	auto pRestored = pAdapter->ReleaseSource();
+	EXPECT_EQ ( pRestored.get(), pIdentity );
+	EXPECT_NE ( pRestored->GetCountWindows(), nullptr );
+	EXPECT_EQ ( pRestored->GetDocsNode(), nullptr );
+	pAdapter.reset();
+	EXPECT_EQ ( iDestroyed, 0 );
+	pRestored.reset();
+	EXPECT_EQ ( iDestroyed, 1 );
+
+	pAdapter = CreateWindowDocsAdapter ( std::make_unique<AdapterTestWindow_c> ( bContinue, iDestroyed ) );
+	pAdapter.reset();
+	EXPECT_EQ ( iDestroyed, 2 );
+}
+
+TEST ( WindowCount, FilteredCountingCancellationPreservesPartialCount )
+{
+	if ( !env_bool ( "MANTICORE_WINDOW_OR" ).value_or(true) )
+		GTEST_SKIP() << "Window counting explicitly disabled by MANTICORE_WINDOW_OR";
+
+	class InterruptingFilter_c final : public ISphFilter
+	{
+	public:
+		explicit InterruptingFilter_c ( CSphQueryStats & tStats )
+			: m_tStats(tStats)
+		{}
+
+		bool Eval ( const CSphMatch & tMatch ) const override
+		{
+			if ( ++m_iEvaluated==m_iStopAt )
+			{
+				session::SetKilled(true);
+				Threads::Coro::SetThrottlingPeriodMS(1);
+				Threads::Coro::RestartRuntime();
+				// Model a slow filter without yielding: the next producer check
+				// must observe cancellation once the coroutine time slice expires.
+				while ( !Threads::Coro::RuntimeExceeded() )
+					sphSleepMsec(1);
+
+				m_iFetchedAtStop = m_tStats.m_iFetchedDocs;
+			}
+
+			return !(tMatch.m_tRowID&1);
+		}
+
+		int m_iStopAt = 4096+5;
+		mutable int m_iEvaluated = 0;
+		mutable int64_t m_iFetchedAtStop = 0;
+
+	private:
+		CSphQueryStats & m_tStats;
+	};
+
+	Threads::CallCoroutine ( [] {
+		// Avoid unrelated rescheduling outside the deliberately slow filter.
+		Threads::Coro::SetThrottlingPeriodMS(60000);
+		Threads::Coro::RestartRuntime();
+		for ( bool bRows : { false, true } )
+		{
+			SCOPED_TRACE ( bRows ? "single-contributor rows" : "bitmap" );
+			ScopedInfo_T<ClientTaskInfo_t> tSession ( new ClientTaskInfo_t );
+			WindowTestSetup_c tSetup;
+			CSphQueryStats tStats;
+			tSetup.m_pStats = &tStats;
+			CSphString sWarning;
+			tSetup.m_pWarning = &sWarning;
+			CSphDictSettings tDictSettings;
+			tDictSettings.SetDictFormat(DictFormat_e::CRC);
+			auto pTok = Tokenizer::Detail::CreateUTF8Tokenizer();
+			auto pDict = sphCreateDictionaryCRC ( tDictSettings, nullptr, pTok, "window-cancel-test", false, 32, nullptr, sWarning );
+			ASSERT_TRUE ( pDict ) << sWarning.cstr();
+			tSetup.SetDict(pDict);
+			auto pIndex = sphCreateIndexPhrase ( "window-cancel-test", "unused-window-index" );
+			pIndex->SetDictionary(pDict);
+			tSetup.m_pIndex = pIndex.get();
+			for ( RowID_t i=0; i<8192; ++i )
+			{
+				tSetup.m_dAlpha.push_back ( { i, 1, 1, 0 } );
+				if ( !bRows )
+					tSetup.m_dBeta.push_back ( { i, 1, 1, 0 } );
+			}
+
+			XQQuery_t tXQ;
+			tXQ.m_pRoot = new XQNode_t ( XQLimitSpec_t() );
+			tXQ.m_pRoot->SetOp(SPH_QUERY_OR);
+			tXQ.m_pRoot->AddDirtyWord ( { "alpha", 1 } );
+			tXQ.m_pRoot->AddDirtyWord ( { "beta", 2 } );
+			CSphQuery tQuery;
+			QueryExecutionSettings_t tSettings;
+			tSettings.m_eRanker = SPH_RANK_NONE;
+			CSphQueryContext tContext ( tQuery, tSettings );
+			tContext.m_bSkipQCache = true;
+			tContext.m_iTotalDocs = tContext.m_iIndexTotalDocs = 8192;
+			tContext.m_pFilter = std::make_unique<InterruptingFilter_c>(tStats);
+			auto * pFilter = static_cast<InterruptingFilter_c*>(tContext.m_pFilter.get());
+			tSetup.m_pCtx = &tContext;
+			CSphQueryResultMeta tMeta;
+			auto pRanker = sphCreateRanker ( tXQ, tQuery, tSettings, tMeta, tSetup, tContext, pIndex->GetMatchSchema(), true );
+			ASSERT_TRUE ( pRanker ) << tMeta.m_sError.cstr();
+			ASSERT_TRUE ( pRanker->UsedCountWindows() );
+
+			// Preserve the first window and accepted rows of the interrupted window.
+			EXPECT_EQ ( pRanker->CountDocs(nullptr), (4096+32)/2 );
+			EXPECT_EQ ( pFilter->m_iEvaluated, 4096+32 );
+			EXPECT_EQ ( tStats.m_iFetchedDocs, pFilter->m_iFetchedAtStop );
+			EXPECT_STREQ ( sWarning.cstr(), "query was killed" );
+			EXPECT_EQ ( pRanker->CountDocs(nullptr), 0 );
+			EXPECT_EQ ( pFilter->m_iEvaluated, 4096+32 );
+
+			session::SetKilled(false);
+			Threads::Coro::SetThrottlingPeriodMS(60000);
+			Threads::Coro::RestartRuntime();
+			pFilter->m_iStopAt = 0;
+			pFilter->m_iEvaluated = 0;
+			pRanker->Reset(tSetup);
+			EXPECT_EQ ( pRanker->CountDocs(nullptr), 4096 );
+			EXPECT_EQ ( pFilter->m_iEvaluated, 8192 );
+
+			tContext.m_pFilter.reset();
+			pRanker->Reset(tSetup);
+			EXPECT_EQ ( pRanker->CountDocs(nullptr), 8192 );
+		}
+	} );
 }

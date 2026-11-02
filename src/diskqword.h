@@ -462,33 +462,54 @@ private:
 		tDoc.m_iHitlistPos = m_iHitlistPos;
 	}
 
-	// decode one doclist entry from SRC (the virtual reader, or a DocCursor_t over its window)
-	template <typename SRC>
-	FORCE_INLINE void DecodeNext ( SRC & tSrc )
+	enum class DecodeMode_e
+	{
+		FULL,
+		MEMBERSHIP
+	};
+
+	// Decode one entry and return its low-32-bit field mask. Membership mode keeps row and
+	// external hit-offset accumulation, but does not construct full field or inline-hit metadata.
+	template <DecodeMode_e MODE=DecodeMode_e::FULL, typename SRC>
+	FORCE_INLINE DWORD DecodeNext ( SRC & tSrc )
 	{
 		RowID_t uDelta = tSrc.UnzipRowid();
 		if ( uDelta )
 		{
-			m_bAllFieldsKnown = false;
+			if constexpr ( MODE==DecodeMode_e::FULL )
+				m_bAllFieldsKnown = false;
+
 			m_tDoc.m_tRowID += uDelta;
 
 			if_const ( INLINE_HITS )
 			{
-				m_uMatchHits = tSrc.UnzipInt();
+				const DWORD uHits = tSrc.UnzipInt();
 				const DWORD uFirst = tSrc.UnzipInt();
-				if ( m_uMatchHits==1 && m_bHasHitlist )
+				if constexpr ( MODE==DecodeMode_e::FULL )
+					m_uMatchHits = uHits;
+
+				if ( uHits==1 && m_bHasHitlist )
 				{
-					DWORD uField = tSrc.UnzipInt(); // field and end marker
-					m_iHitlistPos = uFirst | ( uField << 23 ) | ( U64C(1)<<63 );
-					m_dQwordFields.UnsetAll();
+					const DWORD uField = tSrc.UnzipInt(); // field and end marker
 					// want to make sure bad field data not cause crash
-					m_dQwordFields.Set ( ( uField >> 1 ) & ( (DWORD)SPH_MAX_FIELDS-1 ) );
-					m_bAllFieldsKnown = true;
+					const DWORD uFieldID = ( uField >> 1 ) & ( (DWORD)SPH_MAX_FIELDS-1 );
+					if constexpr ( MODE==DecodeMode_e::FULL )
+					{
+						m_iHitlistPos = uFirst | ( uField << 23 ) | ( U64C(1)<<63 );
+						m_dQwordFields.UnsetAll();
+						m_dQwordFields.Set(uFieldID);
+						m_bAllFieldsKnown = true;
+					}
+
+					return uFieldID<32 ? DWORD(1)<<uFieldID : 0;
 				} else
 				{
-					m_dQwordFields.Assign32 ( uFirst );
+					if constexpr ( MODE==DecodeMode_e::FULL )
+						m_dQwordFields.Assign32 ( uFirst );
+
 					m_uHitPosition += tSrc.UnzipOffset();
 					m_iHitlistPos = m_uHitPosition;
+					return uFirst;
 				}
 			} else
 			{
@@ -497,11 +518,20 @@ private:
 
 				m_iHitlistPos += iDeltaPos;
 
-				m_dQwordFields.Assign32 ( tSrc.UnzipInt() );
-				m_uMatchHits = tSrc.UnzipInt();
+				const DWORD uFields = tSrc.UnzipInt();
+				const DWORD uHits = tSrc.UnzipInt();
+				if constexpr ( MODE==DecodeMode_e::FULL )
+				{
+					m_dQwordFields.Assign32(uFields);
+					m_uMatchHits = uHits;
+				}
+
+				return uFields;
 			}
 		} else
 			m_tDoc.m_tRowID = INVALID_ROWID;
+
+		return 0;
 	}
 
 	inline void ReadNext()
@@ -519,8 +549,8 @@ private:
 			DecodeNext ( m_tDocs );
 	}
 
-	// Exclusive membership cursor over this decoder. Keep one decoded candidate in
-	// the qword itself; bulk output never constructs intermediate QwordDoc records.
+	// Exclusive membership cursor: retain the candidate row in the qword and its field mask here.
+	// Full hit/field metadata is not maintained; reset/setup the qword before using full decoding again.
 	class DirectPostingWindow_c final : public PostingWindow_i
 	{
 	public:
@@ -564,6 +594,7 @@ private:
 		void Reset ( bool bHasDocs, const PostingWindowContext_t & tContext ) override
 		{
 			m_tContext = tContext;
+			m_uDocFields = 0;
 			m_bPending = false;
 			m_bEOF = !bHasDocs;
 			m_bStopped = false;
@@ -572,12 +603,13 @@ private:
 	private:
 		DiskIndexQword_c &		m_tWord;
 		const DWORD				m_uFields;
+		DWORD					m_uDocFields = 0;
 		PostingWindowContext_t	m_tContext;
 		bool					m_bPending = false;
 		bool					m_bEOF = false;
 		bool					m_bStopped = false;
 
-		bool MatchesFields() const { return (m_tWord.m_dQwordFields.GetMask32() & m_uFields)!=0; }
+		bool MatchesFields() const { return (m_uDocFields & m_uFields)!=0; }
 
 		bool CheckContinue()
 		{
@@ -610,7 +642,7 @@ private:
 						if ( !tSrc.Has() )
 							return false;
 
-					m_tWord.DecodeNext(tSrc);
+					m_uDocFields = m_tWord.template DecodeNext<DecodeMode_e::MEMBERSHIP>(tSrc);
 					if ( m_tWord.m_tDoc.m_tRowID==INVALID_ROWID )
 					{
 						m_bEOF = true;

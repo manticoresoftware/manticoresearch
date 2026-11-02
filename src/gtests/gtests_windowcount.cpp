@@ -721,6 +721,103 @@ TEST ( PostingWindow, NativeInlineFile ) { CheckNativePostingWindow<true,BlockRe
 TEST ( PostingWindow, NativePlainMapped ) { CheckNativePostingWindow<false,RawReader_t>(); }
 TEST ( PostingWindow, NativePlainFile ) { CheckNativePostingWindow<false,BlockReader_t>(); }
 
+namespace
+{
+template<bool INLINE_HITS, typename READER>
+void CheckMembershipDecoder()
+{
+	for ( bool bHasHitlist : { false, true } )
+	{
+		CSphString sFile;
+		sFile.SetSprintf ( "test_membership_%d_%d_%d.spd", int(INLINE_HITS), int(READER::IS_RAW), int(bHasHitlist) );
+		struct Cleanup_t
+		{
+			const CSphString & m_sFile;
+			~Cleanup_t() { ::unlink ( m_sFile.cstr() ); }
+		} tCleanup { sFile };
+		CSphString sError;
+		const DWORD dFields[] = { 0, 1, 31, 32, 255, 256, 511 };
+		const int iDocs = 280;
+		{
+			CSphWriter tWriter;
+			ASSERT_TRUE ( tWriter.OpenFile ( sFile, sError ) ) << sError.cstr();
+			for ( int i=0; i<iDocs; ++i )
+			{
+				const DWORD uField = dFields[i%7];
+				const DWORD uMask = uField<32 ? DWORD(1)<<uField : 0;
+				const DWORD uHits = i%3 ? 1 : 3;
+				tWriter.ZipInt(1);
+				if constexpr ( INLINE_HITS )
+				{
+					tWriter.ZipInt(uHits);
+					if ( uHits==1 && bHasHitlist )
+					{
+						tWriter.ZipInt(123);
+						tWriter.ZipInt ( (uField<<1)|1 );
+					} else
+					{
+						tWriter.ZipInt(uMask);
+						tWriter.ZipOffset ( SphOffset_t(1)<<35 );
+					}
+				} else
+				{
+					tWriter.ZipOffset ( SphOffset_t(1)<<35 );
+					tWriter.ZipInt(uMask);
+					tWriter.ZipInt(uHits);
+				}
+			}
+			tWriter.ZipInt(0); // exercise the checked map tail too
+			tWriter.CloseFile();
+			ASSERT_FALSE ( tWriter.IsError() );
+		}
+		DataReaderFactoryPtr_c pFactory ( NewProxyReader ( sFile, sError, DataReaderFactory_c::DOCS, 64, READER::IS_RAW ? FileAccess_e::MMAP : FileAccess_e::FILE ) );
+		ASSERT_TRUE(pFactory) << sError.cstr();
+		for ( DWORD uFields : { 1u, 2u, 0x80000000u, 0xffffffffu } )
+		{
+			DiskIndexQword_c<INLINE_HITS,false,READER> tWord ( false, false, 0 ), tFull ( false, false, 0 );
+			for ( auto * pWord : { &tWord, &tFull } )
+			{
+				pWord->SetDocReader(pFactory);
+				pWord->ResetDecoderState();
+				pWord->SeekDocReader ( 0, 0 );
+				pWord->m_bHasHitlist = bHasHitlist;
+				pWord->m_iDocs = iDocs;
+			}
+			auto p = tWord.CreatePostingWindow ( uFields, {} );
+			for ( int i=0; i<iDocs; ++i )
+			{
+				SCOPED_TRACE(i);
+				ASSERT_EQ ( tFull.GetNextDoc().m_tRowID, RowID_t(i) );
+				ASSERT_EQ ( p->AdvanceTo(i).m_tNext, RowID_t(i) );
+				EXPECT_EQ ( tWord.GetDocReaderPos(), tFull.GetDocReaderPos() );
+				const DWORD uHits = i%3 ? 1 : 3;
+				const bool bInline = INLINE_HITS && bHasHitlist && uHits==1;
+				const DWORD uField = bInline ? dFields[i%7] & (SPH_MAX_FIELDS-1) : dFields[i%7];
+				const DWORD uMask = uField<32 ? DWORD(1)<<uField : 0;
+				EXPECT_EQ ( tFull.m_dQwordFields.GetMask32(), uMask );
+				EXPECT_EQ ( tFull.m_uMatchHits, uHits );
+				if ( bInline )
+					EXPECT_EQ ( tFull.m_iHitlistPos, SphOffset_t(123 | (((dFields[i%7]<<1)|1)<<23) | (U64C(1)<<63)) );
+				else
+					EXPECT_EQ ( tWord.m_iHitlistPos, tFull.m_iHitlistPos );
+				const bool bMatch = (uMask & uFields)!=0;
+				EXPECT_EQ ( p->Probe(i).m_bMatch, bMatch );
+				if ( bMatch )
+					EXPECT_TRUE ( p->Probe(i).m_bMatch ); // retained field mask survives repeated probes
+			}
+			EXPECT_EQ ( p->AdvanceTo(iDocs).m_tNext, INVALID_ROWID );
+			EXPECT_EQ ( tFull.GetNextDoc().m_tRowID, INVALID_ROWID );
+			EXPECT_EQ ( tWord.GetDocReaderPos(), tFull.GetDocReaderPos() );
+		}
+	}
+}
+}
+
+TEST ( PostingWindow, MembershipInlineMapped ) { CheckMembershipDecoder<true,RawReader_t>(); }
+TEST ( PostingWindow, MembershipInlineFile ) { CheckMembershipDecoder<true,BlockReader_t>(); }
+TEST ( PostingWindow, MembershipPlainMapped ) { CheckMembershipDecoder<false,RawReader_t>(); }
+TEST ( PostingWindow, MembershipPlainFile ) { CheckMembershipDecoder<false,BlockReader_t>(); }
+
 TEST ( WindowCount, DeadMapPartialWindow )
 {
 	const CSphString sFile ( "test_window_deadmap.spm" );

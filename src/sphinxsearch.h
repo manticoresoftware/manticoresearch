@@ -15,7 +15,6 @@
 
 #include "sphinxquery/sphinxquery.h"
 #include "sphinxint.h"
-#include "postingwindow.h"
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -112,7 +111,6 @@ public:
 	// fill up to iMax entries; returns fewer than iMax only at the end of the doclist;
 	// leaves the qword positioned on the last returned entry, as if GetNextDoc() had returned it
 	virtual int					GetNextDocs ( QwordDoc_t * pDocs, int iMax );
-	virtual std::unique_ptr<PostingWindow_i> CreatePostingWindow ( DWORD uFields, const PostingWindowContext_t & tContext );
 	virtual void				SeekHitlist ( SphOffset_t uOff ) = 0;
 	virtual Hitpos_t			GetNextHit () = 0;
 	virtual bool				WantHitPrefetch() { return false; }

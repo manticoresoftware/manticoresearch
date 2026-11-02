@@ -21,7 +21,7 @@
 #include "secondaryindex.h"
 #include "coroutine.h"
 #include "mini_timer.h"
-#include "diskqword.h"
+#include "std/env.h"
 #include <algorithm>
 #include <set>
 #include <vector>
@@ -560,167 +560,6 @@ TEST ( PostingWindow, BoundsEmptyAndInterruption )
 	EXPECT_EQ ( tWord.m_iBatchCalls, iCalls );
 }
 
-namespace
-{
-template<bool INLINE_HITS, typename READER>
-void CheckNativePostingWindow()
-{
-	CSphString sFile;
-	sFile.SetSprintf ( "test_native_postings_%d_%d.spd", int(INLINE_HITS), int(READER::IS_RAW) );
-	struct Cleanup_t
-	{
-		const CSphString & m_sFile;
-		~Cleanup_t() { ::unlink ( m_sFile.cstr() ); }
-	} tCleanup { sFile };
-	CSphString sError;
-	std::vector<RowID_t> dDocs;
-	for ( RowID_t i=0; i<300; ++i ) dDocs.push_back(i);
-	dDocs.insert ( dDocs.end(), { 4096, 9000, INVALID_ROWID-1 } );
-	SphOffset_t iSkipOffset = 0, iSkipHitPosition = 0;
-	{
-		CSphWriter tWriter;
-		ASSERT_TRUE ( tWriter.OpenFile ( sFile, sError ) ) << sError.cstr();
-		RowID_t tPrevious = INVALID_ROWID;
-		SphOffset_t iHitPosition = 0;
-		for ( RowID_t tRow : dDocs )
-		{
-			if ( tRow==128 )
-			{
-				iSkipOffset = tWriter.GetPos();
-				iSkipHitPosition = iHitPosition;
-			}
-			const DWORD uField = tRow%5 ? 0 : 1;
-			const DWORD uHits = tRow%2 ? 1 : 3;
-			const SphOffset_t iDelta = tRow%7 ? 17 : (SphOffset_t(1)<<35);
-			tWriter.ZipInt ( tRow-tPrevious );
-			if constexpr ( INLINE_HITS )
-			{
-				tWriter.ZipInt(uHits);
-				tWriter.ZipInt ( uHits==1 ? 123 : DWORD(1)<<uField );
-				if ( uHits==1 )
-					tWriter.ZipInt ( uField<<1 );
-				else
-				{
-					tWriter.ZipOffset(iDelta);
-					iHitPosition += iDelta;
-				}
-			} else
-			{
-				tWriter.ZipOffset(iDelta);
-				iHitPosition += iDelta;
-				tWriter.ZipInt ( DWORD(1)<<uField );
-				tWriter.ZipInt(uHits);
-			}
-			tPrevious = tRow;
-		}
-		tWriter.ZipInt(0); // no padding: the final posting exercises checked map-tail decoding
-		tWriter.CloseFile();
-		ASSERT_FALSE ( tWriter.IsError() ) << sError.cstr();
-	}
-	DataReaderFactoryPtr_c pFactory ( NewProxyReader ( sFile, sError, DataReaderFactory_c::DOCS, 64, READER::IS_RAW ? FileAccess_e::MMAP : FileAccess_e::FILE ) );
-	ASSERT_TRUE(pFactory) << sError.cstr();
-	DiskIndexQword_c<INLINE_HITS,false,READER> tWord ( false, false, 0 );
-	tWord.SetDocReader(pFactory);
-	tWord.ResetDecoderState();
-	tWord.SeekDocReader ( 0, 0 );
-	tWord.m_iDocs = int(dDocs.size());
-	CSphQueryStats tStats;
-	auto p = tWord.CreatePostingWindow ( 1, { nullptr, nullptr, &tStats } );
-	EXPECT_EQ ( p->AdvanceTo(0).m_tNext, 0u );
-	EXPECT_EQ ( tStats.m_iFetchedDocs, 1 ); // only the retained candidate, no decoded batch
-	EXPECT_FALSE ( p->Probe(0).m_bMatch );
-	EXPECT_TRUE ( p->Probe(1).m_bMatch );
-	EXPECT_TRUE ( p->Probe(1).m_bMatch );
-	RowID_t dRows[128];
-	auto tRows = p->ReadRows ( { 0, 1, 4096 }, dRows, 17 );
-	ASSERT_EQ ( tRows.m_iRows, 17 );
-	EXPECT_EQ ( dRows[0], 1u );
-	EXPECT_EQ ( dRows[16], 21u );
-	EXPECT_EQ ( tRows.m_tNext, 22u );
-	DWORD dBits[PostingWindow_t::WORDS] = {};
-	dBits[0] = 1;
-	auto tFill = p->FillOr ( { 0, 22, 4096 }, dBits );
-	EXPECT_EQ ( tFill.m_tNext, 4096u );
-	int iExpected = 0;
-	for ( int i=0; i<PostingWindow_t::ROWS; ++i )
-	{
-		const bool bExpected = i>=22 && i<300 && i%5;
-		iExpected += bExpected;
-		EXPECT_EQ ( (dBits[i>>5] & (DWORD(1)<<(i&31)))!=0, i==0 || bExpected ) << i;
-	}
-	EXPECT_EQ ( tFill.m_iRows, iExpected );
-	EXPECT_TRUE ( p->Probe(4096).m_bMatch );
-	EXPECT_EQ ( p->ReadRows ( { 4096, 4096, 4096 }, dRows, 1 ).m_iRows, 0 );
-	tRows = p->ReadRows ( { 4096, 4096, 8192 }, dRows, 1 );
-	EXPECT_EQ ( tRows.m_iRows, 1 );
-	EXPECT_EQ ( dRows[0], 4096u );
-	EXPECT_EQ ( tRows.m_tNext, 9000u );
-	EXPECT_FALSE ( p->Probe(9000).m_bMatch );
-	tRows = p->ReadRows ( { INVALID_ROWID-4095, INVALID_ROWID-1, uint64_t(INVALID_ROWID)+1 }, dRows, 1 );
-	EXPECT_EQ ( tRows.m_iRows, 1 );
-	EXPECT_EQ ( dRows[0], INVALID_ROWID-1 );
-	EXPECT_EQ ( tRows.m_tNext, INVALID_ROWID );
-	EXPECT_FALSE ( tRows.m_bStopped );
-	EXPECT_EQ ( tStats.m_iFetchedDocs, dDocs.size() );
-	EXPECT_EQ ( p->AdvanceTo(0).m_tNext, INVALID_ROWID ); // no restart after EOF
-
-	// Capacity exactly at the periodic-check boundary must still obtain lookahead.
-	tWord.Reset();
-	tWord.SetDocReader(pFactory);
-	tWord.SeekDocReader ( 0, 0 );
-	tWord.m_iDocs = int(dDocs.size());
-	p = tWord.CreatePostingWindow ( 3, {} );
-	tRows = p->ReadRows ( { 0, 0, 4096 }, dRows, 128 );
-	EXPECT_EQ ( tRows.m_iRows, 128 );
-	EXPECT_EQ ( tRows.m_tNext, 128u );
-	for ( int i=0; i<128; ++i ) EXPECT_EQ ( dRows[i], RowID_t(i) );
-	EXPECT_TRUE ( p->Probe(128).m_bMatch );
-
-	// Cancellation limits decoded work even when every posting fails its field mask.
-	for ( DWORD uFields : { 3u, 4u } )
-	{
-		tWord.Reset();
-		tWord.SetDocReader(pFactory);
-		tWord.SeekDocReader ( 0, 0 );
-		tWord.m_iDocs = int(dDocs.size());
-		int iChecks = 0;
-		CSphQueryStats tPartialStats;
-		p = tWord.CreatePostingWindow ( uFields, { &iChecks, [] ( void * pCheck ) { return ++*static_cast<int *>(pCheck)<3; }, &tPartialStats } );
-		tFill = p->FillOr ( { 0, 0, 4096 }, dBits );
-		EXPECT_TRUE ( tFill.m_bStopped );
-		EXPECT_EQ ( tFill.m_iRows, uFields==3 ? 128 : 0 );
-		EXPECT_EQ ( tPartialStats.m_iFetchedDocs, 128 );
-		EXPECT_TRUE ( p->AdvanceTo(4096).m_bStopped );
-		EXPECT_EQ ( tPartialStats.m_iFetchedDocs, 128 );
-	}
-
-	// A real skip restores row and hit-offset bases before direct decoding resumes.
-	tWord.Reset();
-	tWord.SetDocReader(pFactory);
-	tWord.SeekDocReader ( 0, 0 );
-	tWord.m_pSkipData = new SkipData_t;
-	tWord.m_pSkipData->m_dSkiplist.Add ( { 0, 0, 0 } );
-	tWord.m_pSkipData->m_dSkiplist.Add ( { 128, iSkipOffset, iSkipHitPosition } );
-	p->Reset ( true, { nullptr, nullptr, &tStats } );
-	EXPECT_EQ ( p->AdvanceTo(200).m_tNext, 200u );
-	EXPECT_EQ ( tStats.m_iSkips, 1 );
-	DiskIndexQword_c<INLINE_HITS,false,READER> tReference ( false, false, 0 );
-	tReference.SetDocReader(pFactory);
-	tReference.ResetDecoderState();
-	tReference.SeekDocReader ( 0, 0 );
-	for ( int i=0; i<=200; ++i ) tReference.GetNextDoc();
-	EXPECT_EQ ( tWord.m_iHitlistPos, tReference.m_iHitlistPos );
-	EXPECT_EQ ( tWord.GetDocReaderPos(), tReference.GetDocReaderPos() );
-	p->Reset ( false, {} );
-	EXPECT_EQ ( p->ReadRows ( { 0, 0, 4096 }, dRows, 128 ).m_iRows, 0 );
-}
-}
-
-TEST ( PostingWindow, NativeInlineMapped ) { CheckNativePostingWindow<true,RawReader_t>(); }
-TEST ( PostingWindow, NativeInlineFile ) { CheckNativePostingWindow<true,BlockReader_t>(); }
-TEST ( PostingWindow, NativePlainMapped ) { CheckNativePostingWindow<false,RawReader_t>(); }
-TEST ( PostingWindow, NativePlainFile ) { CheckNativePostingWindow<false,BlockReader_t>(); }
-
 TEST ( WindowCount, DeadMapPartialWindow )
 {
 	const CSphString sFile ( "test_window_deadmap.spm" );
@@ -769,6 +608,9 @@ TEST ( WindowCount, DeadMapPartialWindow )
 }
 TEST ( WindowCount, RankerRestoresWindowSourceAfterSI )
 {
+	if ( !env_bool ( "MANTICORE_WINDOW_OR" ).value_or(true) )
+		GTEST_SKIP() << "Window counting explicitly disabled by MANTICORE_WINDOW_OR";
+
 	Threads::CallCoroutine ( [] {
 		WindowTestSetup_c tSetup;
 		CSphString sError;
@@ -918,6 +760,9 @@ TEST ( WindowCount, GenericAdapterRetainedRowsAndOwnership )
 
 TEST ( WindowCount, FilteredCountingCancellationPreservesPartialCount )
 {
+	if ( !env_bool ( "MANTICORE_WINDOW_OR" ).value_or(true) )
+		GTEST_SKIP() << "Window counting explicitly disabled by MANTICORE_WINDOW_OR";
+
 	class InterruptingFilter_c final : public ISphFilter
 	{
 	public:

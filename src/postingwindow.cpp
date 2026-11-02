@@ -170,8 +170,3 @@ std::unique_ptr<PostingWindow_i> CreateBufferedPostingWindow ( ISphQword & tWord
 {
 	return std::make_unique<BufferedPostingWindow_c> ( tWord, uFields, tContext );
 }
-
-std::unique_ptr<PostingWindow_i> ISphQword::CreatePostingWindow ( DWORD uFields, const PostingWindowContext_t & tContext )
-{
-	return CreateBufferedPostingWindow ( *this, uFields, tContext );
-}

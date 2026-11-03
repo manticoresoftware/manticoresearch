@@ -8911,6 +8911,14 @@ static bool AreAllFiltersExpressions ( const CSphVector<CSphFilterSettings> & dF
 }
 
 
+static bool CanRemoveCoveredFilters ( const CSphQuery & tQuery )
+{
+	return tQuery.m_dFilterTree.IsEmpty() && tQuery.m_sJoinIdx.IsEmpty() && !tQuery.HasKnn() && !tQuery.m_bHybridSearch
+		&& tQuery.m_dIndexHints.IsEmpty() && tQuery.m_dFilters.any_of ( []( const CSphFilterSettings & tFilter )
+			{ return tFilter.m_eType==SPH_FILTER_RANGE && !tFilter.m_bExclude; } );
+}
+
+
 bool CSphIndex_VLN::SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta, const ISphSchema * & pMaxSorterSchema, CSphVector<const ISphSchema *> & dSorterSchemas, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphVector<FilterTreeItem_t> & dTransformedFilterTree, CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const
 {
 	// select the sorter with max schema
@@ -8944,6 +8952,15 @@ bool CSphIndex_VLN::SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilt
 
 	if ( pModifiedMatchSchema )
 		tFlx.m_pMatchSchema = pModifiedMatchSchema.get();
+
+	if ( CanRemoveCoveredFilters(tQuery) && dTransformedFilterTree.IsEmpty() && dJsonSITransforms.IsEmpty() )
+	{
+		const DWORD * pMin = m_pDocinfoIndex && m_iDocinfoIndex ? m_pDocinfoIndex + m_iDocinfoIndex*m_tSchema.GetRowSize()*2 : nullptr;
+		const DWORD * pMax = pMin ? pMin+m_tSchema.GetRowSize() : nullptr;
+		for ( int i=dTransformedFilters.GetLength()-1; i>=0; --i )
+			if ( FilterCoversIndex ( dTransformedFilters[i], tFlx, pMin, pMax ) )
+				dTransformedFilters.Remove(i);
+	}
 
 	tFlx.m_pFilters = &dTransformedFilters;
 	tFlx.m_pFilterTree = dTransformedFilterTree.GetLength() ? &dTransformedFilterTree : nullptr;

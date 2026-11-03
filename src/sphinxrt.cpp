@@ -8815,6 +8815,9 @@ static bool PerformFullscan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 		if ( tCtx.m_pFilter )
 			tCtx.m_pFilter->SetColumnar(pColumnar);
 
+		if ( tCtx.m_pWeightFilter )
+			tCtx.m_pWeightFilter->SetColumnar(pColumnar);
+
 		session::Info().m_pSessionOpaque2 = (void*)tSeg.m_pDocstore.get();
 
 		for ( auto tRowID : RtLiveRows_c(tSeg) )
@@ -8833,6 +8836,14 @@ static bool PerformFullscan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 				tMatch.m_iWeight = ( sphRand() & 0xffff ) * iIndexWeight;
 
 			tCtx.CalcSort ( tMatch );
+
+			// a filter tree that depends on weight
+			if ( tCtx.m_pWeightFilter && !tCtx.m_pWeightFilter->Eval ( tMatch ) )
+			{
+				tCtx.FreeDataFilter ( tMatch );
+				tCtx.FreeDataSort ( tMatch );
+				continue;
+			}
 
 			// storing segment in matches tag for finding strings attrs offset later, biased against default zero
 			tMatch.m_iTag = iSeg+1;
@@ -8924,6 +8935,9 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 
 		if ( tCtx.m_pFilter )
 			tCtx.m_pFilter->SetColumnar(pColumnar);
+
+		if ( tCtx.m_pWeightFilter )
+			tCtx.m_pWeightFilter->SetColumnar(pColumnar);
 
 		// storing segment in matches tag for finding strings attrs offset later, biased against default zero
 		int iTag = iSeg+1;

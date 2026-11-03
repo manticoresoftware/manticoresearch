@@ -8317,7 +8317,7 @@ bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryCo
 			tMatch.m_tRowID = i;
 			tMatch.m_pStatic = fnToStatic(i);
 
-			// early filter only (no late filters in full-scan because of no @weight)
+			// early filter; a filter tree that depends on weight is checked after CalcSort
 			if constexpr ( HAS_FILTER_CALC )
 				tCtx.CalcFilter(tMatch);
 
@@ -8336,7 +8336,19 @@ bool Fullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryCo
 				tMatch.m_iWeight = ( sphRand() & 0xffff ) * iIndexWeight;
 
 			if constexpr ( HAS_SORT_CALC )
+			{
 				tCtx.CalcSort(tMatch);
+
+				// a filter tree that depends on weight
+				if ( tCtx.m_pWeightFilter && !tCtx.m_pWeightFilter->Eval(tMatch) )
+				{
+					if constexpr ( HAS_FILTER_CALC )
+						tCtx.FreeDataFilter ( tMatch );
+
+					tCtx.FreeDataSort ( tMatch );
+					continue;
+				}
+			}
 
 			bool bNewMatch = false;
 			if constexpr  ( SINGLE_SORTER )
@@ -8387,7 +8399,8 @@ template <typename ITERATOR, typename TO_STATIC>
 bool RunFullscan ( ITERATOR & tIterator, TO_STATIC && fnToStatic, const CSphQueryContext & tCtx, CSphQueryResultMeta & tMeta, const VecTraits_T<ISphMatchSorter *>& dSorters, CSphMatch & tMatch, int iCutoff, bool bRandomize, int iIndexWeight, int64_t tmMaxTimer )
 {
 	bool bHasFilterCalc = !tCtx.m_dCalcFilter.IsEmpty();
-	bool bHasSortCalc = !tCtx.m_dCalcSort.IsEmpty();
+	// the weight filter reads sort-stage values, so it is checked right after CalcSort
+	bool bHasSortCalc = !tCtx.m_dCalcSort.IsEmpty() || !!tCtx.m_pWeightFilter;
 	bool bHasFilter = !!tCtx.m_pFilter;
 	bool bHasTimer = tmMaxTimer>0;
 	bool bHasCutoff = iCutoff!=-1;
@@ -8517,12 +8530,42 @@ RowIteratorsWithEstimates_t CSphIndex_VLN::CreateColumnarAnalyzerOrPrefilter ( C
 	for ( int i = (int)dToDelete.size()-1; i>=0; i-- )
 		dColumnarFilters.erase ( dColumnarFilters.begin() + dToDelete[i] );
 
+	// MCL reports created analyzers by their index in the shortened list; the kept filters keep their order
+	int iKept = 0;
+	for ( auto & i : dFilterMap )
+		if ( i!=-1 )
+			i = iKept++;
+
 	if ( dColumnarFilters.empty() || ( dColumnarFilters.size()==1 && dColumnarFilters[0].m_sName=="@rowid" ) )
 		return {};
 
+	// MCL evaluates block min/max only for the attributes of the filters passed to it,
+	// so the removed filters must not be in the block tester: their min/max were never read
+	CSphVector<CSphFilterSettings> dPassedFilters;
+	CreateFilterContext_t tPassedCtx;
+	if ( !dToDelete.empty() )
+	{
+		for ( size_t i = 0; i < dFilterMap.size(); i++ )
+			if ( dFilterMap[i]!=-1 )
+				dPassedFilters.Add ( dFilters[i] );
+
+		tPassedCtx.m_pFilters		= &dPassedFilters;
+		tPassedCtx.m_pMatchSchema	= &tSchema;
+		tPassedCtx.m_pIndexSchema	= &m_tSchema;
+		tPassedCtx.m_pBlobPool		= m_tBlobAttrs.GetReadPtr();
+		tPassedCtx.m_pColumnar		= m_pColumnar.get();
+		tPassedCtx.m_eCollation		= eCollation;
+		tPassedCtx.m_pHistograms	= m_pHistograms;
+		tPassedCtx.m_iTotalDocs		= m_iDocinfo;
+
+		CSphString sError, sTesterWarning;
+		if ( !sphCreateFilters ( tPassedCtx, sError, sTesterWarning ) || !tPassedCtx.m_pFilter )
+			return {};
+	}
+
 	std::vector<int> dDeletedFilters;
 	std::vector<common::BlockIterator_i *> dIterators;
-	dIterators = m_pColumnar->CreateAnalyzerOrPrefilter ( dColumnarFilters, dDeletedFilters, *pFilter );
+	dIterators = m_pColumnar->CreateAnalyzerOrPrefilter ( dColumnarFilters, dDeletedFilters, tPassedCtx.m_pFilter ? *tPassedCtx.m_pFilter : *pFilter );
 	if ( dIterators.empty() )
 		return {};
 
@@ -9100,7 +9143,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	bool bCutoffHit =  false;
 	if ( pIterator )
 	{
-		if ( iCutoff>=0 && !tCtx.m_pFilter )
+		if ( iCutoff>=0 && !tCtx.m_pFilter && !tCtx.m_pWeightFilter )
 			pIterator->SetCutoff(iCutoff);
 
 		bCutoffHit = RunFullscanOnIterator ( pIterator.get(), tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );

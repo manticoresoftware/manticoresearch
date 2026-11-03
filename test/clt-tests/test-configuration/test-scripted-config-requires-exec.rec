@@ -1,0 +1,31 @@
+––– comment –––
+A shebang config without execute permission must be rejected instead of being interpreted.
+––– input –––
+mkdir -p /tmp/searchd-shebang-data
+cat > /tmp/rt.conf.sh <<'EOF'
+#!/bin/sh
+echo "
+searchd {
+    listen = 127.0.0.1:19412
+    listen = 127.0.0.1:19406:mysql
+    log = /tmp/searchd-shebang.log
+    query_log = /tmp/searchd-shebang-query.log
+    pid_file = /tmp/searchd-shebang.pid
+    data_dir = /tmp/searchd-shebang-data
+}
+"
+EOF
+chmod 600 /tmp/rt.conf.sh
+searchd --config /tmp/rt.conf.sh --check > /tmp/searchd-shebang.out 2>&1
+echo exit=$?
+sed -E 's/^\[[^]]+\] \[[0-9]+\] //; s|/[^ ]*rt\.conf\.sh|rt.conf.sh|g' /tmp/searchd-shebang.out
+––– output –––
+exit=1
+FATAL: failed to parse config file 'rt.conf.sh': the file is a script (shebang) but has no execute permission
+––– comment –––
+The very same file is interpreted as usual once it is executable.
+––– input –––
+chmod +x /tmp/rt.conf.sh
+searchd --config /tmp/rt.conf.sh --check
+––– output –––
+OK

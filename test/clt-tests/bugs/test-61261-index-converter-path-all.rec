@@ -3,4 +3,4 @@ Issue #61261: --path --all must fail clearly instead of dereferencing a null con
 ––– input –––
 index_converter --path . --all 2>&1 || true
 ––– output –––
---all requires --config; converting all indexes from --path is not supported
+FATAL: --all requires --config; converting all indexes from --path is not supported

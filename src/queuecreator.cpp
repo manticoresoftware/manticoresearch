@@ -1478,6 +1478,11 @@ bool QueueCreator_c::AddStoredFieldExpressions()
 		if ( !(tField.m_uFieldFlags & CSphColumnInfo::FIELD_STORED) )
 			continue;
 
+		// The SELECT list might have already added this stored-field expression.
+		const CSphColumnInfo * pSorterField = m_pSorterSchema->GetAttr ( tField.m_sName.cstr() );
+		if ( pSorterField && pSorterField->m_pExpr )
+			continue;
+
 		CSphQueryItem tItem;
 		tItem.m_sExpr = tField.m_sName;
 		tItem.m_sAlias = tField.m_sName;
@@ -1533,7 +1538,10 @@ bool QueueCreator_c::MaybeAddExpressionsFromSelectList ()
 	if ( !m_tQuery.m_dItems.all_of ( [&] ( const CSphQueryItem & v ) { return ParseQueryItem ( v ); } ))
 		return false;
 
-	if ( m_bHaveStar )
+	// Streaming SQL sends the default table schema even for a partial SELECT.
+	// Materialize its columnar attributes and stored fields just like SELECT *.
+	bool bDirectSql = m_tQuery.m_iLimit==-1 && m_tSettings.m_pSqlRowBuffer;
+	if ( m_bHaveStar || bDirectSql )
 	{
 		if ( !AddColumnarAttributeExpressions() )
 			return false;

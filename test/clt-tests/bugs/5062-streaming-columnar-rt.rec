@@ -1,0 +1,58 @@
+––– comment –––
+Regression for #5062 in RT RAM and disk chunks. In streaming mode, SELECT lists only id and value,
+but the direct queue must still fetch and serialize all columnar attributes correctly.
+Explicitly selected stored text fields must not be parsed twice.
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS gh5062_rt; CREATE TABLE gh5062_rt (title TEXT, lang STRING engine='columnar', tags MULTI engine='columnar', tags64 MULTI64 engine='columnar', n INT engine='columnar', value INT); INSERT INTO gh5062_rt (id, title, lang, tags, tags64, n, value) VALUES (1, 'First', 'en', (2,3), (10000000000,10000000001), 42, 10);" && echo ready
+––– output –––
+ready
+––– input –––
+cat > /tmp/gh5062-rt-check.sh <<'CHECK'
+#!/bin/sh
+result=$(mysql -h0 -P9306 --skip-table --batch --raw -e "$1") || exit 1
+printf '%s\n' "$result" | awk -F '\t' '
+{ rows[NR]=$0 }
+NR==1 {
+    gsub(/[[:space:]]/, "", $4)
+    gsub(/[[:space:]]/, "", $5)
+    valid = NF==7 && $1=="1" && $2=="First" && $3=="en" &&
+        $4=="(2,3)" && $5=="(10000000000,10000000001)" &&
+        $6=="42" && $7=="10"
+}
+END {
+    if (NR==1 && valid) print "OK"
+    else { print "FAIL"; for (i=1; i<=NR; i++) print "raw row " i ": " rows[i] > "/dev/stderr" }
+}'
+CHECK
+sh /tmp/gh5062-rt-check.sh "SELECT id, value FROM gh5062_rt LIMIT -1"
+sh /tmp/gh5062-rt-check.sh "SELECT /*!40001 SQL_NO_CACHE */ id, value FROM gh5062_rt"
+sh /tmp/gh5062-rt-check.sh "SELECT id, title, value FROM gh5062_rt LIMIT -1"
+sh /tmp/gh5062-rt-check.sh "SELECT /*!40001 SQL_NO_CACHE */ id, title, lang, tags, tags64, n, value FROM gh5062_rt"
+sh /tmp/gh5062-rt-check.sh "SELECT * FROM gh5062_rt LIMIT -1"
+––– output –––
+OK
+OK
+OK
+OK
+OK
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK gh5062_rt;" && echo flushed
+––– output –––
+flushed
+––– input –––
+sh /tmp/gh5062-rt-check.sh "SELECT id, value FROM gh5062_rt LIMIT -1"
+sh /tmp/gh5062-rt-check.sh "SELECT /*!40001 SQL_NO_CACHE */ id, value FROM gh5062_rt"
+sh /tmp/gh5062-rt-check.sh "SELECT id, title, value FROM gh5062_rt LIMIT -1"
+sh /tmp/gh5062-rt-check.sh "SELECT /*!40001 SQL_NO_CACHE */ id, title, lang, tags, tags64, n, value FROM gh5062_rt"
+sh /tmp/gh5062-rt-check.sh "SELECT * FROM gh5062_rt LIMIT -1"
+––– output –––
+OK
+OK
+OK
+OK
+OK
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE gh5062_rt;"
+rm -f /tmp/gh5062-rt-check.sh
+––– output –––

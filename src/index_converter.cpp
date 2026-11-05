@@ -2598,7 +2598,8 @@ int main ( int argc, char ** argv )
 
 		if ( bAll )
 		{
-			++pItt;
+			if ( iIndexTotal )
+				++pItt;
 			if ( pItt==pIndexes->end() )
 				break;
 

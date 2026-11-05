@@ -1,0 +1,37 @@
+––– comment –––
+PR #5060, https://bugzilla.altlinux.org/show_bug.cgi?id=61261: index_converter crashed with --config --all,
+--path and --path --all, and --all skipped the first table. The crashes happened before any table file was read,
+so tables with missing files are enough.
+––– input –––
+cat > /tmp/5060.conf <<'EOF'
+index t1
+{
+    type = plain
+    path = /tmp/5060/t1
+}
+
+index t2
+{
+    type = plain
+    path = /tmp/5060/t2
+}
+EOF
+––– output –––
+––– input –––
+index_converter --config /tmp/5060.conf --all 2>&1
+––– output –––
+using config file '/tmp/5060.conf'...
+converting plain table 't1'
+WARNING: failed to load table 't1', error: failed to open /tmp/5060/t1.sph: No such file or directory
+converting plain table 't2'
+WARNING: failed to load table 't2', error: failed to open /tmp/5060/t2.sph: No such file or directory
+converted tables 0(2)
+––– input –––
+index_converter --path /tmp/5060/t1 2>&1
+––– output –––
+WARNING: unknown table type 't1'
+converted tables 0(1)
+––– input –––
+index_converter --path . --all 2>&1 || true
+––– output –––
+FATAL: --all requires --config

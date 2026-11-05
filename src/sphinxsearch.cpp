@@ -154,7 +154,8 @@ struct RankerSettings_t
 	bool	m_bSkipQCache = false;
 	bool	m_bCollectHits = true;
 	RowIdBoundaries_t m_tBoundaries;
-	bool m_bCountWindows = false;
+	bool m_bCountOrWindows = false;
+	bool m_bCountAndWindows = false;
 };
 
 /// ranker interface
@@ -268,6 +269,7 @@ public:
 	int64_t						CountDocs ( const DeadRowMap_Disk_c * pDeadRows ) override;
 	// Queried after CountDocs; its path is determined by the current root.
 	bool UsedCountWindows() const override { return m_pRoot && m_pRoot->GetCountWindows(); }
+	const char * GetCountWindowName() const override { return UsedCountWindows() ? m_pRoot->GetCountWindows()->GetName() : nullptr; }
 
 private:
 	int64_t						CountDocsWindowed ( CountWindowIterator_i & tWindows, const DeadRowMap_Disk_c * pDeadRows, bool bFilter );
@@ -312,7 +314,7 @@ class ExtRanker_None_c : public ExtRanker_T<false>
 
 public:
 	ExtRanker_None_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings )
-		: ExtRanker_T<false> ( tXQ, tSetup, { tSettings.m_bRowidLimits, tSettings.m_bSkipQCache, false, tSettings.m_tBoundaries, tSettings.m_bCountWindows } )
+		: ExtRanker_T<false> ( tXQ, tSetup, { tSettings.m_bRowidLimits, tSettings.m_bSkipQCache, false, tSettings.m_tBoundaries, tSettings.m_bCountOrWindows, tSettings.m_bCountAndWindows } )
 	{}
 
 	int		GetMatches () override;
@@ -695,8 +697,10 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup,
 	tSetup.m_pZoneChecker = this;
 	assert ( !m_pRoot );
 	const auto * pBounds = tSettings.m_bRowidLimits ? &tSettings.m_tBoundaries : nullptr;
-	if ( tSettings.m_bCountWindows )
+	if ( tSettings.m_bCountOrWindows )
 		m_pRoot.reset ( CreateWindowOrCountNode ( tXQ.m_pRoot, tSetup, pBounds ) );
+	if ( !m_pRoot && tSettings.m_bCountAndWindows )
+		m_pRoot.reset ( CreateWindowAndCountNode ( tXQ.m_pRoot, tSetup, pBounds ) );
 	if ( !m_pRoot )
 		m_pRoot.reset ( ExtNode_i::Create ( tXQ.m_pRoot, tSetup, bUseBM25, pBounds ) );
 	m_pDocsRoot = m_pRoot ? m_pRoot->GetDocsNode() : nullptr;
@@ -4787,7 +4791,8 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 	// Enabled by default; retain an opt-out for Linux comparisons and admission tuning.
 	// Cached once per process; no public SQL option and no effect on non-count callers.
 	static const bool bWindowOr = env_bool ( "MANTICORE_WINDOW_OR" ).value_or(true);
-	tRankerSettings.m_bCountWindows = bDiskCount && bWindowOr && tQuerySettings.m_eRanker==SPH_RANK_NONE;
+	tRankerSettings.m_bCountOrWindows = bDiskCount && bWindowOr && tQuerySettings.m_eRanker==SPH_RANK_NONE;
+	tRankerSettings.m_bCountAndWindows = bDiskCount && tQuerySettings.m_eRanker==SPH_RANK_NONE;
 
 	// can we serve this from cache?
 	QcacheEntryRefPtr_t pCached;

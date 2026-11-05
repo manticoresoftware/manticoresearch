@@ -172,6 +172,7 @@ public:
 	virtual int64_t				CountDocs ( const DeadRowMap_Disk_c * ) { return -1; }
 	virtual void				Reset ( const ISphQwordSetup & tSetup ) = 0;
 	virtual bool				UsedCountWindows() const { return false; }
+	virtual const char *		GetCountWindowName() const { return nullptr; }
 	virtual bool				IsCache() const { return false; }
 	virtual void				FinalizeCache ( const ISphSchema & ) {}
 

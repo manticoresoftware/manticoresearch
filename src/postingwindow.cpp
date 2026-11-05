@@ -10,6 +10,7 @@
 
 #include "postingwindow.h"
 #include "sphinxsearch.h"
+#include "std/bitmap/bitmap.h"
 
 namespace
 {
@@ -33,16 +34,28 @@ public:
 
 	PostingWindowResult_t FillOr ( const PostingWindow_t & tWindow, DWORD * pBits ) override
 	{
-		return Consume ( tWindow, PostingWindow_t::ROWS, [=] ( RowID_t tRow, int ) {
+		// Window bounds already limit bitmap output to ROWS unique rows.
+		return Consume<false> ( tWindow, PostingWindow_t::ROWS, [=] ( RowID_t tRow, int ) {
 			const DWORD uOffset = tRow-tWindow.m_tBase;
 			pBits[uOffset>>5] |= DWORD(1)<<(uOffset&31);
 		} );
 	}
 
+	PostingWindowResult_t FillAnd ( const PostingWindow_t & tWindow, DWORD * pBits ) override
+	{
+		// Keep per-word intersection work out of the scalar posting loop.
+		DWORD dScratch[PostingWindow_t::WORDS] = {};
+		auto tResult = FillOr ( tWindow, dScratch );
+		const int iWords = int ( (tWindow.m_uEnd-tWindow.m_tBase+31)/32 );
+		bitmap::And ( pBits, pBits, dScratch, iWords );
+		tResult.m_iRows = int ( bitmap::Count ( pBits, iWords ) );
+		return tResult;
+	}
+
 	PostingWindowResult_t ReadRows ( const PostingWindow_t & tWindow, RowID_t * pRows, int iCapacity ) override
 	{
 		assert ( iCapacity>0 );
-		return Consume ( tWindow, iCapacity, [=] ( RowID_t tRow, int i ) { pRows[i] = tRow; } );
+		return Consume<true> ( tWindow, iCapacity, [=] ( RowID_t tRow, int i ) { pRows[i] = tRow; } );
 	}
 
 	PostingProbeResult_t Probe ( RowID_t tRow ) override
@@ -123,7 +136,7 @@ private:
 		return false;
 	}
 
-	template<typename WRITE>
+	template<bool LIMIT_ROWS, typename WRITE>
 	PostingWindowResult_t Consume ( const PostingWindow_t & tWindow, int iCapacity, WRITE fnWrite )
 	{
 		assert ( tWindow.m_tBase<=tWindow.m_tMin && tWindow.m_tMin<=tWindow.m_uEnd );
@@ -134,29 +147,43 @@ private:
 			return Result();
 
 		int iRows = 0;
+
+		// Exclude the EOF sentinel even when the widened window end is INVALID_ROWID+1.
+		const RowID_t tEnd = RowID_t ( Min ( tWindow.m_uEnd, uint64_t(INVALID_ROWID) ) );
+		const DWORD uFields = m_uFields;
 		while ( EnsureCandidate(tWindow.m_tMin) )
 		{
 			// Sorted rows in this batch already meet the lower bound.
-			while ( m_iPos<m_iLength )
+			// Publish cursor state only after draining the batch or retaining lookahead.
+			const QwordDoc_t * pDoc = m_dBatch+m_iPos;
+			const QwordDoc_t * pEnd = m_dBatch+m_iLength;
+			RowID_t tLastEmitted = m_tLastEmitted;
+			while ( pDoc<pEnd )
 			{
-				const auto & tDoc = m_dBatch[m_iPos];
+				const auto & tDoc = *pDoc;
 				const RowID_t tRow = tDoc.m_tRowID;
-				if ( tRow==INVALID_ROWID || uint64_t(tRow)>=tWindow.m_uEnd )
-					return Result(iRows);
+				if ( tRow>=tEnd )
+					break;
 
-				if ( !(tDoc.m_uFields & m_uFields) || tRow==m_tLastEmitted )
+				if ( !(tDoc.m_uFields & uFields) || tRow==tLastEmitted )
 				{
-					++m_iPos;
+					++pDoc;
 					continue;
 				}
 
-				if ( iRows==iCapacity )
-					return Result(iRows);
+				if constexpr ( LIMIT_ROWS )
+					if ( iRows==iCapacity )
+						break;
 
 				fnWrite ( tRow, iRows++ );
-				m_tLastEmitted = tRow;
-				++m_iPos;
+				tLastEmitted = tRow;
+				++pDoc;
 			}
+
+			m_iPos = int(pDoc-m_dBatch);
+			m_tLastEmitted = tLastEmitted;
+			if ( pDoc<pEnd )
+				return Result(iRows);
 
 			// Refill even at capacity: an empty batch alone does not mean EOF.
 		}

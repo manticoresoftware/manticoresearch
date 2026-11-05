@@ -28,7 +28,7 @@ struct PostingWindow_t
 struct PostingWindowResult_t
 {
 	RowID_t m_tNext = INVALID_ROWID;	// first unread candidate; INVALID means EOF only when !m_bStopped
-	int		m_iRows = 0;				// matching unique rows consumed, NOT newly set bits
+	int		m_iRows = 0;				// FillAnd: surviving bits; FillOr/ReadRows: matching unique rows consumed
 	bool	m_bStopped = false;			// interrupted; output may be incomplete
 };
 
@@ -48,7 +48,7 @@ struct PostingWindowContext_t
 // Exclusive, count/membership-only view of an already set-up qword. The qword
 // must outlive the cursor and must not be read separately while it is in use.
 // All methods share retained lookahead and move forwards. AdvanceTo/Probe retain
-// their candidate; FillOr/ReadRows consume rows. Methods may be mixed, but cannot
+// their candidate; FillOr/FillAnd/ReadRows consume rows. Methods may be mixed, but cannot
 // revisit consumed rows. Candidates may fail the bound low-32-bit field mask.
 class PostingWindow_i
 {
@@ -59,6 +59,11 @@ public:
 	// OR into caller-owned storage without clearing it. On completion, next>=end
 	// or EOF. The span end-base is at most ROWS; no padding is required.
 	virtual PostingWindowResult_t FillOr ( const PostingWindow_t & tWindow, DWORD * pBits ) = 0;
+
+	// Intersect with matching postings in [min,end), returning the surviving bit count.
+	// Accesses ceil((end-base)/32) words; bits outside [min,end) in those words are cleared.
+	// On completion, next>=end or EOF. Interrupted output/count cover only consumed postings.
+	virtual PostingWindowResult_t FillAnd ( const PostingWindow_t & tWindow, DWORD * pBits ) = 0;
 
 	// Output is sorted and unique. May stop at capacity before reaching end;
 	// next identifies where to resume. Capacity must be positive.

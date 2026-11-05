@@ -18,6 +18,9 @@
 #include "coroutine.h"
 #include "secondaryindex.h"
 #include "client_task_info.h"
+#include "std/bitmap/bitmap.h"
+#include "indexing_sources/source_stats.h"
+#include <algorithm>
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1137,8 +1140,9 @@ std::unique_ptr<WindowDocsAdapter_i> CreateWindowDocsAdapter ( std::unique_ptr<Q
 }
 
 
-// Count-only union over disk qwords. Document consumers use WindowDocsAdapter_c.
-class ExtWindowOr_c final : public WindowNode_i
+// Count-only boolean windows over disk qwords. Document consumers use WindowDocsAdapter_c.
+template<bool IS_AND>
+class ExtWindowBool_T final : public WindowNode_i
 {
 	struct Term_t
 	{
@@ -1154,7 +1158,7 @@ public:
 		DWORD m_uFields;
 	};
 
-	ExtWindowOr_c ( const VecTraits_T<Leaf_t> & dLeaves, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds )
+	ExtWindowBool_T ( const VecTraits_T<Leaf_t> & dLeaves, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds )
 		: m_dTerms ( dLeaves.GetLength() )
 		, m_pWarning ( tSetup.m_pWarning )
 		, m_pStats ( tSetup.m_pStats )
@@ -1164,14 +1168,36 @@ public:
 		{
 			auto & tTerm = m_dTerms[i];
 			tTerm.m_pWord.reset ( CreateQueryWord ( *dLeaves[i].m_pWord, tSetup ) );
+			if constexpr ( IS_AND )
+				if ( tTerm.m_pWord->m_iDocs && int64_t(tTerm.m_pWord->m_iDocs)*32<tSetup.m_pIndex->GetStats().m_iTotalDocuments )
+				{
+					// Reject at the first sparse clause, before allocating the other
+					// cursors/readers. The legacy factory will set up its own qwords.
+					m_bDense = false;
+					return;
+				}
+
 			tTerm.m_pCursor = CreateBufferedPostingWindow ( *tTerm.m_pWord, dLeaves[i].m_uFields, CursorContext() );
 		}
+
+		if constexpr ( IS_AND )
+			std::sort ( m_dTerms.Begin(), m_dTerms.Begin()+m_dTerms.GetLength(), [] ( const Term_t & a, const Term_t & b ) { return a.m_pWord->m_iDocs<b.m_pWord->m_iDocs; } );
 
 		if ( pBounds )
 			SetRowidBoundaries ( *pBounds );
 	}
 
-	CountWindow_t *		NextWindow() override					{ return FillWindow(); }
+	bool IsDense() const { return m_bDense; }
+	const char * GetName() const override { return IS_AND ? "WindowAndCount" : "WindowOrCount"; }
+
+	CountWindow_t * NextWindow() override
+	{
+		if constexpr ( IS_AND )
+			return FillAndWindow();
+		else
+			return FillWindow();
+	}
+
 	bool				CheckContinue() override				{ return CheckInterrupted(); }
 	void				SetAtomPos ( int iPos ) override		{ m_iAtomPos = iPos; }
 	int					GetAtomPos() const override				{ return m_iAtomPos; }
@@ -1250,11 +1276,33 @@ public:
 	void DebugDump ( int iLevel ) override
 	{
 		DebugIndent ( iLevel );
-		printf ( "ExtWindowOr (count only, %d terms)\n", m_dTerms.GetLength() );
+		printf ( "%s (count only, %d terms)\n", GetName(), m_dTerms.GetLength() );
 	}
 
 	NodeEstimate_t Estimate ( int64_t iTotalDocs ) const override
 	{
+		if constexpr ( IS_AND )
+		{
+			if ( iTotalDocs<=0 )
+				return { 0.0f, 0, m_dTerms.GetLength() };
+
+			NodeEstimate_t tResult { 0.0f, 0, 0 };
+			for ( const auto & tTerm : m_dTerms )
+			{
+				NodeEstimate_t tRight { float(tTerm.m_pWord->m_iDocs)*COST_SCALE*55.0f, tTerm.m_pWord->m_iDocs, 1 };
+				if ( !tResult.m_iTerms )
+					tResult = tRight;
+				else
+				{
+					tResult.m_fCost = CalcFTIntersectCost ( tResult, tRight, iTotalDocs, MAX_BLOCK_DOCS, MAX_BLOCK_DOCS );
+					tResult.m_iDocs = iTotalDocs>0 ? Min ( Min ( tResult.m_iDocs, tRight.m_iDocs ), int64_t ( double(tResult.m_iDocs)*tRight.m_iDocs/iTotalDocs ) ) : 0;
+					++tResult.m_iTerms;
+				}
+			}
+
+			return tResult;
+		}
+
 		// Preserve the legacy OR estimate until a measured window cost model is available.
 		NodeEstimate_t tResult { 0.0f, 0, 0 };
 		for ( const auto & tTerm : m_dTerms )
@@ -1281,6 +1329,7 @@ private:
 	int						m_iSingleTerm = -1;
 	uint64_t				m_uSingleEnd = 0;
 	bool					m_bStopped = false;
+	bool					m_bDense = true;
 	int						m_iAtomPos = 0;
 	int64_t					m_iMaxTimer;
 	const int64_t &			m_iCheckTimePoint { Threads::Coro::GetNextTimePointUS() };
@@ -1315,7 +1364,7 @@ private:
 
 	PostingWindowContext_t CursorContext()
 	{
-		return { this, [] ( void * pContext ) { return static_cast<ExtWindowOr_c *>(pContext)->CheckInterrupted(); }, m_pStats };
+		return { this, [] ( void * pContext ) { return static_cast<ExtWindowBool_T *>(pContext)->CheckInterrupted(); }, m_pStats };
 	}
 
 	PostingWindow_t WindowRange() const
@@ -1345,6 +1394,175 @@ private:
 		return !m_bStopped && m_tWindow.m_iRows ? &m_tWindow : nullptr;
 	}
 
+	// Only candidates surviving the materialized clauses are probed. A cursor
+	// that jumps ahead lets us discard all candidates before its next posting.
+	bool ProbeCandidates ( int iFirstTerm )
+	{
+		RowID_t tSkipTo = 0;
+		for ( int iWord=0; iWord<CountWindow_t::WORDS; ++iWord )
+		{
+			DWORD uBits = m_tWindow.m_dBits[iWord];
+			while ( uBits )
+			{
+				const DWORD uBit = uBits & (DWORD(0)-uBits);
+				uBits &= uBits-1;
+				const RowID_t tRow = m_tWindow.m_tBase+iWord*32+sphLog2(uBit)-1;
+				bool bMatch = tRow>=tSkipTo;
+				for ( int i=iFirstTerm; bMatch && i<m_dTerms.GetLength(); ++i )
+				{
+					const auto tResult = m_dTerms[i].m_pCursor->Probe(tRow);
+					m_bStopped |= tResult.m_tState.m_bStopped;
+					if ( m_bStopped )
+						return false;
+
+					bMatch = tResult.m_bMatch;
+					if ( !bMatch )
+						tSkipTo = tResult.m_tState.m_tNext;
+				}
+
+				if ( !bMatch )
+					m_tWindow.m_dBits[iWord] &= ~uBit;
+			}
+		}
+
+		return true;
+	}
+
+	bool AdvanceAndTerms ( RowID_t & tFirst )
+	{
+		for ( auto & tTerm : m_dTerms )
+		{
+			const auto tResult = tTerm.m_pCursor->AdvanceTo(tFirst);
+			m_bStopped |= tResult.m_bStopped;
+			if ( m_bStopped || tResult.m_tNext==INVALID_ROWID || tResult.m_tNext>m_tBounds.m_tMaxRowID )
+				return false;
+
+			tFirst = Max ( tFirst, tResult.m_tNext );
+		}
+
+		return true;
+	}
+
+	bool FillAndBitmap ( const PostingWindow_t & tRange )
+	{
+		m_tWindow.m_pRows = nullptr;
+		memset ( m_tWindow.m_dBits, 0, sizeof(m_tWindow.m_dBits) );
+		const auto tLead = m_dTerms[0].m_pCursor->FillOr ( tRange, m_tWindow.m_dBits );
+		m_bStopped |= tLead.m_bStopped;
+		if ( m_bStopped )
+			return false;
+
+		int iRows = tLead.m_iRows;
+		const int iThreshold = Max ( 1, int(tRange.m_uEnd-tRange.m_tMin)/32 );
+		int iTerm = 1;
+		for ( ; iTerm<m_dTerms.GetLength() && iRows>=iThreshold; ++iTerm )
+		{
+			const auto tResult = m_dTerms[iTerm].m_pCursor->FillAnd ( tRange, m_tWindow.m_dBits );
+			m_bStopped |= tResult.m_bStopped;
+			if ( m_bStopped )
+				return false;
+
+			iRows = tResult.m_iRows;
+		}
+
+		if ( iRows && iTerm<m_dTerms.GetLength() && !ProbeCandidates(iTerm) )
+			return false;
+
+		return iRows && bitmap::Count ( m_tWindow.m_dBits, CountWindow_t::WORDS );
+	}
+
+	CountWindow_t * FillAndWindow()
+	{
+		while ( CheckInterrupted() )
+		{
+			RowID_t tFirst = m_tBounds.m_tMinRowID;
+			if ( !AdvanceAndTerms(tFirst) )
+				return nullptr;
+
+			m_tWindow.m_tBase = tFirst & ~(RowID_t(CountWindow_t::ROWS)-1);
+			auto tRange = WindowRange();
+			tRange.m_tMin = tFirst;
+			const bool bAny = FillAndBitmap(tRange);
+			if ( m_bStopped )
+				return nullptr;
+
+			// Lead rows are consumed even when followers were only probed. Never
+			// revisit this window, including an empty intersection or the last rowid.
+			m_tBounds.m_tMinRowID = RowID_t ( Min ( tRange.m_uEnd, uint64_t(INVALID_ROWID) ) );
+			if ( bAny )
+				return &m_tWindow;
+		}
+
+		return nullptr;
+	}
+
+	RowID_t AdvanceOrTerms()
+	{
+		RowID_t tFirst = INVALID_ROWID;
+		for ( auto & tTerm : m_dTerms )
+		{
+			const auto tResult = tTerm.m_pCursor->AdvanceTo(m_tBounds.m_tMinRowID);
+			tTerm.m_tNext = tResult.m_tNext;
+			m_bStopped |= tResult.m_bStopped;
+			if ( m_bStopped )
+				return INVALID_ROWID;
+
+			tFirst = Min ( tFirst, tTerm.m_tNext );
+		}
+
+		return tFirst;
+	}
+
+	bool SelectSingleTerm ( uint64_t uEnd )
+	{
+		int iContributors = 0;
+		ARRAY_FOREACH ( i, m_dTerms )
+		{
+			const auto & tTerm = m_dTerms[i];
+			// Each cursor retains its first unread candidate. A clause
+			// outside this window cannot contribute before uEnd. Field masks may
+			// overestimate contributors, which only forgoes the shortcut.
+			if ( tTerm.m_tNext!=INVALID_ROWID && uint64_t(tTerm.m_tNext)<uEnd )
+			{
+				m_iSingleTerm = i;
+				if ( ++iContributors==2 )
+					break;
+			}
+		}
+
+		if ( iContributors==1 )
+		{
+			m_uSingleEnd = uEnd;
+			return true; // stream rows without clearing, setting or scanning a bitmap
+		}
+
+		m_iSingleTerm = -1;
+		return false;
+	}
+
+	bool FillOrBitmap ( const PostingWindow_t & tRange )
+	{
+		m_tWindow.m_pRows = nullptr;
+		m_tWindow.m_iRows = 0;
+		memset ( m_tWindow.m_dBits, 0, sizeof(m_tWindow.m_dBits) );
+		bool bAny = false;
+		for ( auto & tTerm : m_dTerms )
+		{
+			if ( tTerm.m_tNext==INVALID_ROWID || uint64_t(tTerm.m_tNext)>=tRange.m_uEnd )
+				continue;
+
+			const auto tResult = tTerm.m_pCursor->FillOr ( tRange, m_tWindow.m_dBits );
+			tTerm.m_tNext = tResult.m_tNext;
+			m_bStopped |= tResult.m_bStopped;
+			if ( m_bStopped )
+				return false;
+
+			bAny |= tResult.m_iRows!=0;
+		}
+
+		return bAny;
+	}
+
 	CountWindow_t * FillWindow()
 	{
 		while ( CheckInterrupted() )
@@ -1357,62 +1575,17 @@ private:
 				if ( m_bStopped )
 					return nullptr;
 			}
-			RowID_t tFirst = INVALID_ROWID;
-			for ( auto & tTerm : m_dTerms )
-			{
-				const auto tResult = tTerm.m_pCursor->AdvanceTo(m_tBounds.m_tMinRowID);
-				tTerm.m_tNext = tResult.m_tNext;
-				m_bStopped |= tResult.m_bStopped;
-				if ( m_bStopped ) return nullptr;
-				tFirst = Min ( tFirst, tTerm.m_tNext );
-			}
 
+			const RowID_t tFirst = AdvanceOrTerms();
 			if ( tFirst==INVALID_ROWID || tFirst>m_tBounds.m_tMaxRowID )
 				return nullptr;
 
 			m_tWindow.m_tBase = tFirst & ~(RowID_t(CountWindow_t::ROWS)-1);
 			const auto tRange = WindowRange();
-			const uint64_t uEnd = tRange.m_uEnd;
-			int iContributors = 0;
-			ARRAY_FOREACH ( i, m_dTerms )
-			{
-				const auto & tTerm = m_dTerms[i];
-				// Each cursor retains its first unread candidate. A clause
-				// outside this window cannot contribute before uEnd. Field masks may
-				// overestimate contributors, which only forgoes the shortcut.
-				if ( tTerm.m_tNext!=INVALID_ROWID && uint64_t(tTerm.m_tNext)<uEnd )
-				{
-					m_iSingleTerm = i;
-					if ( ++iContributors==2 )
-						break;
-				}
-			}
+			if ( SelectSingleTerm(tRange.m_uEnd) )
+				continue;
 
-			if ( iContributors==1 )
-			{
-				m_uSingleEnd = uEnd;
-				continue; // stream rows without clearing, setting or scanning a bitmap
-			}
-
-			m_iSingleTerm = -1;
-			m_tWindow.m_pRows = nullptr;
-			m_tWindow.m_iRows = 0;
-			memset ( m_tWindow.m_dBits, 0, sizeof(m_tWindow.m_dBits) );
-			bool bAny = false;
-			for ( auto & tTerm : m_dTerms )
-			{
-				if ( tTerm.m_tNext==INVALID_ROWID || uint64_t(tTerm.m_tNext)>=uEnd )
-					continue;
-
-				const auto tResult = tTerm.m_pCursor->FillOr ( tRange, m_tWindow.m_dBits );
-				tTerm.m_tNext = tResult.m_tNext;
-				m_bStopped |= tResult.m_bStopped;
-				if ( m_bStopped )
-					return nullptr;
-
-				bAny |= tResult.m_iRows!=0;
-			}
-
+			const bool bAny = FillOrBitmap(tRange);
 			if ( m_bStopped )
 				return nullptr;
 
@@ -1424,10 +1597,14 @@ private:
 	}
 };
 
+using ExtWindowOr_c = ExtWindowBool_T<false>;
+using ExtWindowAnd_c = ExtWindowBool_T<true>;
+
 // Check the whole transformed tree before creating any readers. Field specs on
 // boolean parents have already been propagated by the parser; like Create(),
 // use each leaf's effective mask (a nested explicit spec can override it).
-static bool CollectWindowOrLeaves ( const XQNode_t * pNode, CSphVector<ExtWindowOr_c::Leaf_t> & dLeaves, int iDepth=0 )
+template<bool IS_AND>
+static bool CollectWindowLeaves ( const XQNode_t * pNode, CSphVector<typename ExtWindowBool_T<IS_AND>::Leaf_t> & dLeaves, int iDepth=0 )
 {
 	if ( !pNode || iDepth>64 || pNode->m_bVirtuallyPlain || pNode->m_bNotWeighted || pNode->m_iAtomPos!=-1
 		|| pNode->m_dSpec.m_iFieldMaxPos || pNode->m_dSpec.m_bZoneSpan || !pNode->m_dSpec.m_dZones.IsEmpty() )
@@ -1435,16 +1612,16 @@ static bool CollectWindowOrLeaves ( const XQNode_t * pNode, CSphVector<ExtWindow
 
 	if ( !pNode->dChildren().IsEmpty() )
 	{
-		if ( pNode->GetOp()!=SPH_QUERY_OR || !pNode->dWords().IsEmpty() )
+		if ( pNode->GetOp()!=(IS_AND ? SPH_QUERY_AND : SPH_QUERY_OR) || !pNode->dWords().IsEmpty() )
 			return false;
 
 		for ( const auto * pChild : pNode->dChildren() )
-			if ( !CollectWindowOrLeaves ( pChild, dLeaves, iDepth+1 ) )
+			if ( !CollectWindowLeaves<IS_AND> ( pChild, dLeaves, iDepth+1 ) )
 				return false;
 
 		return true;
 	}
-	if ( pNode->GetOp()!=SPH_QUERY_OR && !(pNode->GetOp()==SPH_QUERY_AND && pNode->dWords().GetLength()==1) )
+	if ( pNode->GetOp()!=(IS_AND ? SPH_QUERY_AND : SPH_QUERY_OR) && !(pNode->GetOp()==SPH_QUERY_AND && pNode->dWords().GetLength()==1) )
 		return false;
 
 	for ( const auto & tWord : pNode->dWords() )
@@ -1466,10 +1643,28 @@ WindowNode_i * CreateWindowOrCountNode ( const XQNode_t * pNode, const ISphQword
 		return nullptr;
 
 	CSphVector<ExtWindowOr_c::Leaf_t> dLeaves;
-	if ( !CollectWindowOrLeaves ( pNode, dLeaves ) || dLeaves.GetLength()<2 )
+	if ( !CollectWindowLeaves<false> ( pNode, dLeaves ) || dLeaves.GetLength()<2 )
 		return nullptr;
 
 	return new ExtWindowOr_c ( dLeaves, tSetup, pBounds );
+}
+
+
+WindowNode_i * CreateWindowAndCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds )
+{
+	if ( !tSetup.m_pIndex || tSetup.m_pIndex->GetMatchSchema().GetFieldsCount()>32
+		|| tSetup.m_pIndex->GetSettings().m_eHitless!=SPH_HITLESS_NONE )
+		return nullptr;
+
+	CSphVector<ExtWindowAnd_c::Leaf_t> dLeaves;
+	if ( !CollectWindowLeaves<true> ( pNode, dLeaves ) || dLeaves.GetLength()<2 )
+		return nullptr;
+
+	auto pNodeAnd = std::make_unique<ExtWindowAnd_c> ( dLeaves, tSetup, pBounds );
+	if ( !pNodeAnd->IsDense() )
+		return nullptr;
+
+	return pNodeAnd.release();
 }
 
 

@@ -85,6 +85,7 @@ public:
 	virtual CountWindow_t * NextWindow() = 0;
 	// Also checked while an adapter drains an already produced window.
 	virtual bool CheckContinue() = 0;
+	virtual const char * GetName() const { return "WindowOrCount"; }
 };
 
 class ExtNode_i;
@@ -151,6 +152,7 @@ public:
 
 // Caller must guarantee disk qwords and an eligible count-only query.
 WindowNode_i * CreateWindowOrCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds );
+WindowNode_i * CreateWindowAndCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds );
 
 // Takes exclusive ownership of a window-only source; exposes no window capability.
 std::unique_ptr<WindowDocsAdapter_i> CreateWindowDocsAdapter ( std::unique_ptr<QueryNode_i> pSource );

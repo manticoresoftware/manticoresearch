@@ -12380,7 +12380,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 		if ( iCount>=0 )
 		{
 			PushFastCountMatch ( dSorters, GetRawAttrs(), iMyTag, tArgs.m_iIndexWeight, iCount );
-			RecordFastCount ( tMeta, pRanker->UsedCountWindows() ? "WindowOrCount" : "RanklessCount" );
+			RecordFastCount ( tMeta, pRanker->UsedCountWindows() ? pRanker->GetCountWindowName() : "RanklessCount" );
 			bCounted = true;
 		}
 	}

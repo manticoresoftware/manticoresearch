@@ -997,7 +997,7 @@ static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordS
 	return pWord;
 }
 
-// Adapts any count-window producer to sorted, count-only document chunks.
+// Adapts any membership-window producer to sorted, unranked document chunks.
 // The source is exclusively owned and its window capability is not forwarded.
 class WindowDocsAdapter_c final : public WindowDocsAdapter_i
 {
@@ -1027,36 +1027,7 @@ public:
 				m_iRow = 0;
 			}
 
-			RowID_t tRow;
-			if ( m_pWindow->m_pRows )
-			{
-				if ( m_iRow==m_pWindow->m_iRows )
-				{
-					m_pWindow = nullptr;
-					continue;
-				}
-
-				tRow = m_pWindow->m_pRows[m_iRow++];
-			}
-			else
-			{
-				while ( m_iWord<CountWindow_t::WORDS && !m_pWindow->m_dBits[m_iWord] )
-					++m_iWord;
-
-				if ( m_iWord==CountWindow_t::WORDS )
-				{
-					m_pWindow = nullptr;
-					continue;
-				}
-
-				DWORD & uBits = m_pWindow->m_dBits[m_iWord];
-				const int iBit = sphLog2 ( uBits & ( DWORD(0)-uBits ) )-1;
-				uBits &= uBits-1;
-				tRow = m_pWindow->m_tBase + m_iWord*32 + iBit;
-			}
-
-			if ( tRow>=m_tBounds.m_tMinRowID && tRow<=m_tBounds.m_tMaxRowID )
-				m_dDocs[iDocs++] = { tRow, 0, 0.0f };
+			iDocs = m_pWindow->m_pRows ? ReadRows(iDocs) : ReadBitmap(iDocs);
 		}
 
 		m_dDocs[iDocs].m_tRowID = INVALID_ROWID;
@@ -1112,8 +1083,8 @@ public:
 	bool	TimeExceeded() const override { return m_pSource->TimeExceeded(); }
 	int64_t	GetMaxTimeout() const override { return m_pSource->GetMaxTimeout(); }
 
-	const ExtHit_t * GetHits ( const ExtDoc_t * ) override { assert ( false && "count-only adapter" ); return nullptr; }
-	void	SetCollectHits() override { assert ( false && "count-only adapter" ); }
+	const ExtHit_t * GetHits ( const ExtDoc_t * ) override { assert ( false && "membership-only adapter" ); return nullptr; }
+	void	SetCollectHits() override { assert ( false && "membership-only adapter" ); }
 
 	void DebugDump ( int iLevel ) override
 	{
@@ -1123,6 +1094,47 @@ public:
 	}
 
 private:
+	int ReadRows ( int iDocs )
+	{
+		while ( m_iRow<m_pWindow->m_iRows && iDocs<MAX_BLOCK_DOCS-1 )
+		{
+			const RowID_t tRow = m_pWindow->m_pRows[m_iRow++];
+			if ( tRow>=m_tBounds.m_tMinRowID && tRow<=m_tBounds.m_tMaxRowID )
+				m_dDocs[iDocs++] = { tRow, 0, 0.0f };
+		}
+
+		if ( m_iRow==m_pWindow->m_iRows )
+			m_pWindow = nullptr;
+
+		return iDocs;
+	}
+
+	int ReadBitmap ( int iDocs )
+	{
+		while ( m_iWord<CountWindow_t::WORDS && iDocs<MAX_BLOCK_DOCS-1 )
+		{
+			DWORD uBits = m_pWindow->m_dBits[m_iWord];
+			const RowID_t tBase = m_pWindow->m_tBase+m_iWord*32;
+			while ( uBits && iDocs<MAX_BLOCK_DOCS-1 )
+			{
+				const int iBit = sphLog2 ( uBits & ( DWORD(0)-uBits ) )-1;
+				uBits &= uBits-1;
+				const RowID_t tRow = tBase+iBit;
+				if ( tRow>=m_tBounds.m_tMinRowID && tRow<=m_tBounds.m_tMaxRowID )
+					m_dDocs[iDocs++] = { tRow, 0, 0.0f };
+			}
+
+			m_pWindow->m_dBits[m_iWord] = uBits;
+			if ( !uBits )
+				++m_iWord;
+		}
+
+		if ( m_iWord==CountWindow_t::WORDS )
+			m_pWindow = nullptr;
+
+		return iDocs;
+	}
+
 	std::unique_ptr<QueryNode_i> m_pSource;
 	CountWindowIterator_i *	m_pWindows;
 	CountWindow_t *			m_pWindow = nullptr;
@@ -1140,7 +1152,7 @@ std::unique_ptr<WindowDocsAdapter_i> CreateWindowDocsAdapter ( std::unique_ptr<Q
 }
 
 
-// Count-only boolean windows over disk qwords. Document consumers use WindowDocsAdapter_c.
+// Membership-only boolean windows over disk qwords. Document consumers use WindowDocsAdapter_c.
 template<bool IS_AND>
 class ExtWindowBool_T final : public WindowNode_i
 {

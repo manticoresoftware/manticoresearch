@@ -839,6 +839,97 @@ TEST ( WindowCount, RankerRestoresWindowSourceAfterSI )
 		EXPECT_EQ ( tSetup.m_iLiveQwords, 0 );
 	} );
 }
+TEST ( WindowCount, UnrankedDocumentsResetAndSI )
+{
+	if ( !env_bool ( "MANTICORE_WINDOW_OR" ).value_or(true) )
+		GTEST_SKIP() << "Window OR explicitly disabled";
+
+	Threads::CallCoroutine ( [] {
+		WindowTestSetup_c tSetup;
+		CSphString sError;
+		CSphDictSettings tDictSettings;
+		tDictSettings.SetDictFormat(DictFormat_e::CRC);
+		auto pTok = Tokenizer::Detail::CreateUTF8Tokenizer();
+		auto pDict = sphCreateDictionaryCRC ( tDictSettings, nullptr, pTok, "window-docs-test", false, 32, nullptr, sError );
+		ASSERT_TRUE ( pDict ) << sError.cstr();
+		tSetup.SetDict(pDict);
+		auto pIndex = sphCreateIndexPhrase ( "window-docs-test", "unused-window-index" );
+		pIndex->SetDictionary(pDict);
+		tSetup.m_pIndex = pIndex.get();
+		for ( RowID_t i=0; i<4500; ++i )
+		{
+			if ( i<300 )
+				tSetup.m_dAlpha.push_back ( { i, 1, 1, 0 } );
+
+			if ( i<100 || (i>=4096 && i<4396) )
+				tSetup.m_dBeta.push_back ( { i, 1, 1, 0 } );
+		}
+
+		CSphQuery tQuery;
+		QueryExecutionSettings_t tSettings;
+		tSettings.m_eRanker = SPH_RANK_NONE;
+		CSphQueryContext tContext ( tQuery, tSettings );
+		tContext.m_bSkipQCache = true;
+		tContext.m_iTotalDocs = tContext.m_iIndexTotalDocs = 4500;
+		tSetup.m_pCtx = &tContext;
+		for ( auto eOp : { SPH_QUERY_AND, SPH_QUERY_OR } )
+		{
+			SCOPED_TRACE(eOp);
+			XQQuery_t tXQ;
+			tXQ.m_pRoot = new XQNode_t ( XQLimitSpec_t() );
+			tXQ.m_pRoot->SetOp(eOp);
+			tXQ.m_pRoot->AddDirtyWord ( { "alpha", 1 } );
+			tXQ.m_pRoot->AddDirtyWord ( { "beta", 2 } );
+			CSphQueryResultMeta tMeta;
+			auto pRanker = sphCreateRanker ( tXQ, tQuery, tSettings, tMeta, tSetup, tContext, pIndex->GetMatchSchema(), true );
+			ASSERT_TRUE ( pRanker );
+			ASSERT_TRUE ( pRanker->UsedCountWindows() );
+			const bool bAnd = eOp==SPH_QUERY_AND;
+			auto ReadMatches = [&] () {
+				std::vector<RowID_t> dRows;
+				while ( int iMatches = pRanker->GetMatches() )
+					for ( int i=0; i<iMatches; ++i )
+					{
+						const auto & tMatch = pRanker->GetMatchesBuffer()[i];
+						EXPECT_EQ ( tMatch.m_iWeight, 1 );
+						dRows.push_back(tMatch.m_tRowID);
+					}
+
+				return dRows;
+			};
+			std::vector<RowID_t> dExpected;
+			for ( RowID_t i=0; i<4500; ++i )
+				if ( bAnd ? i<100 : i<300 || (i>=4096 && i<4396) )
+					dExpected.push_back(i);
+
+			// Exercise both temporary SI adaptation and the persistent document adapter.
+			for ( int iPass=0; iPass<3; ++iPass )
+			{
+				pRanker->Reset(tSetup);
+				WindowTestIterator_c tIterator;
+				std::vector<RowID_t> dFiltered;
+				for ( RowID_t i=0; i<4500; i+=7 )
+				{
+					tIterator.m_dRows.push_back(i);
+					if ( std::binary_search ( dExpected.begin(), dExpected.end(), i ) )
+						dFiltered.push_back(i);
+				}
+
+				RowidIterator_i * pIterator = &tIterator;
+				ASSERT_TRUE ( pRanker->ExtraData ( EXTRA_SET_ITERATOR, (void**)&pIterator ) );
+				EXPECT_EQ ( ReadMatches(), dFiltered );
+				pRanker->Reset(tSetup);
+				EXPECT_EQ ( ReadMatches(), dExpected );
+				pRanker->Reset(tSetup);
+				EXPECT_EQ ( ReadMatches(), dExpected );
+				EXPECT_EQ ( tSetup.m_iLiveQwords, 2 );
+			}
+		}
+
+		EXPECT_EQ ( tSetup.m_iLiveQwords, 0 );
+	} );
+}
+
 TEST ( WindowCount, GenericAdapterRetainedRowsAndOwnership )
 {
 	WindowTestSetup_c tSetup;

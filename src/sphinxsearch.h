@@ -179,8 +179,8 @@ public:
 	virtual NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const = 0;
 };
 
-/// factory
-std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResultMeta & tMeta, const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx, const ISphSchema & tSorterSchema, bool bDiskCount = false );
+/// Create a ranker for the full-text query and requested ranking mode.
+std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResultMeta & tMeta, const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx, const ISphSchema & tSorterSchema, bool bDiskQwords = false );
 
 class QwordScan_c : public ISphQword
 {

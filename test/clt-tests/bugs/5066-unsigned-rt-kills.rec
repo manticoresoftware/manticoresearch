@@ -1,0 +1,11 @@
+––– comment –––
+Issue #5066: sequential HTTP bulk REPLACE operations with IDs on both sides of
+2^63 must never leave duplicate or stale documents while RAM chunks are being
+saved in the background. Use a small rt_mem_limit and disable auto-merges to
+exercise postponed kills during SaveDiskChunk. Repeated independent trials
+reduce the chance of missing the background-save overlap on slower machines.
+––– block: ../base/start-searchd –––
+––– input –––
+python3 ./test/clt-tests/scripts/issue-5066-unsigned-rt-kills.py
+––– output –––
+RT_UNSIGNED_KILLS_OK

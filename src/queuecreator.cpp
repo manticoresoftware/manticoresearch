@@ -378,6 +378,7 @@ private:
 	PrecalculatedSorterResults_t FetchPrecalculatedValues() const;
 
 	ISphMatchSorter *	SpawnQueue();
+	bool				IsDirectSqlQueue() const { return m_tQuery.m_iLimit==-1 && m_tSettings.m_pSqlRowBuffer; }
 	std::unique_ptr<ISphFilter>	CreateAggrFilter() const;
 	void				SetupCollation();
 	bool				Err ( const char * sFmt, ... ) const;
@@ -1478,11 +1479,6 @@ bool QueueCreator_c::AddStoredFieldExpressions()
 		if ( !(tField.m_uFieldFlags & CSphColumnInfo::FIELD_STORED) )
 			continue;
 
-		// The SELECT list might have already added this stored-field expression.
-		const CSphColumnInfo * pSorterField = m_pSorterSchema->GetAttr ( tField.m_sName.cstr() );
-		if ( pSorterField && pSorterField->m_pExpr )
-			continue;
-
 		CSphQueryItem tItem;
 		tItem.m_sExpr = tField.m_sName;
 		tItem.m_sAlias = tField.m_sName;
@@ -1538,15 +1534,19 @@ bool QueueCreator_c::MaybeAddExpressionsFromSelectList ()
 	if ( !m_tQuery.m_dItems.all_of ( [&] ( const CSphQueryItem & v ) { return ParseQueryItem ( v ); } ))
 		return false;
 
-	// Streaming SQL sends the default table schema even for a partial SELECT.
-	// Materialize its columnar attributes and stored fields just like SELECT *.
-	bool bDirectSql = m_tQuery.m_iLimit==-1 && m_tSettings.m_pSqlRowBuffer;
-	if ( m_bHaveStar || bDirectSql )
+	if ( m_bHaveStar )
 	{
 		if ( !AddColumnarAttributeExpressions() )
 			return false;
 
 		if ( !AddStoredFieldExpressions() )
+			return false;
+	}
+	else if ( IsDirectSqlQueue() && m_tQuery.m_sGroupBy.IsEmpty() && !HasImplicitGrouping ( m_tQuery ) )
+	{
+		// streaming sends every attribute, selected or not; columnar ones are read via expressions
+		// (grouping is set up later, so check it here: grouped queries get a group sorter, not the direct queue)
+		if ( !AddColumnarAttributeExpressions() )
 			return false;
 	}
 
@@ -2950,7 +2950,7 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 		return CreateSorter ( m_eMatchFunc, m_eGroupFunc, &m_tQuery, m_tGroupSorterSettings, bNeedFactors, PredictAggregates(), tPrecalc );
 	}
 
-	if ( m_tQuery.m_iLimit == -1 && m_tSettings.m_pSqlRowBuffer )
+	if ( IsDirectSqlQueue() )
 		return CreateDirectSqlQueue ( m_tSettings.m_pSqlRowBuffer, m_tSettings.m_ppOpaque1, m_tSettings.m_ppOpaque2, std::move (m_tSettings.m_dCreateSchema) );
 
 	if ( m_tSettings.m_pCollection )
@@ -3068,8 +3068,7 @@ bool QueueCreator_c::ConvertColumnarToDocstore()
 
 	// fixme! benchmark and maybe remove the >1 condition
 	const int MIN_POSTLIMIT_THRESH = 1;
-	bool bDirectQueue = m_tQuery.m_iLimit == -1 && m_tSettings.m_pSqlRowBuffer;
-	if ( dStoredColumnarPostlimit.GetLength()>MIN_POSTLIMIT_THRESH && !bDirectQueue )
+	if ( dStoredColumnarPostlimit.GetLength()>MIN_POSTLIMIT_THRESH && !IsDirectSqlQueue() )
 	{
 		for ( auto i : dStoredColumnarPostlimit )
 		{

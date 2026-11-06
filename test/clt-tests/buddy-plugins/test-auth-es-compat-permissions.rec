@@ -1,0 +1,117 @@
+––– comment –––
+Elasticsearch-compatible HTTP endpoints must enforce the same table
+permissions as native SQL and JSON endpoints.
+––– block: ../base/start-searchd-with-auth –––
+––– comment –––
+Prepare three synthetic tables; the test user can read only esauth_allowed.
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE TABLE esauth_allowed(body text); CREATE TABLE esauth_private(body text); CREATE TABLE esauth_drop(body text); INSERT INTO esauth_allowed(id,body) VALUES(1,'public'); INSERT INTO esauth_private(id,body) VALUES(2,'private'); CREATE USER 'esauth_reader' IDENTIFIED BY 'readerpass123'; GRANT read ON 'esauth_allowed' TO 'esauth_reader';" >/dev/null
+––– output –––
+––– comment –––
+Native JSON and Elasticsearch search agree on access control.
+––– input –––
+curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 -H 'Content-Type: application/json' -d '{"table":"esauth_private","query":{"match_all":{}}}' http://127.0.0.1:9308/search
+––– output –––
+403
+––– input –––
+curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 -H 'Content-Type: application/json' -d '{"query":{"match_all":{}}}' http://127.0.0.1:9308/esauth_allowed/_search
+––– output –––
+200
+––– input –––
+curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 -H 'Content-Type: application/json' -d '{"query":{"match_all":{}}}' http://127.0.0.1:9308/esauth_private/_search
+––– output –––
+403
+––– comment –––
+The request body may override the URL index. Wildcard and comma-separated
+indices must authorize every resolved table.
+––– input –––
+curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 -H 'Content-Type: application/json' -d '{"table":"esauth_private","query":{"match_all":{}}}' http://127.0.0.1:9308/esauth_allowed/_search
+––– output –––
+403
+––– input –––
+curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 -H 'Content-Type: application/json' -d '{"query":{"match_all":{}}}' http://127.0.0.1:9308/esauth_allowed,esauth_private/_search
+––– output –––
+403
+––– input –––
+curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 -H 'Content-Type: application/json' -d '{"query":{"match_all":{}}}' http://127.0.0.1:9308/esauth_*/_search
+––– output –––
+403
+––– comment –––
+Count and multi-search must enforce read permissions for every target.
+––– input –––
+curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 -H 'Content-Type: application/json' -d '{"query":{"match_all":{}}}' http://127.0.0.1:9308/esauth_private/_count
+––– output –––
+403
+––– input –––
+printf '%s\n' '{"index":"esauth_allowed"}' '{"query":{"match_all":{}}}' | curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 -H 'Content-Type: application/x-ndjson' --data-binary @- http://127.0.0.1:9308/_msearch
+––– output –––
+200
+––– input –––
+printf '%s\n' '{"index":"esauth_allowed"}' '{"query":{"match_all":{}}}' '{"index":"esauth_private"}' '{"query":{"match_all":{}}}' | curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 -H 'Content-Type: application/x-ndjson' --data-binary @- http://127.0.0.1:9308/_msearch
+––– output –––
+403
+––– input –––
+printf '%s\n' '{"index":"esauth_private"}' '{"query":{"match_all":{}}}' | curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 -H 'Content-Type: application/x-ndjson' --data-binary @- http://127.0.0.1:9308/esauth_allowed/_msearch
+––– output –––
+403
+––– comment –––
+The ES index-count shortcut must not list private table names or document counts.
+––– input –––
+curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 -H 'Content-Type: application/json' -d '{"size":0,"aggs":{"indices":{"terms":{"field":"_index"}}}}' http://127.0.0.1:9308/_all/_search
+––– output –––
+403
+––– comment –––
+Document deletes require WRITE; table creation and deletion require SCHEMA.
+––– input –––
+curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 -X DELETE http://127.0.0.1:9308/esauth_private/_doc/2
+––– output –––
+403
+––– input –––
+curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 -X PUT -H 'Content-Type: application/json' -d '{"mappings":{"properties":{"title":{"type":"text"}}}}' http://127.0.0.1:9308/esauth_created
+––– output –––
+403
+––– input –––
+curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 -X DELETE http://127.0.0.1:9308/esauth_drop
+––– output –––
+403
+––– input –––
+if MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e "SHOW TABLES" | grep -q '^esauth_created'; then echo 'created unexpectedly'; else echo 'creation denied'; fi
+––– output –––
+creation denied
+––– input –––
+if MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e "SHOW TABLES" | grep -q '^esauth_drop'; then echo 'drop denied'; else echo 'deleted unexpectedly'; fi
+––– output –––
+drop denied
+––– comment –––
+Metadata and refresh operations cannot reveal unauthorized tables.
+––– input –––
+curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 http://127.0.0.1:9308/esauth_private/_mapping
+––– output –––
+403
+––– input –––
+curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 http://127.0.0.1:9308/esauth_allowed/_ilm/explain
+––– output –––
+403
+––– input –––
+curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 -X POST http://127.0.0.1:9308/esauth_private/_refresh
+––– output –––
+403
+––– comment –––
+Authorized admin retains ES-compatible schema operations.
+––– input –––
+curl -s -o /dev/null -w '%{http_code}\n' -u admin:adminpass -X PUT -H 'Content-Type: application/json' -d '{"mappings":{"properties":{"title":{"type":"text"}}}}' http://127.0.0.1:9308/esauth_created
+––– output –––
+200
+––– input –––
+if MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e "SHOW TABLES" | grep -q '^esauth_created'; then echo 'created'; else echo 'missing'; fi
+––– output –––
+created
+––– input –––
+curl -s -o /dev/null -w '%{http_code}\n' -u admin:adminpass -X DELETE http://127.0.0.1:9308/esauth_created
+––– output –––
+200
+––– comment –––
+Cleanup.
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "DROP TABLE IF EXISTS esauth_allowed; DROP TABLE IF EXISTS esauth_private; DROP TABLE IF EXISTS esauth_drop; DROP TABLE IF EXISTS esauth_created; DROP USER 'esauth_reader';" >/dev/null
+––– output –––

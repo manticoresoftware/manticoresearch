@@ -72,6 +72,29 @@ add_library ( lmanticore STATIC sphinx.cpp sphinxutils.cpp
 		attr_embedding.cpp embeddingutils.cpp hybridexecutor.cpp
 		sortergroup.cpp sortertraits.cpp sorterprecalc.cpp querycontext.cpp skip_cache.cpp jsonsi.cpp sorterscroll.cpp )
 
+# Avoid JCC boundary penalties in the ranking loops without changing the required ISA.
+if ( CMAKE_CXX_COMPILER_ID MATCHES "Clang" )
+	include ( CheckCXXSourceCompiles )
+	include ( CheckCXXCompilerFlag )
+	check_cxx_source_compiles ( "
+#if !defined(__x86_64__) && !defined(__i386__) && !defined(_M_X64) && !defined(_M_IX86)
+#error Not an x86 target
+#endif
+int main() { return 0; }" SEARCH_TARGET_X86 )
+	if ( SEARCH_TARGET_X86 )
+		set ( SEARCH_BRANCH_ALIGNMENT_FLAG "-mbranches-within-32B-boundaries" )
+		if ( MSVC )
+			set ( SEARCH_BRANCH_ALIGNMENT_FLAG "/clang:${SEARCH_BRANCH_ALIGNMENT_FLAG}" )
+		endif ()
+
+		check_cxx_compiler_flag ( "${SEARCH_BRANCH_ALIGNMENT_FLAG}" SEARCH_HAVE_BRANCH_ALIGNMENT )
+		if ( SEARCH_HAVE_BRANCH_ALIGNMENT )
+			set_property ( SOURCE sphinxsearch.cpp APPEND PROPERTY COMPILE_OPTIONS "${SEARCH_BRANCH_ALIGNMENT_FLAG}" )
+		endif ()
+		unset ( SEARCH_BRANCH_ALIGNMENT_FLAG )
+	endif ()
+endif ()
+
 if (WIN32)
 target_link_libraries ( lmanticore PRIVATE dbghelp AdvAPI32 ShLwApi )
 endif()

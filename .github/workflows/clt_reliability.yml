@@ -16,6 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Verify report calculations
+        run: python3 -m unittest discover -s .github/scripts/tests -p 'test_clt_reliability.py' -v
+
       - name: Calculate CLT failure rates
         env:
           GH_TOKEN: ${{ github.token }}

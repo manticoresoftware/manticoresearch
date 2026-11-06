@@ -170,7 +170,6 @@ The easiest way to run CLT tests is through GitHub Actions:
 
 CLT tests are organized into test suites defined in `.github/workflows/clt_tests.yml`.
 
-
 ### Finding unstable CLT tests
 
 Each CLT shard uploads its individual test results, including failed tests. The

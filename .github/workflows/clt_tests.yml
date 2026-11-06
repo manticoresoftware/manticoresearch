@@ -160,8 +160,7 @@ jobs:
             LC_ALL=C sort > "${{ runner.temp }}/clt-model-cache-before.tsv"
 
       - id: run-clt
-        # First release of the per-test result output; pin until the CLT action release.
-        uses: manticoresoftware/clt@9e6be93fbc84182c8ceca99c12c75a6ab177b12d
+        uses: manticoresoftware/clt@main
         with:
           artifact: ${{ inputs.artifact_name }}
           image: ${{ inputs.docker_image }}
@@ -177,7 +176,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: clt-test-results-${{ matrix.chunk.id }}-attempt-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/clt-test-results.jsonl
+          path: ${{ steps.run-clt.outputs.test-results }}
           if-no-files-found: error
           retention-days: 90
 

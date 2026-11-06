@@ -22,7 +22,7 @@ jobs:
       run:
         shell: bash
     container:
-      image: manticoresearch/docs_autodeploy_multi:latest
+      image: manticoresearch/docs_autodeploy_multi:latest@sha256:b632535fb7bdcebe4ad0bd7935d1352435332afa00ab2475c3443e76d94a7e36
       env:
         CACHEB: "../cache"
         DOCKER_HOST: tcp://docker:2375/

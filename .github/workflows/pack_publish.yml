@@ -896,7 +896,7 @@ jobs:
         id: sha
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@v4.4.0
         with:
           image: tonistiigi/binfmt:qemu-v7.0.0-28
       - name: Building docker

@@ -38,13 +38,13 @@ jobs:
         CACHEB: "../cache"
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5.1.0
         with:
           persist-credentials: false
           token: ${{ secrets.GITHUB_TOKEN }}
           set-safe-directory: true
       - name: Check out cache before building
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v5.1.0
         with:
           path: cache
           key: build_linux_debug_x86_64

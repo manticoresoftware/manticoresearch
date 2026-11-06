@@ -83,7 +83,7 @@ jobs:
           apt-get install -y git
     
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5.1.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           set-safe-directory: true

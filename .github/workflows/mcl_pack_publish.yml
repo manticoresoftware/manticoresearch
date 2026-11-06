@@ -43,7 +43,7 @@ jobs:
       version_rpm: ${{ steps.package_version.outputs.version_rpm }}
       version_tagged: ${{ steps.package_version.outputs.version_tagged }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
         with:
           persist-credentials: false
           ref: ${{ inputs.source_ref != '' && inputs.source_ref || github.sha }}

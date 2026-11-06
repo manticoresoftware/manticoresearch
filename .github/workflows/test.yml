@@ -65,7 +65,7 @@ jobs:
       run_image_push: ${{ steps.calc.outputs.run_image_push }} # push test-kit image tags
       skip_clt_reason: ${{ steps.related_prs.outputs.skip_clt_reason }} # explanation for CLT skip
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -356,7 +356,7 @@ jobs:
     steps:
       - name: Check out cache
         id: cache
-        uses: actions/cache@v5
+        uses: actions/cache@v5.1.0
         with:
           path: |
             bundle
@@ -375,7 +375,7 @@ jobs:
           wget https://repo.manticoresearch.com/repository/ci/boost_1_75_0.tgz
           tar -xf boost_1_75_0.tgz
       - name: Upload Windows bundle artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: windows_bundle
           path: |
@@ -506,7 +506,7 @@ jobs:
       - name: Restore exact-SHA MCL package cache
         id: probe
         if: ${{ needs.meta.outputs.mcl_full_sha != '' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v5.1.0
         with:
           path: .mcl-package-cache
           key: mcl-test-pkg-jammy-amd64-${{ needs.meta.outputs.mcl_full_sha }}
@@ -537,7 +537,7 @@ jobs:
       image: manticoresearch/external_toolchain:clang16_cmake3263
     steps:
       - name: Restore exact-SHA MCL package cache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v5.1.0
         with:
           path: .mcl-package-cache
           key: ${{ needs.mcl_test_package_cache_probe.outputs.cache_key }}
@@ -555,7 +555,7 @@ jobs:
             exit 1
           fi
       - name: Upload cached MCL package artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: mcl_package_jammy_x86_64
           path: mcl-package
@@ -575,7 +575,7 @@ jobs:
         run: mkdir -p .mcl-runtime-cache
       - name: Restore exact MCL Linux Release runtime cache
         id: restore
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v5.1.0
         with:
           path: .mcl-runtime-cache
           key: ${{ needs.meta.outputs.mcl_runtime_linux_release_cache_key }}
@@ -605,7 +605,7 @@ jobs:
           echo "cache_hit=${ok}" >> "$GITHUB_OUTPUT"
       - name: Upload cached MCL Linux Release runtime artifact
         if: steps.validate.outputs.cache_hit == 'true'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: mcl_runtime_linux_release_x86_64
           path: mcl-runtime
@@ -625,7 +625,7 @@ jobs:
         run: mkdir -p .mcl-runtime-cache
       - name: Restore exact MCL Linux Debug runtime cache
         id: restore
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v5.1.0
         with:
           path: .mcl-runtime-cache
           key: ${{ needs.meta.outputs.mcl_runtime_linux_debug_cache_key }}
@@ -655,7 +655,7 @@ jobs:
           echo "cache_hit=${ok}" >> "$GITHUB_OUTPUT"
       - name: Upload cached MCL Linux Debug runtime artifact
         if: steps.validate.outputs.cache_hit == 'true'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: mcl_runtime_linux_debug_x86_64
           path: mcl-runtime
@@ -675,7 +675,7 @@ jobs:
         run: mkdir -p .mcl-runtime-cache
       - name: Restore exact MCL Windows Debug runtime cache
         id: restore
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v5.1.0
         with:
           path: .mcl-runtime-cache
           key: ${{ needs.meta.outputs.mcl_runtime_windows_debug_cache_key }}
@@ -705,7 +705,7 @@ jobs:
           echo "cache_hit=${ok}" >> "$GITHUB_OUTPUT"
       - name: Upload cached MCL Windows Debug runtime artifact
         if: steps.validate.outputs.cache_hit == 'true'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: mcl_runtime_windows_debug_x64
           path: mcl-runtime
@@ -892,7 +892,7 @@ jobs:
       candidate_image: ${{ steps.candidate.outputs.candidate_image }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5.1.0
         with:
           persist-credentials: false
           submodules: recursive
@@ -914,7 +914,7 @@ jobs:
         run: tar -cf artifact.tar manticore_test_kit.img
       - name: Upload docker image artifact for fork PRs
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: manticore_test_kit.img
           path: artifact.tar
@@ -943,7 +943,7 @@ jobs:
       candidate_image: ${{ steps.candidate.outputs.candidate_image }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5.1.0
         with:
           persist-credentials: false
           submodules: recursive
@@ -955,7 +955,7 @@ jobs:
           path: .
       - name: Restore exact-SHA MCL package cache
         if: ${{ needs.mcl_test_package_cache_probe.outputs.cache_hit == 'true' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v5.1.0
         with:
           path: ./.mcl-package-cache
           key: ${{ needs.mcl_test_package_cache_probe.outputs.cache_key }}
@@ -985,7 +985,7 @@ jobs:
         run: tar -cf artifact.tar manticore_test_kit.img
       - name: Upload docker image artifact for fork PRs
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: manticore_test_kit.img
           path: artifact.tar
@@ -1043,7 +1043,7 @@ jobs:
       CANDIDATE_IMAGE: ${{ needs.test_kit_docker_build.outputs.candidate_image || needs.test_kit_docker_reuse.outputs.candidate_image }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5.1.0
         with:
           persist-credentials: false
       - name: Download light image artifact
@@ -1070,7 +1070,7 @@ jobs:
       (needs.test_kit_docker_build.outputs.candidate_image != '' || needs.test_kit_docker_reuse.outputs.candidate_image != '')
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
         with:
           persist-credentials: false
       - name: Delete candidate image
@@ -1087,7 +1087,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5.1.0
         with:
           persist-credentials: false
       - name: Download bundle package
@@ -1098,7 +1098,7 @@ jobs:
       - name: Build official-style image
         run: ./dist/test_kit_light_docker_build.sh bundle-package
       - name: Upload light image artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: test_kit_light_docker
           path: test_kit_light_docker.tar.gz

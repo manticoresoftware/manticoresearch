@@ -177,7 +177,7 @@ jobs:
 
       - name: Upload per-test results
         if: ${{ always() }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: clt-test-results-${{ matrix.chunk.id }}-attempt-${{ github.run_attempt }}
           path: ${{ steps.run-clt.outputs.test-results }}
@@ -229,7 +229,7 @@ jobs:
       # fan-in job run without special handling for a matrix where no model cache changed.
       - name: Upload changed model-cache folders
         if: ${{ success() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: clt-model-cache-${{ matrix.chunk.id }}
           path: ${{ runner.temp }}/clt-model-cache-delta
@@ -249,7 +249,7 @@ jobs:
 
       - name: Upload timing measurements
         if: ${{ success() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: clt-timings-${{ matrix.chunk.id }}
           path: ${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv
@@ -264,7 +264,7 @@ jobs:
     continue-on-error: true
     steps:
       - name: Merge per-test result artifacts
-        uses: actions/upload-artifact/merge@v6
+        uses: actions/upload-artifact/merge@v6.0.0
         with:
           name: clt-results-merged-${{ github.run_attempt }}
           pattern: clt-test-results-*-attempt-*

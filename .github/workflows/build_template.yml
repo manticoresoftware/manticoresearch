@@ -120,7 +120,7 @@ jobs:
         BUILD_TAG: ${{ inputs.build_tag }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5.1.0
         with:
           persist-credentials: false
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
@@ -149,7 +149,7 @@ jobs:
 
       - name: Download built MCL package artifact
         if: ${{ inputs.MCL_PACKAGE_ARTIFACT_NAME != '' }}
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v7.0.0
         with:
           name: ${{ inputs.MCL_PACKAGE_ARTIFACT_NAME }}
           path: ./mcl-package
@@ -175,7 +175,7 @@ jobs:
           echo "MCL_REPO_TYPE=${{ inputs.MCL_REPO_TYPE }}" >> "$GITHUB_ENV"
 
       - name: Check out cache before building
-        uses: actions/cache@v5
+        uses: actions/cache@v5.1.0
         with:
           path: cache
           enableCrossOsArchive: true
@@ -187,7 +187,7 @@ jobs:
 
       - name: Upload Windows build cache artifact
         if: success() && inputs.DISTR == 'windows'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: cache_${{ inputs.cache_key }}
           path: cache
@@ -202,7 +202,7 @@ jobs:
 
       - name: Upload build artifacts
         if: success()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: ${{ steps.artifact_name.outputs.value }}
           path: artifact.tar

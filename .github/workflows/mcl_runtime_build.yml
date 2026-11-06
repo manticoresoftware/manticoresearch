@@ -80,7 +80,7 @@ jobs:
         SYSROOT_URL: https://repo.manticoresearch.com/repository/sysroots
     steps:
       - name: Checkout daemon repository with MCL submodule
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5.1.0
         with:
           persist-credentials: false
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
@@ -105,7 +105,7 @@ jobs:
 
       - name: Restore exact MCL runtime cache
         id: runtime_cache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v5.1.0
         with:
           path: .mcl-runtime-cache
           key: ${{ inputs.cache_key }}
@@ -148,7 +148,7 @@ jobs:
 
       - name: Download embeddings artifact
         if: ${{ steps.restored.outputs.ok != 'true' && inputs.embeddings_artifact != '' }}
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v7.0.0
         with:
           name: ${{ inputs.embeddings_artifact }}
           path: ./embeddings-lib
@@ -272,13 +272,13 @@ jobs:
 
       - name: Save exact MCL runtime cache
         if: ${{ steps.restored.outputs.ok != 'true' }}
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v5.1.0
         with:
           path: .mcl-runtime-cache
           key: ${{ inputs.cache_key }}
 
       - name: Upload MCL runtime artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: ${{ inputs.artifact_name }}
           path: mcl-runtime

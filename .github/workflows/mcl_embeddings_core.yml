@@ -51,7 +51,7 @@ jobs:
         shell: bash
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
         with:
           persist-credentials: false
           ref: ${{ inputs.source_ref != '' && inputs.source_ref || github.sha }}
@@ -118,7 +118,7 @@ jobs:
           echo "${dest}/bin" >> "${GITHUB_PATH}"
 
       - name: Cache cargo registry
-        uses: actions/cache@v5
+        uses: actions/cache@v5.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -127,7 +127,7 @@ jobs:
           restore-keys: cargo-registry-${{ runner.os }}-
 
       - name: Cache cargo build target
-        uses: actions/cache@v5
+        uses: actions/cache@v5.1.0
         with:
           path: ./embeddings/target
           key: cargo-target-${{ runner.os }}-${{ hashFiles('embeddings/Cargo.lock') }}-${{ hashFiles('embeddings/src/**/*.rs') }}
@@ -136,7 +136,7 @@ jobs:
             cargo-target-${{ runner.os }}-
 
       - name: Cache ML test models
-        uses: actions/cache@v5
+        uses: actions/cache@v5.1.0
         with:
           path: ./embeddings/.cache/manticore
           key: ml-models-${{ runner.os }}-${{ hashFiles('embeddings/src/model/local_test.rs') }}
@@ -262,7 +262,7 @@ jobs:
           lib_dir="./embeddings/target/${target}/release"
           echo "lib_dir=${lib_dir}" >> $GITHUB_OUTPUT
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
         with:
           persist-credentials: false
           ref: ${{ inputs.source_ref != '' && inputs.source_ref || github.sha }}
@@ -372,7 +372,7 @@ jobs:
 
       - name: Cache cargo registry for native build
         if: ${{ inputs.distr != 'linux' }}
-        uses: actions/cache@v5
+        uses: actions/cache@v5.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -381,7 +381,7 @@ jobs:
           restore-keys: emb-build-cargo-${{ runner.os }}-${{ inputs.arch }}-
 
       - name: Cache cargo build target
-        uses: actions/cache@v5
+        uses: actions/cache@v5.1.0
         with:
           path: embeddings/target
           key: emb-build-target-${{ runner.os }}-${{ inputs.distr }}-${{ inputs.arch }}-${{ inputs.mcl_full_sha }}-${{ hashFiles('embeddings/Cargo.lock', 'embeddings/Cargo.toml', 'embeddings/src/**/*.rs') }}
@@ -391,7 +391,7 @@ jobs:
 
       - name: Cache cargo registry for Docker build
         if: ${{ inputs.distr == 'linux' }}
-        uses: actions/cache@v5
+        uses: actions/cache@v5.1.0
         with:
           path: |
             .cargo-cache/registry
@@ -604,7 +604,7 @@ jobs:
 
       - name: Upload build artifacts
         if: success()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: embeddings_${{ inputs.distr }}_${{ inputs.arch }}
           path: ./build/*

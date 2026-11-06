@@ -278,7 +278,11 @@ jobs:
     needs: [check_branch, pack]
     if: needs.pack.outputs.should_continue == 'true' || needs.pack.outputs.mcl_package_needed == 'true'
     uses: ./.github/workflows/mcl_pack_publish.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
     with:
       enabled: ${{ needs.pack.outputs.mcl_package_needed == 'true' }}
       mcl_full_sha: ${{ needs.check_branch.outputs.mcl_full_sha }}
@@ -304,7 +308,8 @@ jobs:
   pack_debian_ubuntu:
     name: Debian/Ubuntu packages
     uses: ./.github/workflows/build_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     needs: [pack, check_branch, check_deps, mcl_pack_matrix]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
@@ -333,7 +338,8 @@ jobs:
   pack_rhel:
     name: RHEL packages
     uses: ./.github/workflows/build_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     needs: [pack, check_branch, check_deps, mcl_pack_matrix]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
@@ -365,7 +371,8 @@ jobs:
   pack_macos:
     name: MacOS packages
     uses: ./.github/workflows/build_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     needs: [pack, check_branch, check_deps, mcl_pack_matrix]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
@@ -397,7 +404,8 @@ jobs:
   pack_windows:
     name: Windows x64 package
     uses: ./.github/workflows/build_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     needs: [pack, check_branch, check_deps, mcl_pack_matrix]
     if: needs.pack.outputs.should_continue == 'true'
     with:

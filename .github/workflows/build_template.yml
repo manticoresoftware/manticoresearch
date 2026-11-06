@@ -2,6 +2,9 @@ name: Build Template
 
 on:
   workflow_call:
+    secrets:
+      MCL_SUBMODULE_TOKEN:
+        required: false
     inputs:
       arch:
         required: false

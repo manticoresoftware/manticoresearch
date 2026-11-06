@@ -2,6 +2,9 @@ name: Test Template
 
 on:
   workflow_call:
+    secrets:
+      MCL_SUBMODULE_TOKEN:
+        required: false
     inputs:
       WITH_COVERAGE:
         required: false

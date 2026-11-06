@@ -2,6 +2,15 @@ name: MCL pack matrix
 
 on:
   workflow_call:
+    secrets:
+      MCL_SUBMODULE_TOKEN:
+        required: false
+      OPENAI_API_KEY:
+        required: false
+      VOYAGE_API_KEY:
+        required: false
+      JINA_API_KEY:
+        required: false
     inputs:
       enabled:
         required: false
@@ -101,7 +110,11 @@ jobs:
     if: ${{ inputs.enabled }}
     needs: metadata
     uses: ./.github/workflows/mcl_embeddings_build.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
     strategy:
       fail-fast: false
       matrix:
@@ -130,7 +143,8 @@ jobs:
     if: ${{ inputs.enabled }}
     needs: [metadata, embeddings_builds]
     uses: ./.github/workflows/mcl_package_build.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -152,7 +166,8 @@ jobs:
     if: ${{ inputs.enabled }}
     needs: [metadata, embeddings_builds]
     uses: ./.github/workflows/mcl_package_build.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -182,7 +197,8 @@ jobs:
     if: ${{ inputs.enabled }}
     needs: [metadata, embeddings_builds]
     uses: ./.github/workflows/mcl_package_build.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -209,7 +225,8 @@ jobs:
     if: ${{ inputs.enabled }}
     needs: [metadata, embeddings_builds]
     uses: ./.github/workflows/mcl_package_build.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     with:
       enabled: ${{ inputs.enabled }}
       mcl_full_sha: ${{ inputs.mcl_full_sha }}

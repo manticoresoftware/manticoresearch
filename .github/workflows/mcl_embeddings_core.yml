@@ -2,6 +2,15 @@ name: MCL embeddings core
 
 on:
   workflow_call:
+    secrets:
+      MCL_SUBMODULE_TOKEN:
+        required: false
+      OPENAI_API_KEY:
+        required: false
+      VOYAGE_API_KEY:
+        required: false
+      JINA_API_KEY:
+        required: false
     inputs:
       distr:
         required: true

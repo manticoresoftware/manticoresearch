@@ -16,7 +16,8 @@ env:
 jobs:
   check:
     uses: ./.github/workflows/check_docs.yml
-    secrets: inherit
+    secrets:
+      GH_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
   commit_info:
     name: Commit info
     runs-on: ubuntu-22.04

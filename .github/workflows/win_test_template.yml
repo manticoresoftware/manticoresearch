@@ -2,6 +2,9 @@ name: Windows Test Template
 
 on:
   workflow_call:
+    secrets:
+      MCL_SUBMODULE_TOKEN:
+        required: false
     inputs:
       CTEST_START:
         required: false

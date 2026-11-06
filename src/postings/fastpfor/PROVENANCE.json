@@ -1,0 +1,26 @@
+{
+  "repository": "https://github.com/manticoresoftware/FastPFor",
+  "commit": "5f6b7df8f0dba402bb616a81ca510bfeb04c42ce",
+  "files": {
+    "common.h": {
+      "upstream_path": "headers/common.h",
+      "sha256": "9b5a2d62d5d22ca8788c4c997ce039a4b8201dc7be23768a428f3e96196193dc"
+    },
+    "simdbitpacking.h": {
+      "upstream_path": "headers/simdbitpacking.h",
+      "sha256": "e5f5731eb096b22423a86fe07ec46fc0ca333a96fc6ab167354f3304f0ad7390"
+    },
+    "simdbitpacking.cpp": {
+      "upstream_path": "src/simdbitpacking.cpp",
+      "sha256": "90b56b02dab679788a0a4ee866aafb2389aa8ac01de668b5882ee0493c15c402"
+    },
+    "LICENSE": {
+      "upstream_path": "LICENSE",
+      "sha256": "73ba74dfaa520b49a401b5d21459a8523a146f3b7518a833eea5efa85130bf68"
+    },
+    "AUTHORS": {
+      "upstream_path": "AUTHORS",
+      "sha256": "55b36c85a5f135fc52cc58ba0694fca1305ecd0010a9fcf940727688aeab4a27"
+    }
+  }
+}

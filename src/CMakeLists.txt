@@ -52,6 +52,7 @@ add_subdirectory ( schema )
 add_subdirectory ( dict )
 add_subdirectory ( sphinxquery )
 add_subdirectory ( indexing_sources )
+add_subdirectory ( postings )
 
 # main bunch of sources (for libsphinx)
 add_library ( lmanticore STATIC sphinx.cpp sphinxutils.cpp

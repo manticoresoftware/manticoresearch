@@ -16,6 +16,11 @@ concurrency:
   group: nightly_dumps_${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  # The CLT action comments the failures on the pull request.
+  pull-requests: write
+
 jobs:
   commit_info:
     name: Commit info

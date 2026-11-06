@@ -13,6 +13,10 @@ on:
 env:
   DOCS_AUTOCOMMIT_TITLE: Docs_examples_update
 
+permissions:
+  # The deployment commits the refreshed examples back to the branch.
+  contents: write
+
 jobs:
   check:
     uses: ./.github/workflows/check_docs.yml

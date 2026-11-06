@@ -42,6 +42,11 @@ on:
         description: Outcome of the test step (success/failure)
         value: ${{ jobs.test_windows.outputs.test_outcome }}
 
+permissions:
+  contents: read
+  # The test result publisher writes a check run.
+  checks: write
+
 jobs:
   test_windows:
     name: ${{ inputs.suite_name || format('{0}_{1}', inputs.CTEST_START, inputs.CTEST_END) }}

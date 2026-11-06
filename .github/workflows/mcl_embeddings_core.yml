@@ -38,6 +38,9 @@ on:
         type: boolean
         default: true
 
+permissions:
+  contents: read
+
 jobs:
   # Quality check job - runs tests and clippy before build
   quality-check:

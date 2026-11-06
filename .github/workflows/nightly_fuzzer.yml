@@ -18,6 +18,9 @@ concurrency:
   group: nightly_fuzzing_${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
 
   recover_build_from_cache:

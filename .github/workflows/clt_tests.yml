@@ -34,6 +34,9 @@ on:
         required: true
         description: "Jina API key for CLT tests"
 
+permissions:
+  contents: read
+
 jobs:
   discover:
     name: Discover CLT tests

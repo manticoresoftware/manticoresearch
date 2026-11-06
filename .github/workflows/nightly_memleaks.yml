@@ -17,6 +17,9 @@ concurrency:
   group: nightly_memleaks_${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   memleaks:
     name: Memleak tests

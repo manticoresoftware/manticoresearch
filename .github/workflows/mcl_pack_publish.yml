@@ -24,6 +24,9 @@ on:
         type: string
         default: ""
 
+permissions:
+  contents: read
+
 jobs:
   noop:
     if: ${{ inputs.enabled != true }}

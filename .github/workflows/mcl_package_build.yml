@@ -81,6 +81,9 @@ on:
         type: string
         default: ""
 
+permissions:
+  contents: read
+
 jobs:
   build:
     if: ${{ inputs.enabled }}

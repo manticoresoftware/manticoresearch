@@ -38,6 +38,9 @@ on:
         type: boolean
         default: true
 
+permissions:
+  contents: read
+
 jobs:
   build:
     uses: ./.github/workflows/mcl_embeddings_core.yml

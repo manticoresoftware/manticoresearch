@@ -3573,10 +3573,10 @@ characters properly.
 </p><p>
 Second, we additionally need to know the language-specific
 string sorting rules. For instance, when sorting according to US rules
-in en_US locale, the accented character 'ï' (small letter i with diaeresis)
+in en_US locale, the accented character '' (small letter i with diaeresis)
 should be placed somewhere after 'z'. However, when sorting with French rules
 and fr_FR locale in mind, it should be placed between 'i' and 'j'. And some
-other set of rules might choose to ignore accents at all, allowing 'ï'
+other set of rules might choose to ignore accents at all, allowing ''
 and 'i' to be mixed arbitrarily.
 </p><p>
 Third, but not least, we might need case-sensitive sorting in some
@@ -5706,7 +5706,7 @@ mysql&gt; CALL QSUGGEST('automaticlly ','forum', 5 as limit, 4 as max_edits,1 as
 CALL SUGGEST(word, index [,options])
 </pre>
 CALL SUGGEST statement, introduced in version 2.3.2-beta. Works the same as CALL QUSUGGEST, except that if a bag of words is present, the statement will return suggestions only for the first word, ignoring the rest.
-If the first paramenter is a word, the functionality of CALL SUGGEST and CALL QSUGGEST is the same.
+If the first parameter is a word, the functionality of CALL SUGGEST and CALL QSUGGEST is the same.
 </div>
 <div class="sect1" title="8.18.&nbsp;SHOW TABLES syntax"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="sphinxql-show-tables"></a>8.18.&nbsp;SHOW TABLES syntax</h2></div></div></div>
 <pre class="programlisting">

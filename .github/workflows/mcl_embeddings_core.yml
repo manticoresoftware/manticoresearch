@@ -89,8 +89,9 @@ jobs:
           git config --global --add safe.directory "$PWD"
 
       - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@v1
         with:
+          toolchain: stable
           components: clippy, rustfmt
 
       - name: Install protoc
@@ -299,8 +300,9 @@ jobs:
           git config --global --add safe.directory "$PWD"
 
       - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@v1
         with:
+          toolchain: stable
           target: ${{ steps.vars.outputs.target }}
 
       - name: Install protoc

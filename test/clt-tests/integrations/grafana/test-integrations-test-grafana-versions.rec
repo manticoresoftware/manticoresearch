@@ -19,6 +19,7 @@ NETWORK_NAME="manticore-grafana-test"
 MANTICORE_CONTAINER="manticore-test-kit"
 GRAFANA_CONTAINER="grafana-${VERSION}"
 GRAFANA_PASSWORD="admin"
+DATASOURCE_UID="manticore-mysql"
 
 resolve_grafana_image_tag() {
     local version="$1"
@@ -35,8 +36,16 @@ resolve_grafana_image_tag() {
 
 start_grafana_container() {
     local image_tag="$1"
+    # MySQL became a separately installed plugin in Grafana 13.2.
+    local -a plugin_args=()
+    if [[ "$VERSION" == "13.2" || "$VERSION" == "13.3" ]]; then
+        plugin_args=(-e GF_PLUGINS_PREINSTALL_SYNC=mysql)
+    fi
     # The database is disposable; avoid slow nested-overlay fsyncs during migrations.
-    docker run -d --name "$GRAFANA_CONTAINER"         --network "$NETWORK_NAME"         --tmpfs /var/lib/grafana:rw,size=256m,uid=472,gid=0,mode=0755         -e GF_SECURITY_ADMIN_PASSWORD="$GRAFANA_PASSWORD"         "grafana/grafana:${image_tag}" > /tmp/grafana-docker-run.log 2>&1
+    docker run -d --name "$GRAFANA_CONTAINER" --network "$NETWORK_NAME" \
+        --tmpfs /var/lib/grafana:rw,size=256m,uid=472,gid=0,mode=0755 \
+        -e GF_SECURITY_ADMIN_PASSWORD="$GRAFANA_PASSWORD" "${plugin_args[@]}" \
+        "grafana/grafana:${image_tag}" > /tmp/grafana-docker-run.log 2>&1
 }
 
 # Cleanup function (only removes Grafana container, keeps Manticore and network for reuse)
@@ -87,6 +96,26 @@ timeout 180 bash -c "until docker exec $GRAFANA_CONTAINER wget -qO- http://local
 
 echo "✓ Grafana $VERSION started successfully"
 
+# In Grafana 13.2+, /api/health can be ready while the standalone MySQL plugin is not.
+if [[ "$VERSION" == "13.2" || "$VERSION" == "13.3" ]]; then
+    MYSQL_PLUGIN_READY=false
+    for _ in $(seq 1 90); do
+        if docker exec "$GRAFANA_CONTAINER" curl -fsS -u "admin:$GRAFANA_PASSWORD" \
+            http://localhost:3000/api/plugins/mysql 2>/dev/null \
+            | jq -e '.id == "mysql"' >/dev/null 2>&1; then
+            MYSQL_PLUGIN_READY=true
+            break
+        fi
+        sleep 1
+    done
+    if [ "$MYSQL_PLUGIN_READY" != true ]; then
+        echo "✗ Error: MySQL data source plugin not registered" >&2
+        docker logs --tail 50 "$GRAFANA_CONTAINER" >&2
+        cleanup
+        exit 1
+    fi
+fi
+
 # Verify Grafana is accessible
 if docker exec "$GRAFANA_CONTAINER" wget -qO- http://localhost:3000/api/health > /dev/null 2>&1; then
     echo "✓ Grafana API accessible"
@@ -100,7 +129,7 @@ fi
 DATASOURCE_RESPONSE=$(docker exec "$GRAFANA_CONTAINER" curl -s -X POST "http://localhost:3000/api/datasources" \
     -u "admin:$GRAFANA_PASSWORD" \
     -H "Content-Type: application/json" \
-    -d "{\"name\":\"Manticore\",\"type\":\"mysql\",\"url\":\"${MANTICORE_CONTAINER}:9306\",\"access\":\"proxy\"}")
+    -d "{\"uid\":\"$DATASOURCE_UID\",\"name\":\"Manticore\",\"type\":\"mysql\",\"url\":\"${MANTICORE_CONTAINER}:9306\",\"access\":\"proxy\"}")
 
 if echo "$DATASOURCE_RESPONSE" | grep -q '"message":"Datasource added"'; then
     echo "✓ Data source created successfully"
@@ -150,7 +179,7 @@ fi
 QUERY_RESPONSE=$(docker exec "$GRAFANA_CONTAINER" curl -s -X POST "http://localhost:3000/api/ds/query" \
     -u "admin:$GRAFANA_PASSWORD" \
     -H "Content-Type: application/json" \
-    -d '{"queries":[{"datasourceId":1,"rawSql":"SELECT COUNT(*) as total FROM products","format":"table"}]}')
+    -d "{\"queries\":[{\"refId\":\"A\",\"datasource\":{\"uid\":\"$DATASOURCE_UID\",\"type\":\"mysql\"},\"rawSql\":\"SELECT COUNT(*) as total FROM products\",\"format\":\"table\"}]}")
 
 if echo "$QUERY_RESPONSE" | grep -q '"total"' && echo "$QUERY_RESPONSE" | grep -q '\[3\]'; then
     echo "✓ Query execution via Grafana API works"
@@ -179,7 +208,7 @@ docker exec "$MANTICORE_CONTAINER" mysql -h0 -P9306 -e "INSERT INTO orders (orde
 GROUP_BY_RESPONSE=$(docker exec "$GRAFANA_CONTAINER" curl -s -X POST "http://localhost:3000/api/ds/query" \
     -u "admin:$GRAFANA_PASSWORD" \
     -H "Content-Type: application/json" \
-    -d '{"queries":[{"datasourceId":1,"rawSql":"SELECT status, COUNT(*) as count FROM orders GROUP BY status","format":"table"}]}')
+    -d "{\"queries\":[{\"refId\":\"A\",\"datasource\":{\"uid\":\"$DATASOURCE_UID\",\"type\":\"mysql\"},\"rawSql\":\"SELECT status, COUNT(*) as count FROM orders GROUP BY status\",\"format\":\"table\"}]}")
 
 if echo "$GROUP_BY_RESPONSE" | grep -q '"status"' && echo "$GROUP_BY_RESPONSE" | grep -q '"count"'; then
     echo "✓ GROUP BY query works"

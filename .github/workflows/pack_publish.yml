@@ -51,6 +51,8 @@ jobs:
             github.event.pull_request.labels.*.name, 'publish'
           )
         )
+        &&
+        github.event.pull_request.head.repo.full_name == github.repository
       )
       ||
       (
@@ -59,6 +61,8 @@ jobs:
         github.event.workflow_run.conclusion == 'success'
         &&
         github.ref == 'refs/heads/main'
+        &&
+        github.event.workflow_run.head_repository.full_name == github.repository
       )
       ||
       (
@@ -165,6 +169,8 @@ jobs:
             github.event.pull_request.labels.*.name, 'publish'
           )
         )
+        &&
+        github.event.pull_request.head.repo.full_name == github.repository
       )
       ||
       (
@@ -173,6 +179,8 @@ jobs:
         github.event.workflow_run.conclusion == 'success'
         &&
         github.ref == 'refs/heads/main'
+        &&
+        github.event.workflow_run.head_repository.full_name == github.repository
       )
       ||
       (
@@ -294,7 +302,7 @@ jobs:
   # Runs on every PR, workflow_run, or push event matching the conditions
   check_deps:
     needs: pack
-    if: needs.pack.outputs.should_continue == 'true'
+    if: needs.pack.outputs.should_continue == 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.head_repository.full_name == github.repository) && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     name: Check deps test
     runs-on: ubuntu-22.04
     steps:
@@ -434,7 +442,7 @@ jobs:
   build_nsis:
     name: Making Windows NSIS installer
     needs: [pack_windows, pack, check_branch, mcl_pack_matrix]
-    if: needs.pack.outputs.should_continue == 'true'
+    if: needs.pack.outputs.should_continue == 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.head_repository.full_name == github.repository) && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-22.04
     container:
       image: manticoresearch/build_nsis:1.0.0
@@ -866,7 +874,7 @@ jobs:
   build_docker:
     name: Building and pushing docker
     needs: [publish_debian_ubuntu, pack]
-    if: needs.pack.outputs.should_continue == 'true'
+    if: needs.pack.outputs.should_continue == 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.head_repository.full_name == github.repository) && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-22.04
     env:
       DOCKER_USER: ${{ secrets.DOCKER_USER }}

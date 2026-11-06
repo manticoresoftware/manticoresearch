@@ -5,8 +5,40 @@ permissions as native SQL and JSON endpoints.
 ––– comment –––
 Prepare three synthetic tables; the test user can read only esauth_allowed.
 ––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE TABLE esauth_allowed(body text); CREATE TABLE esauth_private(body text); CREATE TABLE esauth_drop(body text); INSERT INTO esauth_allowed(id,body) VALUES(1,'public'); INSERT INTO esauth_private(id,body) VALUES(2,'private'); CREATE USER 'esauth_reader' IDENTIFIED BY 'readerpass123'; GRANT read ON 'esauth_allowed' TO 'esauth_reader';" >/dev/null
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE TABLE esauth_allowed(body text);"
 ––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE TABLE esauth_private(body text);"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE TABLE esauth_drop(body text);"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "INSERT INTO esauth_allowed(id,body) VALUES(1,'public');"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "INSERT INTO esauth_private(id,body) VALUES(2,'private');"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE USER 'esauth_reader' IDENTIFIED BY 'readerpass123';" >/dev/null
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON 'esauth_allowed' TO 'esauth_reader';"
+––– output –––
+––– comment –––
+Ensure that the tables actually exist before checking authorization.
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e "SELECT COUNT(*) FROM esauth_allowed;"
+––– output –––
+1
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e "SELECT COUNT(*) FROM esauth_private;"
+––– output –––
+1
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e "SELECT COUNT(*) FROM esauth_drop;"
+––– output –––
+0
 ––– comment –––
 Native JSON and Elasticsearch search agree on access control.
 ––– input –––
@@ -75,11 +107,11 @@ curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 -X DELET
 ––– output –––
 403
 ––– input –––
-if MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e "SHOW TABLES" | grep -q '^esauth_created'; then echo 'created unexpectedly'; else echo 'creation denied'; fi
+if MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e "SELECT COUNT(*) FROM esauth_created" >/dev/null 2>&1; then echo 'created unexpectedly'; else echo 'creation denied'; fi
 ––– output –––
 creation denied
 ––– input –––
-if MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e "SHOW TABLES" | grep -q '^esauth_drop'; then echo 'drop denied'; else echo 'deleted unexpectedly'; fi
+if MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e "SELECT COUNT(*) FROM esauth_drop" >/dev/null 2>&1; then echo 'drop denied'; else echo 'deleted unexpectedly'; fi
 ––– output –––
 drop denied
 ––– comment –––
@@ -103,7 +135,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -u admin:adminpass -X PUT -H 'Content-T
 ––– output –––
 200
 ––– input –––
-if MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e "SHOW TABLES" | grep -q '^esauth_created'; then echo 'created'; else echo 'missing'; fi
+if MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e "SELECT COUNT(*) FROM esauth_created" >/dev/null 2>&1; then echo 'created'; else echo 'missing'; fi
 ––– output –––
 created
 ––– input –––
@@ -113,5 +145,17 @@ curl -s -o /dev/null -w '%{http_code}\n' -u admin:adminpass -X DELETE http://127
 ––– comment –––
 Cleanup.
 ––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "DROP TABLE IF EXISTS esauth_allowed; DROP TABLE IF EXISTS esauth_private; DROP TABLE IF EXISTS esauth_drop; DROP TABLE IF EXISTS esauth_created; DROP USER 'esauth_reader';" >/dev/null
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "DROP TABLE IF EXISTS esauth_allowed;"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "DROP TABLE IF EXISTS esauth_private;"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "DROP TABLE IF EXISTS esauth_drop;"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "DROP TABLE IF EXISTS esauth_created;"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "DROP USER 'esauth_reader';"
 ––– output –––

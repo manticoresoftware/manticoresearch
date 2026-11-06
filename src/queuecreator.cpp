@@ -451,7 +451,12 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 		}
 		else if ( tGroupByAttr.m_pExpr && !tGroupByAttr.m_pExpr->IsDataPtrAttr() )
 		{
-			m_tGroupSorterSettings.m_pGrouper = CreateGrouperStringExpr ( tGroupByAttr.m_pExpr, m_tQuery.m_eCollation );
+			CSphAttrLocator tSourceLocator;
+			if ( tGroupByAttr.m_pExpr->GetBlobAttrLocator(tSourceLocator) )
+				m_tGroupSorterSettings.m_pGrouper = CreateGrouperString ( tSourceLocator, m_tQuery.m_eCollation );
+			else
+				m_tGroupSorterSettings.m_pGrouper = CreateGrouperStringExpr ( tGroupByAttr.m_pExpr, m_tQuery.m_eCollation );
+
 			bGrouperUsesAttrs = false;
 		}
 		else

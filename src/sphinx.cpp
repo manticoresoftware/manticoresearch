@@ -7992,6 +7992,18 @@ inline RowID_t CSphIndex_VLN::GetRowIDByDocinfo ( const CSphRowitem * pDocinfo )
 	return RowID_t ( ( pDocinfo - m_tAttr.GetReadPtr() ) / m_tSchema.GetCachedRowSize() );
 }
 
+static void PrefetchGroupBlobs ( const CSphMatch * pMatches, int iCount, const CSphAttrLocator & tLocator, const BYTE * pBlobPool )
+{
+	for ( int i=0; i<iCount; i++ )
+		if ( pMatches[i].m_pStatic )
+			sphPrefetchBlobRowOffset ( pMatches[i], tLocator );
+
+	for ( int i=0; i<iCount; i++ )
+		if ( pMatches[i].m_pStatic )
+			sphPrefetchBlobRow ( pMatches[i], tLocator, pBlobPool );
+}
+
+
 template<bool USE_KLIST, bool RANDOMIZE, bool USE_FACTORS, bool HAS_SORT_CALC, bool HAS_WEIGHT_FILTER, bool HAS_FILTER_CALC, bool HAS_CUTOFF>
 void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, ISphRanker * pRanker, int iTag, int iIndexWeight, int iCutoff ) const
 {
@@ -8005,6 +8017,16 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQ
 		pRanker->ExtraData ( EXTRA_SET_MATCHTAG, (void**)&iTag );
 
 	// do searching
+	CSphAttrLocator tBlobLocator;
+	bool bPrefetchBlobs = false;
+	if ( m_tBlobAttrs.GetReadPtr() )
+		for ( auto * pSorter : dSorters )
+			if ( pSorter->GetGroupbyBlobLocator(tBlobLocator) )
+			{
+				bPrefetchBlobs = true;
+				break;
+			}
+
 	CSphMatch * pMatch = pRanker->GetMatchesBuffer();
 	while (true)
 	{
@@ -8014,6 +8036,9 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQ
 			break;
 
 		SwitchProfile ( pProfile, SPH_QSTATE_SORT );
+
+		if ( bPrefetchBlobs )
+			PrefetchGroupBlobs ( pMatch, iMatches, tBlobLocator, m_tBlobAttrs.GetReadPtr() );
 
 		for ( int i=0; i<iMatches; i++ )
 		{

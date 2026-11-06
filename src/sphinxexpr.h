@@ -25,6 +25,7 @@ class ISphSchema;
 class CSphSchema;
 struct CSphString;
 struct CSphColumnInfo;
+struct CSphAttrLocator;
 
 /// known attribute types
 enum ESphAttr
@@ -162,6 +163,9 @@ public:
 
 	/// check for stringptr subtype
 	virtual bool IsDataPtrAttr () const { return false; }
+
+	/// get the locator of a directly referenced static rowwise blob attribute
+	virtual bool GetBlobAttrLocator ( CSphAttrLocator & ) const { return false; }
 
 	/// get Nth arg of an arglist
 	virtual ISphExpr * GetArg ( int ) const { return NULL; }

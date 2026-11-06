@@ -134,6 +134,20 @@ public:
 			m_pDistinctFetcher->SetBlobPool(pBlobPool);
 	}
 
+	bool GetGroupbyBlobLocator ( CSphAttrLocator & tLocator ) const final
+	{
+		if ( m_eGroupBy!=SPH_GROUPBY_ATTR || !m_pGrouper || m_pGrouper->IsMultiValue() )
+			return false;
+
+		CSphAttrLocator tSource;
+		m_pGrouper->GetLocator(tSource);
+		if ( !tSource.IsBlobAttr() || tSource.m_bDynamic )
+			return false;
+
+		tLocator = tSource;
+		return true;
+	}
+
 	void SetColumnar ( columnar::Columnar_i * pColumnar ) final
 	{
 		CSphMatchQueueTraits::SetColumnar(pColumnar);

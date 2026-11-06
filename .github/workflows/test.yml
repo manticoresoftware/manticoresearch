@@ -67,6 +67,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          persist-credentials: false
           fetch-depth: 0
           submodules: recursive
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
@@ -893,6 +894,7 @@ jobs:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v5
         with:
+          persist-credentials: false
           submodules: recursive
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Reuse cached test kit image
@@ -943,6 +945,7 @@ jobs:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v5
         with:
+          persist-credentials: false
           submodules: recursive
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Download built x86_64 Ubuntu Jammy packages
@@ -1041,6 +1044,8 @@ jobs:
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Download light image artifact
         uses: actions/download-artifact@v7
         with:
@@ -1066,6 +1071,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Delete candidate image
         env:
           GH_TOKEN: ${{ secrets.GHCR_PASSWORD || github.token }}
@@ -1081,6 +1088,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Download bundle package
         uses: manticoresoftware/download_artifact_with_retries@v5
         with:

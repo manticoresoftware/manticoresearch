@@ -82,6 +82,7 @@ jobs:
       - name: Checkout daemon repository with MCL submodule
         uses: actions/checkout@v5
         with:
+          persist-credentials: false
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
           ref: ${{ inputs.source_ref != '' && inputs.source_ref || github.sha }}
           set-safe-directory: true

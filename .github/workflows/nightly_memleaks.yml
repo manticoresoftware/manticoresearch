@@ -40,6 +40,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          persist-credentials: false
           token: ${{ secrets.GITHUB_TOKEN }}
           set-safe-directory: true
       - name: Check out cache before building

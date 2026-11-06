@@ -50,6 +50,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          persist-credentials: false
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.ref }}
       - id: build

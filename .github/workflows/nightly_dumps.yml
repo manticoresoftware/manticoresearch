@@ -37,6 +37,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: manticoresoftware/clt@0.7.9
         with:
           image: manticoresearch/dind:v1
@@ -51,6 +53,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: manticoresoftware/clt@0.7.9
         with:
           image: manticoresearch/dind:v1
@@ -65,6 +69,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: manticoresoftware/clt@0.7.9
         with:
           image: manticoresearch/dind:v1

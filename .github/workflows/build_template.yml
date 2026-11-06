@@ -122,6 +122,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          persist-credentials: false
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
           ref: ${{ inputs.ref != '' && inputs.ref || github.sha }}
           set-safe-directory: true

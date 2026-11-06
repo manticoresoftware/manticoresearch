@@ -39,6 +39,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: manticoresoftware/clt@0.7.9
         with:
           test_prefix: test/clt-tests/integrations/filebeat/test-integrations-check-filebeat-versions
@@ -54,6 +56,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: manticoresoftware/clt@0.7.9
         with:
           test_prefix: test/clt-tests/integrations/logstash/test-integrations-check-logstash-versions
@@ -69,6 +73,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: manticoresoftware/clt@0.7.9
         with:
           test_prefix: test/clt-tests/integrations/grafana/test-integrations-check-grafana-versions
@@ -87,6 +93,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: manticoresoftware/clt@0.7.9
         with:
           test_prefix: test/clt-tests/integrations/dbeaver/test-integrations-dbeaver
@@ -102,6 +110,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: manticoresoftware/clt@0.7.9
         with:
           test_prefix: test/clt-tests/integrations/filebeat/test-integrations-filebeat
@@ -117,6 +127,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: manticoresoftware/clt@0.7.9
         with:
           test_prefix: test/clt-tests/integrations/fluentbit/test-integrations-fluentbit
@@ -131,6 +143,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: manticoresoftware/clt@0.7.9
         with:
           test_prefix: test/clt-tests/integrations/grafana/test-integrations-grafana
@@ -146,6 +160,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: manticoresoftware/clt@0.7.9
         with:
           test_prefix: test/clt-tests/integrations/kafka/test-integration-
@@ -161,6 +177,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: manticoresoftware/clt@0.7.9
         with:
           test_prefix: test/clt-tests/integrations/logstash/test-integrations-logstash
@@ -176,6 +194,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: manticoresoftware/clt@0.7.9
         with:
           test_prefix: test/clt-tests/integrations/vector/test-integrations-vector
@@ -194,6 +214,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: manticoresoftware/clt@0.7.9
         with:
           test_prefix: test/clt-tests/integrations/filebeat/test-integrations-support-filebeat-versions
@@ -209,6 +231,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: manticoresoftware/clt@0.7.9
         with:
           test_prefix: test/clt-tests/integrations/logstash/test-integrations-test-logstash-versions
@@ -224,6 +248,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: manticoresoftware/clt@0.7.9
         with:
           test_prefix: test/clt-tests/integrations/grafana/test-integrations-test-grafana-versions

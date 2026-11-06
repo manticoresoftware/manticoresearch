@@ -113,6 +113,7 @@ jobs:
       - name: Checkout daemon repository with MCL submodule
         uses: actions/checkout@v5
         with:
+          persist-credentials: false
           ref: ${{ inputs.source_ref != '' && inputs.source_ref || github.sha }}
           fetch-depth: 0
           submodules: recursive

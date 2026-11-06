@@ -35,6 +35,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - run: |
           echo "# Nightly tests of latest release" >> $GITHUB_STEP_SUMMARY
           echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
@@ -144,6 +146,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: manticoresoftware/clt@0.7.9
         with:
           test_prefix: ${{ matrix.test_prefix }}
@@ -234,6 +238,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: manticoresoftware/clt@0.7.9
         with:
           test_prefix: ${{ matrix.test_prefix }}

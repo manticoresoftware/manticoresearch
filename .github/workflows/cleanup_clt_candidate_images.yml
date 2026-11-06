@@ -25,6 +25,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Delete expired temporary CLT candidate images
         env:
           # Candidate images are published with GHCR_PASSWORD when configured. Use

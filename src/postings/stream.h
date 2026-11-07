@@ -128,6 +128,14 @@ public:
 	bool				Open ( uint64_t uOffset, std::string & sError );
 	bool				Next ( uint32_t uMinRow, std::string & sError );
 	bool				ReadRows ( std::string & sError );
+	// Read the current leaf's row-container kind, count, bounds and encoded payload
+	// without expanding it into row IDs. The borrowed payload remains valid until
+	// Next/Open, including across other column reads.
+	bool				ReadRowBlock ( RowBlock_t & tBlock, std::string & sError );
+	// Decode the field-membership mask for fields 0..31 for each posting in the
+	// current leaf, in posting order. pFields must hold at least m_uCount entries.
+	// Higher field-mask words are not decoded; GetFields() is not populated.
+	bool				ReadLowFields ( uint32_t * pFields, std::string & sError );
 	bool				ReadFields ( std::string & sError );
 	bool				ReadTF ( std::string & sError );
 	bool				ReadHitRefs ( std::string & sError );
@@ -165,6 +173,8 @@ private:
 	std::unique_ptr<FieldTFCache_t>	m_pFieldTF;
 	Input_i &						m_tInput;
 	std::vector<uint8_t>			m_dReadBuffer;
+	std::vector<uint8_t>			m_dRowBuffer;
+	Bytes_t						m_tRowData;
 	TermDesc_t						m_tDesc;
 	Leaf_t							m_tLeaf;
 

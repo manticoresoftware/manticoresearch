@@ -302,6 +302,7 @@ bool Reader_c::Open ( uint64_t uOffset, std::string & sError )
 	m_bError = false;
 	m_bHaveLeaf = false;
 	m_dLoaded.fill(false);
+	m_tRowData = {};
 	m_pFieldTF.reset();
 	m_dDecodeCounts.fill(0);
 	std::array<uint8_t,TERM_HEADER_SIZE> d;
@@ -348,6 +349,7 @@ bool Reader_c::Next ( uint32_t uMinRow, std::string & sError )
 		{
 			m_bEOF = true;
 			m_dLoaded.fill(false);
+			m_tRowData = {};
 			m_pFieldTF.reset();
 			return true;
 		}
@@ -381,6 +383,7 @@ bool Reader_c::Next ( uint32_t uMinRow, std::string & sError )
 		m_uNext += t.m_uBytes;
 		m_tLeaf = t;
 		m_dLoaded.fill(false);
+		m_tRowData = {};
 		m_pFieldTF.reset();
 		if ( t.m_uLast>=uMinRow )
 			return true;
@@ -417,17 +420,42 @@ bool Reader_c::ReadColumn ( Column_e eColumn, Bytes_t & tData, std::vector<uint8
 }
 
 
+bool Reader_c::ReadRowBlock ( RowBlock_t & tBlock, std::string & sError )
+{
+	if ( !m_tRowData.m_pData && !ReadColumn ( Column_e::ROWS, m_tRowData, m_dRowBuffer, sError ) )
+		return false;
+
+	const uint8_t * p = m_tRowData.m_pData;
+	assert ( m_tRowData.m_iSize>=ROW_HEADER_SIZE );
+	assert ( Get(p+6,2)==m_tLeaf.m_uCount && Get(p+8,4)==m_tLeaf.m_uFirst && Get(p+12,4)==m_tLeaf.m_uLast );
+	tBlock = { Rows_e(p[5]), m_tLeaf.m_uCount, m_tLeaf.m_uFirst, m_tLeaf.m_uLast, { p+ROW_HEADER_SIZE, size_t(Get(p+16,4)) } };
+	assert ( tBlock.m_tPayload.m_iSize==m_tRowData.m_iSize-ROW_HEADER_SIZE );
+	return true;
+}
+
+
+bool Reader_c::ReadLowFields ( uint32_t * pFields, std::string & sError )
+{
+	Bytes_t tData;
+	if ( !ReadColumn ( Column_e::FIELDS, tData, m_dReadBuffer, sError ) )
+		return false;
+
+	++m_dDecodeCounts[size_t(Column_e::FIELDS)];
+	return Frame ( m_tDesc.m_tFields, tData, pFields, m_tLeaf.m_uCount, sError );
+}
+
+
 bool Reader_c::ReadRows ( std::string & sError )
 {
 	if ( m_dLoaded[0] )
 		return !m_bError;
 
-	Bytes_t tData;
-	if ( !ReadColumn ( Column_e::ROWS, tData, m_dReadBuffer, sError ) )
+	RowBlock_t tBlock;
+	if ( !ReadRowBlock ( tBlock, sError ) )
 		return false;
 
-	DecodeRowsInto ( m_tDesc.m_tRows, tData, m_dRows.data(), MAX_VALUES, sError );
-	assert ( Get(tData.m_pData+6,2)==m_tLeaf.m_uCount && m_dRows[0]==m_tLeaf.m_uFirst && m_dRows[m_tLeaf.m_uCount-1]==m_tLeaf.m_uLast );
+	DecodeRowsInto ( m_tDesc.m_tRows, m_tRowData, m_dRows.data(), MAX_VALUES, sError );
+	assert ( tBlock.m_uCount==m_tLeaf.m_uCount && m_dRows[0]==m_tLeaf.m_uFirst && m_dRows[m_tLeaf.m_uCount-1]==m_tLeaf.m_uLast );
 
 	m_dLoaded[0] = true;
 	++m_dDecodeCounts[0];

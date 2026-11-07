@@ -8,6 +8,7 @@
 
 #include "postings/blockqword.h"
 #include "postings/disk.h"
+#include "std/bitmap/bitmap.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -170,6 +171,129 @@ static void Test ( const char * sFile, unsigned uCount, bool bMembership, FileAc
 }
 
 
+static void TestWindows ( const char * sFile, unsigned uShape, unsigned uFieldCount, DWORD uMask, RowID_t tBase, FileAccess_e eAccess, bool bUniform=false )
+{
+	MemoryOutput_c tOutput;
+	auto pWriter = std::make_unique<postings::Writer_c>(tOutput);
+	postings::TermDesc_t tDesc;
+	tDesc.m_uFields = uint16_t(uFieldCount);
+	std::string sError;
+	Check ( pWriter->Begin ( tDesc, sError ) );
+	constexpr unsigned COUNT = 2051;
+	for ( unsigned i=0; i<COUNT; ++i )
+	{
+		postings::Posting_t t;
+		t.m_uRow = tBase+(uShape==0 ? i : uShape==1 ? i*3/2 : i*97);
+		t.m_uTF = 1;
+		t.m_uHitRef = 8+i;
+		unsigned f = bUniform ? 1 : i%uFieldCount;
+		t.m_dFields[f/32] = 1U<<(f%32);
+		t.m_dFieldTF[f] = 1;
+		Check ( pWriter->Add ( t, sError ) );
+	}
+
+	Check ( pWriter->Finish(sError) );
+	{
+		std::ofstream tFile ( sFile, std::ios::binary | std::ios::trunc );
+		tFile.write ( reinterpret_cast<const char *>(tOutput.m_dData.data()), tOutput.m_dData.size() );
+		Check ( bool(tFile) );
+	}
+
+	// Each fixture must actually exercise its intended persisted container.
+	Check ( tOutput.m_dData[postings::FILE_HEADER_SIZE+postings::TERM_HEADER_SIZE+postings::LEAF_HEADER_SIZE+5]==unsigned(uShape==0 ? postings::Rows_e::RANGE : uShape==1 ? postings::Rows_e::BITMAP : postings::Rows_e::DELTA) );
+	CSphString sReadError;
+	DataReaderFactoryPtr_c pFactory ( NewProxyReader ( sFile, sReadError, DataReaderFactory_c::DOCS, 1024, eAccess ) );
+	Check ( bool(pFactory) );
+	CountingQword_c a, b;
+	a.SetDocReader(pFactory);
+	b.SetDocReader(pFactory);
+	a.m_iDocs = b.m_iDocs = COUNT;
+	auto pNative = a.CreatePostingWindow ( uMask, {} );
+	auto pBuffered = CreateBufferedPostingWindow ( b, uMask, {} );
+	for ( unsigned mode=0; mode<3; ++mode )
+	{
+		a.SeekDocReader ( postings::FILE_HEADER_SIZE, 0 );
+		b.SeekDocReader ( postings::FILE_HEADER_SIZE, 0 );
+		pNative->Reset ( true, {} );
+		pBuffered->Reset ( true, {} );
+		RowID_t tNext = 0;
+		for ( unsigned turn=0; ; ++turn )
+		{
+			Check ( turn<10000 );
+			auto na = pNative->AdvanceTo(tNext), nb = pBuffered->AdvanceTo(tNext);
+			Check ( na.m_tNext==nb.m_tNext && !na.m_bStopped && !nb.m_bStopped );
+			if ( na.m_tNext==INVALID_ROWID )
+				break;
+
+			RowID_t tMin = na.m_tNext;
+			if ( mode==2 )
+			{
+				auto pa = pNative->Probe(tMin), pb = pBuffered->Probe(tMin);
+				Check ( pa.m_bMatch==pb.m_bMatch && pa.m_tState.m_tNext==pb.m_tState.m_tNext );
+			}
+
+			PostingWindow_t tWindow { tMin>17 ? tMin-17 : 0, tMin, std::min ( uint64_t(INVALID_ROWID)+1, uint64_t(tMin)+1+turn%4*997 ) };
+			DWORD dA[PostingWindow_t::WORDS], dB[PostingWindow_t::WORDS];
+			std::fill_n ( dA, PostingWindow_t::WORDS, mode==1 ? 0x55555555 : 0x80000001 );
+			std::copy_n ( dA, PostingWindow_t::WORDS, dB );
+			if ( mode==0 )
+			{
+				na = pNative->FillOr ( tWindow, dA );
+				nb = pBuffered->FillOr ( tWindow, dB );
+			} else if ( mode==1 )
+			{
+				na = pNative->FillAnd ( tWindow, dA );
+				nb = pBuffered->FillAnd ( tWindow, dB );
+			} else
+			{
+				RowID_t dRowsA[128], dRowsB[128];
+				int iCapacity = 1+turn%128;
+				na = pNative->ReadRows ( tWindow, dRowsA, iCapacity );
+				nb = pBuffered->ReadRows ( tWindow, dRowsB, iCapacity );
+				Check ( na.m_iRows==nb.m_iRows && std::equal ( dRowsA, dRowsA+na.m_iRows, dRowsB ) );
+			}
+
+			Check ( na.m_tNext==nb.m_tNext && na.m_iRows==nb.m_iRows && !na.m_bStopped );
+			Check ( std::equal ( dA, dA+PostingWindow_t::WORDS, dB ) );
+			if ( na.m_tNext==INVALID_ROWID )
+				break;
+
+			tNext = na.m_tNext;
+			if ( mode==2 && turn%5==0 )
+				tNext = RowID_t(std::min ( uint64_t(INVALID_ROWID), uint64_t(tNext)+113 ));
+		}
+
+		Check ( !a.GetReadError() && a.m_uCalls==0 );
+		const auto & dCounts = a.GetDecodeCounts();
+		Check ( !dCounts[2] && !dCounts[3] && !dCounts[4] );
+		if ( bUniform && uShape!=2 )
+			Check ( !dCounts[0] && dCounts[1]>0 );
+
+		if ( uFieldCount==1 && uMask==UINT32_MAX )
+			Check ( !dCounts[1] && (uShape==2 || !dCounts[0]) );
+	}
+
+	a.SeekDocReader ( postings::FILE_HEADER_SIZE, 0 );
+	int iChecks = 0;
+	PostingWindowContext_t tContext { &iChecks, [] ( void * p ) { return ++*static_cast<int *>(p)<=2; }, nullptr };
+	pNative->Reset ( true, tContext );
+	DWORD dBits[PostingWindow_t::WORDS] = {};
+	PostingWindow_t tWindow { tBase, tBase, std::min ( uint64_t(INVALID_ROWID)+1, uint64_t(tBase)+4096 ) };
+	auto tResult = pNative->FillOr ( tWindow, dBits );
+	Check ( tResult.m_bStopped || uShape==2 );
+	Check ( tResult.m_iRows==int(bitmap::Count ( dBits, PostingWindow_t::WORDS )) );
+	Check ( !tResult.m_bStopped || pNative->AdvanceTo(tBase).m_bStopped );
+	a.SeekDocReader ( postings::FILE_HEADER_SIZE, 0 );
+	iChecks = 0;
+	pNative->Reset ( true, tContext );
+	Check ( pNative->AdvanceTo(tBase+(uShape==2 ? 100000 : 1024)).m_bStopped );
+	Check ( !a.GetDecodeCounts()[0] && !a.GetDecodeCounts()[1] );
+
+	pNative->Reset ( false, {} );
+	Check ( pNative->AdvanceTo(0).m_tNext==INVALID_ROWID );
+}
+
+
 int main ( int argc, char ** argv )
 {
 	if ( argc!=2 )
@@ -179,6 +303,16 @@ int main ( int argc, char ** argv )
 		for ( bool bMembership : { false, true } )
 			for ( auto eAccess : { FileAccess_e::MMAP, FileAccess_e::FILE } )
 				Test ( argv[1], n, bMembership, eAccess );
+
+	for ( unsigned shape=0; shape<3; ++shape )
+		for ( unsigned fields : { 1u, 2u, 33u } )
+			for ( DWORD mask : { 0u, 1u, UINT32_MAX } )
+				for ( RowID_t base : { 4093u, UINT32_MAX-(shape==0 ? 2050u : shape==1 ? 3075u : 198850u)-1 } )
+					for ( auto access : { FileAccess_e::MMAP, FileAccess_e::FILE } )
+						TestWindows ( argv[1], shape, fields, mask, base, access );
+
+	for ( unsigned shape=0; shape<3; ++shape )
+		TestWindows ( argv[1], shape, 33, 2, 4093, FileAccess_e::FILE, true );
 
 	Check ( !std::remove(argv[1]) );
 	std::cout << g_uChecks << " qword batch checks passed\n";

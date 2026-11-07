@@ -68,6 +68,10 @@ def main():
             "SELECT id,weight() FROM {} WHERE MATCH('alpha beta') ORDER BY weight() DESC,id ASC LIMIT 50 OPTION ranker=proximity_bm25",
             "SELECT id FROM {} WHERE MATCH('common | rare') AND grp=3 ORDER BY id ASC LIMIT 500 OPTION ranker=none",
             "SELECT grp,count(*) FROM {} WHERE MATCH('common') GROUP BY grp ORDER BY grp ASC",
+            "SELECT count(*) FROM {} WHERE MATCH('@body (alpha | beta)')",
+            "SELECT count(*) FROM {} WHERE MATCH('@body (common alpha)') AND grp=3",
+            "SELECT id FROM {} WHERE MATCH('@body (alpha | beta)') ORDER BY id DESC LIMIT 50 OPTION ranker=none",
+            "SELECT id FROM {} WHERE MATCH('rare common') ORDER BY id ASC LIMIT 50 OPTION ranker=none",
             "SELECT count(*) FROM {} WHERE MATCH('absent')",
         ]
         if case == "wide":

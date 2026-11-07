@@ -1,4 +1,4 @@
-# Block postings (M1/M2)
+# Block postings (M1/M2/M3)
 
 Experimental opt-in format: set `postings_format = block` when building a plain
 table, or `postings_format='block'` in `CREATE TABLE`. The default is `legacy`.
@@ -20,17 +20,21 @@ layouts are experimental until publication.
 
 The shared writer serves plain indexing, RT flush, merging and offline conversion.
 The block qword adapter serves the existing document/hit consumers. Eligible
-posting-window consumers request membership only: rows and field masks are
-decoded without TF, hit-reference or position decoding. Other consumers currently
-decode TF and references with each posting leaf and seek external positions when
-needed. M3 will consume stored bitmap/run containers directly; M4 will replace
-the transitional external position varints. Native length-normalized BM25 and
+posting-window consumers select the native block cursor: bitmap words and
+consecutive ranges feed OR/intersection directly, without reconstructing rows or
+staging QwordDoc records. Sparse containers decode row IDs; restricted fields read
+only low-32-bit field masks, with a row fallback for mixed membership. All-field
+queries skip field decoding when the schema fits the requested mask. Membership
+reads no TF, hit-reference or position data. Other consumers currently decode TF
+and references with each posting leaf and seek external positions when needed.
+M4 will replace the transitional external position varints. Native length-normalized BM25 and
 WAND/BMW remain later milestones.
 
 Encoded column access borrows the immutable file mapping when available. Buffered
-readers retain one reusable byte buffer across columns/leaves. A column view is
-consumed before its backing storage changes; lazy per-field TF retains a mapping
-view or its own file buffer so later column reads cannot invalidate it. The reader
+readers reuse byte buffers across leaves. Row-container views retain their own
+buffer until the next leaf, so field reads cannot overwrite a bitmap in use.
+Other column views are consumed before their backing storage changes; lazy
+per-field TF similarly retains a mapping view or its own file buffer. The reader
 decodes into its destination arrays through the non-overlapping
 `DecodeIntegersInto`/`DecodeRowsInto` APIs; delta rows are prefix-summed in place.
 Full 128-value packing frames use the destination directly when it is 16-byte
@@ -215,9 +219,18 @@ The row container grammar still supports per-block DELTA/BITMAP/RANGE representa
 entire encoded delta frame. `InspectRows` validates before exposing a bounded
 borrowed bitmap/integer payload. The view has the lifetime of its source buffer.
 It does not allocate a row-ID array for bitmap/range input; delta validation
-does decode deltas. `DecodeRows` materializes rows for tests/adapters. Future
-native bitmap consumers must use the borrowed view rather than reconstructing
-rows. These are storage primitives, not `PostingWindow_i` integration (M3).
+does decode deltas. `DecodeRows` materializes rows for document consumers.
+`Reader_c::ReadRowBlock` exposes trusted persisted containers to the native
+`BlockPostingWindow_c`; structural checks remain assertions/checker work.
+
+The native cursor implements the same forward-only `PostingWindow_i` contract as
+the legacy buffered cursor. OR/adaptive AND and their document adapter select it
+through the qword factory. `AdvanceTo`, `Probe`, `FillOr`, `FillAnd` and bounded
+`ReadRows` share retained lookahead. Intersections use the shared bitmap API;
+field rejection, clipped windows and interrupted output retain the existing
+semantics. Continuation checks run at entry and before each leaf refill/skip.
+Dead-row masks and attribute filters remain in the consuming search/ranker path.
+Expanded-term wrappers and unsupported query shapes retain their existing path.
 
 There are no checksums in the block postings format. Structurally and semantically
 valid payload changes are not detectable by the checker.

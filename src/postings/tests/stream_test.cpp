@@ -103,10 +103,17 @@ static void Test ( unsigned n, unsigned uFields, Codec_e eCodec, bool bPositions
 		if ( tReader.IsEOF() )
 			break;
 
+		RowBlock_t tBlock;
+		Check ( tReader.ReadRowBlock ( tBlock, sError ) );
+		std::vector<uint8_t> dPayload ( tBlock.m_tPayload.m_pData, tBlock.m_tPayload.m_pData+tBlock.m_tPayload.m_iSize );
+		alignas(16) std::array<uint32_t,MAX_VALUES> dLowFields;
+		Check ( tReader.ReadLowFields ( dLowFields.data(), sError ) );
+		Check ( std::equal ( dPayload.begin(), dPayload.end(), tBlock.m_tPayload.m_pData ) );
 		Check ( tReader.ReadRows(sError) && tReader.ReadFields(sError) );
 		Check ( tReader.GetDecodeCounts()[2]==0 && tReader.GetDecodeCounts()[3]==0 && tReader.GetDecodeCounts()[4]==0 );
 		for ( unsigned i=0; i<tReader.GetLeaf().m_uCount; ++i, ++iRow )
 		{
+			Check ( dLowFields[i]==dExpected[iRow].m_dFields[0] );
 			Check ( tReader.GetRows()[i]==dExpected[iRow].m_uRow );
 			Check ( tReader.GetFields()[i]==dExpected[iRow].m_dFields );
 		}

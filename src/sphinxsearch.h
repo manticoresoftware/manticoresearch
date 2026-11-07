@@ -15,6 +15,7 @@
 
 #include "sphinxquery/sphinxquery.h"
 #include "sphinxint.h"
+#include "postingwindow.h"
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -114,6 +115,7 @@ public:
 	virtual void				SeekHitlist ( SphOffset_t uOff ) = 0;
 	virtual Hitpos_t			GetNextHit () = 0;
 	virtual void				SetMembershipOnly() {}
+	virtual std::unique_ptr<PostingWindow_i> CreatePostingWindow ( DWORD uFields, const PostingWindowContext_t & tContext );
 	virtual bool				WantHitPrefetch() { return false; }
 	virtual void				PrefetchHits ( const SphOffset_t * pOffsets, const DWORD * pHits, int iCount ) {}
 	virtual void				CollectHitMask ();

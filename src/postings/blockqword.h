@@ -33,7 +33,12 @@ public:
 	void				SetMembershipOnly() override	{ m_bMembership = true; }
 	const char *		GetReadError() const override	{ return m_sError.empty() ? nullptr : m_sError.c_str(); }
 
+	const std::array<uint64_t,postings::COLUMNS> & GetDecodeCounts() const { return m_tReader.GetDecodeCounts(); }
+
+	std::unique_ptr<PostingWindow_i> CreatePostingWindow ( DWORD uFields, const PostingWindowContext_t & tContext ) override;
+
 private:
+	friend class BlockPostingWindow_c;
 	uint64_t		GetSize() const final		{ return m_iDocFileSize; }
 	const uint8_t *	GetMappedData() const final	{ return m_pDocMap; }
 	void			OnDocReaderChanged() final;

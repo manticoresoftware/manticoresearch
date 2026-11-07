@@ -1189,7 +1189,7 @@ public:
 					return;
 				}
 
-			tTerm.m_pCursor = CreateBufferedPostingWindow ( *tTerm.m_pWord, dLeaves[i].m_uFields, CursorContext() );
+			tTerm.m_pCursor = tTerm.m_pWord->CreatePostingWindow ( dLeaves[i].m_uFields, CursorContext() );
 		}
 
 		if constexpr ( IS_AND )

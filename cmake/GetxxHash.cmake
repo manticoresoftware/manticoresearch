@@ -9,6 +9,20 @@ set ( XXH_BUNDLE "${LIBS_BUNDLE}/xxHash-${XXH_REV}.zip" )
 
 include ( update_bundle )
 
+# try system xxhash via pkg-config first
+find_package ( PkgConfig QUIET )
+if (PkgConfig_FOUND)
+	pkg_check_modules ( XXHASH_PKG QUIET libxxhash )
+	if (XXHASH_PKG_FOUND)
+		add_library ( xxHash::xxhash INTERFACE IMPORTED )
+		set_target_properties ( xxHash::xxhash PROPERTIES
+			INTERFACE_INCLUDE_DIRECTORIES "${XXHASH_PKG_INCLUDE_DIRS}"
+			INTERFACE_LINK_LIBRARIES "${XXHASH_PKG_LINK_LIBRARIES}"
+		)
+		return_if_target_found ( xxHash::xxhash "found via pkg-config (no need to build)" )
+	endif()
+endif()
+
 # determine destination folder where we expect pre-built xxhash
 find_package ( xxHash QUIET CONFIG )
 return_if_target_found ( xxHash::xxhash "found ready (no need to build)" )

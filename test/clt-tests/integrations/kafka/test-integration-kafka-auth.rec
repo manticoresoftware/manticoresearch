@@ -45,6 +45,18 @@ Start authenticated searchd and wait for Buddy
 docker exec manticore bash -lc "rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --logdebugvv > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi"
 ––– output –––
 Buddy started!
+––– comment –––
+Wait for Buddy's HTTP endpoint, not just searchd's listener or startup log.
+––– input –––
+docker exec manticore bash -lc 'for n in $(seq 1 150); do buddy_url=$(grep -F "[BUDDY] started " /var/log/manticore/searchd.log 2>/dev/null | tail -1 | awk "{print \$NF}"); if [ -n "$buddy_url" ] && curl -fsS --max-time 1 "$buddy_url/config" >/dev/null 2>&1; then echo "Buddy HTTP ready"; exit 0; fi; sleep 0.2; done; echo "Buddy HTTP unavailable" >&2; exit 1'
+––– output –––
+Buddy HTTP ready
+––– comment –––
+Check the first Queue query explicitly; a PHP 8.5 parser regression must still fail this test.
+––– input –––
+docker exec manticore bash -lc 'MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "SHOW SOURCES" >/dev/null'; echo $?
+––– output –––
+0
 ––– block: ../../base/start-kafka-kraft –––
 ––– input –––
 docker exec kafka /opt/kafka/bin/kafka-topics.sh --create --topic my-data --partitions 4 --bootstrap-server localhost:9092 2>&1 | grep -o 'Created topic my-data\.' | head -n 1

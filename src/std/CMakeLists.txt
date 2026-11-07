@@ -133,3 +133,5 @@ add_library ( manticore_std OBJECT
 		)
 target_include_directories( manticore_std PRIVATE "${MANTICORE_SOURCE_DIR}/src" )
 target_link_libraries ( manticore_std PRIVATE lextra )
+add_subdirectory ( bitmap )
+target_link_libraries ( manticore_std PUBLIC manticore_bitmap )

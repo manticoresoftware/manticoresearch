@@ -56,6 +56,9 @@ public:
 	/// set blob pool pointer (for string+groupby sorters)
 	virtual void		SetBlobPool ( const BYTE * ) {}
 
+	/// get a static blob locator read by the grouper
+	virtual bool		GetGroupbyBlobLocator ( CSphAttrLocator & ) const { return false; }
+
 	/// set columnar (to work with columnar attributes)
 	virtual void		SetColumnar ( columnar::Columnar_i * pColumnar ) = 0;
 

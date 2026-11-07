@@ -82,7 +82,7 @@ ready
 sql "SELECT COUNT(*) FROM t4 WHERE x=5 AND y NOT BETWEEN 100 AND 200 AND z>=0 OPTION threads=1; SHOW META LIKE 'index';" | tr '\t' ' '
 ––– output –––
 99
-index x:SecondaryIndex (100%), z:ColumnarScan (100%)
+index x:SecondaryIndex (100%)
 ––– input –––
 sql "SELECT id FROM t4 WHERE x=5 AND y NOT BETWEEN 100 AND 200 AND z>=0 ORDER BY id ASC LIMIT 3 OPTION threads=1 /*+ SecondaryIndex(x) ColumnarScan(y,z) */;" | paste -sd' ' -
 ––– output –––
@@ -91,7 +91,7 @@ sql "SELECT id FROM t4 WHERE x=5 AND y NOT BETWEEN 100 AND 200 AND z>=0 ORDER BY
 sql "SELECT COUNT(*) FROM t4 WHERE x=5 AND z>=0 OPTION threads=1; SHOW META LIKE 'index';" | tr '\t' ' '
 ––– output –––
 100
-index x:SecondaryIndex (100%), z:ColumnarScan (100%)
+index x:SecondaryIndex (100%)
 ––– input –––
 sql "DROP TABLE t4;"
 ––– output –––

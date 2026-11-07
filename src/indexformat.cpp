@@ -11,6 +11,7 @@
 //
 
 #include "indexformat.h"
+#include "diskqword.h"
 
 #if WITH_RE2
 #include <string>
@@ -51,6 +52,7 @@ void DiskIndexQwordTraits_c::SetDocReader ( DataReaderFactory_c * pReader )
 		return;
 
 	m_rdDoclist = pReader->MakeReader ( m_pDocsBuf, MINIBUFFER_LEN );
+	OnDocReaderChanged();
 }
 
 
@@ -60,6 +62,8 @@ void DiskIndexQwordTraits_c::SetHitReader ( DataReaderFactory_c * pReader )
 		return;
 
 	m_rdHitlist = pReader->MakeReader ( m_pHitsBuf, MINIBUFFER_LEN );
+	m_pHitFactory = pReader;
+	OnHitReaderChanged();
 }
 
 
@@ -136,23 +140,6 @@ struct DiskExpandedPayload_t
 	int			m_iHits;
 	uint64_t	m_uDoclistOff;
 	int			m_iDoclistHint;
-};
-
-
-struct Slice64_t
-{
-	uint64_t	m_uOff;
-	int			m_iLen;
-};
-
-
-struct DiskSubstringPayload_t : public ISphSubstringPayload
-{
-	explicit DiskSubstringPayload_t ( int iDoclists )
-		: m_dDoclist ( iDoclists )
-	{}
-
-	CSphFixedVector<Slice64_t>	m_dDoclist;
 };
 
 

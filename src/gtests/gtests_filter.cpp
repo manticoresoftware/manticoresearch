@@ -14,6 +14,11 @@
 
 #include "sphinxfilter.h"
 #include "conversion.h"
+#include "secondaryindex.h"
+#include "secondarylib.h"
+#include "histogram.h"
+
+#include <filesystem>
 
 class filter_block_level : public ::testing::Test
 {
@@ -584,4 +589,157 @@ TEST_F ( filter_block_level, and )
 	*dMin.Begin() = 1;
 	*dMax.Begin() = 30;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
+}
+
+
+TEST ( FilterCoverage, IntegerBounds )
+{
+	for ( auto eType : { SPH_ATTR_INTEGER, SPH_ATTR_TIMESTAMP, SPH_ATTR_BOOL, SPH_ATTR_BIGINT, SPH_ATTR_TOKENCOUNT } )
+	{
+		CSphSchema tSchema;
+		tSchema.AddAttr ( CSphColumnInfo ( "value", eType ), false );
+		const auto & tLoc = tSchema.GetAttr(0).m_tLocator;
+		CSphFixedVector<DWORD> dMin ( tSchema.GetRowSize() ), dMax ( tSchema.GetRowSize() );
+		dMin.Fill(0);
+		dMax.Fill(0);
+		SphAttr_t iMin = eType==SPH_ATTR_BOOL ? 0 : 10;
+		SphAttr_t iMax = eType==SPH_ATTR_BOOL ? 1 : 30;
+		sphSetRowAttr ( dMin.Begin(), tLoc, iMin );
+		sphSetRowAttr ( dMax.Begin(), tLoc, iMax );
+		CreateFilterContext_t tCtx;
+		tCtx.m_pIndexSchema = tCtx.m_pMatchSchema = &tSchema;
+		tCtx.m_iTotalDocs = 2;
+		CSphFilterSettings tFilter;
+		tFilter.m_sAttrName = "value";
+		tFilter.m_eType = SPH_FILTER_RANGE;
+		tFilter.m_iMinValue = iMin;
+		tFilter.m_iMaxValue = iMax;
+		EXPECT_TRUE ( FilterCoversIndex ( tFilter, tCtx, dMin.Begin(), dMax.Begin() ) );
+		tFilter.m_bHasEqualMin = false;
+		EXPECT_FALSE ( FilterCoversIndex ( tFilter, tCtx, dMin.Begin(), dMax.Begin() ) );
+		tFilter.m_bOpenLeft = true;
+		EXPECT_TRUE ( FilterCoversIndex ( tFilter, tCtx, dMin.Begin(), dMax.Begin() ) );
+		tFilter.m_bHasEqualMax = false;
+		EXPECT_FALSE ( FilterCoversIndex ( tFilter, tCtx, dMin.Begin(), dMax.Begin() ) );
+		tFilter.m_bOpenLeft = false;
+		tFilter.m_bOpenRight = true;
+		tFilter.m_bHasEqualMin = true;
+		EXPECT_TRUE ( FilterCoversIndex ( tFilter, tCtx, dMin.Begin(), dMax.Begin() ) );
+		tFilter.m_bExclude = true;
+		EXPECT_FALSE ( FilterCoversIndex ( tFilter, tCtx, dMin.Begin(), dMax.Begin() ) );
+		tFilter.m_bExclude = false;
+		EXPECT_FALSE ( FilterCoversIndex ( tFilter, tCtx, nullptr, nullptr ) );
+		tCtx.m_iTotalDocs = 0;
+		EXPECT_FALSE ( FilterCoversIndex ( tFilter, tCtx, dMin.Begin(), dMax.Begin() ) );
+	}
+}
+
+
+TEST ( FilterCoverage, SignedLimitsAndFallbacks )
+{
+	CSphSchema tSchema;
+	tSchema.AddAttr ( CSphColumnInfo ( "value", SPH_ATTR_BIGINT ), false );
+	const auto & tLoc = tSchema.GetAttr(0).m_tLocator;
+	DWORD dMin[2] = {}, dMax[2] = {};
+	sphSetRowAttr ( dMin, tLoc, INT64_MIN );
+	sphSetRowAttr ( dMax, tLoc, INT64_MAX );
+	CreateFilterContext_t tCtx;
+	tCtx.m_pIndexSchema = tCtx.m_pMatchSchema = &tSchema;
+	tCtx.m_iTotalDocs = 2;
+	CSphFilterSettings tFilter;
+	tFilter.m_sAttrName = "value";
+	tFilter.m_eType = SPH_FILTER_RANGE;
+	tFilter.m_iMinValue = INT64_MIN;
+	tFilter.m_iMaxValue = INT64_MAX;
+	EXPECT_TRUE ( FilterCoversIndex ( tFilter, tCtx, dMin, dMax ) );
+	tFilter.m_iMaxValue--;
+	EXPECT_FALSE ( FilterCoversIndex ( tFilter, tCtx, dMin, dMax ) );
+	sphSetRowAttr ( dMin, tLoc, -7 );
+	sphSetRowAttr ( dMax, tLoc, -7 );
+	tFilter.m_iMinValue = tFilter.m_iMaxValue = -7;
+	EXPECT_TRUE ( FilterCoversIndex ( tFilter, tCtx, dMin, dMax ) );
+	tFilter.m_iMinValue = 0;
+	tFilter.m_iMaxValue = 10;
+	EXPECT_FALSE ( FilterCoversIndex ( tFilter, tCtx, dMin, dMax ) );
+	tFilter.m_iMinValue = -10;
+	EXPECT_TRUE ( FilterCoversIndex ( tFilter, tCtx, dMin, dMax ) );
+
+	CSphSchema tDynamic;
+	tDynamic.AddAttr ( CSphColumnInfo ( "value", SPH_ATTR_BIGINT ), true );
+	tCtx.m_pMatchSchema = &tDynamic;
+	EXPECT_FALSE ( FilterCoversIndex ( tFilter, tCtx, dMin, dMax ) );
+	tCtx.m_pMatchSchema = &tSchema;
+	tFilter.m_eMvaFunc = SPH_MVAFUNC_ANY;
+	EXPECT_FALSE ( FilterCoversIndex ( tFilter, tCtx, dMin, dMax ) );
+	tFilter.m_eMvaFunc = SPH_MVAFUNC_NONE;
+	tFilter.m_eType = SPH_FILTER_VALUES;
+	EXPECT_FALSE ( FilterCoversIndex ( tFilter, tCtx, dMin, dMax ) );
+	tFilter.m_eType = SPH_FILTER_RANGE;
+	tFilter.m_sAttrName = "missing";
+	EXPECT_FALSE ( FilterCoversIndex ( tFilter, tCtx, dMin, dMax ) );
+}
+
+
+TEST ( FilterCoverage, MixedInclusiveBlockBoundaries )
+{
+	// Data touches the inclusive lower endpoint of [60,100).
+	EXPECT_TRUE ( ( EvalBlockRangeAny<true,false> ( 50, 60, 60, 100 ) ) );
+	EXPECT_FALSE ( ( EvalBlockRangeAny<true,false> ( 100, 110, 60, 100 ) ) );
+	// Data touches the inclusive upper endpoint of (10,20].
+	EXPECT_TRUE ( ( EvalBlockRangeAny<false,true> ( 20, 30, 10, 20 ) ) );
+	EXPECT_FALSE ( ( EvalBlockRangeAny<false,true> ( 0, 10, 10, 20 ) ) );
+}
+
+
+TEST ( FilterCoverage, ExactSecondaryCount )
+{
+	CSphString sError;
+	if ( !IsSecondaryLibLoaded() )
+		ASSERT_TRUE ( InitSecondary(sError) ) << sError.cstr();
+
+	if ( !IsSecondaryLibLoaded() )
+		GTEST_SKIP() << "Secondary library unavailable";
+
+	auto tPath = std::filesystem::temp_directory_path() / ( "coverage-si-" + std::to_string(sphMicroTimer()) + ".spidx" );
+	CSphString sFile = tPath.string().c_str();
+	auto tCleanup = AtScopeExit ( [&tPath]() { std::filesystem::remove(tPath); } );
+	common::Schema_t tSISchema = { { "value", common::AttrType_e::INT64 } };
+	auto pBuilder = CreateSecondaryIndexBuilder ( tSISchema, 16*1024*1024, sFile, 65536, sError );
+	ASSERT_TRUE(pBuilder) << sError.cstr();
+	pBuilder->SetRowID(0);
+	pBuilder->SetAttr ( 0, int64_t(0) );
+	pBuilder->SetRowID(1);
+	pBuilder->SetAttr ( 0, int64_t(50) );
+	std::string sBuilderError;
+	ASSERT_TRUE ( pBuilder->Done(sBuilderError) ) << sBuilderError;
+	pBuilder.reset();
+	SIContainer_c tSI;
+	ASSERT_TRUE ( tSI.Load ( sFile, false, sError ) ) << sError.cstr();
+	CSphSchema tSchema;
+	tSchema.AddAttr ( CSphColumnInfo ( "value", SPH_ATTR_BIGINT ), false );
+	HistogramContainer_c tHistograms;
+	auto pHistogram = CreateHistogram ( "value", SPH_ATTR_BIGINT );
+	// Deliberately misleading statistics: both values estimated inside [-1,1].
+	pHistogram->Insert(0);
+	pHistogram->Insert(0);
+	pHistogram->Finalize();
+	tHistograms.Add ( std::move(pHistogram) );
+	CreateFilterContext_t tCtx;
+	tCtx.m_pIndexSchema = tCtx.m_pMatchSchema = &tSchema;
+	tCtx.m_pSI = &tSI;
+	tCtx.m_pHistograms = &tHistograms;
+	tCtx.m_iTotalDocs = 2; // physical rows, including any killed row
+	CSphFilterSettings tFilter;
+	tFilter.m_sAttrName = "value";
+	tFilter.m_eType = SPH_FILTER_RANGE;
+	tFilter.m_iMinValue = -1;
+	tFilter.m_iMaxValue = 1;
+	HistogramRset_t tEstimate;
+	ASSERT_TRUE ( tHistograms.Get("value")->EstimateRsetSize ( tFilter, tEstimate ) );
+	ASSERT_EQ ( tEstimate.m_iTotal, 2 );
+	EXPECT_FALSE ( FilterCoversIndex ( tFilter, tCtx, nullptr, nullptr ) );
+	tFilter.m_iMaxValue = 50;
+	EXPECT_TRUE ( FilterCoversIndex ( tFilter, tCtx, nullptr, nullptr ) );
+	tSI.ColumnUpdated("value");
+	EXPECT_FALSE ( FilterCoversIndex ( tFilter, tCtx, nullptr, nullptr ) );
 }

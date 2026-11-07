@@ -15868,8 +15868,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 	FileAccessSettings_t & tDefaultFA = MutableIndexSettings_c::GetDefaults().m_tFileAccess;
 	tDefaultFA.m_iReadBufferDocList = hSearchd.GetSize ( "read_buffer_docs", iReadBuffer );
 	tDefaultFA.m_iReadBufferHitList = hSearchd.GetSize ( "read_buffer_hits", iReadBuffer );
-	tDefaultFA.m_eDoclist = GetFileAccess( hSearchd, "access_doclists", true, FileAccess_e::FILE );
-	tDefaultFA.m_eHitlist = GetFileAccess( hSearchd, "access_hitlists", true, FileAccess_e::FILE );
+	tDefaultFA.m_eDoclist = GetFileAccess( hSearchd, "access_doclists", true, tDefaultFA.m_eDoclist );
+	tDefaultFA.m_eHitlist = GetFileAccess( hSearchd, "access_hitlists", true, tDefaultFA.m_eHitlist );
 	tDefaultFA.m_eDict = GetFileAccess( hSearchd, "access_dict", false, tDefaultFA.m_eDict );
 
 	tDefaultFA.m_eAttr = FileAccess_e::MMAP_PREREAD;

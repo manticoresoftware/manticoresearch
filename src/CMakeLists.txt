@@ -73,7 +73,7 @@ add_library ( lmanticore STATIC sphinx.cpp sphinxutils.cpp
 		attr_embedding.cpp embeddingutils.cpp hybridexecutor.cpp
 		sortergroup.cpp sortertraits.cpp sorterprecalc.cpp querycontext.cpp skip_cache.cpp jsonsi.cpp sorterscroll.cpp )
 
-# Avoid JCC boundary penalties in the ranking loops without changing the required ISA.
+# Avoid JCC boundary penalties in ranking and posting loops without changing the required ISA.
 if ( CMAKE_CXX_COMPILER_ID MATCHES "Clang" )
 	include ( CheckCXXSourceCompiles )
 	include ( CheckCXXCompilerFlag )
@@ -90,7 +90,7 @@ int main() { return 0; }" SEARCH_TARGET_X86 )
 
 		check_cxx_compiler_flag ( "${SEARCH_BRANCH_ALIGNMENT_FLAG}" SEARCH_HAVE_BRANCH_ALIGNMENT )
 		if ( SEARCH_HAVE_BRANCH_ALIGNMENT )
-			set_property ( SOURCE sphinxsearch.cpp APPEND PROPERTY COMPILE_OPTIONS "${SEARCH_BRANCH_ALIGNMENT_FLAG}" )
+			set_property ( SOURCE sphinxsearch.cpp diskqword.cpp postingwindow.cpp postings/blockwindow.cpp APPEND PROPERTY COMPILE_OPTIONS "${SEARCH_BRANCH_ALIGNMENT_FLAG}" )
 		endif ()
 		unset ( SEARCH_BRANCH_ALIGNMENT_FLAG )
 	endif ()

@@ -226,9 +226,13 @@ does decode deltas. `DecodeRows` materializes rows for document consumers.
 The native cursor implements the same forward-only `PostingWindow_i` contract as
 the legacy buffered cursor. OR/adaptive AND and their document adapter select it
 through the qword factory. `AdvanceTo`, `Probe`, `FillOr`, `FillAnd` and bounded
-`ReadRows` share retained lookahead. Intersections use the shared bitmap API;
-field rejection, clipped windows and interrupted output retain the existing
-semantics. Continuation checks run at entry and before each leaf refill/skip.
+`ReadRows` share retained lookahead. Intersections update only each leaf's covered
+interval, clearing gaps and the unmatched suffix. Ranges preserve candidates
+inside their span; bitmaps and decoded rows intersect one destination word at a
+time, without a window-sized scratch bitmap. A final shared bitmap count returns
+the survivor count. Field rejection, clipped windows and interrupted output
+retain the existing semantics, including clearing an unprocessed suffix on stop.
+Continuation checks run at entry and before each leaf refill/skip.
 Dead-row masks and attribute filters remain in the consuming search/ranker path.
 Expanded-term wrappers and unsupported query shapes retain their existing path.
 

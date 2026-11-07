@@ -30,6 +30,7 @@ private:
 	bool					Matches() const;
 	DWORD					BitmapWord ( unsigned uBit ) const;
 	int					FillDense ( const PostingWindow_t & tWindow, DWORD * pBits, uint64_t uEnd );
+	void					IntersectLeaf ( const PostingWindow_t & tWindow, DWORD * pBits, uint64_t uEnd );
 	PostingWindowResult_t	Result ( int iRows=0 ) const;
 
 	BlockIndexQword_c &		m_tWord;
@@ -338,14 +339,79 @@ PostingWindowResult_t BlockPostingWindow_c::FillOr ( const PostingWindow_t & tWi
 }
 
 
+static void ClearWindowBits ( DWORD * pBits, unsigned uBegin, unsigned uEnd )
+{
+	if ( uBegin>=uEnd )
+		return;
+
+	unsigned iFirst = uBegin/32;
+	unsigned iLast = (uEnd-1)/32;
+	DWORD uFirst = UINT32_MAX<<(uBegin%32);
+	DWORD uLast = UINT32_MAX>>(31-(uEnd-1)%32);
+	if ( iFirst==iLast )
+		pBits[iFirst] &= ~(uFirst & uLast);
+	else
+	{
+		pBits[iFirst] &= ~uFirst;
+		std::fill ( pBits+iFirst+1, pBits+iLast, 0 );
+		pBits[iLast] &= ~uLast;
+	}
+}
+
+
+// Intersect only this leaf's covered interval; adjacent leaves can share a word.
+void BlockPostingWindow_c::IntersectLeaf ( const PostingWindow_t & tWindow, DWORD * pBits, uint64_t uEnd )
+{
+	m_uMin = uEnd;
+	if ( m_bDirect && m_tBlock.m_eKind==postings::Rows_e::RANGE )
+		return;
+
+	const auto & dRows = m_tReader.GetRows();
+	uint64_t uRow = m_tNext;
+	while ( uRow<uEnd )
+	{
+		unsigned uOffset = unsigned(uRow-tWindow.m_tBase);
+		unsigned uShift = uOffset%32;
+		unsigned uCount = unsigned(std::min ( uEnd-uRow, uint64_t(32-uShift) ));
+		DWORD uMask = (UINT32_MAX>>(32-uCount))<<uShift;
+		DWORD uBits = 0;
+		if ( m_bDirect )
+			uBits = (BitmapWord(unsigned(uRow-m_tBlock.m_uFirst))<<uShift) & uMask;
+		else
+		{
+			while ( m_iPos<m_tBlock.m_uCount && dRows[m_iPos]<uRow+uCount )
+			{
+				if ( Matches() )
+					uBits |= DWORD(1)<<((dRows[m_iPos]-tWindow.m_tBase)%32);
+
+				++m_iPos;
+			}
+		}
+
+		pBits[uOffset/32] &= ~uMask | uBits;
+		uRow += uCount;
+	}
+}
+
+
 PostingWindowResult_t BlockPostingWindow_c::FillAnd ( const PostingWindow_t & tWindow, DWORD * pBits )
 {
-	DWORD dScratch[PostingWindow_t::WORDS] = {};
-	auto tResult = FillOr ( tWindow, dScratch );
-	size_t iWords = size_t((tWindow.m_uEnd-tWindow.m_tBase+31)/32);
-	bitmap::And ( pBits, pBits, dScratch, iWords );
-	tResult.m_iRows = int(bitmap::Count ( pBits, iWords ));
-	return tResult;
+	assert ( tWindow.m_tBase<=tWindow.m_tMin && tWindow.m_tMin<=tWindow.m_uEnd && tWindow.m_uEnd<=uint64_t(tWindow.m_tBase)+PostingWindow_t::ROWS );
+	unsigned uProcessed = 0;
+	unsigned iWords = unsigned((tWindow.m_uEnd-tWindow.m_tBase+31)/32);
+	uint64_t uEnd = std::min ( tWindow.m_uEnd, uint64_t(INVALID_ROWID) );
+	if ( CheckContinue() )
+		while ( EnsureCandidate(tWindow.m_tMin) && m_tNext<uEnd )
+		{
+			ClearWindowBits ( pBits, uProcessed, m_tNext-tWindow.m_tBase );
+			uint64_t uLeafEnd = std::min ( uEnd, uint64_t(m_tBlock.m_uLast)+1 );
+			IntersectLeaf ( tWindow, pBits, uLeafEnd );
+			uProcessed = unsigned(uLeafEnd-tWindow.m_tBase);
+		}
+
+	// Unvisited rows cannot survive, including when a refill was interrupted.
+	ClearWindowBits ( pBits, uProcessed, iWords*32 );
+	return Result(int(bitmap::Count ( pBits, iWords )));
 }
 
 

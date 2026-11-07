@@ -273,6 +273,43 @@ static void TestWindows ( const char * sFile, unsigned uShape, unsigned uFieldCo
 			Check ( !dCounts[1] && (uShape==2 || !dCounts[0]) );
 	}
 
+	// Compare fused AND with the former FillOr+AND implementation using identical
+	// native cursors and continuation budgets, including partially consumed leaves.
+	pBuffered.reset();
+	auto pReference = b.CreatePostingWindow ( uMask, {} );
+	for ( unsigned iTry=0; iTry<32; ++iTry )
+	{
+		struct Continue_t { int m_iCalls = 0; int m_iLimit; };
+		Continue_t tA { 0, int(iTry%8)-1 }, tB { 0, int(iTry%8)-1 };
+		auto fnContinue = [] ( void * p ) { auto & t = *static_cast<Continue_t *>(p); return t.m_iLimit<0 || ++t.m_iCalls<=t.m_iLimit; };
+		a.SeekDocReader ( postings::FILE_HEADER_SIZE, 0 );
+		b.SeekDocReader ( postings::FILE_HEADER_SIZE, 0 );
+		pNative->Reset ( true, { &tA, fnContinue, nullptr } );
+		pReference->Reset ( true, { &tB, fnContinue, nullptr } );
+		RowID_t tMin = tBase+(iTry/8)*17;
+		PostingWindow_t tRange { tBase-7, tMin, std::min ( uint64_t(INVALID_ROWID)+1, uint64_t(tBase)+4077 ) };
+		DWORD dA[PostingWindow_t::WORDS], dB[PostingWindow_t::WORDS], dScratch[PostingWindow_t::WORDS] = {};
+		for ( unsigned i=0; i<PostingWindow_t::WORDS; ++i )
+			dA[i] = dB[i] = iTry/8==0 ? 0 : iTry/8==1 ? UINT32_MAX : (i*1664525U+1013904223U) ^ (iTry*2654435761U);
+
+		auto na = pNative->FillAnd ( tRange, dA );
+		auto nb = pReference->FillOr ( tRange, dScratch );
+		size_t iWords = size_t((tRange.m_uEnd-tRange.m_tBase+31)/32);
+		bitmap::And ( dB, dB, dScratch, iWords );
+		Check ( na.m_iRows==int(bitmap::Count ( dB, iWords )) );
+		Check ( na.m_bStopped==nb.m_bStopped && na.m_tNext==nb.m_tNext );
+		Check ( std::equal ( dA, dA+PostingWindow_t::WORDS, dB ) );
+		Check ( tA.m_iCalls==tB.m_iCalls );
+		if ( !na.m_bStopped )
+		{
+			RowID_t dRowsA[128], dRowsB[128];
+			na = pNative->ReadRows ( tRange, dRowsA, 128 );
+			nb = pReference->ReadRows ( tRange, dRowsB, 128 );
+			Check ( na.m_iRows==nb.m_iRows && na.m_tNext==nb.m_tNext );
+			Check ( std::equal ( dRowsA, dRowsA+na.m_iRows, dRowsB ) );
+		}
+	}
+
 	a.SeekDocReader ( postings::FILE_HEADER_SIZE, 0 );
 	int iChecks = 0;
 	PostingWindowContext_t tContext { &iChecks, [] ( void * p ) { return ++*static_cast<int *>(p)<=2; }, nullptr };

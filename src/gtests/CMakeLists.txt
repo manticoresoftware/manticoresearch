@@ -23,6 +23,7 @@ set ( GTESTS_SRC
 		gtests_strfmt.cpp
 		gtests_pqstuff.cpp
 		gtests_json.cpp
+		gtests_docstore_readers.cpp
 		gtests_threadstuff.cpp
 		gtests_wsrep.cpp
 		gtests_uklemmatizer.cpp )

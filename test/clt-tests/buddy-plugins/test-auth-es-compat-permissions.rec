@@ -28,15 +28,15 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON 'esauth_allowed' 
 ––– comment –––
 Ensure that the tables actually exist before checking authorization.
 ––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e "SELECT COUNT(*) FROM esauth_allowed;"
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -B -e "SELECT COUNT(*) FROM esauth_allowed;"
 ––– output –––
 1
 ––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e "SELECT COUNT(*) FROM esauth_private;"
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -B -e "SELECT COUNT(*) FROM esauth_private;"
 ––– output –––
 1
 ––– input –––
-MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -e "SELECT COUNT(*) FROM esauth_drop;"
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -N -B -e "SELECT COUNT(*) FROM esauth_drop;"
 ––– output –––
 0
 ––– comment –––

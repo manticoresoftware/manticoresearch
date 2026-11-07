@@ -1481,11 +1481,33 @@ struct CrashQuery_t
 
 };
 
-// get ref to crash info saved thread-locally (beware: it will became invalid after switching context!)
-// use manual get/set, or CrashQueryKeeper_c around context switching (like: throttle, coro event) to survive.
+// Return the crash context bound to the current coroutine (or plain thread).
 CrashQuery_t & GlobalCrashQueryGetRef ();
 
-// RAII keeps copy of TLS crash query (just define this guard to pass context switch)
+// Return empty context if this thread has no crash TLS.
+CrashQuery_t GlobalCrashQuerySnapshot () noexcept;
+
+// Bind a coroutine's context during resume; return the previous TLS pointer.
+CrashQuery_t * GlobalCrashQuerySwap ( CrashQuery_t * pQuery ) noexcept;
+
+// Isolate a request context, restoring the parent on exit.
+class CrashQueryScope_c : public ISphNoncopyable, public ISphNonmovable
+{
+	const CrashQuery_t m_tPrevious;
+
+public:
+	CrashQueryScope_c () : m_tPrevious ( GlobalCrashQuerySnapshot() )
+	{
+		GlobalCrashQueryGetRef() = {};
+	}
+
+	~CrashQueryScope_c ()
+	{
+		GlobalCrashQueryGetRef() = m_tPrevious;
+	}
+};
+
+// Save and restore the context around nested operations that overwrite it.
 class CrashQueryKeeper_c : public ISphNoncopyable, public ISphNonmovable
 {
 	const CrashQuery_t m_tReference;

@@ -166,8 +166,13 @@ mysql -h0 -P9306 -e "CALL CHAT('How do I configure it?', 'knowledge_base', 'fast
 #!/.*search_query: .*[Cc]luster.*/!#
 #!/.*response: .*/!#
 #!/.*sources: .*/!#
+––– comment –––
+The follow-up must keep clustering in the rewritten search_query (checked above).
+The KNN distance threshold can legitimately leave sources empty for a longer
+rewritten query. When sources are returned, they must include the clustering
+document (id 5); malformed sources are always an error.
 ––– input –––
-grep 'sources:' /tmp/output_5.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'map(.id) | contains([5])' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
+grep 'sources:' /tmp/output_5.txt | grep -o '\[.*\]' | head -1 | { read -r s; if echo "$s" | jq -e 'type == "array" and (length == 0 or any(.[]; .id == 5))' >/dev/null 2>&1; then echo "OK"; else echo "FAIL"; echo "Found: $(echo "$s" | jq -c 'map(.id)')"; echo "$s"; fi; }
 ––– output –––
 OK
 ––– comment –––

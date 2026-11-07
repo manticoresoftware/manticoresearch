@@ -352,6 +352,7 @@ class CSphIndexSettings : public CSphSourceSettings, public DocstoreSettings_t
 {
 public:
 	ESphHitFormat	m_eHitFormat = SPH_HIT_FORMAT_PLAIN;
+	DWORD			m_uPostingsFormat = 0; ///< immutable table component: 0=legacy, 1=block
 	bool			m_bHtmlStrip = false;
 	CSphString		m_sHtmlIndexAttrs;
 	CSphString		m_sHtmlRemoveElements;

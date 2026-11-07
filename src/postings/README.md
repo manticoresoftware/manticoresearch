@@ -1,9 +1,133 @@
-# Posting codec primitives (M1)
+# Block postings (M1/M2)
 
-This is an experimental component, not a new table format yet. No production
-reader/writer selects these codecs. M2 will provide chunk metadata, separate
-row/field/TF streams and dictionaries. File offsets, hit references, norms and
-impacts are outside this module's present scope. There are no inline hits.
+Experimental opt-in format: set `postings_format = block` when building a plain
+table, or `postings_format='block'` in `CREATE TABLE`. The default is `legacy`.
+Block tables require `dict=keywords` (the default) or `dict=keywords_32k`.
+`dict=crc` remains supported for legacy postings only. Creation, reconfiguration
+and loading reject block+CRC tables. Existing CRC tables must be rebuilt from
+source with a word dictionary to adopt block postings; their hashes cannot
+recover the original keywords for offline conversion.
+
+A table has one immutable postings format. All of its disk chunks use that
+format; RT RAM segments retain their existing representation. Cross-format
+ATTACH (including into an empty table), merge, chunk loading and reconfiguration
+are rejected. One daemon can serve separate legacy and block tables.
+
+Block tables use disk header version 75, RT metadata version 26 and postings
+component version 2. Legacy output retains its existing header/metadata versions.
+Unknown component versions or required stream codecs are errors. These wire
+layouts are experimental until publication.
+
+The shared writer serves plain indexing, RT flush, merging and offline conversion.
+The block qword adapter serves the existing document/hit consumers. Eligible
+posting-window consumers request membership only: rows and field masks are
+decoded without TF, hit-reference or position decoding. Other consumers currently
+decode TF and references with each posting leaf and seek external positions when
+needed. M3 will consume stored bitmap/run containers directly; M4 will replace
+the transitional external position varints. Native length-normalized BM25 and
+WAND/BMW remain later milestones.
+
+Encoded column access borrows the immutable file mapping when available. Buffered
+readers retain one reusable byte buffer across columns/leaves. A column view is
+consumed before its backing storage changes; lazy per-field TF retains a mapping
+view or its own file buffer so later column reads cannot invalidate it. The reader
+decodes into its destination arrays through the non-overlapping
+`DecodeIntegersInto`/`DecodeRowsInto` APIs; delta rows are prefix-summed in place.
+Full 128-value packing frames use the destination directly when it is 16-byte
+aligned. Short tails and unaligned destinations retain bounded output scratch;
+encoded packing words still use aligned native-endian input scratch. Field-mask
+transposition and hit-reference low/high assembly remain separate steps.
+
+Block qwords fill document batches directly from decoded leaf columns. Positioning
+and hints are shared with single-document reads; a batch continues across leaves
+until its capacity is reached or the term ends. Current-document state is updated
+once per drained span. Membership batches retain lazy TF/hit-reference decoding.
+Expanded-term payload wrappers keep their existing posting-list chaining path.
+
+Mapped block readers share the legacy OS-page prefetch policy: term setup
+prefetches the doclist head (or the whole short list), expanded payloads prefetch
+their slices, and hit consumers prefetch only the matched external hitlists they
+are about to read. Requests use the shared residency probe and power-of-two gate;
+mlocked/resident maps avoid readahead and buffered file readers retain their
+existing read buffering. This does not eagerly decode TF/positions or add CPU
+cache-line prefetch instructions.
+
+`index_field_lengths=1` is enabled for block tables. Existing row-addressable
+token-count attributes are the exact norm store; immutable per-field nonempty
+document counts and summed lengths are stored in the chunk header. Per-term
+field document counts and summed TF are stored separately. Hitless terms
+advertise no positions/per-field TF; they cannot supply those scoring inputs.
+Full-text field schema changes require rebuilding a block table; ordinary
+attribute ALTER remains supported.
+
+Offline conversion creates a separate plain table/disk chunk:
+
+```
+indextool --config source.conf --convert-postings SOURCE OUTPUT_BASE
+```
+
+The source must use a word dictionary, already have field lengths and be
+offline/unlocked. Existing
+destination files are rejected. Attributes, row IDs, dead-row maps and other
+table data are preserved; all postings and external positions are rewritten.
+Sources without lengths need rebuilding into a separate block table. Converting
+an RT table as a whole is not implemented: convert offline plain tables/chunks
+and attach only to a separately created block RT table. The header is written
+last. No conversion or mandatory rewrite occurs at daemon startup.
+
+## Term and leaf framing (component 2)
+
+The `.spd`, `.spp` and `.spe` files start with byte 1, a four-byte magic
+(`BPD1`, `BPH1`, `BPS1`) and little-endian uint32 component version.
+
+A dictionary posting offset points to a 40-byte term header:
+
+| Offset | Bytes | Meaning |
+|---|---|---|
+| 0 | 4 | `PST2` |
+| 4 | 2 | Component version |
+| 6 | 2 | Capabilities: positions=1, per-field TF=2 |
+| 8 | 2 | Field count, 1..256 |
+| 10 | 2 | Reserved, zero |
+| 12 | 8 | Four uint16 codec IDs: rows, fields, TF, hit references |
+| 20 | 4 | Reserved, zero |
+| 24 | 8 | Absolute term end |
+| 32 | 8 | Absolute statistics footer offset |
+
+Codec IDs are selected once per term stream; per-field TF uses the TF codec.
+Changing a registered codec selection does not require a component-version bump.
+The initial writer selects PFOR for rows/TF and FOR for masks/references.
+
+Each 1..256-posting leaf has a 44-byte header: `BLK1`, byte length (uint32),
+posting count and field-mask word count (uint16 each), first/last row and maximum
+TF (uint32 each) and five uint32 section lengths. Sections are rows, fields, TF, hit references and per-field TF.
+Rows use the row-container grammar below. Other integer frames have a uint32
+byte-length prefix. Field masks store one frame per 32-bit mask word. Hit
+references store low/high uint32 frames. Per-field TF contains sorted nonempty
+field entries `(field:uint16, frame length:uint32, integer frame)`.
+
+The footer contains `(document count:uint64, summed TF:uint64)` per field.
+Hitless terms store membership counts and zero field TF.
+Positions are always external: existing packed-hit deltas, big-endian varints,
+terminated by zero per document. Singleton/single-hit postings are not inline.
+
+The `.spe` directory contains `SKP1`, leaf count (uint32), then entries
+`(first:uint32, last:uint32, absolute leaf offset:uint64, max TF:uint32)`.
+The checker compares entries with decoded leaves. M2 seeks by leaf headers;
+using the directory for hierarchical skipping and score pruning is later work.
+Maximum TF alone is not a safe complete score bound for every ranker.
+
+Normal readers trust index data; structural/semantic checks run only in debug
+assertions. `BlockIndexQword_c` and `Reader_c` have no validation-mode flag.
+`indextool --check` constructs a separate `BlockIndexQwordValidation_c`, backed
+by `ReaderValidation_c`; it checks framing and codec payloads before decoding.
+The checker walks every leaf and checks all columns, directory
+entries, footer statistics and per-field TF against external hits. No CRC fields
+are written or checked. The previous experimental component-1 files require
+rebuilding or conversion from legacy; their layout is rejected at table loading.
+Unknown component/codec selection and I/O errors still fail explicitly.
+Lazy readers do not inspect unused columns.
+Writers buffer at most one leaf of postings plus one directory entry per leaf.
 
 The implementation reuses FastPFOR's packing kernels, not its codec framing or
 page-wide exception buffers. `fastpfor/PROVENANCE.json` records the upstream
@@ -16,8 +140,7 @@ Select the integer codec once per logical stream (for example a term's TF or
 position stream). The M1 descriptor is one little-endian uint16 codec ID:
 FOR=1, PFOR=2, VARINT=3, CONSTANT=4; zero and unknown IDs are errors.
 Read this descriptor once and pass the resulting StreamDesc_t to every block
-operation. It is not prepended to every frame. The enclosing M2 metadata will
-identify the stream kind, boundaries and descriptor location.
+operation. It is not prepended to every frame. The term metadata above identifies the stream kind, boundaries and descriptor location.
 
 Changing the selected registered codec changes the stream descriptor, not the
 index/component format version. Each ID specifies a stable codec byte grammar;
@@ -28,7 +151,7 @@ decode future codecs.
 
 All multibyte integers use little-endian encoding. Frames are independent and
 contain 1..256 unsigned 32-bit integers. The caller supplies the exact frame
-length; trailing bytes are rejected. IDs/layouts below are experimental until
+length; the checker rejects trailing bytes. IDs/layouts below are experimental until
 publication. No codec ID or codec override is present in an integer frame:
 
 | Offset | Bytes | Meaning |
@@ -64,10 +187,14 @@ not an unrecorded change of decoder.
 
 InspectIntegers validates counts, lengths, widths, exceptions, canonical
 varints and packed tail padding using the supplied stream descriptor.
-DecodeIntegers validates before writing any caller output. It uses bounded
-stack scratch, explicit byte-order conversion and aligned kernel buffers,
-requiring no input alignment or padding.
-It accepts input/output overlap, but the source must not be changed concurrently.
+DecodeIntegersInto trusts the supplied frame, with validation in debug assertions
+only, and requires disjoint input/output ranges. The checker calls InspectIntegers
+before decoding. Full aligned outputs avoid a decoded scratch copy; short tails
+and unaligned outputs use bounded scratch so the API writes exactly the declared
+count. Encoded input needs no alignment or extra padding. DecodeIntegers retains
+overlap support through a scratch-buffer wrapper; the source must not be changed
+concurrently. DecodeRowsInto and DecodeRows provide the same respective contracts
+for row containers.
 
 ## Row container
 
@@ -92,15 +219,16 @@ does decode deltas. `DecodeRows` materializes rows for tests/adapters. Future
 native bitmap consumers must use the borrowed view rather than reconstructing
 rows. These are storage primitives, not `PostingWindow_i` integration (M3).
 
-There is no checksum at this layer: structurally valid payload changes remain
-valid. Whole-file/block integrity policy belongs to the enclosing format.
+There are no checksums in the block postings format. Structurally and semantically
+valid payload changes are not detectable by the checker.
 
 ## Backends and build
 
 The portable reference packs/unpacks the same four-lane layout. On x86-64,
 AUTO selects the vendored SSE2 kernels; SSE2 is a baseline feature there. ARM
 and other targets use the portable implementation, without an x86 dependency
-or a SIMDe requirement. An explicit unavailable SIMD request fails. Future ISA
+or a SIMDe requirement. Encoding rejects an unavailable SIMD request; trusted
+decoding requires the caller to select an available backend. Future ISA
 variants require runtime feature dispatch; compiler flags must stay local to
 their object targets. No global `-march=native` is required.
 
@@ -121,6 +249,19 @@ stream codec IDs. They use runtime checks even in Release, random/property cases
 equality and Linux guard pages. The test reports a deterministic fingerprint of
 encoded cases for comparison across architectures (not a cryptographic hash).
 
+The RT differential suite requires a disposable daemon and creates its own tables.
+It does not drop existing data and fails on reused table names:
+
+```sh
+python3 src/postings/tests/integration_rt.py --url http://127.0.0.1:PORT \\
+  --prefix postings_m2 --output /home/bench/postings-m2-rt.json
+```
+
+Pass `--access file` to exercise buffered file readers instead of mmap.
+It checks plain/columnar attributes, wide field masks, hitless terms and keyword-v2
+dictionaries through RAM inserts, flushes, deletions, attribute ALTER and actual
+chunk merges, including rejection of changing the table's format.
+
 ## Benchmarks
 
 The optional text corpus has one record per line:
@@ -135,8 +276,8 @@ document hit list.
 
 The benchmark checks every round trip, then reports median encode/decode
 nanoseconds per value over five timed samples and complete frame bytes/value,
-including headers/padding/exceptions. Decode timings include validation and
-copies, not just the packing kernels. Encoding includes block parameter selection/allocation. The benchmark-only
+including headers/padding/exceptions. Release decode timings include copies, but no validation; they measure more
+than just the packing kernels. Encoding includes block parameter selection/allocation. The benchmark-only
 stream-auto policy selects one codec by comparing total encoded bytes over the
 whole sampled stream before timing; it never selects a different codec per block.
 Reported bytes include one stream descriptor. The CSV reports requested policy
@@ -149,3 +290,9 @@ patterns are included even when a real corpus is supplied.
 
 Codec microbenchmarks are not evidence of end-to-end query gains. Linux results
 and source/corpus hashes belong in the external experiment directory and plan.
+
+The main daemon build also provides `postings_qword_test` when
+`WITH_POSTINGS_TOOLS=ON`. Run it with a disposable fixture-file path outside the
+source checkout. It compares direct and generic batches over mmap/file readers,
+membership/full metadata, leaf boundaries, hints, mixed reads, reset and EOF.
+The standalone codec build does not include this daemon-linked test.

@@ -1148,6 +1148,7 @@ Commands are:
 -h, --help			display this help message
 -v				display version information
 --check <TABLE>			perform table consistency check
+--convert-postings <TABLE> <OUTPUT_BASE>  convert one offline disk table/chunk to separate block-format files; requires field lengths and a keyword dictionary
 --fix-docid-lookup <TABLE>	fix a v.71/v.72 table whose header was rewritten by ALTER without converting the docid lookup (manticoresearch#4852): converts the .spt and stamps the fixed header version, offline
 --check-disk-chunk <CHUNK_ID>	perform single disk chunk consistency check (to be used together with --check or --docstore-bad-ids)
 --check-id-dups <CHUNK_ID>	check if there are duplicate ids (to be used together with --check)
@@ -1211,11 +1212,12 @@ enum class IndextoolCmd_e
 	FOLD,
 	APPLYKLISTS,
 	FIXDOCIDLOOKUP,
-	DOCSTOREBADIDS
+	DOCSTOREBADIDS,
+	CONVERTPOSTINGS
 };
 
 static IndextoolCmd_e g_eCommand = IndextoolCmd_e::NOTHING;
-static const char * g_sCommands[] = {"", "dumpheader", "dumpconfig", "dumpdocids", "dumphitlist", "dumpdict", "dumpkilllist", "check", "docextract", "htmlstrip", "morph", "buildidf", "mergeidf", "checkconfig", "fold", "apply-killlists", "fix-docid-lookup", "docstore-bad-ids" };
+static const char * g_sCommands[] = {"", "dumpheader", "dumpconfig", "dumpdocids", "dumphitlist", "dumpdict", "dumpkilllist", "check", "docextract", "htmlstrip", "morph", "buildidf", "mergeidf", "checkconfig", "fold", "apply-killlists", "fix-docid-lookup", "docstore-bad-ids", "convert-postings" };
 
 
 static void SetCmd ( IndextoolCmd_e eCmd )
@@ -1375,6 +1377,7 @@ static void Init()
 	WipeGlobalSchedulerOnShutdownAndFork();
 }
 
+
 int main ( int argc, char ** argv )
 {
 	Init();
@@ -1409,7 +1412,7 @@ int main ( int argc, char ** argv )
 	#define OPT1(_a1)		else if ( !strcmp(argv[i],_a1) )
 
 	const char * sOptConfig = NULL;
-	CSphString sDumpHeader, sIndex, sKeyword, sFoldFile;
+	CSphString sDumpHeader, sIndex, sKeyword, sFoldFile, sConvertOutput;
 	bool bWordid = false;
 	bool bStripPath = false;
 	StrVec_t dFiles;
@@ -1480,6 +1483,16 @@ int main ( int argc, char ** argv )
 		OPT1 ( "--dumpheader" )		{ SetCmd ( IndextoolCmd_e::DUMPHEADER ); sDumpHeader = argv[++i]; }
 		OPT1 ( "--dumpconfig" )		{ SetCmd ( IndextoolCmd_e::DUMPCONFIG ); sDumpHeader = argv[++i]; }
 		OPT1 ( "--dumpdocids" )		{ SetCmd ( IndextoolCmd_e::DUMPDOCIDS ); sIndex = argv[++i]; }
+		OPT1 ( "--convert-postings" )
+		{
+			if ( i+2>=argc )
+				sphDie ( "--convert-postings requires a table and output base" );
+
+			SetCmd ( IndextoolCmd_e::CONVERTPOSTINGS );
+			sIndex = argv[++i];
+			sConvertOutput = argv[++i];
+			continue;
+		}
 		OPT1 ( "--check" )			{ SetCmd ( IndextoolCmd_e::CHECK ); sIndex = argv[++i]; }
 		OPT1 ( "--htmlstrip" )		{ SetCmd ( IndextoolCmd_e::STRIP ); sIndex = argv[++i]; }
 		OPT1 ( "--morph" )			{ SetCmd ( IndextoolCmd_e::MORPH ); sIndex = argv[++i]; }
@@ -1707,7 +1720,7 @@ int main ( int argc, char ** argv )
 		if ( !pIndex )
 			sphDie ( "table '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
 
-		if ( g_eCommand!=IndextoolCmd_e::DUMPDOCIDS && g_eCommand!=IndextoolCmd_e::DUMPDICT )
+		if ( g_eCommand!=IndextoolCmd_e::DUMPDOCIDS && g_eCommand!=IndextoolCmd_e::DUMPDICT && g_eCommand!=IndextoolCmd_e::CONVERTPOSTINGS )
 			pIndex->SetDebugCheck ( bCheckIdDups, iCheckChunk );
 
 		Threads::CallCoroutine ( [&] {
@@ -1769,6 +1782,14 @@ int main ( int argc, char ** argv )
 			pIndex->DebugDumpHeader ( stdout, sDumpHeader, g_eCommand==IndextoolCmd_e::DUMPCONFIG );
 			break;
 		}
+
+		case IndextoolCmd_e::CONVERTPOSTINGS:
+			sError = "";
+			if ( !pIndex->ConvertPostings ( sConvertOutput, sError ) )
+				sphDie ( "posting conversion failed: %s", sError.cstr() );
+
+			fprintf ( stdout, "converted postings to %s\n", sConvertOutput.cstr() );
+			break;
 
 		case IndextoolCmd_e::DUMPDOCIDS:
 			fprintf ( stdout, "dumping docids for table '%s'...\n", sIndex.cstr() );

@@ -161,6 +161,7 @@ TEST_F ( UuidDocidLookupTest, WriterReaderRoundTripAndSearch )
 	EXPECT_EQ ( tReader.Find ( UuidKey ( "00000000-0000-1000-8000-000000000002" ) ), 0U );
 }
 
+
 // manticoresearch#4852: an in-place header rewrite stamped v.71 on chunks whose .spt was still v.70,
 // so every docid lookup on them returned garbage rowids; the layout check must catch it, the upgrade must fix it
 TEST_F ( UuidDocidLookupTest, FormatCheckAndUpgrade )
@@ -230,6 +231,7 @@ TEST_F ( UuidDocidLookupTest, FormatCheckAndUpgrade )
 	EXPECT_EQ ( FixedIndexFormatVersion(72), 74U );
 	EXPECT_EQ ( FixedIndexFormatVersion(73), 73U );
 	EXPECT_EQ ( FixedIndexFormatVersion(74), 74U );
+	EXPECT_EQ ( FixedIndexFormatVersion(75), 75U );
 }
 
 } // namespace

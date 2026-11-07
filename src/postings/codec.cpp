@@ -10,6 +10,7 @@
 #include "packing.h"
 
 #include <algorithm>
+#include <cassert>
 #include <array>
 #include <cstring>
 #include <limits>
@@ -78,6 +79,7 @@ void Pack ( const uint32_t * pValues, size_t iCount, unsigned uWidth, uint8_t * 
 	}
 }
 
+
 void Unpack ( const uint8_t * pInput, size_t iCount, unsigned uWidth, uint32_t * pValues, const Packing_t & tPacking )
 {
 	alignas(16) uint32_t dPacked[128];
@@ -87,11 +89,19 @@ void Unpack ( const uint8_t * pInput, size_t iCount, unsigned uWidth, uint32_t *
 		for ( unsigned j=0; j<4*uWidth; ++j )
 			dPacked[j] = ReadLE ( pInput+j*4, 4 );
 
-		tPacking.m_fnUnpack ( dPacked, dValues, uWidth );
-		std::copy_n ( dValues, std::min ( size_t(128), iCount-i ), pValues+i );
+		size_t iValues = std::min ( size_t(128), iCount-i );
+		if ( iValues==128 && !(uintptr_t(pValues+i)&15) )
+			tPacking.m_fnUnpack ( dPacked, pValues+i, uWidth );
+		else
+		{
+			tPacking.m_fnUnpack ( dPacked, dValues, uWidth );
+			std::copy_n ( dValues, iValues, pValues+i );
+		}
+
 		pInput += 16*uWidth;
 	}
 }
+
 
 bool ReadVarints ( Bytes_t tInput, size_t iCount, uint32_t * pOutput )
 {
@@ -169,13 +179,30 @@ Choice_t ChoosePacked ( const uint32_t * pValues, size_t iCount, bool bException
 	return tBest;
 }
 
+
 void DecodePayload ( StreamDesc_t tStream, const IntegerDesc_t & tDesc, uint32_t * pOutput, const Packing_t & tPacking )
 {
 	const auto & tPayload = tDesc.m_tPayload;
 	if ( tStream.m_eCodec==Codec_e::CONSTANT )
 		std::fill_n ( pOutput, tDesc.m_uCount, ReadLE ( tPayload.m_pData, 4 ) );
 	else if ( tStream.m_eCodec==Codec_e::VARINT )
-		ReadVarints ( tPayload, tDesc.m_uCount, pOutput );
+	{
+		const uint8_t * p = tPayload.m_pData;
+		for ( unsigned i=0; i<tDesc.m_uCount; ++i )
+		{
+			uint32_t uValue = 0;
+			unsigned uShift = 0;
+			uint8_t uByte;
+			do
+			{
+				assert ( p<tPayload.m_pData+tPayload.m_iSize && uShift<35 );
+				uByte = *p++;
+				uValue |= uint32_t(uByte&127)<<uShift;
+				uShift += 7;
+			} while ( uByte&128 );
+			pOutput[i] = uValue;
+		}
+	}
 	else
 	{
 		Unpack ( tPayload.m_pData, tDesc.m_uCount, tDesc.m_uWidth, pOutput, tPacking );
@@ -186,6 +213,7 @@ void DecodePayload ( StreamDesc_t tStream, const IntegerDesc_t & tDesc, uint32_t
 }
 
 }
+
 
 bool WriteStreamDescriptor ( StreamDesc_t tStream, std::vector<uint8_t> & dOutput, std::string & sError )
 {
@@ -199,11 +227,11 @@ bool WriteStreamDescriptor ( StreamDesc_t tStream, std::vector<uint8_t> & dOutpu
 	return true;
 }
 
+
 bool ReadStreamDescriptor ( Bytes_t tInput, StreamDesc_t & tStream, std::string & sError )
 {
 	sError.clear();
-	if ( !tInput.m_pData || tInput.m_iSize!=STREAM_DESCRIPTOR_SIZE )
-		return Fail ( sError, "Invalid stream descriptor length" );
+	assert ( tInput.m_pData && tInput.m_iSize==STREAM_DESCRIPTOR_SIZE );
 
 	const Codec_e eCodec = Codec_e(ReadLE ( tInput.m_pData, STREAM_DESCRIPTOR_SIZE ));
 	if ( !IsKnownCodec(eCodec) )
@@ -213,12 +241,14 @@ bool ReadStreamDescriptor ( Bytes_t tInput, StreamDesc_t & tStream, std::string 
 	return true;
 }
 
+
 bool EncodeIntegers ( StreamDesc_t tStream, const uint32_t * pValues, size_t iCount, std::vector<uint8_t> & dOutput, std::string & sError, Backend_e eBackend )
 {
 	sError.clear();
 	const auto * pPacking = GetPacking(eBackend);
-	if ( !pValues || !iCount || iCount>MAX_VALUES || !pPacking )
-		return Fail ( sError, "Invalid integer count, input or backend" );
+	assert ( pValues && iCount && iCount<=MAX_VALUES );
+	if ( !pPacking )
+		return Fail ( sError, "Unavailable packing backend" );
 
 	const Codec_e eCodec = tStream.m_eCodec;
 	if ( !IsKnownCodec(eCodec) )
@@ -280,6 +310,7 @@ bool EncodeIntegers ( StreamDesc_t tStream, const uint32_t * pValues, size_t iCo
 	dOutput.swap(dEncoded);
 	return true;
 }
+
 
 bool InspectIntegers ( StreamDesc_t tStream, Bytes_t tInput, IntegerDesc_t & tDesc, std::string & sError )
 {
@@ -349,33 +380,48 @@ bool InspectIntegers ( StreamDesc_t tStream, Bytes_t tInput, IntegerDesc_t & tDe
 	return true;
 }
 
-bool DecodeIntegers ( StreamDesc_t tStream, Bytes_t tInput, uint32_t * pOutput, size_t iCapacity, std::string & sError, Backend_e eBackend )
+
+bool DecodeIntegersInto ( StreamDesc_t tStream, Bytes_t tInput, uint32_t * pOutput, size_t iCapacity, std::string & sError, Backend_e eBackend )
 {
-	IntegerDesc_t tDesc;
-	if ( !InspectIntegers ( tStream, tInput, tDesc, sError ) )
-		return false;
-
+#ifndef NDEBUG
+	IntegerDesc_t tChecked;
+	assert ( InspectIntegers ( tStream, tInput, tChecked, sError ) );
+#endif
+	const auto * p = tInput.m_pData;
+	IntegerDesc_t tDesc { p[0], p[1], uint16_t(ReadLE(p+2,2)), { p+INTEGER_HEADER_SIZE, ReadLE(p+4,2) } };
 	const auto * pPacking = GetPacking(eBackend);
-	if ( !pOutput || iCapacity<tDesc.m_uCount || !pPacking )
-		return Fail ( sError, "Insufficient output capacity or unavailable backend" );
-
-	uint32_t dValues[MAX_VALUES];
-	DecodePayload ( tStream, tDesc, dValues, *pPacking );
-	std::copy_n ( dValues, tDesc.m_uCount, pOutput );
+	assert ( pOutput && pPacking && iCapacity>=tDesc.m_uCount );
+	(void)iCapacity;
+	(void)sError;
+	assert ( uintptr_t(pOutput)>=uintptr_t(p) ? uintptr_t(pOutput)-uintptr_t(p)>=tInput.m_iSize : uintptr_t(p)-uintptr_t(pOutput)>=size_t(tDesc.m_uCount)*sizeof(uint32_t) );
+	DecodePayload ( tStream, tDesc, pOutput, *pPacking );
 	return true;
 }
+
+
+bool DecodeIntegers ( StreamDesc_t tStream, Bytes_t tInput, uint32_t * pOutput, size_t iCapacity, std::string & sError, Backend_e eBackend )
+{
+	alignas(16) uint32_t dValues[MAX_VALUES];
+	DecodeIntegersInto ( tStream, tInput, dValues, MAX_VALUES, sError, eBackend );
+	unsigned uCount = ReadLE(tInput.m_pData+2,2);
+	assert ( pOutput && iCapacity>=uCount );
+	(void)iCapacity;
+	std::copy_n ( dValues, uCount, pOutput );
+	return true;
+}
+
 
 bool EncodeRows ( StreamDesc_t tStream, const uint32_t * pRows, size_t iCount, std::vector<uint8_t> & dOutput, std::string & sError, Rows_e eKind, Backend_e eBackend )
 {
 	sError.clear();
-	if ( !pRows || !iCount || iCount>MAX_VALUES || !GetPacking(eBackend) )
-		return Fail ( sError, "Invalid row count, input or backend" );
+	assert ( pRows && iCount && iCount<=MAX_VALUES );
+	if ( !GetPacking(eBackend) )
+		return Fail ( sError, "Unavailable packing backend" );
 
 	uint32_t dDeltas[MAX_VALUES] {};
 	for ( size_t i=0; i<iCount; ++i )
 	{
-		if ( pRows[i]==UINT32_MAX || (i && pRows[i]<=pRows[i-1]) )
-			return Fail ( sError, "Rows must increase and exclude INVALID_ROWID" );
+		assert ( pRows[i]!=UINT32_MAX && (!i || pRows[i]>pRows[i-1]) );
 
 		if ( i )
 			dDeltas[i] = pRows[i]-pRows[i-1];
@@ -427,6 +473,7 @@ bool EncodeRows ( StreamDesc_t tStream, const uint32_t * pRows, size_t iCount, s
 	dOutput.swap(dEncoded);
 	return true;
 }
+
 
 static bool ParseRows ( StreamDesc_t tStream, Bytes_t tInput, RowBlock_t & tBlock, uint32_t * pRows, std::string & sError, const Packing_t & tPacking )
 {
@@ -515,22 +562,65 @@ bool InspectRows ( StreamDesc_t tStream, Bytes_t tInput, RowBlock_t & tBlock, st
 	return ParseRows ( tStream, tInput, tBlock, nullptr, sError, *GetPacking(Backend_e::AUTO) );
 }
 
-bool DecodeRows ( StreamDesc_t tStream, Bytes_t tInput, uint32_t * pOutput, size_t iCapacity, std::string & sError, Backend_e eBackend )
+
+bool DecodeRowsInto ( StreamDesc_t tStream, Bytes_t tInput, uint32_t * pOutput, size_t iCapacity, std::string & sError, Backend_e eBackend )
 {
+#ifndef NDEBUG
+	RowBlock_t tChecked;
+	assert ( InspectRows ( tStream, tInput, tChecked, sError ) );
+#endif
+	const uint8_t * p = tInput.m_pData;
+	unsigned uCount = ReadLE(p+6,2);
+	uint32_t uFirst = ReadLE(p+8,4);
 	const auto * pPacking = GetPacking(eBackend);
-	if ( !pOutput || !pPacking )
-		return Fail ( sError, "Invalid output or unavailable backend" );
+	assert ( pOutput && pPacking && iCapacity>=uCount );
+	(void)iCapacity;
+	(void)sError;
+	assert ( uintptr_t(pOutput)>=uintptr_t(p) ? uintptr_t(pOutput)-uintptr_t(p)>=tInput.m_iSize : uintptr_t(p)-uintptr_t(pOutput)>=size_t(uCount)*sizeof(uint32_t) );
+	if ( Rows_e(p[5])==Rows_e::DELTA )
+	{
+		const uint8_t * q = p+ROW_HEADER_SIZE;
+		IntegerDesc_t tDesc { q[0], q[1], uint16_t(ReadLE(q+2,2)), { q+INTEGER_HEADER_SIZE, ReadLE(q+4,2) } };
+		DecodePayload ( tStream, tDesc, pOutput, *pPacking );
+		uint32_t uRow = uFirst;
+		for ( unsigned i=0; i<uCount; ++i )
+		{
+			uRow += pOutput[i];
+			pOutput[i] = uRow;
+		}
+	} else if ( Rows_e(p[5])==Rows_e::RANGE )
+	{
+		for ( unsigned i=0; i<uCount; ++i )
+			pOutput[i] = uFirst+i;
+	} else
+	{
+		assert ( Rows_e(p[5])==Rows_e::BITMAP );
+		unsigned iRow = 0;
+		size_t n = ReadLE(p+16,4);
+		for ( size_t i=0; i<n*8; ++i )
+			if ( p[ROW_HEADER_SIZE+i/8] & (1U<<(i%8)) )
+			{
+				assert ( iRow<uCount );
+				pOutput[iRow++] = uFirst+uint32_t(i);
+			}
 
-	uint32_t dRows[MAX_VALUES];
-	RowBlock_t tBlock;
-	if ( !ParseRows ( tStream, tInput, tBlock, dRows, sError, *pPacking ) )
-		return false;
+		assert ( iRow==uCount );
+	}
 
-	if ( iCapacity<tBlock.m_uCount )
-		return Fail ( sError, "Insufficient row output capacity" );
-
-	std::copy_n ( dRows, tBlock.m_uCount, pOutput );
 	return true;
 }
+
+
+bool DecodeRows ( StreamDesc_t tStream, Bytes_t tInput, uint32_t * pOutput, size_t iCapacity, std::string & sError, Backend_e eBackend )
+{
+	alignas(16) uint32_t dRows[MAX_VALUES];
+	DecodeRowsInto ( tStream, tInput, dRows, MAX_VALUES, sError, eBackend );
+	unsigned uCount = ReadLE(tInput.m_pData+6,2);
+	assert ( pOutput && iCapacity>=uCount );
+	(void)iCapacity;
+	std::copy_n ( dRows, uCount, pOutput );
+	return true;
+}
+
 
 }

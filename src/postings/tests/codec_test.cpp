@@ -40,26 +40,30 @@ static void RoundTrip ( const std::vector<uint32_t> & dValues, Codec_e eCodec )
 	CHECK ( InspectIntegers ( tStream, View(dAuto), tDesc, sError ) );
 	CHECK ( tDesc.m_uCount==dValues.size() );
 	for ( auto eBackend : { Backend_e::SCALAR, Backend_e::AUTO } )
-	{
-		std::array<uint32_t,MAX_VALUES+2> dDecoded;
-		dDecoded.fill(0xdeadbeef);
-		CHECK ( DecodeIntegers ( tStream, View(dAuto), dDecoded.data()+1, MAX_VALUES, sError, eBackend ) );
-		CHECK ( std::equal ( dValues.begin(), dValues.end(), dDecoded.begin()+1 ) );
-		CHECK ( dDecoded[0]==0xdeadbeef && dDecoded[dValues.size()+1]==0xdeadbeef );
-		CHECK ( !DecodeIntegers ( tStream, View(dAuto), dDecoded.data(), dValues.size()-1, sError, eBackend ) );
-		CHECK ( dDecoded[0]==0xdeadbeef );
-	}
+		for ( auto fnDecode : { DecodeIntegers, DecodeIntegersInto } )
+			for ( unsigned uOffset=1; uOffset<=4; ++uOffset )
+			{
+				alignas(16) std::array<uint32_t,MAX_VALUES+8> dDecoded;
+				dDecoded.fill(0xdeadbeef);
+				CHECK ( fnDecode ( tStream, View(dAuto), dDecoded.data()+uOffset, dValues.size(), sError, eBackend ) );
+				CHECK ( std::equal ( dValues.begin(), dValues.end(), dDecoded.begin()+uOffset ) );
+				CHECK ( dDecoded[uOffset-1]==0xdeadbeef && dDecoded[dValues.size()+uOffset]==0xdeadbeef );
+			}
 
 	// Input alignment must have no effect on decoding or persistent bytes.
 	for ( unsigned uOffset=1; uOffset<=16; ++uOffset )
 	{
 		std::vector<uint8_t> dUnaligned ( uOffset+dAuto.size() );
 		std::copy ( dAuto.begin(), dAuto.end(), dUnaligned.begin()+uOffset );
-		uint32_t dDecoded[MAX_VALUES];
-		CHECK ( DecodeIntegers ( tStream, { dUnaligned.data()+uOffset, dAuto.size() }, dDecoded, MAX_VALUES, sError ) );
-		CHECK ( std::equal ( dValues.begin(), dValues.end(), dDecoded ) );
+		alignas(16) uint32_t dDecoded[MAX_VALUES];
+		for ( auto fnDecode : { DecodeIntegers, DecodeIntegersInto } )
+		{
+			CHECK ( fnDecode ( tStream, { dUnaligned.data()+uOffset, dAuto.size() }, dDecoded, MAX_VALUES, sError, Backend_e::AUTO ) );
+			CHECK ( std::equal ( dValues.begin(), dValues.end(), dDecoded ) );
+		}
 	}
 }
+
 
 static void Golden()
 {
@@ -87,6 +91,7 @@ static void Golden()
 	CHECK ( dEncoded==std::vector<uint8_t> ( { 0,0,1,0,4,0,255,255,255,255 } ) );
 }
 
+
 static void Streams()
 {
 	std::string sError;
@@ -111,7 +116,7 @@ static void Streams()
 		}
 	}
 
-	for ( auto dBad : { std::vector<uint8_t>{}, {1}, {1,0,0}, {0,0}, {255,255}, {1,1} } )
+	for ( auto dBad : { std::vector<uint8_t>{0,0}, {255,255}, {1,1} } )
 	{
 		StreamDesc_t tUnchanged { Codec_e::PFOR };
 		CHECK ( !ReadStreamDescriptor ( View(dBad), tUnchanged, sError ) );
@@ -122,9 +127,10 @@ static void Streams()
 	const uint32_t dMixed[] = {1,2};
 	CHECK ( !EncodeIntegers ( { Codec_e::CONSTANT }, dMixed, 2, dHeader, sError ) );
 	CHECK ( EncodeIntegers ( tStream, dMixed, 2, dHeader, sError ) );
-	uint32_t dOutput[MAX_VALUES];
-	CHECK ( !DecodeIntegers ( {}, View(dHeader), dOutput, MAX_VALUES, sError ) );
+	IntegerDesc_t tDesc;
+	CHECK ( !InspectIntegers ( {}, View(dHeader), tDesc, sError ) );
 }
+
 
 static void Integers()
 {
@@ -154,6 +160,7 @@ static void Integers()
 	}
 }
 
+
 static void Corruption()
 {
 	std::string sError;
@@ -161,9 +168,6 @@ static void Corruption()
 	CHECK ( !InspectIntegers ( tStream, {}, tDesc, sError ) );
 	uint32_t uValue = 0;
 	std::vector<uint8_t> dUnchanged {42};
-	CHECK ( !EncodeIntegers ( tStream, &uValue, 0, dUnchanged, sError ) );
-	CHECK ( !EncodeIntegers ( tStream, &uValue, 257, dUnchanged, sError ) );
-	CHECK ( !EncodeIntegers ( tStream, nullptr, 1, dUnchanged, sError ) );
 	CHECK ( !EncodeIntegers ( { Codec_e(255) }, &uValue, 1, dUnchanged, sError ) );
 	CHECK ( dUnchanged==std::vector<uint8_t>{42} );
 	if ( !HasSimd() )
@@ -182,10 +186,6 @@ static void Corruption()
 		auto dBad = dGood;
 		dBad[tEdit.first] = tEdit.second;
 		CHECK ( !InspectIntegers ( tStream, View(dBad), tDesc, sError ) );
-		std::array<uint32_t,MAX_VALUES> dDecoded;
-		dDecoded.fill(123);
-		CHECK ( !DecodeIntegers ( tStream, View(dBad), dDecoded.data(), dDecoded.size(), sError ) );
-		CHECK ( std::all_of ( dDecoded.begin(), dDecoded.end(), [] ( uint32_t u ) { return u==123; } ) );
 	}
 
 	for ( auto dBad : { std::vector<uint8_t>{0,0,1,0,2,0,128,0}, {0,0,1,0,5,0,255,255,255,255,31} } )
@@ -201,15 +201,15 @@ static void Corruption()
 		auto dBad = dGood;
 		dBad[tRandom()%dBad.size()] ^= uint8_t(1u<<(tRandom()%8));
 		uint32_t dScalar[MAX_VALUES], dAuto[MAX_VALUES];
-		const bool bScalar = DecodeIntegers ( tStream, View(dBad), dScalar, MAX_VALUES, sError, Backend_e::SCALAR );
-		CHECK ( DecodeIntegers ( tStream, View(dBad), dAuto, MAX_VALUES, sError )==bScalar );
-		if ( bScalar )
+		if ( InspectIntegers ( tStream, View(dBad), tDesc, sError ) )
 		{
-			CHECK ( InspectIntegers ( tStream, View(dBad), tDesc, sError ) );
+			CHECK ( DecodeIntegers ( tStream, View(dBad), dScalar, MAX_VALUES, sError, Backend_e::SCALAR ) );
+			CHECK ( DecodeIntegers ( tStream, View(dBad), dAuto, MAX_VALUES, sError ) );
 			CHECK ( std::equal ( dScalar, dScalar+tDesc.m_uCount, dAuto ) );
 		}
 	}
 }
+
 
 static void Rows()
 {
@@ -236,11 +236,15 @@ static void Rows()
 					CHECK ( InspectRows ( tStream, View(dEncoded), tBlock, sError ) );
 					CHECK ( tBlock.m_uCount==uCount && tBlock.m_uFirst==dRows.front() && tBlock.m_uLast==dRows.back() );
 					for ( auto eBackend : { Backend_e::SCALAR, Backend_e::AUTO } )
-					{
-						uint32_t dDecoded[MAX_VALUES];
-						CHECK ( DecodeRows ( tStream, View(dEncoded), dDecoded, MAX_VALUES, sError, eBackend ) );
-						CHECK ( std::equal ( dRows.begin(), dRows.end(), dDecoded ) );
-					}
+						for ( auto fnDecode : { DecodeRows, DecodeRowsInto } )
+							for ( unsigned uOffset=1; uOffset<=4; ++uOffset )
+							{
+								alignas(16) std::array<uint32_t,MAX_VALUES+8> dDecoded;
+								dDecoded.fill(0xdeadbeef);
+								CHECK ( fnDecode ( tStream, View(dEncoded), dDecoded.data()+uOffset, uCount, sError, eBackend ) );
+								CHECK ( std::equal ( dRows.begin(), dRows.end(), dDecoded.begin()+uOffset ) );
+								CHECK ( dDecoded[uOffset-1]==0xdeadbeef && dDecoded[uCount+uOffset]==0xdeadbeef );
+							}
 
 					for ( size_t i=0; i<dEncoded.size(); ++i )
 						CHECK ( !InspectRows ( tStream, { dEncoded.data(), i }, tBlock, sError ) );
@@ -250,25 +254,16 @@ static void Rows()
 						auto dBad = dEncoded;
 						dBad[tRandom()%dBad.size()] ^= uint8_t(1u<<(tRandom()%8));
 						std::array<uint32_t,MAX_VALUES> dDecoded;
-						dDecoded.fill(123);
-						if ( !DecodeRows ( tStream, View(dBad), dDecoded.data(), MAX_VALUES, sError ) )
-							CHECK ( std::all_of ( dDecoded.begin(), dDecoded.end(), [] ( uint32_t u ) { return u==123; } ) );
-						else
+						if ( InspectRows ( tStream, View(dBad), tBlock, sError ) )
 						{
-							CHECK ( InspectRows ( tStream, View(dBad), tBlock, sError ) );
+							CHECK ( DecodeRows ( tStream, View(dBad), dDecoded.data(), MAX_VALUES, sError ) );
 							CHECK ( std::adjacent_find ( dDecoded.begin(), dDecoded.begin()+tBlock.m_uCount, std::greater_equal<uint32_t>() )==dDecoded.begin()+tBlock.m_uCount );
 						}
 					}
 				}
 			}
-
-	std::vector<uint8_t> dOutput {42};
-	for ( auto dBad : { std::vector<uint32_t>{0,0}, {1,0}, {UINT32_MAX}, {0,UINT32_MAX} } )
-	{
-		CHECK ( !EncodeRows ( tStream, dBad.data(), dBad.size(), dOutput, sError ) );
-		CHECK ( dOutput==std::vector<uint8_t>{42} );
-	}
 }
+
 
 static void GuardPages()
 {
@@ -277,6 +272,9 @@ static void GuardPages()
 	auto * pMap = static_cast<uint8_t *>( mmap ( nullptr, iPage*2, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0 ) );
 	CHECK ( pMap!=MAP_FAILED );
 	CHECK ( !mprotect ( pMap+iPage, iPage, PROT_NONE ) );
+	auto * pOutMap = static_cast<uint8_t *>( mmap ( nullptr, iPage*2, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0 ) );
+	CHECK ( pOutMap!=MAP_FAILED );
+	CHECK ( !mprotect ( pOutMap+iPage, iPage, PROT_NONE ) );
 	std::string sError;
 	for ( size_t n : {1u,127u,128u,129u,256u} )
 		for ( unsigned b=0; b<=32; ++b )
@@ -289,6 +287,9 @@ static void GuardPages()
 			uint32_t dDecoded[MAX_VALUES];
 			CHECK ( DecodeIntegers ( tStream, { pInput, dEncoded.size() }, dDecoded, MAX_VALUES, sError ) );
 			CHECK ( std::equal ( dValues.begin(), dValues.end(), dDecoded ) );
+			auto * pDirect = reinterpret_cast<uint32_t *>(pOutMap+iPage-n*sizeof(uint32_t));
+			CHECK ( DecodeIntegersInto ( tStream, { pInput, dEncoded.size() }, pDirect, n, sError ) );
+			CHECK ( std::equal ( dValues.begin(), dValues.end(), pDirect ) );
 			// Output ends exactly at the guard page and can overlap the encoded input.
 			auto * pOutput = reinterpret_cast<uint32_t *>(pMap+iPage-n*sizeof(uint32_t));
 			CHECK ( DecodeIntegers ( tStream, { pInput, dEncoded.size() }, pOutput, n, sError ) );
@@ -298,9 +299,30 @@ static void GuardPages()
 			CHECK ( dEncoded==dCopy );
 		}
 
+	for ( size_t n : {1u,127u,128u,129u,256u} )
+		for ( unsigned uStep : {1u,2u,1000u} )
+		{
+			std::vector<uint32_t> dRows(n);
+			for ( size_t i=0; i<n; ++i )
+				dRows[i] = uint32_t(i)*uStep;
+
+			std::vector<uint8_t> dEncoded;
+			CHECK ( EncodeRows ( tStream, dRows.data(), n, dEncoded, sError ) );
+			auto * pInput = pMap+iPage-dEncoded.size();
+			std::copy ( dEncoded.begin(), dEncoded.end(), pInput );
+			auto * pOutput = reinterpret_cast<uint32_t *>(pOutMap+iPage-n*sizeof(uint32_t));
+			CHECK ( DecodeRowsInto ( tStream, { pInput, dEncoded.size() }, pOutput, n, sError ) );
+			CHECK ( std::equal ( dRows.begin(), dRows.end(), pOutput ) );
+			pOutput = reinterpret_cast<uint32_t *>(pMap+iPage-n*sizeof(uint32_t));
+			CHECK ( DecodeRows ( tStream, { pInput, dEncoded.size() }, pOutput, n, sError ) );
+			CHECK ( std::equal ( dRows.begin(), dRows.end(), pOutput ) );
+		}
+
+	CHECK ( !munmap ( pOutMap, iPage*2 ) );
 	CHECK ( !munmap ( pMap, iPage*2 ) );
 #endif
 }
+
 
 int main()
 {

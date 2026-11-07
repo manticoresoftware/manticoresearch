@@ -44,7 +44,11 @@ public:
 	void			SetDocReader ( DataReaderFactory_c * pReader );
 	void			SetHitReader ( DataReaderFactory_c * pReader );
 	void			ResetDecoderState();
+	bool			WantHitPrefetch() final;
+	void			PrefetchHits ( const SphOffset_t * pOffsets, const DWORD * pHits, int iCount ) final;
 	virtual bool	Setup ( const DiskIndexQwordSetup_c * pSetup ) = 0;
+	virtual void	SetReadErrorTarget ( CSphString * pError ) {}
+	virtual const char *	GetReadError() const { return nullptr; }
 
 	// reader positioning for setup, merge and check code; the templated qword routes these to its reader policy
 	virtual void		SeekDocReader ( SphOffset_t iPos, int iHint )	{ m_rdDoclist->SeekTo ( iPos, iHint ); }
@@ -53,6 +57,8 @@ public:
 	virtual SphOffset_t	GetHitReaderPos() const							{ return m_rdHitlist->GetPos(); }
 
 protected:
+	PrefetchGate_t			m_tHitGate;	// one per term, shared by legacy and block hit readers
+	SphOffset_t				m_iDocFileSize = 0;
 	FileBlockReaderPtr_c	m_rdDoclist;	///< my doclist accessor; outside code positions it through SeekDocReader/GetDocReaderPos
 	FileBlockReaderPtr_c	m_rdHitlist;	///< my hitlist accessor; outside code positions it through SeekHitReader/GetHitReaderPos
 	DataReaderFactory_c *	m_pHitFactory = nullptr;	///< the hitlist's factory (owned by the index), for prefetch requests
@@ -173,10 +179,23 @@ protected:
 
 std::unique_ptr<ISphKeywordsBlockReader> CreateKeywordsBlockReader ( const BYTE * pBuf, int iSkiplistBlockSize, DictFormat_e eDictFormat );
 
+struct PostingNormStats_t
+{
+	uint64_t	m_dDocs[SPH_MAX_FIELDS] {};
+	uint64_t	m_dTokens[SPH_MAX_FIELDS] {};
+
+	void Add ( int iField, uint64_t uLength )
+	{
+		m_dDocs[iField] += uLength!=0;
+		m_dTokens[iField] += uLength;
+	}
+};
+
 // header of a disk index or chunk
 struct BuildHeader_t : public CSphSourceStats, public DictHeader_t
 {
 	BuildHeader_t() = default;
+	PostingNormStats_t	m_tPostingNorms;
 
 	DWORD			m_uFormatVersion = 0;	// version to stamp into the header; 0 = current INDEX_FORMAT_VERSION
 	explicit BuildHeader_t ( const CSphSourceStats & tStat )

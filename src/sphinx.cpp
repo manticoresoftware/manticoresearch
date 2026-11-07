@@ -37,6 +37,8 @@
 #include "global_idf.h"
 #include "indexformat.h"
 #include "diskqword.h"
+#include "postings/disk.h"
+#include "postings/diskvalidation.h"
 #include "indexcheck.h"
 #include "coroutine.h"
 #include "columnarlib.h"
@@ -950,6 +952,9 @@ public:
 						CSphIndex_VLN ( CSphString sIndexName, CSphString sFilename );
 						~CSphIndex_VLN() override;
 
+	bool				ConvertPostings ( const CSphString & sOutput, CSphString & sError ) final;
+	bool				ConvertPostingWords ( CSphHitBuilder & tBuilder, CSphString & sError );
+
 	int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer, CSphIndexProgress & tProgress, bool bRemoveDupes ) final; // fixme! build only
 
 	enum class LOAD_E { ParseError_e, GeneralError_e, Ok_e };
@@ -1066,6 +1071,7 @@ private:
 	// common stuff
 	int								m_iLockFD;
 	CSphSourceStats					m_tStats;			///< my stats
+	PostingNormStats_t				m_tPostingNorms;
 	CSphFixedVector<int64_t>		m_dFieldLens;	///< total per-field lengths summed over entire indexed data, in tokens
 	CSphString						m_sKeepAttrs;			///< retain attributes of that index reindexing //fixme! build only
 	StrVec_t						m_dKeepAttrs;		// fixme! build only
@@ -2925,6 +2931,7 @@ void CSphIndex_VLN::PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t
 	tBuildHeader.m_iDocinfo = m_iDocinfo;
 	tBuildHeader.m_iDocinfoIndex = m_iDocinfoIndex;
 	tBuildHeader.m_iMinMaxIndex = m_iMinMaxIndex;
+	tBuildHeader.m_tPostingNorms = m_tPostingNorms;
 
 	if ( bCopyDictHeader )
 		*(DictHeader_t*)&tBuildHeader = *(DictHeader_t*)&m_tWordlist;
@@ -2939,7 +2946,7 @@ void CSphIndex_VLN::PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t
 
 	// a rewritten header of an existing table carries the fixed version (71->73, 72->74): the callers
 	// bring the docid lookup in sync in the same operation, so the result is never suspect
-	tBuildHeader.m_uFormatVersion = FixedIndexFormatVersion ( m_uVersion );
+	tBuildHeader.m_uFormatVersion = bCopyDictHeader ? FixedIndexFormatVersion(m_uVersion) : (m_tSettings.m_uPostingsFormat ? INDEX_FORMAT_VERSION : 74);
 }
 
 
@@ -3434,7 +3441,7 @@ void GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict
 class CSphHitBuilder
 {
 public:
-	CSphHitBuilder ( const CSphIndexSettings & tSettings, const CSphVector<SphWordID_t> & dHitless, bool bMerging, int iBufSize, DictRefPtr_c pDict, CSphString * sError, StrVec_t * pCreatedFiles );
+	CSphHitBuilder ( const CSphIndexSettings & tSettings, const CSphVector<SphWordID_t> & dHitless, bool bMerging, int iBufSize, DictRefPtr_c pDict, CSphString * sError, StrVec_t * pCreatedFiles, int iFields );
 
 	bool	CreateIndexFiles ( const CSphString& sDocName, const CSphString& sHitName, const CSphString& sSkipName, bool bInplace, int iWriteBuffer, CSphAutofile & tHit, SphOffset_t * pSharedOffset=nullptr );
 	void	HitReset ();
@@ -3453,6 +3460,10 @@ private:
 	void	DoclistBeginEntry ( RowID_t tDocid );
 	void	DoclistEndEntry ( Hitpos_t uLastPos );
 	void	DoclistEndList ();
+
+	std::unique_ptr<postings::DiskWriter_c>	m_pBlockWriter;
+	postings::Posting_t	m_tPosting;
+	int					m_iPostingFields = 0;
 
 	CSphWriter					m_wrDoclist;			///< wordlist writer
 	CSphWriter					m_wrHitlist;			///< hitlist writer
@@ -3488,7 +3499,7 @@ private:
 };
 
 
-CSphHitBuilder::CSphHitBuilder ( const CSphIndexSettings & tSettings, const CSphVector<SphWordID_t> & dHitless, bool bMerging, int iBufSize, DictRefPtr_c pDict, CSphString * sError, StrVec_t * pCreatedFiles )
+CSphHitBuilder::CSphHitBuilder ( const CSphIndexSettings & tSettings, const CSphVector<SphWordID_t> & dHitless, bool bMerging, int iBufSize, DictRefPtr_c pDict, CSphString * sError, StrVec_t * pCreatedFiles, int iFields )
 	: m_dWriteBuffer ( iBufSize )
 	, m_dLastKeyword ( GetKeywordBufSize ( pDict->GetSettings().GetDictFormat() ) )
 	, m_dHitlessWords ( dHitless )
@@ -3502,6 +3513,10 @@ CSphHitBuilder::CSphHitBuilder ( const CSphIndexSettings & tSettings, const CSph
 	, m_bMerging ( bMerging )
 #endif
 {
+	m_iPostingFields = iFields;
+	if ( tSettings.m_uPostingsFormat )
+		m_pBlockWriter = std::make_unique<postings::DiskWriter_c>(m_wrDoclist);
+
 	m_dLastKeyword[0] = '\0';
 	HitReset();
 	m_dLastDocFields.UnsetAll();
@@ -3544,6 +3559,14 @@ bool CSphHitBuilder::CreateIndexFiles ( const CSphString& sDocName, const CSphSt
 	if ( m_pCreatedFiles )
 		m_pCreatedFiles->Add ( m_wrSkiplist.GetFilename() );
 
+	if ( m_pBlockWriter )
+	{
+		postings::WriteFileHeader ( m_wrDoclist, "BPD1" );
+		postings::WriteFileHeader ( m_wrHitlist, "BPH1" );
+		postings::WriteFileHeader ( m_wrSkiplist, "BPS1" );
+		return true;
+	}
+
 	// put dummy byte (otherwise offset would start from 0, first delta would be 0
 	// and VLB encoding of offsets would fuckup)
 	BYTE bDummy = 1;
@@ -3583,6 +3606,14 @@ void CSphHitBuilder::HitReset()
 
 void CSphHitBuilder::DoclistBeginEntry ( RowID_t tRowid )
 {
+	if ( m_pBlockWriter )
+	{
+		m_tPosting = {};
+		m_tPosting.m_uRow = tRowid;
+		m_tPosting.m_uHitRef = m_wrHitlist.GetPos();
+		return;
+	}
+
 	assert ( m_iSkiplistBlockSize>0 );
 
 	// build skiplist
@@ -3603,7 +3634,24 @@ void CSphHitBuilder::DoclistBeginEntry ( RowID_t tRowid )
 void CSphHitBuilder::DoclistEndEntry ( Hitpos_t uLastPos )
 {
 	// end doclist entry
-	if ( m_eHitFormat==SPH_HIT_FORMAT_INLINE )
+	if ( m_pBlockWriter )
+	{
+		if ( !(m_tWord.m_iDocs & HITLESS_DOC_MASK) )
+		{
+			bool bPositions = std::any_of ( m_tPosting.m_dFieldTF.begin(), m_tPosting.m_dFieldTF.end(), [] ( DWORD uTF ) { return uTF!=0; } );
+			if ( !m_pBlockWriter->Begin ( m_iPostingFields, bPositions, *m_pLastError ) )
+			{
+				m_bError = true;
+				return;
+			}
+		}
+
+		m_tPosting.m_uTF = m_uLastDocHits;
+		for ( unsigned i=0; i<postings::FIELD_WORDS; ++i )
+			m_tPosting.m_dFields[i] = m_dLastDocFields[i];
+
+		m_bError |= !m_pBlockWriter->Add ( m_tPosting, *m_pLastError );
+	} else if ( m_eHitFormat==SPH_HIT_FORMAT_INLINE )
 	{
 		bool bIgnoreHits =
 			( m_eHitless==SPH_HITLESS_ALL ) ||
@@ -3642,6 +3690,13 @@ void CSphHitBuilder::DoclistEndEntry ( Hitpos_t uLastPos )
 
 void CSphHitBuilder::DoclistEndList ()
 {
+	if ( m_pBlockWriter )
+	{
+		m_tWord.m_iSkiplistOffset = (m_tWord.m_iDocs & HITLESS_DOC_MASK)>m_iSkiplistBlockSize ? m_wrSkiplist.GetPos() : 0;
+		m_bError |= !m_pBlockWriter->Finish ( m_wrSkiplist, *m_pLastError );
+		return;
+	}
+
 	assert ( m_iSkiplistBlockSize>0 );
 
 	// emit eof marker
@@ -3684,6 +3739,7 @@ void CSphHitBuilder::DoclistEndList ()
 	m_dSkiplist.Resize ( 0 );
 }
 
+
 static int strcmpp (const char* l, const char* r)
 {
 	const char* szEmpty = "";
@@ -3706,6 +3762,7 @@ static bool CopyKeywordBounded ( BYTE * pDst, int iDstLen, const BYTE * pSrc )
 	memset ( p, 0, CSphString::GetGap() );
 	return !*pSrc;
 }
+
 
 void CSphHitBuilder::cidxHit ( AggregateHit_t * pHit )
 {
@@ -3879,6 +3936,9 @@ void CSphHitBuilder::cidxHit ( AggregateHit_t * pHit )
 
 		// update matched fields mask
 		m_dLastDocFields.Set ( HITMAN::GetField ( pHit->m_iWordPos ) );
+
+		if ( m_pBlockWriter )
+			++m_tPosting.m_dFieldTF[HITMAN::GetField(pHit->m_iWordPos)];
 
 		m_uLastDocHits++;
 		m_tWord.m_iHits++;
@@ -4100,7 +4160,7 @@ bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & 
 		wrHeaderJson.PutString ( (Str_t)sJson );
 		wrHeaderJson.CloseFile();
 		assert ( bson::ValidateJson ( sJson.cstr(), &sError ) );
-		return true;
+		return !wrHeaderJson.IsError();
 	}
 
 	sphWarning ( "failed to serialize header to json: %s", sError.cstr() );
@@ -5692,7 +5752,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		? Max ( iWriteBuffer, MIN_WRITE_BUFFER )
 		: DEFAULT_WRITE_BUFFER;
 
-	CSphHitBuilder tHitBuilder ( m_tSettings, dHitlessWords, false, iHitBuilderBufferSize, m_pDict, &m_sLastError, nullptr );
+	CSphHitBuilder tHitBuilder ( m_tSettings, dHitlessWords, false, iHitBuilderBufferSize, m_pDict, &m_sLastError, nullptr, m_tSchema.GetFieldsCount() );
 
 	////////////////////////////////////////////////
 	// collect and partially sort hits
@@ -5930,7 +5990,12 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			if ( iFieldLens>=0 )
 			{
 				for ( int i=0; i < m_tSchema.GetFieldsCount(); i++ )
-					m_dFieldLens[i] += pSource->m_tDocInfo.GetAttr ( m_tSchema.GetAttr ( i+iFieldLens ).m_tLocator );
+				{
+					auto uLength = pSource->m_tDocInfo.GetAttr ( m_tSchema.GetAttr ( i+iFieldLens ).m_tLocator );
+					m_dFieldLens[i] += uLength;
+					if ( m_tSettings.m_uPostingsFormat )
+						m_tPostingNorms.Add ( i, uLength );
+				}
 			}
 
 			if ( bHaveNonColumnarAttrs )
@@ -6582,9 +6647,9 @@ namespace QwordIteration
 		tQword.m_uHitPosition = 0;
 		tQword.m_iHitlistPos = 0;
 
-		if_const ( QWORD::is_worddict::value )
-			tQword.SeekDocReader ( tReader.m_iDoclistOffset, tReader.m_iHint );
+		tQword.SeekDocReader ( tReader.m_iDoclistOffset, tReader.m_iHint );
 	}
+
 
 	template<typename QWORD>
 	inline bool NextDocument ( QWORD & tQword, const CSphIndex_VLN * pSourceIndex )
@@ -6626,9 +6691,11 @@ namespace QwordIteration
 		}
 	}
 
+
 	template<typename QWORD>
-	inline void ConfigureQword ( QWORD & tQword, DataReaderFactory_c * pHits, DataReaderFactory_c * pDocs, int iDynamic )
+	inline void ConfigureQword ( QWORD & tQword, DataReaderFactory_c * pHits, DataReaderFactory_c * pDocs, int iDynamic, CSphString & sError )
 	{
+		tQword.SetReadErrorTarget(&sError);
 		tQword.SetHitReader ( pHits );
 		tQword.SeekHitReader ( 1, READ_NO_SIZE_HINT );
 
@@ -6686,6 +6753,200 @@ public:
 private:
 	CSphHitBuilder *	m_pHitBuilder;
 };
+
+
+bool CSphIndex_VLN::ConvertPostingWords ( CSphHitBuilder & tBuilder, CSphString & sError )
+{
+	CSphDictReader<true> tDict ( m_tSettings.m_iSkiplistBlockSize, m_pDict->GetSettings().GetDictFormat() );
+	if ( !tDict.Setup ( GetFilename(SPH_EXT_SPI), m_tWordlist.GetWordsEnd(), m_tSettings.m_eHitless, sError ) )
+		return false;
+
+	DataReaderFactoryPtr_c pDocs { NewProxyReader ( GetFilename(SPH_EXT_SPD), sError, DataReaderFactory_c::DOCS, 65536, FileAccess_e::FILE ) };
+	DataReaderFactoryPtr_c pHits { NewProxyReader ( GetFilename(SPH_EXT_SPP), sError, DataReaderFactory_c::HITS, 65536, FileAccess_e::FILE ) };
+	if ( !pDocs || !pHits )
+		return false;
+
+	std::unique_ptr<DiskIndexQwordTraits_c> pWord ( sphCreateDiskIndexQword ( m_tSettings.m_eHitFormat==SPH_HIT_FORMAT_INLINE, m_tSettings.m_uPostingsFormat!=0 ) );
+	pWord->SetDocReader(pDocs);
+	pWord->SetHitReader(pHits);
+	pWord->SetReadErrorTarget(&sError);
+	tBuilder.HitblockBegin();
+	while ( tDict.Read() )
+	{
+		if ( sphInterrupted() )
+		{
+			sError = "posting conversion interrupted";
+			return false;
+		}
+
+		pWord->ResetDecoderState();
+		pWord->m_bHasHitlist = tDict.m_bHasHitlist;
+		pWord->SeekDocReader ( tDict.m_iDoclistOffset, tDict.m_iHint );
+		AggregateHit_t tHit;
+		tHit.m_uWordID = tDict.m_uWordID;
+		tHit.m_szKeyword = tDict.GetWord();
+		uint64_t uDocs = 0, uHits = 0;
+		while ( pWord->GetNextDoc().m_tRowID!=INVALID_ROWID )
+		{
+			++uDocs;
+			uHits += pWord->m_uMatchHits;
+			tHit.m_tRowID = pWord->m_tDoc.m_tRowID;
+			tHit.m_dFieldMask.UnsetAll();
+			if ( pWord->m_bHasHitlist )
+			{
+				pWord->SeekHitlist(pWord->m_iHitlistPos);
+				while ( (tHit.m_iWordPos=pWord->GetNextHit())!=EMPTY_HIT )
+					tBuilder.cidxHit(&tHit);
+			} else
+			{
+				tHit.m_dFieldMask = pWord->m_dQwordFields;
+				tHit.SetAggrCount(pWord->m_uMatchHits);
+				tBuilder.cidxHit(&tHit);
+			}
+
+			if ( tBuilder.IsError() || !sError.IsEmpty() )
+				return false;
+		}
+
+		if ( !sError.IsEmpty() )
+			return false;
+
+		if ( uDocs!=uint64_t(tDict.m_iDocs) || uHits!=uint64_t(tDict.m_iHits) )
+		{
+			sError = "source posting counts disagree with dictionary";
+			return false;
+		}
+	}
+
+	AggregateHit_t tFlush;
+	tFlush.m_tRowID = INVALID_ROWID;
+	tFlush.m_uWordID = 0;
+	tFlush.m_szKeyword = (const BYTE *)"";
+	tFlush.m_iWordPos = EMPTY_HIT;
+	tFlush.m_dFieldMask.UnsetAll();
+	tBuilder.cidxHit(&tFlush);
+	return !tBuilder.IsError();
+}
+
+
+bool CSphIndex_VLN::ConvertPostings ( const CSphString & sOutput, CSphString & sError )
+{
+	if ( !m_pDict->GetSettings().IsWordDict() )
+	{
+		sError = "postings_format=block requires dict=keywords or dict=keywords_32k; rebuild CRC tables from source";
+		return false;
+	}
+
+	if ( !m_tSettings.m_bIndexFieldLens || m_tSchema.GetAttrId_FirstFieldLen()<0 )
+	{
+		sError = "conversion requires existing index_field_lengths=1; otherwise rebuild into a separate block table";
+		return false;
+	}
+
+	if ( !Lock() )
+	{
+		sError = GetLastError();
+		return false;
+	}
+
+	AT_SCOPE_EXIT ( [this] { Unlock(); } );
+	auto fnPath = [&] ( ESphExt eExt ) { return SphSprintf ( "%s%s", sOutput.cstr(), sphGetExt(eExt) ); };
+	for ( const auto & tExt : sphGetExts() )
+		if ( sphFileExists(fnPath(tExt.m_eExt)) )
+		{
+			sError.SetSprintf ( "conversion output already exists: %s", fnPath(tExt.m_eExt).cstr() );
+			return false;
+		}
+
+	CSphAutofile tLock ( fnPath(SPH_EXT_SPL), SPH_O_NEW | O_EXCL, sError );
+	if ( tLock.GetFD()<0 )
+		return false;
+
+	StrVec_t dCreated;
+	dCreated.Add(fnPath(SPH_EXT_SPL));
+	bool bComplete = false;
+	AT_SCOPE_EXIT ( [&]
+	{
+		if ( !bComplete )
+			for ( const auto & sFile : dCreated )
+				::unlink(sFile.cstr());
+	} );
+
+	CSphIndexSettings tSettings = m_tSettings;
+	tSettings.m_uPostingsFormat = postings::COMPONENT_VERSION;
+	tSettings.m_eHitFormat = SPH_HIT_FORMAT_PLAIN;
+	DictRefPtr_c pDict { m_pDict->Clone() };
+	CSphVector<SphWordID_t> dHitless;
+	CSphHitBuilder tBuilder ( tSettings, dHitless, true, 1024*1024, pDict, &sError, &dCreated, m_tSchema.GetFieldsCount() );
+	CSphAutofile tDummy;
+	if ( !tBuilder.CreateIndexFiles ( fnPath(SPH_EXT_SPD), fnPath(SPH_EXT_SPP), fnPath(SPH_EXT_SPE), false, 0, tDummy ) )
+		return false;
+
+	CSphAutofile tDict ( fnPath(SPH_EXT_SPI), SPH_O_NEW | O_EXCL, sError );
+	if ( tDict.GetFD()<0 )
+		return false;
+
+	dCreated.Add(fnPath(SPH_EXT_SPI));
+	pDict->SortedDictBegin ( tDict, 1024*1024, tSettings.m_iMinInfixLen ? m_pTokenizer->GetMaxCodepointLength() : 0 );
+	if ( !ConvertPostingWords ( tBuilder, sError ) )
+		return false;
+
+	BuildHeader_t tHeader;
+	WriteHeader_t tWrite;
+	PrepareHeaders ( tHeader, tWrite, false );
+	tHeader.m_uFormatVersion = INDEX_FORMAT_VERSION;
+	tWrite.m_pSettings = &tSettings;
+	tWrite.m_pDict = pDict;
+	if ( !tBuilder.cidxDone ( 16*1024*1024, tSettings.m_iMinInfixLen, m_pTokenizer->GetMaxCodepointLength(), &tHeader ) )
+		return false;
+
+	// Lengths are copied unchanged; collect their immutable statistics over the same row IDs.
+	tHeader.m_tPostingNorms = {};
+	auto dIterators = CreateAllColumnarIterators ( m_pColumnar.get(), m_tSchema );
+	CSphVector<PlainOrColumnar_t> dNormAttrs;
+	for ( int f=0; f<m_tSchema.GetFieldsCount(); ++f )
+		dNormAttrs.Add ( CreatePlainOrColumnar ( m_tSchema, m_tSchema.GetAttr(m_tSchema.GetAttrId_FirstFieldLen()+f) ) );
+
+	for ( RowID_t tRow=0; tRow<m_iDocinfo; ++tRow )
+	{
+		if ( !(tRow&4095) && sphInterrupted() )
+		{
+			sError = "posting conversion interrupted";
+			return false;
+		}
+
+		const CSphRowitem * pRow = GetRawAttrs() ? GetRawAttrs()+int64_t(tRow)*m_tSchema.GetRowSize() : nullptr;
+		ARRAY_FOREACH ( f, dNormAttrs )
+			tHeader.m_tPostingNorms.Add ( f, dNormAttrs[f].Get ( tRow, pRow, dIterators ) );
+	}
+
+	for ( const auto & tExt : sphGetExts() )
+	{
+		if ( !tExt.m_bCopy || tExt.m_eExt==SPH_EXT_SPH || tExt.m_eExt==SPH_EXT_SPI || tExt.m_eExt==SPH_EXT_SPD || tExt.m_eExt==SPH_EXT_SPP || tExt.m_eExt==SPH_EXT_SPE )
+			continue;
+
+		CSphString sSource = GetFilename(tExt.m_eExt);
+		if ( !sphFileExists(sSource) && tExt.m_bOptional )
+			continue;
+
+		if ( !CopyFile ( sSource, fnPath(tExt.m_eExt), sError, SPH_O_NEW | O_EXCL ) )
+			return false;
+
+		dCreated.Add(fnPath(tExt.m_eExt));
+	}
+
+	if ( !UpgradeDocidLookupFile ( fnPath(SPH_EXT_SPT), m_uVersion, sError ) )
+		return false;
+
+	// Publish the header last; an interrupted conversion has no loadable output table.
+	dCreated.Add(fnPath(SPH_EXT_SPH));
+	if ( !IndexBuildDone ( tHeader, tWrite, fnPath(SPH_EXT_SPH), sError ) )
+		return false;
+
+	bComplete = true;
+	return true;
+}
+
 
 // QWORDDST, QWORDSRC = DiskIndexQword_c
 template < typename QWORDDST, typename QWORDSRC >
@@ -6753,8 +7014,8 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 	CSphMerger tMerger(pHitBuilder);
 
-	QwordIteration::ConfigureQword<QWORDDST> ( tDstQword, tDstHits, tDstDocs, pDstIndex->m_tSchema.GetDynamicSize() );
-	QwordIteration::ConfigureQword<QWORDSRC> ( tSrcQword, tSrcHits, tSrcDocs, pSrcIndex->m_tSchema.GetDynamicSize() );
+	QwordIteration::ConfigureQword<QWORDDST> ( tDstQword, tDstHits, tDstDocs, pDstIndex->m_tSchema.GetDynamicSize(), sError );
+	QwordIteration::ConfigureQword<QWORDSRC> ( tSrcQword, tSrcHits, tSrcDocs, pSrcIndex->m_tSchema.GetDynamicSize(), sError );
 
 	/// merge
 
@@ -6882,6 +7143,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 	return true;
 }
 
+
 template <typename QWORD>
 bool CSphIndex_VLN::MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, const VecTraits_T<CSphFixedVector<RowID_t>> & dRowMaps, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphIndexProgress & tProgress )
 {
@@ -6938,7 +7200,7 @@ bool CSphIndex_VLN::MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, c
 		if ( !sError.IsEmpty () || tMonitor.NeedStop () )
 			return false;
 
-		QwordIteration::ConfigureQword<QWORD> ( pSrc->m_tQword, pSrc->m_tHits, pSrc->m_tDocs, pIndex->m_tSchema.GetDynamicSize() );
+		QwordIteration::ConfigureQword<QWORD> ( pSrc->m_tQword, pSrc->m_tHits, pSrc->m_tDocs, pIndex->m_tSchema.GetDynamicSize(), sError );
 		pSrc->m_bHasWord = pSrc->m_tReader.Read();
 	}
 
@@ -7062,6 +7324,7 @@ bool CSphIndex_VLN::MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, c
 	return true;
 }
 
+
 // called only from indexer
 bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids, CSphIndexProgress& tProgress )
 {
@@ -7162,7 +7425,13 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	auto & tMonitor = tProgress.GetMergeCb();
 	assert ( pDstIndex && pSrcIndex );
 
-	/// 'merge with self' - only apply filters/kill-lists, no real merge
+	if ( pDstIndex->m_tSettings.m_uPostingsFormat!=pSrcIndex->m_tSettings.m_uPostingsFormat )
+	{
+		sError = "postings formats must be the same on merged tables; convert to a separate table first";
+		return false;
+	}
+
+	/// 'merge with self'  - only apply filters/kill-lists, no real merge
 	bool bCompress = pSrcIndex==pDstIndex;
 
 	const CSphSchema & tDstSchema = pDstIndex->m_tSchema;
@@ -7235,7 +7504,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	DictRefPtr_c pDict { pSettings->m_pDict->Clone() };
 
 	CSphVector<SphWordID_t> dDummy;
-	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, g_tMergeSettings.m_iBufferDict, pDict, &sError, &dDeleteOnInterrupt );
+	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, g_tMergeSettings.m_iBufferDict, pDict, &sError, &dDeleteOnInterrupt, pSettings->m_tSchema.GetFieldsCount() );
 
 	int iInfixCodepointBytes = 0;
 	if ( pSettings->m_tSettings.m_iMinInfixLen > 0 && pDict->GetSettings().IsWordDict() )
@@ -7297,6 +7566,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	return true;
 }
 
+
 bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSphString & sError, CSphIndexProgress & tProgress, MergeTimings_t * pTimings )
 {
 	TRACE_CORO ( "sph", "CSphIndex_VLN::DoMergeN" );
@@ -7327,6 +7597,12 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 
 		if ( !tBaseSchema.CompareTo ( pIndex->m_tSchema, sError ) )
 			return false;
+
+		if ( pBaseIndex->m_tSettings.m_uPostingsFormat!=pIndex->m_tSettings.m_uPostingsFormat )
+		{
+			sError = "postings formats must be the same on merged chunks";
+			return false;
+		}
 
 		if ( eBaseHitless!=pIndex->m_tSettings.m_eHitless )
 		{
@@ -7410,7 +7686,7 @@ bool CSphIndex_VLN::DoMergeN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, CSph
 	DictRefPtr_c pDict { pSettings->m_pDict->Clone() };
 
 	CSphVector<SphWordID_t> dDummy;
-	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, g_tMergeSettings.m_iBufferDict, pDict, &sError, &dDeleteOnInterrupt );
+	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, g_tMergeSettings.m_iBufferDict, pDict, &sError, &dDeleteOnInterrupt, pSettings->m_tSchema.GetFieldsCount() );
 
 	int iInfixCodepointBytes = 0;
 	if ( pSettings->m_tSettings.m_iMinInfixLen > 0 && pDict->GetSettings().IsWordDict() )
@@ -7500,6 +7776,7 @@ bool sphMergeN ( VecTraits_T<const CSphIndex *> dIndexes, CSphIndexProgress & tP
 	return CSphIndex_VLN::DoMergeN ( dVlnIndexes, sError, tProgress, pTimings );
 }
 
+
 template < typename QWORD >
 bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField )
 {
@@ -7535,7 +7812,7 @@ bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder *
 	if ( !sError.IsEmpty () || sphInterrupted () )
 		return false;
 
-	QwordIteration::ConfigureQword ( tQword, tHits, tDocs, pIndex->m_tSchema.GetDynamicSize() );
+	QwordIteration::ConfigureQword ( tQword, tHits, tDocs, pIndex->m_tSchema.GetDynamicSize(), sError );
 
 	/// process
 	while ( tWordsReader.Read () )
@@ -7600,7 +7877,7 @@ bool CSphIndex_VLN::DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHe
 
 	int iHitBufferSize = 8 * 1024 * 1024;
 	CSphVector<SphWordID_t> dDummy;
-	CSphHitBuilder tHitBuilder ( m_tSettings, dDummy, true, iHitBufferSize, pDict, &sError, nullptr );
+	CSphHitBuilder tHitBuilder ( m_tSettings, dDummy, true, iHitBufferSize, pDict, &sError, nullptr, m_tSchema.GetFieldsCount() );
 
 	// FIXME? is this magic dict block constant any good?..
 
@@ -7791,6 +8068,12 @@ bool CSphIndex_VLN::AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSph
 
 bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldName, DWORD uFieldFlags, CSphString & sError )
 {
+	if ( m_tSettings.m_uPostingsFormat )
+	{
+		sError = "changing full-text fields of a block postings table requires a rebuild with matching length attributes";
+		return false;
+	}
+
 	// the header gets rewritten with the current format version below
 	if ( !UpgradeDocidLookup ( sError ) )
 		return false;
@@ -7821,6 +8104,7 @@ bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldNa
 
 	return JuggleFile ( SPH_EXT_SPH, sError );
 }
+
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -9330,6 +9614,7 @@ bool DiskIndexQwordSetup_c::SetupWithCrc ( const DiskIndexQwordTraits_c& tWord, 
 	return pIndex->m_tWordlist.GetWord ( pBuf, tWord.m_uWordID, tRes );
 }
 
+
 bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 {
 	// there was a dynamic_cast here once but it's not necessary
@@ -9378,7 +9663,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 
 		// read in skiplist
 		// OPTIMIZE? maybe add an option to decompress on preload instead?
-		if ( m_pSkips && iLayoutDocs>m_iSkiplistBlockSize )
+		if ( !pIndex->m_tSettings.m_uPostingsFormat && m_pSkips && iLayoutDocs>m_iSkiplistBlockSize )
 		{
 			int iSkips = tWord.m_iDocs/m_iSkiplistBlockSize;
 			const int SMALL_SKIP_THRESH = 256;
@@ -9401,6 +9686,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 
 	return true;
 }
+
 
 static DWORD Fields2Mask ( int iFields )
 {
@@ -9669,6 +9955,7 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderLegacy ( const CSphString& sHeade
 	return rdInfo.GetErrorFlag() ? LOAD_E::GeneralError_e : LOAD_E::Ok_e;
 }
 
+
 CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning )
 {
 	using namespace bson;
@@ -9719,6 +10006,11 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 
 	// index settings
 	LoadIndexSettingsJson ( tBson.ChildByName ( "index_settings" ), m_tSettings );
+	if ( (m_tSettings.m_uPostingsFormat && m_tSettings.m_uPostingsFormat!=postings::COMPONENT_VERSION) || (m_tSettings.m_uPostingsFormat && m_uVersion<75) )
+	{
+		m_sLastError = "unsupported postings component version";
+		return LOAD_E::GeneralError_e;
+	}
 	if ( m_uVersion<68 && m_tSettings.m_eHitless!=SPH_HITLESS_NONE )
 		sWarning.SetSprintf ( "hitless dictionary (format version %u < 68) could be corrupted - rebuild table", m_uVersion );
 
@@ -9730,6 +10022,12 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 	// dictionary stuff
 	CSphDictSettings tDictSettings;
 	tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, pFilenameBuilder, sWarning );
+	if ( m_tSettings.m_uPostingsFormat && !tDictSettings.IsWordDict() )
+	{
+		m_sLastError = "postings_format=block requires dict=keywords or dict=keywords_32k; rebuild CRC tables from source";
+		return LOAD_E::GeneralError_e;
+	}
+
 	// dictionary header (wordlist checkpoints, infix blocks, etc)
 	m_tWordlist.m_iDictCheckpointsOffset = Int ( tBson.ChildByName ( "dict_checkpoints_offset" ) );
 	m_tWordlist.m_iDictCheckpoints = Int ( tBson.ChildByName ( "dict_checkpoints" ) );
@@ -9796,6 +10094,25 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 		return LOAD_E::GeneralError_e;
 
 	SetFieldFilter ( std::move ( pFieldFilter ) );
+
+	if ( m_tSettings.m_uPostingsFormat )
+	{
+		Bson_c tNorms ( tBson.ChildByName("posting_norms") );
+		if ( m_bDebugCheck )
+		{
+			if ( !postings::CheckNorms ( tNorms, m_tSchema, m_iDocinfo, m_tSettings.m_bIndexFieldLens ) )
+			{
+				m_sLastError = "invalid or missing block posting length statistics";
+				return LOAD_E::GeneralError_e;
+			}
+		} else
+			assert ( postings::CheckNorms ( tNorms, m_tSchema, m_iDocinfo, m_tSettings.m_bIndexFieldLens ) );
+
+		int iField = 0;
+		Bson_c(tNorms.ChildByName("field_docs")).ForEach ( [&] ( const NodeHandle_t & tNode ) { m_tPostingNorms.m_dDocs[iField++] = Int(tNode); } );
+		iField = 0;
+		Bson_c(tNorms.ChildByName("field_tokens")).ForEach ( [&] ( const NodeHandle_t & tNode ) { m_tPostingNorms.m_dTokens[iField++] = Int(tNode); } );
+	}
 
 	auto tIndexFieldsLenNode = tBson.ChildByName ( "index_fields_lens" );
 	if ( m_tSettings.m_bIndexFieldLens )
@@ -10378,6 +10695,7 @@ bool CSphIndex_VLN::PreallocSecondaryIndex()
 	return true;
 }
 
+
 bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings )
 {
 	MEMORY ( MEM_INDEX_DISK );
@@ -10426,6 +10744,22 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 	if ( !PreallocDocstore() )		return false;
 	if ( !PreallocColumnar() )		return false;
 	if ( !PreallocKNN() )			return false;
+	if ( m_tSettings.m_uPostingsFormat )
+	{
+		auto CheckPostingsHeaders = [&]()
+		{
+			return postings::CheckFileHeader ( GetFilename(SPH_EXT_SPD), "BPD1", m_sLastError ) &&
+				postings::CheckFileHeader ( GetFilename(SPH_EXT_SPP), "BPH1", m_sLastError ) &&
+				postings::CheckFileHeader ( GetFilename(SPH_EXT_SPE), "BPS1", m_sLastError );
+		};
+		if ( m_bDebugCheck )
+		{
+			if ( !CheckPostingsHeaders() )
+				return false;
+		} else
+			assert ( CheckPostingsHeaders() );
+	}
+
 	if ( !PreallocSkiplist() )		return false;
 	if ( !PreallocSecondaryIndex() ) return false;
 
@@ -12272,6 +12606,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 	tTermSetup.m_iDynamicRowitems = tMaxSorterSchema.GetDynamicSize();
 	tTermSetup.m_iMaxTimer = tmMaxTimer;
 	tTermSetup.m_pWarning = &tMeta.m_sWarning;
+	tTermSetup.m_pError = &tMeta.m_sError;
 	tTermSetup.m_pCtx = &tCtx;
 	tTermSetup.m_pNodeCache = pNodeCache;
 	tTermSetup.m_bHasWideFields = ( m_tSchema.GetFieldsCount()>32 );
@@ -12420,6 +12755,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 			assert ( 0 && "Internal error" );
 			break;
 	}
+
+	if ( !tMeta.m_sError.IsEmpty() )
+		return false;
 
 	////////////////////
 	// cook result sets

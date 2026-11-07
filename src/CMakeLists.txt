@@ -58,7 +58,7 @@ add_subdirectory ( postings )
 add_library ( lmanticore STATIC sphinx.cpp sphinxutils.cpp
 		sphinxsort.cpp sortsetup.cpp sphinxexpr.cpp sphinxfilter.cpp sphinxsearch.cpp sphinxrt.cpp accumulator.cpp uuid_docid.cpp
 		sphinxjson.cpp sphinxaot.cpp sphinxplugin.cpp sphinxudf.c sphinxqcache.cpp 
-		attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp postingwindow.cpp fastcount.cpp diskqword.cpp json/cJSON_test.c sphinxpq.cpp
+		attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp postingwindow.cpp fastcount.cpp diskqword.cpp postings/disk.cpp postings/diskvalidation.cpp postings/blockqword.cpp postings/blockqwordvalidation.cpp json/cJSON_test.c sphinxpq.cpp
 		global_idf.cpp docstore.cpp lz4/lz4.c lz4/lz4hc.c snippetfunctor.cpp snippetindex.cpp
 		snippetstream.cpp snippetpassage.cpp threadutils.cpp sphinxversion.cpp datareader.cpp
 		indexformat.cpp indexsettings.cpp fileutils.cpp threads_detached.cpp hazard_pointer.cpp
@@ -106,7 +106,7 @@ target_link_libraries ( indexcheck PRIVATE lextra roaring::roaring )
 target_link_libraries ( lmanticore PUBLIC indexcheck )
 
 target_link_libraries ( lmanticore PUBLIC lextra indexcheck conversion manticore_std stripper tokenizer
-		schema dict sphinxquery sourcedoc lmanticore_coro )
+		schema dict sphinxquery sourcedoc lmanticore_coro manticore_postings )
 
 if (WITH_ICU OR WITH_JIEBA)
 	add_library ( lcjk cjkpreprocessor.cpp )

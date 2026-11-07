@@ -113,6 +113,7 @@ public:
 	virtual int					GetNextDocs ( QwordDoc_t * pDocs, int iMax );
 	virtual void				SeekHitlist ( SphOffset_t uOff ) = 0;
 	virtual Hitpos_t			GetNextHit () = 0;
+	virtual void				SetMembershipOnly() {}
 	virtual bool				WantHitPrefetch() { return false; }
 	virtual void				PrefetchHits ( const SphOffset_t * pOffsets, const DWORD * pHits, int iCount ) {}
 	virtual void				CollectHitMask ();
@@ -134,13 +135,14 @@ public:
 	const CSphIndex *		m_pIndex		{nullptr};
 	int						m_iDynamicRowitems {0};
 	int64_t					m_iMaxTimer		{0};
+	CSphString *			m_pError		{nullptr};
 	CSphString *			m_pWarning		{nullptr};
 	CSphQueryContext *		m_pCtx			{nullptr};
 	CSphQueryNodeCache *	m_pNodeCache	{nullptr};
 	mutable ISphZoneCheck *	m_pZoneChecker	{nullptr};
 	CSphQueryStats *		m_pStats		{nullptr};
 	mutable bool			m_bSetQposMask	{false};
-	DictRefPtr_c			m_pDict;
+	DictRefPtr_c		m_pDict;
 	mutable KeywordBuf_t	m_tKeywordBuf;
 	bool					m_bHasWideFields { false };
 
@@ -187,20 +189,20 @@ class QwordScan_c : public ISphQword
 public:
 	QwordScan_c ( int iRowsCount, int iAtomPos, int iFieldsCount );
 
-	const CSphMatch & GetNextDoc() final;
+	const CSphMatch &	GetNextDoc() final;
 
-	void SeekHitlist ( SphOffset_t uOff ) override {}
-	Hitpos_t GetNextHit () override { return EMPTY_HIT; }
-	void Reset () final;
+	void				SeekHitlist ( SphOffset_t uOff ) override	{}
+	Hitpos_t			GetNextHit () override						{ return EMPTY_HIT; }
+	void				Reset () final;
 
 protected:
-	RowID_t m_iRowsCount = INVALID_ROWID;
-	bool m_bDone = false;
-	CSphMatch m_tDoc;
-	int m_iFieldsCount;
+	RowID_t		m_iRowsCount = INVALID_ROWID;
+	bool		m_bDone = false;
+	CSphMatch	m_tDoc;
+	int			m_iFieldsCount;
 
-	virtual bool IsAliveRow (  RowID_t ) const { return true; }
-	void SetFieldMask();
+	virtual bool	IsAliveRow ( RowID_t ) const	{ return true; }
+	void			SetFieldMask();
 };
 
 

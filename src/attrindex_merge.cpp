@@ -39,6 +39,7 @@ class AttrMerger_c::Impl_c
 	CSphVector<PlainOrColumnar_t>			m_dAttrsForKNN;
 	CSphFixedVector<DocidRowidPair_t> 		m_dDocidLookup {0};
 	CSphFixedVector<UuidDocidLookupPair_t>	m_dUuidLookup {0};
+	PostingNormStats_t					m_tPostingNorms;
 	CSphWriter								m_tWriterSPA;
 	std::unique_ptr<BlobRowBuilder_i>		m_pBlobRowBuilder;
 	std::unique_ptr<DocstoreBuilder_i>		m_pDocstoreBuilder;
@@ -97,6 +98,7 @@ public:
 	bool CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
 	bool FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t & tBuildHeader );
 };
+
 
 bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex )
 {
@@ -167,6 +169,7 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 	return true;
 }
 
+
 template <bool WITH_BLOB, bool WITH_STRIDE, bool WITH_DOCSTORE, bool WITH_SI, bool PURE_COLUMNAR, bool WITH_UUID>
 bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap )
 {
@@ -181,6 +184,14 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 
 	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
 	CSphVector<int64_t> dTmp;
+
+	CSphVector<PlainOrColumnar_t> dPostingNormAttrs;
+	if ( tIndex.GetSettings().m_uPostingsFormat )
+	{
+		const auto & tSchema = tIndex.GetMatchSchema();
+		for ( int f=0; f<tSchema.GetFieldsCount(); ++f )
+			dPostingNormAttrs.Add ( CreatePlainOrColumnar ( tSchema, tSchema.GetAttr(tSchema.GetAttrId_FirstFieldLen()+f) ) );
+	}
 
 	// docstore entries are copied by name and type, so a source chunk written before an entry existed
 	// (e.g. the chunk spans) contributes an empty value for it instead of shifting the whole layout
@@ -228,6 +239,8 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 
 		const CSphRowitem * pRow = PURE_COLUMNAR ? nullptr : tIndex.GetRawAttrs() + (int64_t)tRowID * iStride;
 		const BYTE * pRawBlobAttrs = PURE_COLUMNAR ? nullptr : tIndex.GetRawBlobAttrs();
+		ARRAY_FOREACH ( f, dPostingNormAttrs )
+			m_tPostingNorms.Add ( f, dPostingNormAttrs[f].Get ( tRowID, pRow, dColumnarIterators ) );
 
 		// limit granted by caller code
 		assert ( m_tResultRowID != INVALID_ROWID );
@@ -543,6 +556,7 @@ bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, 
 	tBuildHeader.m_iDocinfo = m_iTotalDocs;
 	tBuildHeader.m_iTotalDocuments = m_iTotalDocs;
 	tBuildHeader.m_iTotalBytes = m_iTotalBytes;
+	tBuildHeader.m_tPostingNorms = m_tPostingNorms;
 
 	m_dDocidLookup.Sort ( CmpDocidLookup_fn() );
 	if ( m_bUuidLinked )

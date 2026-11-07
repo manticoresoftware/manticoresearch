@@ -13,6 +13,7 @@
 #include "sphinxint.h"
 #include "fastcount.h"
 #include "sphinxrt.h"
+#include "postings/disk.h"
 #include "sphinxpq.h"
 #include "sphinxsearch.h"
 #include "sphinxsort.h"
@@ -1766,7 +1767,7 @@ private:
 	// v22: keywords_v2 dictionary layout versioning.
 	// v23: UUID primary ID linked-schema semantics.
 	// v24: float_vector_array attribute type
-	static constexpr DWORD		META_VERSION		= 25; // next should be 26
+	static constexpr DWORD		META_VERSION		= 26; // immutable table-wide block postings selector
 	// Since v20, RT meta is JSON. indextool.cpp's separate v18 constant only handles legacy binary meta.
 
 	int							m_iStride;
@@ -4592,6 +4593,11 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	RowID_t tNextRowID = 0;
 	int iStride = m_tSchema.GetRowSize();
 	auto iStrideBytes = sizeof ( CSphRowitem ) * iStride;
+	CSphVector<PlainOrColumnar_t> dPostingNormAttrs;
+	if ( m_tSettings.m_uPostingsFormat )
+		for ( int f=0; f<m_tSchema.GetFieldsCount(); ++f )
+			dPostingNormAttrs.Add ( CreatePlainOrColumnar ( m_tSchema, m_tSchema.GetAttr(m_tSchema.GetAttrId_FirstFieldLen()+f) ) );
+
 	CSphFixedVector<CSphRowitem> dNewRow { iStride };
 	CSphRowitem * pNewRow = dNewRow.Begin();
 	ARRAY_FOREACH ( i, tCtx.m_tRamSegments )
@@ -4607,6 +4613,9 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 		{
 			const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID*iStride;
 			tMinMaxBuilder.Collect(pRow);
+			ARRAY_FOREACH ( f, dPostingNormAttrs )
+				tCtx.m_tPostingNorms.Add ( f, dPostingNormAttrs[f].Get ( tRowID, pRow, dColumnarIterators ) );
+
 			if ( pBlobLocatorAttr )
 			{
 				auto tSrcOffset = sphGetRowAttr ( pRow, pBlobLocatorAttr->m_tLocator );
@@ -4859,6 +4868,40 @@ bool RtIndex_c::StoreKNNParallel ( SaveDiskDataContext_t & tCtx, knn::Builder_i 
 }
 
 
+static bool WriteBlockPosting ( postings::DiskWriter_c & tBlockWriter, CSphWriter & tWriterHits, const RtSegment_t & tSegment, const RtDoc_t & tDoc, RowID_t tRowID, bool bHasHitlist, CSphString & sError )
+{
+	postings::Posting_t tPosting;
+	tPosting.m_uRow = tRowID;
+	tPosting.m_uTF = tDoc.m_uHits;
+	tPosting.m_uHitRef = tWriterHits.GetPos();
+	if ( bHasHitlist )
+	{
+		DWORD uLastHit = 0;
+		auto fnWriteHit = [&] ( DWORD uValue )
+		{
+			unsigned f = HITMAN::GetField(uValue);
+			tPosting.m_dFields[f/32] |= 1U<<(f%32);
+			++tPosting.m_dFieldTF[f];
+			tWriterHits.ZipInt ( uValue-std::exchange(uLastHit,uValue) );
+		};
+
+		if ( tDoc.m_uHits==1 )
+			fnWriteHit(tDoc.m_uHit);
+		else
+		{
+			RtHitReader_c tInHits ( tSegment, tDoc );
+			while ( DWORD uValue = tInHits.UnzipHit() )
+				fnWriteHit(uValue);
+		}
+
+		tWriterHits.ZipInt(0);
+	} else
+		tPosting.m_dFields[0] = tDoc.m_uDocFields;
+
+	return tBlockWriter.Add ( tPosting, sError );
+}
+
+
 bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, CSphString & sError ) const
 {
 	CSphWriterNonThrottled tWriterHits, tWriterDocs, tWriterSkips;
@@ -4872,9 +4915,19 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 	if ( !tWriterSkips.OpenFile ( tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPE ), sError ) )
 		return false;
 
-	tWriterHits.PutByte(1);
-	tWriterDocs.PutByte(1);
-	tWriterSkips.PutByte(1);
+	std::unique_ptr<postings::DiskWriter_c> pBlockWriter;
+	if ( m_tSettings.m_uPostingsFormat )
+	{
+		postings::WriteFileHeader ( tWriterHits, "BPH1" );
+		postings::WriteFileHeader ( tWriterDocs, "BPD1" );
+		postings::WriteFileHeader ( tWriterSkips, "BPS1" );
+		pBlockWriter = std::make_unique<postings::DiskWriter_c>(tWriterDocs);
+	} else
+	{
+		tWriterHits.PutByte(1);
+		tWriterDocs.PutByte(1);
+		tWriterSkips.PutByte(1);
+	}
 
 	int iSegments = tCtx.m_tRamSegments.GetLength();
 
@@ -4941,6 +4994,19 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 				if ( tRowID==INVALID_ROWID )
 					continue;
 
+				if ( pBlockWriter )
+				{
+					if ( !iDocs && !pBlockWriter->Begin ( m_tSchema.GetFieldsCount(), pWord->m_bHasHitlist, sError ) )
+						return false;
+
+					if ( !WriteBlockPosting ( *pBlockWriter, tWriterHits, *tCtx.m_tRamSegments[iSegment], *pDoc, tRowID, pWord->m_bHasHitlist, sError ) )
+						return false;
+
+					++iDocs;
+					iHits += pDoc->m_uHits;
+					continue;
+				}
+
 				// build skiplist, aka save decoder state as needed
 				if ( ( iDocs & ( iSkiplistBlockSize-1 ) )==0 )
 				{
@@ -4980,6 +5046,9 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 
 		// write skiplist
 		int64_t iSkiplistOff = tWriterSkips.GetPos();
+		if ( pBlockWriter && iDocs && !pBlockWriter->Finish ( tWriterSkips, sError ) )
+			return false;
+
 		for ( int i=1; i<dSkiplist.GetLength(); ++i )
 		{
 			const SkiplistEntry_t & tPrev = dSkiplist[i-1];
@@ -4994,7 +5063,8 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 		// write dict entry if necessary
 		if ( tWriterDocs.GetPos()!=uDocpos )
 		{
-			tWriterDocs.ZipInt ( 0 ); // docs over
+			if ( !pBlockWriter )
+				tWriterDocs.ZipInt ( 0 ); // docs over
 
 			if ( ( iWords%SPH_WORDLIST_CHECKPOINT )==0 )
 			{
@@ -5050,7 +5120,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 			if ( bWordDict )
 			{
 				BYTE uHint = sphDoclistHintPack ( iDocs, tWriterDocs.GetPos()-tCtx.m_tLastDocPos );
-				if ( uHint )
+				if ( iDocs>=DOCLIST_HINT_THRESH )
 					tWriterDict.PutByte ( uHint );
 
 				// build infixes
@@ -5084,7 +5154,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 	tWriterHits.CloseFile();
 	tWriterDocs.CloseFile();
 	tWriterSkips.CloseFile();
-	return true;
+	return !tWriterSkips.IsError() && !tWriterDocs.IsError() && !tWriterHits.IsError();
 }
 
 
@@ -5276,7 +5346,7 @@ bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 
 static void FixupIndexSettings ( CSphIndexSettings & tSettings )
 {
-	tSettings.m_eHitFormat = SPH_HIT_FORMAT_INLINE;
+	tSettings.m_eHitFormat = tSettings.m_uPostingsFormat ? SPH_HIT_FORMAT_PLAIN : SPH_HIT_FORMAT_INLINE;
 	tSettings.m_iBoundaryStep = 0;
 	tSettings.m_iStopwordStep = 1;
 	tSettings.m_iOvershortStep = 1;
@@ -5361,6 +5431,7 @@ bool RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 	return true;
 }
 
+
 void RtIndex_c::WriteMeta ( int64_t iTID, const VecTraits_T<int>& dChunkNames, CSphWriter& wrMeta ) const
 {
 	JsonEscapedBuilder sNewMeta;
@@ -5369,7 +5440,7 @@ void RtIndex_c::WriteMeta ( int64_t iTID, const VecTraits_T<int>& dChunkNames, C
 	// human-readable sugar
 	sNewMeta.NamedString ( "meta_created_time_utc", sphCurrentUtcTime() );
 
-	sNewMeta.NamedVal ( "meta_version", META_VERSION );
+	sNewMeta.NamedVal ( "meta_version", m_tSettings.m_uPostingsFormat ? META_VERSION : 25 );
 	//	sNewMeta.NamedVal ( "index_format_version", INDEX_FORMAT_VERSION );
 	sNewMeta.NamedVal ( "total_documents", m_tStats.m_iTotalDocuments );
 	sNewMeta.NamedVal ( "total_bytes", m_tStats.m_iTotalBytes );
@@ -5416,6 +5487,7 @@ void RtIndex_c::WriteMeta ( int64_t iTID, const VecTraits_T<int>& dChunkNames, C
 	wrMeta.PutString ( (Str_t)sNewMeta );
 	assert ( bson::ValidateJson ( sNewMeta.cstr() ) );
 }
+
 
 bool RtIndex_c::SaveMeta()
 {
@@ -5673,6 +5745,7 @@ RtActionResult_e RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUI
 	return RtActionResult_e::OK;
 }
 
+
 std::unique_ptr<CSphIndex> RtIndex_c::PreallocDiskChunk ( const CSphString& sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * szName ) const
 {
 	MEMORY ( MEM_INDEX_DISK );
@@ -5698,10 +5771,15 @@ std::unique_ptr<CSphIndex> RtIndex_c::PreallocDiskChunk ( const CSphString& sChu
 	{
 		sError.SetSprintf ( "disk chunk %s: prealloc failed: %s", sChunk.cstr(), pDiskChunk->GetLastError().cstr() );
 		pDiskChunk = nullptr;
+	} else if ( pDiskChunk->GetSettings().m_uPostingsFormat!=m_tSettings.m_uPostingsFormat )
+	{
+		sError.SetSprintf ( "disk chunk %s: postings format differs from its RT table", sChunk.cstr() );
+		pDiskChunk = nullptr;
 	}
 
 	return pDiskChunk;
 }
+
 
 RtIndex_c::LOAD_E RtIndex_c::LoadMetaLegacy ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes, StrVec_t & dWarnings )
 {
@@ -5894,6 +5972,11 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder
 	ReadSchemaJson ( tBson.ChildByName ( "schema" ), tSchema );
 	SetSchema ( std::move ( tSchema ) );
 	LoadIndexSettingsJson ( tBson.ChildByName ( "index_settings" ), m_tSettings );
+	if ( (m_tSettings.m_uPostingsFormat && m_tSettings.m_uPostingsFormat!=postings::COMPONENT_VERSION) || (m_tSettings.m_uPostingsFormat && uVersion<26) )
+	{
+		m_sLastError = "unsupported postings component version";
+		return LOAD_E::GeneralError_e;
+	}
 	if ( !tTokenizerSettings.Load ( pFilenameBuilder, tBson.ChildByName ( "tokenizer_settings" ), tEmbeddedFiles, m_sLastError ) )
 		return LOAD_E::GeneralError_e;
 
@@ -5902,6 +5985,12 @@ RtIndex_c::LOAD_E RtIndex_c::LoadMetaJson ( FilenameBuilder_i * pFilenameBuilder
 		tDictSettings.Load ( tBson.ChildByName ( "dictionary_settings" ), tEmbeddedFiles, pFilenameBuilder, sWarning );
 		if ( !sWarning.IsEmpty() )
 			dWarnings.Add(sWarning);
+	}
+
+	if ( m_tSettings.m_uPostingsFormat && !tDictSettings.IsWordDict() )
+	{
+		m_sLastError = "postings_format=block requires dict=keywords or dict=keywords_32k; rebuild CRC tables from source";
+		return LOAD_E::GeneralError_e;
 	}
 
 	// initialize AOT if needed
@@ -10338,8 +10427,15 @@ DiskAttachRes_e RtIndex_c::AttachDiskIndexImpl ( CSphIndex * pIndex, bool bTrunc
 	return bMetaSaved ? DiskAttachRes_e::OK : DiskAttachRes_e::META_FAILED;
 }
 
+
 bool RtIndex_c::CanAttach ( const CSphIndex * pIndex, bool bCheckFT, CSphString & sError ) const
 {
+	if ( m_tSettings.m_uPostingsFormat!=pIndex->GetSettings().m_uPostingsFormat )
+	{
+		sError = "ATTACH requires the same postings format, including for empty tables";
+		return false;
+	}
+
 	// ATTACH to exist index require these checks
 	if ( !m_tRtChunks.IsEmpty() )
 	{
@@ -10364,6 +10460,7 @@ bool RtIndex_c::CanAttach ( const CSphIndex * pIndex, bool bCheckFT, CSphString 
 
 	return true;
 }
+
 
 bool RtIndex_c::AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
@@ -12089,6 +12186,18 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, DictFo
 	if ( fnCreateFilenameBuilder )
 		pFilenameBuilder = fnCreateFilenameBuilder ( sIndexName.cstr() );
 
+	if ( tIndexSettings.m_uPostingsFormat!=tSettings.m_tIndex.m_uPostingsFormat )
+	{
+		sError = "changing postings_format requires conversion to a separate table";
+		return true;
+	}
+
+	if ( tSettings.m_tIndex.m_uPostingsFormat && !tSettings.m_tDict.IsWordDict() )
+	{
+		sError = "postings_format=block requires dict=keywords or dict=keywords_32k; rebuild CRC tables from source";
+		return true;
+	}
+
 	DictFormat_e eNewDictFormat = tSettings.m_tDict.GetDictFormat();
 	const bool bDictFormatChanged = eNewDictFormat!=eCurrentDictFormat;
 	const bool bUpgradeToKeywordsV2 = eCurrentDictFormat==DictFormat_e::KEYWORDS && eNewDictFormat==DictFormat_e::KEYWORDS_V2;
@@ -12335,6 +12444,7 @@ bool RtIndex_c::IsAlive ( DocID_t tDocID ) const
 	return false;
 }
 
+
 uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 {
 	uint64_t uHash = 0;
@@ -12354,6 +12464,7 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 
 	int iMinPrefixLen = tSettings.RawMinPrefixLen();
 
+	uHash = sphFNV64 ( &tSettings.m_uPostingsFormat, sizeof(tSettings.m_uPostingsFormat), uHash );
 	uHash = sphFNV64 ( &tSettings.m_eHitFormat, sizeof(tSettings.m_eHitFormat), uHash );
 	uHash = sphFNV64 ( tSettings.m_sHtmlIndexAttrs.cstr(), tSettings.m_sHtmlIndexAttrs.Length(), uHash );
 	uHash = sphFNV64 ( tSettings.m_sHtmlRemoveElements.cstr(), tSettings.m_sHtmlRemoveElements.Length(), uHash );
@@ -12375,6 +12486,7 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 
 	return uHash;
 }
+
 
 StrVec_t RtIndex_c::CollectOwnedExternalFiles () const
 {

@@ -51,6 +51,7 @@ void DiskIndexQwordTraits_c::SetDocReader ( DataReaderFactory_c * pReader )
 	if ( !pReader )
 		return;
 
+	m_iDocFileSize = pReader->GetFilesize();
 	m_rdDoclist = pReader->MakeReader ( m_pDocsBuf, MINIBUFFER_LEN );
 	OnDocReaderChanged();
 }
@@ -943,6 +944,7 @@ void ExpandedMergeThdHits ( int iHits )
 	g_iExpandMergeHits = iHits;
 }
 
+
 ////////////////////////////////////////////////////////////////////
 
 void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, JsonEscapedBuilder& sJson, bool bForceWordDict, bool SkipEmbeddDict )
@@ -953,7 +955,7 @@ void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t 
 	sJson.NamedString ( "meta_created_time_utc", sphCurrentUtcTime() );
 
 	// version
-	sJson.NamedVal ( "index_format_version", tBuildHeader.m_uFormatVersion ? tBuildHeader.m_uFormatVersion : INDEX_FORMAT_VERSION );
+	sJson.NamedVal ( "index_format_version", tBuildHeader.m_uFormatVersion ? tBuildHeader.m_uFormatVersion : (tWriteHeader.m_pSettings->m_uPostingsFormat ? INDEX_FORMAT_VERSION : 74) );
 
 	// index stats - json (put here to be similar with .meta)
 	sJson.NamedValNonDefault ( "total_documents", tBuildHeader.m_iTotalDocuments );
@@ -992,6 +994,26 @@ void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t 
 	{
 		tWriteHeader.m_pFieldFilter->GetSettings ( tFieldFilterSettings );
 		sJson.NamedVal ( "field_filter_settings", tFieldFilterSettings );
+	}
+
+	if ( tWriteHeader.m_pSettings->m_uPostingsFormat )
+	{
+		sJson.Named ( "posting_norms" );
+		auto tNormObject = sJson.ObjectW();
+		sJson.NamedString ( "storage", "field_lengths" );
+		sJson.NamedVal ( "version", 1 );
+		{
+			sJson.Named ( "field_docs" );
+			auto tArray = sJson.Array();
+			for ( int i=0; i<tWriteHeader.m_pSchema->GetFieldsCount(); ++i )
+				sJson << tBuildHeader.m_tPostingNorms.m_dDocs[i];
+		}
+		{
+			sJson.Named ( "field_tokens" );
+			auto tArray = sJson.Array();
+			for ( int i=0; i<tWriteHeader.m_pSchema->GetFieldsCount(); ++i )
+				sJson << tBuildHeader.m_tPostingNorms.m_dTokens[i];
+		}
 	}
 
 	// average field lengths

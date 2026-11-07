@@ -193,7 +193,9 @@ private:
 };
 }
 
+
 std::unique_ptr<PostingWindow_i> CreateBufferedPostingWindow ( ISphQword & tWord, DWORD uFields, const PostingWindowContext_t & tContext )
 {
+	tWord.SetMembershipOnly();
 	return std::make_unique<BufferedPostingWindow_c> ( tWord, uFields, tContext );
 }

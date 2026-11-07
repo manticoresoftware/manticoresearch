@@ -32,6 +32,7 @@ public:
 	virtual RowID_t		UnzipRowid() = 0;
 	virtual SphWordID_t	UnzipWordid() = 0;
 	virtual void		Reset () = 0;
+	virtual const char * GetError() const { return nullptr; }
 
 	// for memory-mapped readers: the whole map, so that a qword can decode from raw pointers; null otherwise
 	virtual const BYTE * GetMapBase ( SphOffset_t & iSize ) const { iSize = 0; return nullptr; }
@@ -48,6 +49,17 @@ struct FileRange_t
 	SphOffset_t	m_iLen = 0;
 };
 
+
+/// prefetch gate: a residency probe and readahead request are issued only when the counter is zero or a power
+/// of two, and a cache miss resets it. A cold query therefore prefetches every term while a warm one stops
+/// probing after a few terms
+struct PrefetchGate_t
+{
+	DWORD	m_uCounter = 0;
+
+	bool	ShouldProbe()	{ DWORD u = m_uCounter++; return ( u & ( u-1 ) )==0; }
+	void	OnMiss()		{ m_uCounter = 0; }
+};
 
 // producer of readers from file or filemap
 class DataReaderFactory_c : public ISphRefcountedMT

@@ -1,0 +1,24 @@
+name: OpenSSL dependency checks
+
+on:
+  pull_request:
+    paths:
+      - CMakeLists.txt
+      - cmake/GetSSL.cmake
+      - cmake/helpers.cmake
+      - cmake/CheckOpenSSLVersion.cmake
+      - cmake/vcpkg-overlay-ports/**
+      - test/openssl/**
+      - .github/workflows/openssl_dependency.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  configure_checks:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check version rejection and dependency-install failure handling
+        run: python3 test/openssl/test_build_dependency.py

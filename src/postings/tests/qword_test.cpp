@@ -18,12 +18,14 @@
 
 static unsigned g_uChecks = 0;
 
-static void Check ( bool bCondition )
+#define Check(...) CheckAt ( (__VA_ARGS__), __LINE__ )
+
+static void CheckAt ( bool bCondition, int iLine )
 {
 	++g_uChecks;
 	if ( !bCondition )
 	{
-		std::cerr << "failed check " << g_uChecks << '\n';
+		std::cerr << "failed check " << g_uChecks << " at line " << iLine << '\n';
 		std::exit(1);
 	}
 }
@@ -331,6 +333,175 @@ static void TestWindows ( const char * sFile, unsigned uShape, unsigned uFieldCo
 }
 
 
+static void TestBlockPayloads ( const char * sFile, unsigned uShape, FileAccess_e eAccess, bool bRestricted, RowID_t tBase )
+{
+	MemoryOutput_c tOutput;
+	auto pWriter = std::make_unique<postings::Writer_c>(tOutput);
+	postings::TermDesc_t tDesc;
+	tDesc.m_uFields = 2;
+
+	std::string sError;
+	std::array<std::vector<QwordDoc_t>,3> dExpected;
+	std::array<uint64_t,3> dStarts;
+	for ( unsigned iTerm=0; iTerm<3; ++iTerm )
+	{
+		dStarts[iTerm] = tOutput.GetPos();
+		Check ( pWriter->Begin ( tDesc, sError ) );
+		for ( unsigned i=0; i<2051; ++i )
+		{
+			if ( (iTerm==1 && i%7==0) || (iTerm==2 && (i%17==0 || (i>700 && i<1250))) )
+				continue;
+
+			postings::Posting_t t;
+			t.m_uRow = tBase+(uShape==0 ? i : uShape==1 ? i*3/2 : i*97);
+			t.m_uTF = i%11+1;
+			t.m_uHitRef = (uint64_t(1)<<34)+i*31+iTerm;
+
+			unsigned f = (i+iTerm)%2;
+			t.m_dFields[0] = 1U<<f;
+			t.m_dFieldTF[f] = t.m_uTF;
+			Check ( pWriter->Add ( t, sError ) );
+			dExpected[iTerm].push_back ( { t.m_uRow, t.m_dFields[0], t.m_uTF, SphOffset_t(t.m_uHitRef) } );
+		}
+
+		Check ( pWriter->Finish(sError) );
+	}
+	{
+		std::ofstream tFile ( sFile, std::ios::binary | std::ios::trunc );
+		tFile.write ( reinterpret_cast<const char *>(tOutput.m_dData.data()), tOutput.m_dData.size() );
+		Check ( bool(tFile) );
+	}
+
+	CSphString sReadError;
+	DataReaderFactoryPtr_c pFactory ( NewProxyReader ( sFile, sReadError, DataReaderFactory_c::DOCS, 1024, eAccess ) );
+	Check ( bool(pFactory) );
+	for ( unsigned mode=0; mode<4; ++mode )
+	{
+		std::array<CountingQword_c,3> dWords;
+		PostingBlockAnd_c tAnd({});
+		for ( unsigned i=0; i<3; ++i )
+		{
+			dWords[i].SetDocReader(pFactory);
+			dWords[i].m_iDocs = int(dExpected[i].size());
+			dWords[i].SeekDocReader ( dStarts[i], 0 );
+			tAnd.Add ( dWords[i].CreatePostingBlock ( bRestricted ? 1U<<(i%2) : UINT32_MAX, {} ) );
+		}
+
+		unsigned iExpected = 0;
+		unsigned iSeen = 0;
+		RowID_t tMin = tBase+17;
+		uint64_t uEnd = std::min ( uint64_t(INVALID_ROWID), uint64_t(dExpected[0].back().m_tRowID)-3 );
+		for ( unsigned turn=0; ; ++turn )
+		{
+			Check ( turn<10000 );
+
+			auto tRows = tAnd.ReadRows ( tMin, uEnd, int(turn%3==0 ? 1 : turn%3==1 ? 31 : 257) );
+			if ( !tRows.m_iCount )
+				break;
+
+			std::array<QwordDoc_t,257> dDocs;
+			for ( unsigned iTerm=0; iTerm<3; ++iTerm )
+			{
+				const auto & dCounts = dWords[iTerm].GetDecodeCounts();
+				if ( !(mode & 1) )
+					Check ( !dCounts[2] );
+
+				if ( !(mode & 2) )
+					Check ( !dCounts[3] );
+
+				Check ( tAnd.GetCursor(iTerm).ReadPayloads ( tRows.m_pRows, tRows.m_iCount, dDocs.data(), mode & 1, mode & 2 ) );
+				for ( int j=0; j<tRows.m_iCount; ++j )
+				{
+					auto pExpected = std::lower_bound ( dExpected[iTerm].begin(), dExpected[iTerm].end(), tRows.m_pRows[j], [] ( const QwordDoc_t & t, RowID_t r ) { return t.m_tRowID<r; } );
+					Check ( pExpected!=dExpected[iTerm].end() && pExpected->m_tRowID==dDocs[j].m_tRowID );
+					Check ( dDocs[j].m_uFields==pExpected->m_uFields );
+					Check ( dDocs[j].m_uMatchHits==((mode & 1) ? pExpected->m_uMatchHits : 0) );
+					Check ( dDocs[j].m_iHitlistPos==((mode & 2) ? pExpected->m_iHitlistPos : 0) );
+				}
+			}
+
+			for ( int j=0; j<tRows.m_iCount; ++j )
+			{
+				bool bFound = false;
+				while ( iExpected<2051 )
+				{
+					unsigned i = iExpected++;
+					RowID_t tRow = dExpected[0][i].m_tRowID;
+					if ( tRow<tMin || i%7==0 || i%17==0 || (i>700 && i<1250) || (bRestricted && i%2) )
+						continue;
+
+					Check ( tRows.m_pRows[j]==tRow && tRow<uEnd );
+					++iSeen;
+					bFound = true;
+					break;
+				}
+
+				Check(bFound);
+			}
+
+			if ( turn%5==0 )
+				tMin = RowID_t(std::min ( uEnd, uint64_t(tRows.m_pRows[tRows.m_iCount-1])+19 ));
+		}
+
+		Check ( iSeen>0 );
+		for ( unsigned i=iExpected; i<2051; ++i )
+			Check ( dExpected[0][i].m_tRowID<tMin || dExpected[0][i].m_tRowID>=uEnd || i%7==0 || i%17==0 || (i>700 && i<1250) || (bRestricted && i%2) );
+
+		Check ( !tAnd.ReadRows ( tMin, uEnd, 31 ).m_iCount );
+		for ( const auto & tWord : dWords )
+			Check ( !tWord.GetReadError() && !tWord.m_uCalls );
+
+		// The lead fixture is dense throughout; followers have deliberately sparse gaps.
+		if ( !bRestricted && uShape!=2 )
+			Check ( !dWords[0].GetDecodeCounts()[0] );
+	}
+
+	// Intersecting and probing must not invalidate payloads, even after the last
+	// posting in the leaf was consumed. A fresh view after reset must work too.
+	CountingQword_c tWord;
+	tWord.SetDocReader(pFactory);
+	tWord.m_iDocs = int(dExpected[0].size());
+	for ( unsigned iTry=0; iTry<3; ++iTry )
+	{
+		tWord.Reset();
+		tWord.m_iDocs = int(dExpected[0].size());
+		tWord.SeekDocReader ( dStarts[0], 0 );
+
+		auto pCursor = tWord.CreatePostingBlock ( UINT32_MAX, {} );
+		PostingLeaf_t tLeaf;
+		Check ( pCursor->Prepare ( tBase+3, tLeaf ) );
+
+		RowID_t tLast = RowID_t(tLeaf.m_uEnd-1);
+		DWORD dBits[PostingWindow_t::WORDS];
+		std::fill_n ( dBits, PostingWindow_t::WORDS, UINT32_MAX );
+
+		PostingWindow_t tWindow { tLast, tLast, tLeaf.m_uEnd };
+		Check ( pCursor->Intersect ( tWindow, dBits )==1 );
+		Check ( pCursor->FilterRows ( &tLast, 1 )==1 );
+		Check ( !tWord.GetDecodeCounts()[2] && !tWord.GetDecodeCounts()[3] );
+
+		QwordDoc_t tDoc;
+		Check ( pCursor->ReadPayloads ( &tLast, 1, &tDoc, true, true ) );
+		Check ( tDoc.m_tRowID==tLast && tDoc.m_uMatchHits==dExpected[0][255].m_uMatchHits && tDoc.m_iHitlistPos==dExpected[0][255].m_iHitlistPos );
+	}
+
+	int iCalls = 0;
+	PostingWindowContext_t tContext { &iCalls, [] ( void * p ) { return ++*static_cast<int *>(p)<3; }, nullptr };
+	tWord.Reset();
+	tWord.m_iDocs = int(dExpected[0].size());
+	tWord.SeekDocReader ( dStarts[0], 0 );
+
+	auto dCountsBefore = tWord.GetDecodeCounts();
+	PostingBlockAnd_c tStopped(tContext);
+	tStopped.Add ( tWord.CreatePostingBlock ( UINT32_MAX, tContext ) );
+	Check ( !tStopped.ReadRows ( tBase, INVALID_ROWID, 31 ).m_iCount );
+
+	int iStopped = iCalls;
+	Check ( !tStopped.ReadRows ( tBase, INVALID_ROWID, 31 ).m_iCount && iCalls==iStopped );
+	Check ( tWord.GetDecodeCounts()==dCountsBefore );
+}
+
+
 int main ( int argc, char ** argv )
 {
 	if ( argc!=2 )
@@ -350,6 +521,12 @@ int main ( int argc, char ** argv )
 
 	for ( unsigned shape=0; shape<3; ++shape )
 		TestWindows ( argv[1], shape, 33, 2, 4093, FileAccess_e::FILE, true );
+
+	for ( unsigned shape=0; shape<3; ++shape )
+		for ( auto access : { FileAccess_e::MMAP, FileAccess_e::FILE } )
+			for ( bool restricted : { false, true } )
+				for ( RowID_t base : { 4093u, UINT32_MAX-200000u } )
+					TestBlockPayloads ( argv[1], shape, access, restricted, base );
 
 	Check ( !std::remove(argv[1]) );
 	std::cout << g_uChecks << " qword batch checks passed\n";

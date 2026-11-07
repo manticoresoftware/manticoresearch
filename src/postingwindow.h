@@ -12,9 +12,12 @@
 
 #include "sphinxdefs.h"
 #include <memory>
+#include <array>
+#include <vector>
 
 class ISphQword;
 struct CSphQueryStats;
+struct QwordDoc_t;
 
 struct PostingWindow_t
 {
@@ -78,3 +81,67 @@ public:
 };
 
 std::unique_ptr<PostingWindow_i> CreateBufferedPostingWindow ( ISphQword & tWord, DWORD uFields, const PostingWindowContext_t & tContext );
+
+// The current leaf remains available until Prepare advances into another leaf.
+struct PostingLeaf_t
+{
+	RowID_t		m_tFirst = INVALID_ROWID;
+	uint64_t	m_uEnd = 0;
+};
+
+// Exclusive posting view for candidate intersection followed by lazy payload
+// gathering. The qword must outlive it; only hit reads may use the qword directly.
+class PostingBlock_i
+{
+public:
+	virtual ~PostingBlock_i() = default;
+
+	// Find a leaf containing a candidate at/after min. False means EOF, interruption
+	// or I/O failure. Bounds may include rows rejected by the bound field mask.
+	virtual bool	Prepare ( RowID_t tMin, PostingLeaf_t & tLeaf ) = 0;
+
+	// Intersect within the prepared leaf without advancing to another leaf.
+	// Its payloads remain available to ReadPayloads(). The window is at most
+	// ROWS long; clear padding through the last accessed word.
+	virtual int		Intersect ( const PostingWindow_t & tWindow, DWORD * pBits ) = 0;
+
+	// Compact sorted candidates to exact field-aware matches in the prepared leaf.
+	virtual int		FilterRows ( RowID_t * pRows, int iCount ) = 0;
+
+	// Gather payloads for sorted surviving rows, including after Intersect/FilterRows.
+	// Decode only requested columns; unrequested TF/hit references are zeroed.
+	virtual bool	ReadPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits ) = 0;
+};
+
+struct PostingCandidateRows_t
+{
+	const RowID_t *	m_pRows = nullptr;
+	int				m_iCount = 0;
+};
+
+// Intersects leaf-bounded intervals, then holds every participating leaf until
+// the returned rows' payloads have been gathered. Sparse survivors use row probes.
+class PostingBlockAnd_c
+{
+public:
+	explicit PostingBlockAnd_c ( const PostingWindowContext_t & tContext );
+
+	void					Add ( std::unique_ptr<PostingBlock_i> pCursor );
+	PostingBlock_i &		GetCursor ( int i )	{ return *m_dCursors[i]; }
+
+	// Sorted rows in [min,end), valid (with their payloads) until the next call.
+	PostingCandidateRows_t	ReadRows ( RowID_t tMin, uint64_t uEnd, int iCapacity );
+
+private:
+	bool	FillCandidates ( uint64_t uEnd );
+	void	ExtractRows ( RowID_t tBase, const DWORD * pBits, int iWords );
+
+	std::vector<std::unique_ptr<PostingBlock_i>>	m_dCursors;
+	std::array<RowID_t,PostingWindow_t::ROWS>		m_dRows;
+
+	PostingWindowContext_t	m_tContext;
+	RowID_t					m_tNext = 0;
+	int						m_iCount = 0;
+	int						m_iRead = 0;
+	bool					m_bDone = false;
+};

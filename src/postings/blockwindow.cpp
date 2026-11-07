@@ -11,7 +11,7 @@
 #include "std/bitcount.h"
 #include <algorithm>
 
-class BlockPostingWindow_c final : public PostingWindow_i
+class BlockPostingWindow_c final : public PostingWindow_i, public PostingBlock_i
 {
 public:
 	BlockPostingWindow_c ( BlockIndexQword_c & tWord, DWORD uFields, const PostingWindowContext_t & tContext );
@@ -23,7 +23,13 @@ public:
 	PostingProbeResult_t		Probe ( RowID_t tRow ) final;
 	void					Reset ( bool bHasDocs, const PostingWindowContext_t & tContext ) final;
 
+	bool					Prepare ( RowID_t tMin, PostingLeaf_t & tLeaf ) final;
+	int						Intersect ( const PostingWindow_t & tWindow, DWORD * pBits ) final;
+	int						FilterRows ( RowID_t * pRows, int iCount ) final;
+	bool					ReadPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits ) final;
+
 private:
+	void					BuildBitmapOrdinals();
 	bool					CheckContinue();
 	bool					LoadLeaf ( RowID_t tMin );
 	bool					EnsureCandidate ( RowID_t tMin );
@@ -49,6 +55,10 @@ private:
 	bool		m_bStopped = false;
 	bool		m_bAllFields = false;
 	bool		m_bDirect = false;
+	bool		m_bLowFields = false;
+	bool		m_bOrdinals = false;
+
+	std::array<uint16_t,postings::MAX_BITMAP_BITS/32+1> m_dOrdinals;
 };
 
 
@@ -121,6 +131,8 @@ bool BlockPostingWindow_c::LoadLeaf ( RowID_t tMin )
 	if ( !m_tReader.ReadRowBlock ( m_tBlock, m_tWord.m_sError ) )
 		return false;
 
+	m_bLowFields = m_bOrdinals = false;
+
 	unsigned uFields = m_tReader.GetDesc().m_uFields;
 	m_bAllFields = uFields<=32 && (m_uFields & (UINT32_MAX>>(32-uFields)))==(UINT32_MAX>>(32-uFields));
 	if ( !m_bAllFields )
@@ -128,6 +140,7 @@ bool BlockPostingWindow_c::LoadLeaf ( RowID_t tMin )
 		if ( !m_tReader.ReadLowFields ( m_dFields.data(), m_tWord.m_sError ) )
 			return false;
 
+		m_bLowFields = true;
 		m_bAllFields = std::all_of ( m_dFields.begin(), m_dFields.begin()+m_tBlock.m_uCount, [this] ( DWORD uMask ) { return (uMask & m_uFields)!=0; } );
 	}
 
@@ -442,5 +455,137 @@ PostingWindowResult_t BlockPostingWindow_c::ReadRows ( const PostingWindow_t & t
 std::unique_ptr<PostingWindow_i> BlockIndexQword_c::CreatePostingWindow ( DWORD uFields, const PostingWindowContext_t & tContext )
 {
 	SetMembershipOnly();
+	return std::make_unique<BlockPostingWindow_c> ( *this, uFields, tContext );
+}
+
+
+bool BlockPostingWindow_c::Prepare ( RowID_t tMin, PostingLeaf_t & tLeaf )
+{
+	if ( !CheckContinue() || !EnsureCandidate(tMin) )
+		return false;
+
+	tLeaf = { m_tNext, uint64_t(m_tBlock.m_uLast)+1 };
+	return true;
+}
+
+
+int BlockPostingWindow_c::Intersect ( const PostingWindow_t & tWindow, DWORD * pBits )
+{
+	assert ( m_bLeaf && tWindow.m_tBase==tWindow.m_tMin && tWindow.m_tMin>=m_tNext && tWindow.m_tMin<tWindow.m_uEnd );
+	assert ( tWindow.m_uEnd<=uint64_t(m_tBlock.m_uLast)+1 && tWindow.m_uEnd<=uint64_t(tWindow.m_tBase)+PostingWindow_t::ROWS );
+	// The caller aligned all leaves before choosing the common interval. Seeking
+	// inside this leaf cannot invalidate any payload retained for the interval.
+	if ( !EnsureCandidate(tWindow.m_tMin) || m_tNext>=tWindow.m_uEnd )
+	{
+		std::fill_n ( pBits, (tWindow.m_uEnd-tWindow.m_tBase+31)/32, 0 );
+		return 0;
+	}
+
+	ClearWindowBits ( pBits, 0, m_tNext-tWindow.m_tBase );
+	IntersectLeaf ( tWindow, pBits, tWindow.m_uEnd );
+
+	unsigned iWords = unsigned((tWindow.m_uEnd-tWindow.m_tBase+31)/32);
+	ClearWindowBits ( pBits, unsigned(tWindow.m_uEnd-tWindow.m_tBase), iWords*32 );
+	return int(bitmap::Count ( pBits, iWords ));
+}
+
+
+void BlockPostingWindow_c::BuildBitmapOrdinals()
+{
+	if ( m_bOrdinals )
+		return;
+
+	unsigned iWords = (m_tBlock.m_uLast-m_tBlock.m_uFirst+32)/32;
+	m_dOrdinals[0] = 0;
+	for ( unsigned i=0; i<iWords; ++i )
+		m_dOrdinals[i+1] = uint16_t(m_dOrdinals[i]+sphBitCount(BitmapWord(i*32)));
+
+	m_bOrdinals = true;
+}
+
+
+int BlockPostingWindow_c::FilterRows ( RowID_t * pRows, int iCount )
+{
+	if ( !iCount || (m_bDirect && m_tBlock.m_eKind==postings::Rows_e::RANGE) )
+		return iCount;
+
+	int iOut = 0;
+	if ( m_bDirect )
+	{
+		for ( int i=0; i<iCount; ++i )
+			if ( BitmapWord(pRows[i]-m_tBlock.m_uFirst) & 1 )
+				pRows[iOut++] = pRows[i];
+	} else
+	{
+		const auto & dRows = m_tReader.GetRows();
+		const auto pEnd = dRows.begin()+m_tBlock.m_uCount;
+		auto pRow = std::lower_bound ( dRows.begin(), pEnd, pRows[0] );
+		for ( int i=0; i<iCount; ++i )
+		{
+			while ( pRow!=pEnd && *pRow<pRows[i] )
+				++pRow;
+
+			if ( pRow!=pEnd && *pRow==pRows[i] && (m_bAllFields || (m_dFields[pRow-dRows.begin()] & m_uFields)) )
+				pRows[iOut++] = pRows[i];
+		}
+	}
+
+	return iOut;
+}
+
+
+bool BlockPostingWindow_c::ReadPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits )
+{
+	if ( !iCount )
+		return true;
+
+	if ( (!m_bLowFields && !m_tReader.ReadLowFields ( m_dFields.data(), m_tWord.m_sError ))
+		|| (bTF && !m_tReader.ReadTF(m_tWord.m_sError)) || (bHits && !m_tReader.ReadHitRefs(m_tWord.m_sError)) )
+	{
+		m_tWord.Fail();
+		return false;
+	}
+
+	m_bLowFields = true;
+
+	auto Store = [&] ( int i, unsigned iOrdinal )
+	{
+		assert ( iOrdinal<m_tBlock.m_uCount );
+		pDocs[i] = { pRows[i], m_dFields[iOrdinal], bTF ? m_tReader.GetTF()[iOrdinal] : 0, bHits ? SphOffset_t(m_tReader.GetHitRefs()[iOrdinal]) : 0 };
+	};
+
+	if ( m_bDirect && m_tBlock.m_eKind==postings::Rows_e::RANGE )
+	{
+		for ( int i=0; i<iCount; ++i )
+			Store ( i, pRows[i]-m_tBlock.m_uFirst );
+	} else if ( m_bDirect )
+	{
+		BuildBitmapOrdinals();
+		for ( int i=0; i<iCount; ++i )
+		{
+			unsigned uBit = pRows[i]-m_tBlock.m_uFirst;
+			DWORD uMask = (DWORD(1)<<(uBit%32))-1;
+			Store ( i, m_dOrdinals[uBit/32]+sphBitCount(BitmapWord(uBit & ~31U) & uMask) );
+		}
+	} else
+	{
+		const auto & dRows = m_tReader.GetRows();
+		auto pRow = std::lower_bound ( dRows.begin(), dRows.begin()+m_tBlock.m_uCount, pRows[0] );
+		for ( int i=0; i<iCount; ++i )
+		{
+			while ( pRow!=dRows.begin()+m_tBlock.m_uCount && *pRow<pRows[i] )
+				++pRow;
+
+			assert ( pRow!=dRows.begin()+m_tBlock.m_uCount && *pRow==pRows[i] );
+			Store ( i, unsigned(pRow-dRows.begin()) );
+		}
+	}
+
+	return true;
+}
+
+
+std::unique_ptr<PostingBlock_i> BlockIndexQword_c::CreatePostingBlock ( DWORD uFields, const PostingWindowContext_t & tContext )
+{
 	return std::make_unique<BlockPostingWindow_c> ( *this, uFields, tContext );
 }

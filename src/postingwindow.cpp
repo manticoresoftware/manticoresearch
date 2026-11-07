@@ -11,6 +11,7 @@
 #include "postingwindow.h"
 #include "sphinxsearch.h"
 #include "std/bitmap/bitmap.h"
+#include <algorithm>
 
 namespace
 {
@@ -204,4 +205,104 @@ std::unique_ptr<PostingWindow_i> CreateBufferedPostingWindow ( ISphQword & tWord
 {
 	tWord.SetMembershipOnly();
 	return std::make_unique<BufferedPostingWindow_c> ( tWord, uFields, tContext );
+}
+
+
+PostingBlockAnd_c::PostingBlockAnd_c ( const PostingWindowContext_t & tContext ) : m_tContext(tContext) {}
+
+
+void PostingBlockAnd_c::Add ( std::unique_ptr<PostingBlock_i> pCursor )
+{
+	m_dCursors.push_back(std::move(pCursor));
+}
+
+
+void PostingBlockAnd_c::ExtractRows ( RowID_t tBase, const DWORD * pBits, int iWords )
+{
+	m_iCount = 0;
+	for ( int i=0; i<iWords; ++i )
+	{
+		DWORD uBits = pBits[i];
+		while ( uBits )
+		{
+			m_dRows[m_iCount++] = tBase+i*32+sphLog2(uBits & (DWORD(0)-uBits))-1;
+			uBits &= uBits-1;
+		}
+	}
+}
+
+
+bool PostingBlockAnd_c::FillCandidates ( uint64_t uEnd )
+{
+	while ( m_tNext<uEnd )
+	{
+		if ( m_tContext.m_fnContinue && !m_tContext.m_fnContinue(m_tContext.m_pContext) )
+			return false;
+
+		RowID_t tFirst = m_tNext;
+		uint64_t uLimit = uEnd;
+		for ( auto & pCursor : m_dCursors )
+		{
+			PostingLeaf_t tLeaf;
+			if ( !pCursor->Prepare ( tFirst, tLeaf ) )
+				return false;
+
+			tFirst = std::max ( tFirst, tLeaf.m_tFirst );
+			uLimit = std::min ( uLimit, tLeaf.m_uEnd );
+		}
+
+		m_tNext = tFirst;
+		if ( tFirst>=uLimit )
+			continue;
+
+		uLimit = std::min ( uLimit, uint64_t(tFirst)+PostingWindow_t::ROWS );
+
+		PostingWindow_t tWindow { tFirst, tFirst, uLimit };
+		int iWords = int((uLimit-tFirst+31)/32);
+		DWORD dBits[PostingWindow_t::WORDS];
+		std::fill_n ( dBits, iWords, UINT32_MAX );
+
+		int iCount = int(uLimit-tFirst);
+		int iThreshold = std::max ( 1, iCount/32 );
+		size_t iTerm = 0;
+		for ( ; iTerm<m_dCursors.size() && iCount>=iThreshold; ++iTerm )
+			iCount = m_dCursors[iTerm]->Intersect ( tWindow, dBits );
+
+		m_iCount = 0;
+		if ( iCount )
+		{
+			ExtractRows ( tFirst, dBits, iWords );
+			for ( ; iTerm<m_dCursors.size() && m_iCount; ++iTerm )
+				m_iCount = m_dCursors[iTerm]->FilterRows ( m_dRows.data(), m_iCount );
+		}
+
+		m_tNext = RowID_t(uLimit);
+		m_iRead = 0;
+		if ( m_iCount )
+			return true;
+	}
+
+	return false;
+}
+
+
+PostingCandidateRows_t PostingBlockAnd_c::ReadRows ( RowID_t tMin, uint64_t uEnd, int iCapacity )
+{
+	assert ( iCapacity>0 && !m_dCursors.empty() );
+	uEnd = std::min ( uEnd, uint64_t(INVALID_ROWID) );
+	m_tNext = std::max ( m_tNext, tMin );
+	m_iRead = int(std::lower_bound ( m_dRows.begin()+m_iRead, m_dRows.begin()+m_iCount, tMin )-m_dRows.begin());
+	if ( m_iRead==m_iCount && !m_bDone )
+		m_bDone = !FillCandidates(uEnd);
+
+	if ( m_bDone || m_iRead==m_iCount || m_dRows[m_iRead]>=uEnd )
+		return {};
+
+	int iCount = std::min ( iCapacity, m_iCount-m_iRead );
+	while ( iCount && m_dRows[m_iRead+iCount-1]>=uEnd )
+		--iCount;
+
+	const RowID_t * pRows = m_dRows.data()+m_iRead;
+	m_iRead += iCount;
+	return { pRows, iCount };
 }

@@ -36,6 +36,7 @@ public:
 	const std::array<uint64_t,postings::COLUMNS> & GetDecodeCounts() const { return m_tReader.GetDecodeCounts(); }
 
 	std::unique_ptr<PostingWindow_i> CreatePostingWindow ( DWORD uFields, const PostingWindowContext_t & tContext ) override;
+	std::unique_ptr<PostingBlock_i> CreatePostingBlock ( DWORD uFields, const PostingWindowContext_t & tContext ) override;
 
 private:
 	friend class BlockPostingWindow_c;

@@ -313,3 +313,27 @@ The main daemon build also provides `postings_qword_test` when
 source checkout. It compares direct and generic batches over mmap/file readers,
 membership/full metadata, leaf boundaries, hints, mixed reads, reset and EOF.
 The standalone codec build does not include this daemon-linked test.
+
+
+### Leaf-bounded candidates and lazy payloads
+
+`PostingBlock_i` provides an exclusive view of a set-up qword for consumers that
+need scores or hits after finding matching rows. `Prepare` finds a candidate and
+pins its current leaf until a later `Prepare` advances to another leaf.
+`Intersect` and `FilterRows` restrict candidates without releasing that leaf;
+`ReadPayloads` gathers low field masks and optionally TF/hit references for
+survivors. These operations must not be mixed with qword document reads. Hit
+reads through the qword remain independent.
+
+`PostingBlockAnd_c` intersects intervals bounded by all participating leaves and
+at most 4096 row IDs. Once few candidates remain (interval length / 32), remaining
+clauses filter a sorted row array. Output batches retain all participating leaves
+until the next batch request, allowing consumers to gather payloads first.
+Bitmap posting ordinals use a lazily built prefix-popcount table; ranges use row
+offsets, and decoded leaves use a forward merge with the survivor batch. TF and
+hit-reference columns are decoded once per accessed leaf only when requested.
+
+Eligible block qwords in `ExtMultiAnd_T` use this producer and retain the existing
+document-chunk, scoring and hit-merging interfaces. Legacy/RAM/unsupported qwords
+and wide-field schemas keep the existing qword advancement path. Phrase candidate
+generation and generic binary AND composition are not changed by this step.

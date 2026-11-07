@@ -546,6 +546,15 @@ private:
 	};
 
 
+	std::unique_ptr<PostingBlockAnd_c> m_pBlockAnd;
+	RowID_t							m_tBlockHint = 0;
+	bool							m_bStopped = false;
+
+	void				SetupBlocks ( const ISphQwordSetup & tSetup );
+	bool				CheckContinue();
+	const ExtDoc_t *	GetBlockDocsChunk();
+	bool				GatherBlockDocs ( PostingCandidateRows_t tRows, int iStart );
+
 	bool							m_bFirstChunk {true};
 	bool							m_bCollectHits {false};
 	CSphVector<NodeInfo_t>			m_dNodes;
@@ -3861,12 +3870,14 @@ ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::ExtMultiAnd_T ( const VecTrait
 
 	m_pWarning = tSetup.m_pWarning;
 	m_pStats = tSetup.m_pStats;
+	SetupBlocks(tSetup);
 }
 
 
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
 ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::~ExtMultiAnd_T()
 {
+	m_pBlockAnd.reset();
 	for ( auto & i : m_dNodes )
 		SafeDelete ( i.m_pQword );
 }
@@ -3971,15 +3982,124 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::AdvanceQwords()
 
 
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetDocsChunk()
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::SetupBlocks ( const ISphQwordSetup & tSetup )
 {
+	m_pBlockAnd.reset();
+	m_tBlockHint = 0;
+	m_bStopped = false;
+	if ( tSetup.m_bHasWideFields || m_iNodesSet!=m_dNodes.GetLength() )
+		return;
+
+	PostingWindowContext_t tContext { this, [] ( void * p ) { return static_cast<ExtMultiAnd_T *>(p)->CheckContinue(); }, m_pStats };
+	std::unique_ptr<PostingBlockAnd_c> pAnd;
+	for ( auto & tNode : m_dNodes )
+	{
+		auto pCursor = tNode.m_pQword->CreatePostingBlock ( tNode.m_dQueriedFields.GetMask32(), tContext );
+		if ( !pCursor )
+			return;
+
+		if ( !pAnd )
+			pAnd = std::make_unique<PostingBlockAnd_c>(tContext);
+
+		pAnd->Add(std::move(pCursor));
+	}
+
+	m_pBlockAnd = std::move(pAnd);
+}
+
+
+template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
+bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GatherBlockDocs ( PostingCandidateRows_t tRows, int iStart )
+{
+	int iStored = m_dStoredHits.GetLength();
+	if ( m_bCollectHits )
+	{
+		m_dStoredHits.Resize(iStored+tRows.m_iCount);
+		for ( int i=0; i<tRows.m_iCount; ++i )
+		{
+			auto & tHit = m_dStoredHits[iStored+i];
+			tHit.m_tRowID = tRows.m_pRows[i];
+			tHit.m_dHitlistOffsets.Reset(m_dNodes.GetLength());
+		}
+	}
+
+	for ( int i=0; i<tRows.m_iCount; ++i )
+	{
+		auto & tDoc = m_dDocs[iStart+i];
+		tDoc.m_tRowID = tRows.m_pRows[i];
+		tDoc.m_uDocFields = 0;
+		tDoc.m_fTFIDF = 0.0f;
+	}
+
+	QwordDoc_t dPayloads[MAX_BLOCK_DOCS];
+	ARRAY_FOREACH ( iTerm, m_dNodes )
+	{
+		if ( !m_pBlockAnd->GetCursor(iTerm).ReadPayloads ( tRows.m_pRows, tRows.m_iCount, dPayloads, USE_BM25, m_bCollectHits ) )
+		{
+			m_bStopped = true;
+			return false;
+		}
+
+		const auto & tNode = m_dNodes[iTerm];
+		for ( int i=0; i<tRows.m_iCount; ++i )
+		{
+			auto & tDoc = m_dDocs[iStart+i];
+			tDoc.m_uDocFields |= dPayloads[i].m_uFields & tNode.m_dQueriedFields.GetMask32();
+			if constexpr ( USE_BM25 )
+				tDoc.m_fTFIDF += float(dPayloads[i].m_uMatchHits) / float(dPayloads[i].m_uMatchHits+SPH_BM25_K1) * tNode.m_fIDF;
+
+			if ( m_bCollectHits )
+				m_dStoredHits[iStored+i].m_dHitlistOffsets[iTerm] = dPayloads[i].m_iHitlistPos;
+		}
+	}
+
+	return true;
+}
+
+
+template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
+const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetBlockDocsChunk()
+{
+	RowID_t tMin = m_tBlockHint;
+	uint64_t uEnd = INVALID_ROWID;
+	if constexpr ( ROWID_LIMITS )
+	{
+		tMin = Max ( tMin, m_tBoundaries.m_tMinRowID );
+		uEnd = Min ( uEnd, uint64_t(m_tBoundaries.m_tMaxRowID)+1 );
+	}
+
+	int iDocs = 0;
+	while ( iDocs<MAX_BLOCK_DOCS-1 )
+	{
+		auto tRows = m_pBlockAnd->ReadRows ( tMin, uEnd, MAX_BLOCK_DOCS-1-iDocs );
+		if ( !tRows.m_iCount )
+			break;
+
+		if ( !GatherBlockDocs ( tRows, iDocs ) )
+			return nullptr;
+
+		iDocs += tRows.m_iCount;
+	}
+
+	return ReturnDocsChunk ( iDocs, "multiand" );
+}
+
+
+template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
+bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CheckContinue()
+{
+	if ( m_bStopped )
+		return false;
+
 	// since we're working directly with qwords, we need to check all those things here and not in ExtTerm
 	// max_query_time
 	if ( TimeExceeded () )
 	{
 		if ( m_pWarning )
 			*m_pWarning = "query time exceeded max_query_time";
-		return NULL;
+
+		m_bStopped = true;
+		return false;
 	}
 
 	if ( sph::TimeExceeded ( m_iCheckTimePoint ) )
@@ -3989,17 +4109,34 @@ const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetDocsChunk(
 		{
 			if ( m_pWarning )
 				*m_pWarning = "Server shutdown in progress";
-			return nullptr;
+
+			m_bStopped = true;
+			return false;
 		}
 
 		if ( session::GetKilled() )
 		{
 			if ( m_pWarning )
 				*m_pWarning = "query was killed";
-			return nullptr;
+
+			m_bStopped = true;
+			return false;
 		}
 		Threads::Coro::RescheduleAndKeepCrashQuery();
 	}
+
+	return true;
+}
+
+
+template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
+const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetDocsChunk()
+{
+	if ( !CheckContinue() )
+		return nullptr;
+
+	if ( m_pBlockAnd )
+		return GetBlockDocsChunk();
 
 	if ( m_bFirstChunk )
 	{
@@ -4338,6 +4475,7 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::Reset ( const ISphQwordSe
 	}
 	
 	m_dStoredHits.Resize(0);
+	SetupBlocks(tSetup);
 }
 
 
@@ -4437,6 +4575,12 @@ int ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetDocsCount() const
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
 void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::HintRowID ( RowID_t tRowID )
 {
+	if ( m_pBlockAnd )
+	{
+		m_tBlockHint = Max ( m_tBlockHint, tRowID );
+		return;
+	}
+
 	if ( !m_dNodes[0].m_pQword->m_iDocs )
 		return;
 

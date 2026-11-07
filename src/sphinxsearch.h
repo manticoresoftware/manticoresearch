@@ -116,6 +116,7 @@ public:
 	virtual Hitpos_t			GetNextHit () = 0;
 	virtual void				SetMembershipOnly() {}
 	virtual std::unique_ptr<PostingWindow_i> CreatePostingWindow ( DWORD uFields, const PostingWindowContext_t & tContext );
+	virtual std::unique_ptr<PostingBlock_i> CreatePostingBlock ( DWORD uFields, const PostingWindowContext_t & tContext ) { return nullptr; }
 	virtual bool				WantHitPrefetch() { return false; }
 	virtual void				PrefetchHits ( const SphOffset_t * pOffsets, const DWORD * pHits, int iCount ) {}
 	virtual void				CollectHitMask ();

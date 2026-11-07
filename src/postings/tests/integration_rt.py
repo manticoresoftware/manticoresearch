@@ -74,6 +74,19 @@ def main():
             "SELECT id FROM {} WHERE MATCH('rare common') ORDER BY id ASC LIMIT 50 OPTION ranker=none",
             "SELECT count(*) FROM {} WHERE MATCH('absent')",
         ]
+
+        # Flat scored AND exercises the block candidate/payload path. Compare
+        # complete small result sets, scores and hit-based rankers across formats.
+        for match in ["common alpha beta", "@title alpha @body beta", "rare common beta", "alpha alpha beta",
+                      "common absent", "(alpha beta) | rare", "common alpha !rare"]:
+            for ranker in ["bm25", "proximity_bm25", "wordcount", "expr('sum(lcs*user_weight)+bm25')"]:
+                queries.append("SELECT id,weight() FROM {} WHERE MATCH('" + match +
+                               "') ORDER BY id ASC LIMIT 2000 OPTION max_matches=2000,threads=1,ranker=" + ranker)
+
+        queries += [
+            "SELECT id,weight() FROM {} WHERE MATCH('common alpha beta') AND id BETWEEN 120 AND 900 ORDER BY id ASC LIMIT 2000 OPTION max_matches=2000,ranker=bm25",
+            "SELECT id,weight() FROM {} WHERE MATCH('common alpha beta') AND grp=3 ORDER BY id ASC LIMIT 2000 OPTION max_matches=2000,ranker=proximity_bm25",
+        ]
         if case == "wide":
             queries += ["SELECT count(*) FROM {} WHERE MATCH('@f33 common')",
                         "SELECT count(*) FROM {} WHERE MATCH('comm*')"]

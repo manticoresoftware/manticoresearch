@@ -1175,6 +1175,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "access_dict",			0, nullptr },
 	{ "access_columnar_attrs",	0, nullptr },
 	{ "access_secondary",		0, nullptr },
+	{ "docid_lookup_cache_size", 0, nullptr },
 	{ "docstore_cache_size",	0, nullptr },
 	{ "skiplist_cache_size",	0, nullptr },
 	{ "ssl_cert",				0, nullptr },

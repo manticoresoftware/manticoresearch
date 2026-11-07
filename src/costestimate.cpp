@@ -20,6 +20,7 @@
 #include "secondaryindex.h"
 #include "geodist.h"
 #include "histogram.h"
+#include "docidlookupcache.h"
 #include "std/sys.h"
 
 
@@ -252,7 +253,7 @@ private:
 	static float	Cost_IndexIteratorInit ( int64_t iNumIterators )		{ return COST_INDEX_ITERATOR_INIT*iNumIterators*SCALE; }
 
 	float	CalcFilterCost ( const SecondaryIndexInfo_t & tIndex, const CSphFilterSettings & tFilter, bool bFromIterator, bool bFilterOverExpr, float fDocsLeft ) const;
-	float	CalcLookupCost ( const SecondaryIndexInfo_t & tIndex ) const;
+	float	CalcLookupCost ( const SecondaryIndexInfo_t & tIndex, const CSphFilterSettings & tFilter ) const;
 	float	CalcAnalyzerCost ( const SecondaryIndexInfo_t & tIndex, const CSphFilterSettings & tFilter, float fDocsLeft ) const;
 	float	CalcIndexCost ( const SecondaryIndexInfo_t & tIndex, const CSphFilterSettings & tFilter, float fDocsLeft ) const;
 
@@ -397,10 +398,12 @@ float CostEstimate_c::CalcFilterCost ( const SecondaryIndexInfo_t & tIndex, cons
 }
 
 
-float CostEstimate_c::CalcLookupCost ( const SecondaryIndexInfo_t & tIndex ) const
+float CostEstimate_c::CalcLookupCost ( const SecondaryIndexInfo_t & tIndex, const CSphFilterSettings & tFilter ) const
 {
 	// no cutoff here since lookup reader fetches all docs and sorts them
-	return Cost_LookupRead ( tIndex.m_iRsetEstimate );
+	// Cached sparse lists probe every input, including IDs that do not match.
+	// Retain the existing conservative unit cost until separately calibrated.
+	return Cost_LookupRead ( m_tCtx.IsCachedDocidLookup(tFilter) ? tFilter.GetNumValues() : tIndex.m_iRsetEstimate );
 }
 
 
@@ -545,7 +548,7 @@ float CostEstimate_c::CalcQueryCost()
 		switch ( tIndex.m_eType )
 		{
 		case SecondaryIndexType_e::LOOKUP:
-			fCost += CalcLookupCost(tIndex);
+			fCost += CalcLookupCost ( tIndex, tFilter );
 			iNumLookups++;
 			break;
 
@@ -606,6 +609,14 @@ SelectIteratorCtx_t::SelectIteratorCtx_t ( const CSphQuery & tQuery, const CSphV
 	, m_iTotalDocs ( iTotalDocs )
 	, m_iThreads ( iThreads )
 {}
+
+
+bool SelectIteratorCtx_t::IsCachedDocidLookup ( const CSphFilterSettings & tFilter ) const
+{
+	return m_bHasDocidCache && m_iTotalDocs>0 && tFilter.m_sAttrName==sphGetDocidName()
+		&& tFilter.m_eType==SPH_FILTER_VALUES && !tFilter.m_bExclude && tFilter.GetNumValues()>0
+		&& DocidLookupCache_c::IsSparse ( tFilter.GetNumValues(), uint64_t(m_iTotalDocs) );
+}
 
 
 static bool JsonSIFilterFits ( const SIContainer_c & tSI, const CSphFilterSettings & tFilter )

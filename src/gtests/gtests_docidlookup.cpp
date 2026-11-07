@@ -233,3 +233,203 @@ TEST_F ( UuidDocidLookupTest, FormatCheckAndUpgrade )
 }
 
 } // namespace
+
+namespace
+{
+struct CacheBudgetGuard_t
+{
+	explicit CacheBudgetGuard_t ( size_t nBytes ) { DocidLookupCache_c::SetBudget(nBytes); }
+	~CacheBudgetGuard_t() { DocidLookupCache_c::SetBudget(0); }
+};
+
+CSphVector<RowID_t> CollectLookupRows ( const BYTE * pData, DWORD uVersion, DWORD nDocs, const CSphVector<DocID_t> & dValues, const LookupReader_c * pCacheReader, int64_t & nProcessed, bool bBitmap = false, int iPartition = -1 )
+{
+	CSphVector<CSphFilterSettings> dFilters;
+	auto & tFilter = dFilters.Add();
+	tFilter.m_sAttrName = "id";
+	tFilter.m_eType = SPH_FILTER_VALUES;
+	tFilter.m_dValues = dValues;
+	CSphVector<SecondaryIndexInfo_t> dInfo;
+	auto & tInfo = dInfo.Add();
+	tInfo.m_eType = SecondaryIndexType_e::LOOKUP;
+	// Exercise both storage specializations regardless of actual selectivity.
+	tInfo.m_iRsetEstimate = bBitmap ? nDocs : 0;
+	if ( iPartition>=0 )
+	{
+		auto & tRowFilter = dFilters.Add();
+		tRowFilter.m_sAttrName = "@rowid";
+		tRowFilter.m_eType = SPH_FILTER_RANGE;
+		tRowFilter.m_iMinValue = iPartition;
+		tRowFilter.m_iMaxValue = 4;
+		dInfo.Add();
+	}
+	auto dIterators = CreateLookupIterator ( dInfo, dFilters, pData, uVersion, nDocs, pCacheReader );
+	CSphVector<RowID_t> dRows;
+	if ( dIterators.GetLength()!=1 )
+	{
+		ADD_FAILURE() << "expected one ID iterator";
+		return dRows;
+	}
+	std::unique_ptr<RowidIterator_i> pIterator(dIterators[0].first);
+	RowIdBlock_t dBlock;
+	while ( pIterator->GetNextRowIdBlock(dBlock) )
+		for ( RowID_t tRow : dBlock )
+			dRows.Add(tRow);
+	nProcessed = pIterator->GetNumProcessed();
+	return dRows;
+}
+}
+
+TEST_F ( UuidDocidLookupTest, NativeCacheMatchesAndInvalidatesOnRemap )
+{
+	CacheBudgetGuard_t tBudget ( 1024*1024 );
+	CSphVector<DocidRowidPair_t> dPairs;
+	for ( RowID_t i=0; i<1025; ++i )
+		dPairs.Add ( { (DocID_t)(i*2), i } );
+	dPairs.Add ( { INT64_MIN, 2000 } );
+	dPairs.Add ( { -1, 2001 } );
+	CSphString sError;
+	ASSERT_TRUE ( WriteDocidLookup ( m_sFile, dPairs, sError ) ) << sError.cstr();
+	CSphMappedBuffer<BYTE> tData;
+	Map(tData);
+	LookupReader_c tReference ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	LookupReader_c tCached ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	ASSERT_TRUE ( tCached.BuildCache(UUID_INDEX_VERSION) );
+	for ( const auto & tPair : dPairs )
+		EXPECT_EQ ( tCached.Find(tPair.m_tDocID), tReference.Find(tPair.m_tDocID) );
+	for ( DocID_t i=1; i<2050; i+=2 )
+		EXPECT_EQ ( tCached.Find(i), INVALID_ROWID );
+	tCached.SetData ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	EXPECT_FALSE ( tCached.HasCache() );
+	EXPECT_EQ ( DocidLookupCache_c::GetUsed(), 0U );
+	EXPECT_EQ ( tCached.Find(-1), 2001U );
+	ASSERT_TRUE ( tCached.BuildCache(UUID_INDEX_VERSION) );
+	tCached.SetData ( nullptr, UUID_INDEX_VERSION );
+	EXPECT_EQ ( tCached.Find(0), INVALID_ROWID );
+	EXPECT_EQ ( DocidLookupCache_c::GetUsed(), 0U );
+}
+
+TEST_F ( UuidDocidLookupTest, NativeCacheBudgetAndDuplicateFallback )
+{
+	CacheBudgetGuard_t tBudget(1024);
+	CSphVector<DocidRowidPair_t> dPairs;
+	for ( RowID_t i=0; i<4096; ++i )
+		dPairs.Add ( { (DocID_t)(i*2), i } );
+	CSphString sError;
+	ASSERT_TRUE ( WriteDocidLookup ( m_sFile, dPairs, sError ) );
+	{
+		CSphMappedBuffer<BYTE> tData;
+		Map(tData);
+		LookupReader_c tReader ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+		EXPECT_FALSE ( tReader.BuildCache(UUID_INDEX_VERSION) );
+		EXPECT_EQ ( DocidLookupCache_c::GetUsed(), 0U );
+		EXPECT_EQ ( tReader.Find(8000), 4000U );
+	}
+	DocidLookupCache_c::SetBudget ( 1024*1024 );
+	dPairs.Reset();
+	for ( RowID_t i=0; i<200; ++i )
+		dPairs.Add ( { 42, i } );
+	ASSERT_TRUE ( WriteDocidLookup ( m_sFile, dPairs, sError ) );
+	CSphMappedBuffer<BYTE> tData;
+	Map(tData);
+	LookupReader_c tReader ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	EXPECT_FALSE ( tReader.BuildCache(UUID_INDEX_VERSION) );
+	EXPECT_EQ ( DocidLookupCache_c::GetUsed(), 0U );
+	CSphVector<DocID_t> dValues;
+	dValues.Add(42);
+	int64_t nProcessed;
+	auto dRows = CollectLookupRows ( tData.GetReadPtr(), UUID_INDEX_VERSION, 200, dValues, &tReader, nProcessed );
+	EXPECT_EQ ( dRows.GetLength(), 200 ); // all duplicates must survive filtering
+}
+
+TEST_F ( UuidDocidLookupTest, NativeCacheLegacyV70 )
+{
+	CacheBudgetGuard_t tBudget ( 1024*1024 );
+	WriteNumericLookup();
+	DowngradeToV70();
+	CSphMappedBuffer<BYTE> tData;
+	Map(tData);
+	LookupReader_c tReader ( tData.GetReadPtr(), UUID_INDEX_VERSION-1 );
+	ASSERT_TRUE ( tReader.BuildCache(UUID_INDEX_VERSION-1) );
+	EXPECT_EQ ( tReader.Find(11), 0U );
+	EXPECT_EQ ( tReader.Find(22), 1U );
+	EXPECT_EQ ( tReader.Find(33), 2U );
+	EXPECT_EQ ( tReader.Find(44), INVALID_ROWID );
+}
+
+TEST_F ( UuidDocidLookupTest, NativeCacheSparseAndDenseIdFiltersMatchMerge )
+{
+	CacheBudgetGuard_t tBudget ( 1024*1024 );
+	CSphVector<DocidRowidPair_t> dPairs;
+	for ( RowID_t i=0; i<4094; ++i )
+		dPairs.Add ( { (DocID_t)(i*2), (i*37)%4096 } );
+	dPairs.Add ( { INT64_MIN, (4094*37)%4096 } );
+	dPairs.Add ( { -1, (4095*37)%4096 } );
+	CSphString sError;
+	ASSERT_TRUE ( WriteDocidLookup ( m_sFile, dPairs, sError ) );
+	CSphMappedBuffer<BYTE> tData;
+	Map(tData);
+	LookupReader_c tReader ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	ASSERT_TRUE ( tReader.BuildCache(UUID_INDEX_VERSION) );
+	for ( int nValues : { 8, 13, 14, 15, 16, 29, 30, 31, 32, 61, 62, 63, 64, 4096 } )
+	{
+		bool bDense = uint64_t(nValues+2)*64>4096;
+		CSphVector<DocID_t> dValues;
+		dValues.Add(-1);
+		dValues.Add(INT64_MIN);
+		for ( DocID_t i=0; i<nValues; ++i )
+			dValues.Add(i*3); // a mixture of hits and misses
+		dValues.Sort();
+		for ( bool bBitmap : { false, true } )
+			for ( int iPartition : { -1, 0, 1, 3 } )
+			{
+				int64_t nReference, nCached;
+				auto dReference = CollectLookupRows ( tData.GetReadPtr(), UUID_INDEX_VERSION, 4096, dValues, nullptr, nReference, bBitmap, iPartition );
+				auto dCached = CollectLookupRows ( tData.GetReadPtr(), UUID_INDEX_VERSION, 4096, dValues, &tReader, nCached, bBitmap, iPartition );
+				ASSERT_EQ ( dReference.GetLength(), dCached.GetLength() );
+				for ( int i=0; i<dReference.GetLength(); ++i )
+					EXPECT_EQ ( dReference[i], dCached[i] );
+				if ( bDense )
+					EXPECT_EQ ( nCached, nReference ); // dense lists retain merge
+				else
+				{
+					EXPECT_EQ ( nCached, dValues.GetLength() );
+					EXPECT_LT ( nCached, nReference );
+				}
+			}
+	}
+}
+
+TEST_F ( UuidDocidLookupTest, NativeBatchMatchesCompressedAndHandlesRemap )
+{
+	CacheBudgetGuard_t tBudget ( 1024*1024 );
+	CSphVector<DocidRowidPair_t> dPairs;
+	for ( RowID_t i=0; i<1025; ++i ) dPairs.Add ( { (DocID_t)(i*2), i } );
+	dPairs.Add ( { INT64_MIN, 1025 } );
+	dPairs.Add ( { -1, 1026 } );
+	CSphString sError;
+	ASSERT_TRUE ( WriteDocidLookup ( m_sFile, dPairs, sError ) );
+	CSphMappedBuffer<BYTE> tData;
+	Map(tData);
+	LookupReader_c tReference ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	LookupReader_c tCached ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	ASSERT_TRUE ( tCached.BuildCache(UUID_INDEX_VERSION) );
+	uint64_t dQueries[65];
+	RowID_t dRows[65];
+	for ( int i=0; i<65; ++i ) dQueries[i] = i;
+	dQueries[15] = uint64_t(INT64_MIN);
+	dQueries[16] = UINT64_MAX;
+	dQueries[32] = UINT64_MAX-1;
+	for ( auto * pReader : { &tReference, &tCached } )
+	{
+		pReader->FindBatch ( nullptr, nullptr, 0 );
+		for ( size_t nQueries : { 1, 15, 16, 17, 31, 32, 33, 65 } )
+		{
+			pReader->FindBatch ( dQueries, dRows, nQueries );
+			for ( size_t i=0; i<nQueries; ++i ) EXPECT_EQ ( dRows[i], tReference.Find((DocID_t)dQueries[i]) );
+		}
+	}
+	tCached.SetData ( nullptr, UUID_INDEX_VERSION );
+	tCached.FindBatch ( dQueries, dRows, 65 );
+	for ( RowID_t uRow : dRows ) EXPECT_EQ ( uRow, INVALID_ROWID );
+}

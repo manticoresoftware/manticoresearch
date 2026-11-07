@@ -78,6 +78,8 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	// main loop for one or more commands (if persist)
 	do
 	{
+		// Do not retain the previous packet on a persistent connection.
+		CrashQueryScope_c tCrashQueryScope;
 		if ( !tIn.HasBytes ())
 			tIn.DiscardProcessed ();
 

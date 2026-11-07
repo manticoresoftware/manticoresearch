@@ -12955,6 +12955,8 @@ static void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tO
 // returns false if profile should be discarded (eg. SHOW PROFILE case)
 bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 {
+	CrashQueryScope_c tCrashQueryScope;
+
 	auto& tSess = session::Info();
 	// reset per query buddy auth fallback
 	m_bAuthAllowBuddy = false;
@@ -12989,6 +12991,8 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	m_sError = "";
 
 	CSphVector<SqlStmt_t> dStmt;
+	// The table name may point into dStmt; clear before it is destroyed.
+	AT_SCOPE_EXIT ( [] { GlobalCrashQueryGetRef().m_dIndex = {}; } );
 	bool bParsedOK = sphParseSqlQuery ( sQuery, dStmt, m_sError, tSess.GetCollation () );
 
 	if ( tSess.IsProfile() )

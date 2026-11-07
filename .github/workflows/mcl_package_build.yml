@@ -2,6 +2,9 @@ name: MCL package build
 
 on:
   workflow_call:
+    secrets:
+      MCL_SUBMODULE_TOKEN:
+        required: false
     inputs:
       enabled:
         required: false
@@ -78,6 +81,9 @@ on:
         type: string
         default: ""
 
+permissions:
+  contents: read
+
 jobs:
   build:
     if: ${{ inputs.enabled }}
@@ -105,8 +111,9 @@ jobs:
         RPM_PACKAGE_VERSION: ${{ inputs.rpm_package_version }}
     steps:
       - name: Checkout daemon repository with MCL submodule
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5.1.0
         with:
+          persist-credentials: false
           ref: ${{ inputs.source_ref != '' && inputs.source_ref || github.sha }}
           fetch-depth: 0
           submodules: recursive
@@ -225,7 +232,7 @@ jobs:
           fi
 
       - name: Check out main cache before building
-        uses: actions/cache@v5
+        uses: actions/cache@v5.1.0
         with:
           path: cache
           enableCrossOsArchive: true
@@ -234,7 +241,7 @@ jobs:
             ${{ inputs.cache_key }}_master
 
       - name: Check out deps cache before building
-        uses: actions/cache@v5
+        uses: actions/cache@v5.1.0
         with:
           path: build/_deps/cache
           enableCrossOsArchive: true
@@ -298,7 +305,7 @@ jobs:
 
       - name: Save MCL package to exact-SHA cache
         if: success() && inputs.package_cache_key != ''
-        uses: actions/cache@v5
+        uses: actions/cache@v5.1.0
         with:
           path: .mcl-package-cache
           key: ${{ inputs.package_cache_key }}

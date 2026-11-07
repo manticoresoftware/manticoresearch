@@ -6,6 +6,11 @@ on:
     types:
       - closed
 
+permissions:
+  contents: read
+  # Reopens the issue and comments when the checklist is incomplete.
+  issues: write
+
 jobs:
   checklist-validation:
     name: ✅ Checklist Completion Check

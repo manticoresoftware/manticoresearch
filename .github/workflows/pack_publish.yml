@@ -51,6 +51,8 @@ jobs:
             github.event.pull_request.labels.*.name, 'publish'
           )
         )
+        &&
+        github.event.pull_request.head.repo.full_name == github.repository
       )
       ||
       (
@@ -59,6 +61,8 @@ jobs:
         github.event.workflow_run.conclusion == 'success'
         &&
         github.ref == 'refs/heads/main'
+        &&
+        github.event.workflow_run.head_repository.full_name == github.repository
       )
       ||
       (
@@ -83,6 +87,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          persist-credentials: false
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
           submodules: recursive
@@ -164,6 +169,8 @@ jobs:
             github.event.pull_request.labels.*.name, 'publish'
           )
         )
+        &&
+        github.event.pull_request.head.repo.full_name == github.repository
       )
       ||
       (
@@ -172,6 +179,8 @@ jobs:
         github.event.workflow_run.conclusion == 'success'
         &&
         github.ref == 'refs/heads/main'
+        &&
+        github.event.workflow_run.head_repository.full_name == github.repository
       )
       ||
       (
@@ -191,6 +200,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          persist-credentials: false
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           submodules: recursive
           fetch-depth: 0
@@ -278,7 +288,11 @@ jobs:
     needs: [check_branch, pack]
     if: needs.pack.outputs.should_continue == 'true' || needs.pack.outputs.mcl_package_needed == 'true'
     uses: ./.github/workflows/mcl_pack_publish.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
     with:
       enabled: ${{ needs.pack.outputs.mcl_package_needed == 'true' }}
       mcl_full_sha: ${{ needs.check_branch.outputs.mcl_full_sha }}
@@ -288,13 +302,14 @@ jobs:
   # Runs on every PR, workflow_run, or push event matching the conditions
   check_deps:
     needs: pack
-    if: needs.pack.outputs.should_continue == 'true'
+    if: needs.pack.outputs.should_continue == 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.head_repository.full_name == github.repository) && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     name: Check deps test
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          persist-credentials: false
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       # We have to checkout to access .github/workflows/ in further steps
       - name: Run dependency check script
@@ -304,7 +319,8 @@ jobs:
   pack_debian_ubuntu:
     name: Debian/Ubuntu packages
     uses: ./.github/workflows/build_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     needs: [pack, check_branch, check_deps, mcl_pack_matrix]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
@@ -333,7 +349,8 @@ jobs:
   pack_rhel:
     name: RHEL packages
     uses: ./.github/workflows/build_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     needs: [pack, check_branch, check_deps, mcl_pack_matrix]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
@@ -365,7 +382,8 @@ jobs:
   pack_macos:
     name: MacOS packages
     uses: ./.github/workflows/build_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     needs: [pack, check_branch, check_deps, mcl_pack_matrix]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
@@ -397,7 +415,8 @@ jobs:
   pack_windows:
     name: Windows x64 package
     uses: ./.github/workflows/build_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     needs: [pack, check_branch, check_deps, mcl_pack_matrix]
     if: needs.pack.outputs.should_continue == 'true'
     with:
@@ -423,7 +442,7 @@ jobs:
   build_nsis:
     name: Making Windows NSIS installer
     needs: [pack_windows, pack, check_branch, mcl_pack_matrix]
-    if: needs.pack.outputs.should_continue == 'true'
+    if: needs.pack.outputs.should_continue == 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.head_repository.full_name == github.repository) && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-22.04
     container:
       image: manticoresearch/build_nsis:1.0.0
@@ -433,6 +452,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          persist-credentials: false
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           submodules: recursive
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
@@ -854,7 +874,7 @@ jobs:
   build_docker:
     name: Building and pushing docker
     needs: [publish_debian_ubuntu, pack]
-    if: needs.pack.outputs.should_continue == 'true'
+    if: needs.pack.outputs.should_continue == 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.head_repository.full_name == github.repository) && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-22.04
     env:
       DOCKER_USER: ${{ secrets.DOCKER_USER }}
@@ -865,6 +885,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          persist-credentials: false
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           submodules: recursive
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
@@ -875,7 +896,7 @@ jobs:
         id: sha
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@v4.4.0
         with:
           image: tonistiigi/binfmt:qemu-v7.0.0-28
       - name: Building docker

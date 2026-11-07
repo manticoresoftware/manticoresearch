@@ -24,7 +24,9 @@ jobs:
     name: Remove candidate images older than seven days
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
+        with:
+          persist-credentials: false
       - name: Delete expired temporary CLT candidate images
         env:
           # Candidate images are published with GHCR_PASSWORD when configured. Use

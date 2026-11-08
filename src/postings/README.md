@@ -279,6 +279,24 @@ It checks plain/columnar attributes, wide field masks, hitless terms and keyword
 dictionaries through RAM inserts, flushes, deletions, attribute ALTER and actual
 chunk merges, including rejection of changing the table's format.
 
+The positional suite also compares complete result rows, scores and warnings
+against a baseline binary. Create a daemon-readable stopword file containing
+`the`, then run against a fresh disposable RT daemon for each binary:
+
+```sh
+python3 src/postings/tests/integration_positional.py --url http://127.0.0.1:PORT \
+  --prefix positional_before --stopwords /daemon/path/stopwords.txt \
+  --output /home/bench/positional-before.json
+python3 src/postings/tests/integration_positional.py --url http://127.0.0.1:OTHER_PORT \
+  --prefix positional_after --stopwords /daemon/path/stopwords.txt \
+  --oracle /home/bench/positional-before.json --output /home/bench/positional-after.json
+```
+
+Repeat with `--access file` and fresh prefixes. Coverage includes flat and nested
+phrases/proximity/NEAR, repeated terms, stopword gaps, field masks, hitless
+fallbacks, RAM/disk transitions, deletions and merges. One compound hitless
+expression-ranker case is excluded because it crashes the baseline.
+
 ## Benchmarks
 
 The optional text corpus has one record per line:
@@ -335,5 +353,83 @@ hit-reference columns are decoded once per accessed leaf only when requested.
 
 Eligible block qwords in `ExtMultiAnd_T` use this producer and retain the existing
 document-chunk, scoring and hit-merging interfaces. Legacy/RAM/unsupported qwords
-and wide-field schemas keep the existing qword advancement path. Phrase candidate
-generation and generic binary AND composition are not changed by this step.
+and wide-field schemas keep the existing qword advancement path. Flat phrase,
+proximity and NEAR nodes also use MultiAND candidates while retaining their
+positional verification and hit ordering.
+
+Eligible AND-NOT nodes attach excluded membership cursors to the same producer.
+Dense candidates use `FillAndNot` directly against stored ranges/bitmaps; sparse
+candidates use exact field-aware probes. Negative TFs and hit references are not
+read. Positive leaves remain available for gathering survivor payloads. Negative
+EOF preserves candidates; interruption discards the unfinished candidate batch.
+
+The native AND-NOT path accepts ordinary positive terms (one term or a flat AND)
+and ordinary negative terms (one term or an OR). Legacy/RAM qwords, wide fields,
+hitless tables, positional exclusions, expansions and compound positive operands
+retain the existing tree. It also retains the tree beneath optional operands
+such as OR/MAYBE: existing hit forwarding there can include positive-term hits
+from rejected branches, so collecting only survivors would change scores.
+
+`integration_andnot.py` uses the same arguments as the positional suite above.
+Run it against baseline/candidate disposable daemons with both mmap and file
+access. It compares rows, weights and warnings through RAM, mixed, flushed and
+merged stages, including field restrictions, empty/missing exclusions, nested
+fallbacks, multiple rankers, row bounds and deletions. Low-level qword tests also
+check subtraction boundaries, padding, cancellation and lazy negative payloads.
+
+
+### Quorum membership windows
+
+Distinct plain-term quorum queries with 2..31 required matches across at most
+32 clauses use the shared window producer for count and `ranker=none` consumers.
+Each clause fills an exact field-aware membership bitmap. Two-of-N uses seen-once
+and seen-at-least-twice masks; other thresholds add bit-sliced counters and compare
+them to the required count. Windows before the threshold-th clause's next posting
+cannot satisfy quorum and are skipped. Interrupted windows are never published.
+
+Block qwords fill these bitmaps from stored containers; legacy disk qwords use
+the buffered membership adapter. Neither path decodes positions for quorum
+membership. `SHOW META` reports `WindowQuorumCount` for eligible counts.
+
+Scored queries, repeated terms (including dictionary-normalized duplicates),
+expanded/positional/compound operands, hitless/wide-field tables, RAM segments,
+more than 32 clauses, and thresholds normalized to ordinary AND/OR retain their
+existing paths. Repeated-term quorum counts occurrences, so it must not be treated
+as distinct-clause bitmap membership. This step does not accelerate scored Q42.
+
+`integration_quorum.py` accepts the same baseline/oracle arguments as the other
+RT differential suites. Add `--expect-windows` for the candidate binary to assert
+executor selection. Coverage includes absolute/percentage thresholds, 32/33
+clauses, sparse/missing terms, duplicates, restrictions and scored fallbacks;
+run both mmap and file access. `postings_qword_test` compares the bitmap counter
+against scalar per-row counts through all 32 clause/threshold values and reset.
+
+### Single-term consumers
+
+`ExtTerm_T` declares the payloads it needs before reading. Block qwords decode
+TFs for BM25 and TFs plus hit references for consumers that collect hits;
+unranked consumers decode neither column. Positional wrappers may request hits
+before attaching their qword, so initialization preserves that request. The
+existing batch reader has separate membership, TF-only and full-payload loops.
+Legacy qwords retain their existing decoding behavior.
+
+Eligible single-term count and `ranker=none` roots on block-format disk chunks
+use the shared window producer. Stored bitmap/range membership fills windows
+without first reconstructing posting records. Counts consume those windows
+directly; document consumers use the existing window-to-document adapter, filters
+and sorters. Dense single-term windows use the bitmap path. Terms below 1/32 of
+the chunk's documents retain the ordinary batch reader with selective payload
+decoding: both bitmap windows and the cursor's row-batch path cost more CPU on
+the measured sparse fixture. Field restrictions, bounds, deleted rows
+and interruption checks retain the existing window contracts.
+
+Dictionary `FastCount` remains the first choice when eligible. Window counts
+report `WindowTermCount` in `SHOW META`. Legacy postings, RAM segments, wide-field
+and hitless tables, expanded terms and positional restrictions retain their
+existing paths. BM25-only roots use selective payload decoding, not membership
+windows. This does not implement score-bound pruning or change the index format.
+
+`tests/integration_singleterm.py` compares rows, scores and warnings against an
+optional baseline oracle in mmap/file modes and across RAM, mixed, deleted disk
+and merged RT stages. It also checks positional/scored fallbacks and window
+selection for field-restricted counts.

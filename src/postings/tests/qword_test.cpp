@@ -80,7 +80,7 @@ static void CheckState ( const CountingQword_c & a, const CountingQword_c & b )
 }
 
 
-static void Test ( const char * sFile, unsigned uCount, bool bMembership, FileAccess_e eAccess )
+static void Test ( const char * sFile, unsigned uCount, int iPayload, FileAccess_e eAccess )
 {
 	MemoryOutput_c tOutput;
 	auto pWriter = std::make_unique<postings::Writer_c>(tOutput);
@@ -114,11 +114,8 @@ static void Test ( const char * sFile, unsigned uCount, bool bMembership, FileAc
 		CountingQword_c a, b;
 		a.SetDocReader(pFactory);
 		b.SetDocReader(pFactory);
-		if ( bMembership )
-		{
-			a.SetMembershipOnly();
-			b.SetMembershipOnly();
-		}
+		a.SetPayloadRequirements ( iPayload!=0, iPayload==2 );
+		b.SetPayloadRequirements ( iPayload!=0, iPayload==2 );
 
 		for ( bool bHints : { false, true } )
 		{
@@ -147,6 +144,10 @@ static void Test ( const char * sFile, unsigned uCount, bool bMembership, FileAc
 				{
 					Check ( dA[i].m_tRowID==dB[i].m_tRowID && dA[i].m_uFields==dB[i].m_uFields );
 					Check ( dA[i].m_uMatchHits==dB[i].m_uMatchHits && dA[i].m_iHitlistPos==dB[i].m_iHitlistPos );
+
+					unsigned uOrdinal = dA[i].m_tRowID/3;
+					Check ( dA[i].m_uMatchHits==(iPayload ? uOrdinal%7+1 : 0) );
+					Check ( dA[i].m_iHitlistPos==(iPayload==2 ? (uint64_t(1)<<34)+uOrdinal*29 : 0) );
 					if ( !bHints )
 						Check ( dA[i].m_tRowID==uSeen++*3 );
 				}
@@ -168,6 +169,13 @@ static void Test ( const char * sFile, unsigned uCount, bool bMembership, FileAc
 
 			Check ( a.GetNextDocs ( dA.data(), iBatch )==0 );
 			Check ( a.GetNextDoc().m_tRowID==INVALID_ROWID );
+
+			const auto & dDecodes = a.GetDecodeCounts();
+			if ( !bHints )
+			{
+				Check ( bool(dDecodes[unsigned(postings::Column_e::TF)])==bool(iPayload) );
+				Check ( bool(dDecodes[unsigned(postings::Column_e::HITREFS)])==(iPayload==2) );
+			}
 		}
 	}
 }
@@ -212,7 +220,7 @@ static void TestWindows ( const char * sFile, unsigned uShape, unsigned uFieldCo
 	a.m_iDocs = b.m_iDocs = COUNT;
 	auto pNative = a.CreatePostingWindow ( uMask, {} );
 	auto pBuffered = CreateBufferedPostingWindow ( b, uMask, {} );
-	for ( unsigned mode=0; mode<3; ++mode )
+	for ( unsigned mode=0; mode<4; ++mode )
 	{
 		a.SeekDocReader ( postings::FILE_HEADER_SIZE, 0 );
 		b.SeekDocReader ( postings::FILE_HEADER_SIZE, 0 );
@@ -246,6 +254,10 @@ static void TestWindows ( const char * sFile, unsigned uShape, unsigned uFieldCo
 			{
 				na = pNative->FillAnd ( tWindow, dA );
 				nb = pBuffered->FillAnd ( tWindow, dB );
+			} else if ( mode==3 )
+			{
+				na = pNative->FillAndNot ( tWindow, dA );
+				nb = pBuffered->FillAndNot ( tWindow, dB );
 			} else
 			{
 				RowID_t dRowsA[128], dRowsB[128];
@@ -279,7 +291,7 @@ static void TestWindows ( const char * sFile, unsigned uShape, unsigned uFieldCo
 	// native cursors and continuation budgets, including partially consumed leaves.
 	pBuffered.reset();
 	auto pReference = b.CreatePostingWindow ( uMask, {} );
-	for ( unsigned iTry=0; iTry<32; ++iTry )
+	for ( unsigned iTry=0; iTry<64; ++iTry )
 	{
 		struct Continue_t { int m_iCalls = 0; int m_iLimit; };
 		Continue_t tA { 0, int(iTry%8)-1 }, tB { 0, int(iTry%8)-1 };
@@ -288,16 +300,27 @@ static void TestWindows ( const char * sFile, unsigned uShape, unsigned uFieldCo
 		b.SeekDocReader ( postings::FILE_HEADER_SIZE, 0 );
 		pNative->Reset ( true, { &tA, fnContinue, nullptr } );
 		pReference->Reset ( true, { &tB, fnContinue, nullptr } );
-		RowID_t tMin = tBase+(iTry/8)*17;
+		RowID_t tMin = tBase+(iTry%32/8)*17;
 		PostingWindow_t tRange { tBase-7, tMin, std::min ( uint64_t(INVALID_ROWID)+1, uint64_t(tBase)+4077 ) };
 		DWORD dA[PostingWindow_t::WORDS], dB[PostingWindow_t::WORDS], dScratch[PostingWindow_t::WORDS] = {};
 		for ( unsigned i=0; i<PostingWindow_t::WORDS; ++i )
 			dA[i] = dB[i] = iTry/8==0 ? 0 : iTry/8==1 ? UINT32_MAX : (i*1664525U+1013904223U) ^ (iTry*2654435761U);
 
-		auto na = pNative->FillAnd ( tRange, dA );
+		auto na = iTry<32 ? pNative->FillAnd ( tRange, dA ) : pNative->FillAndNot ( tRange, dA );
 		auto nb = pReference->FillOr ( tRange, dScratch );
 		size_t iWords = size_t((tRange.m_uEnd-tRange.m_tBase+31)/32);
-		bitmap::And ( dB, dB, dScratch, iWords );
+		if ( iTry<32 )
+			bitmap::And ( dB, dB, dScratch, iWords );
+		else
+		{
+			bitmap::AndNot ( dB, dB, dScratch, iWords );
+			for ( unsigned bit=0; bit<iWords*32; ++bit )
+			{
+				uint64_t row = uint64_t(tRange.m_tBase)+bit;
+				if ( nb.m_bStopped || row<tRange.m_tMin || row>=tRange.m_uEnd || row>=INVALID_ROWID )
+					dB[bit/32] &= ~(DWORD(1)<<(bit%32));
+			}
+		}
 		Check ( na.m_iRows==int(bitmap::Count ( dB, iWords )) );
 		Check ( na.m_bStopped==nb.m_bStopped && na.m_tNext==nb.m_tNext );
 		Check ( std::equal ( dA, dA+PostingWindow_t::WORDS, dB ) );
@@ -456,6 +479,101 @@ static void TestBlockPayloads ( const char * sFile, unsigned uShape, FileAccess_
 			Check ( !dWords[0].GetDecodeCounts()[0] );
 	}
 
+	// Exclusion may cross multiple negative leaves while positive payloads stay
+	// pinned. Check dense/sparse shapes, fields, empty negatives and short batches.
+	for ( unsigned mode=0; mode<4; ++mode )
+	{
+		std::array<CountingQword_c,3> dWords;
+		PostingBlockAnd_c tAnd({});
+		unsigned iPositive = mode==1 ? 2 : 1;
+		for ( unsigned i=0; i<3; ++i )
+		{
+			dWords[i].SetDocReader(pFactory);
+			dWords[i].m_iDocs = mode==3 && i>=iPositive ? 0 : int(dExpected[i].size());
+			dWords[i].SeekDocReader ( dStarts[i], 0 );
+
+			DWORD uMask = bRestricted ? 1U<<(i%2) : UINT32_MAX;
+			if ( i<iPositive )
+				tAnd.Add ( dWords[i].CreatePostingBlock ( uMask, {} ) );
+			else if ( mode!=2 || i==1 )
+				tAnd.AddExcluded ( dWords[i].CreatePostingWindow ( uMask, {} ) );
+		}
+
+		std::vector<RowID_t> dRows;
+		for ( const auto & tDoc : dExpected[0] )
+		{
+			bool bKeep = true;
+			for ( unsigned i=0; i<3; ++i )
+			{
+				if ( mode==2 && i==2 )
+					continue;
+
+				auto p = std::lower_bound ( dExpected[i].begin(), dExpected[i].end(), tDoc.m_tRowID, [] ( const QwordDoc_t & t, RowID_t r ) { return t.m_tRowID<r; } );
+				bool bMatch = p!=dExpected[i].end() && p->m_tRowID==tDoc.m_tRowID && (!bRestricted || (p->m_uFields & (1U<<(i%2))));
+				if ( mode==3 && i>=iPositive )
+					bMatch = false;
+
+				bKeep &= i<iPositive ? bMatch : !bMatch;
+			}
+
+			if ( bKeep )
+				dRows.push_back(tDoc.m_tRowID);
+		}
+
+		size_t iExpected = 0;
+		RowID_t tMin = tBase;
+		for ( unsigned turn=0; ; ++turn )
+		{
+			Check ( turn<10000 );
+
+			auto tRows = tAnd.ReadRows ( tMin, INVALID_ROWID, turn%2 ? 31 : 1 );
+			if ( !tRows.m_iCount )
+				break;
+
+			std::array<QwordDoc_t,31> dDocs;
+			Check ( tAnd.GetCursor(0).ReadPayloads ( tRows.m_pRows, tRows.m_iCount, dDocs.data(), true, true ) );
+			for ( int i=0; i<tRows.m_iCount; ++i )
+			{
+				while ( iExpected<dRows.size() && dRows[iExpected]<tMin )
+					++iExpected;
+
+				Check ( iExpected<dRows.size() && tRows.m_pRows[i]==dRows[iExpected++] );
+
+				auto p = std::lower_bound ( dExpected[0].begin(), dExpected[0].end(), tRows.m_pRows[i], [] ( const QwordDoc_t & t, RowID_t r ) { return t.m_tRowID<r; } );
+				Check ( p!=dExpected[0].end() && dDocs[i].m_iHitlistPos==p->m_iHitlistPos && dDocs[i].m_uMatchHits==p->m_uMatchHits );
+			}
+
+			if ( turn%5==0 )
+				tMin = RowID_t(uint64_t(tRows.m_pRows[tRows.m_iCount-1])+19);
+		}
+
+		while ( iExpected<dRows.size() && dRows[iExpected]<tMin )
+			++iExpected;
+
+		Check ( iExpected==dRows.size() );
+		for ( unsigned i=iPositive; i<3; ++i )
+			Check ( !dWords[i].GetDecodeCounts()[2] && !dWords[i].GetDecodeCounts()[3] );
+	}
+
+	// An interrupted negative must not expose any unchecked positive candidates.
+	{
+		CountingQword_c tPositive, tNegative;
+		tPositive.SetDocReader(pFactory);
+		tNegative.SetDocReader(pFactory);
+		tPositive.m_iDocs = int(dExpected[0].size());
+		tNegative.m_iDocs = int(dExpected[1].size());
+		tPositive.SeekDocReader ( dStarts[0], 0 );
+		tNegative.SeekDocReader ( dStarts[1], 0 );
+
+		int iCalls = 0;
+		PostingWindowContext_t tStop { &iCalls, [] ( void * p ) { ++*static_cast<int *>(p); return false; }, nullptr };
+		PostingBlockAnd_c tAnd({});
+		tAnd.Add ( tPositive.CreatePostingBlock ( UINT32_MAX, {} ) );
+		tAnd.AddExcluded ( tNegative.CreatePostingWindow ( UINT32_MAX, tStop ) );
+		Check ( !tAnd.ReadRows ( tBase, INVALID_ROWID, 31 ).m_iCount && iCalls==1 );
+		Check ( !tAnd.ReadRows ( tBase, INVALID_ROWID, 31 ).m_iCount && iCalls==1 );
+	}
+
 	// Intersecting and probing must not invalidate payloads, even after the last
 	// posting in the leaf was consumed. A fresh view after reset must work too.
 	CountingQword_c tWord;
@@ -502,15 +620,58 @@ static void TestBlockPayloads ( const char * sFile, unsigned uShape, FileAccess_
 }
 
 
+static void TestQuorum()
+{
+	uint32_t uSeed = 17;
+	for ( int iThreshold=1; iThreshold<=32; ++iThreshold )
+	{
+		PostingQuorum_c tQuorum(iThreshold);
+		for ( int iRound=0; iRound<2; ++iRound )
+		{
+			tQuorum.Reset();
+
+			unsigned char dCounts[PostingWindow_t::ROWS] {};
+			DWORD dInput[PostingWindow_t::WORDS], dOutput[PostingWindow_t::WORDS];
+			Check ( !tQuorum.Finish(dOutput) );
+			for ( int iTerm=0; iTerm<32; ++iTerm )
+			{
+				for ( int i=0; i<PostingWindow_t::WORDS; ++i )
+				{
+					uSeed = uSeed*1664525u+1013904223u;
+					dInput[i] = i%3==0 ? UINT32_MAX : i%3==1 ? 0 : uSeed;
+					for ( int j=0; j<32; ++j )
+						dCounts[i*32+j] += (dInput[i]>>j)&1;
+				}
+
+				tQuorum.Add(dInput);
+
+				bool bAny = tQuorum.Finish(dOutput);
+				bool bExpected = false;
+				for ( int i=0; i<PostingWindow_t::ROWS; ++i )
+				{
+					bool bMatch = dCounts[i]>=iThreshold;
+					Check ( bool((dOutput[i/32]>>(i%32))&1)==bMatch );
+					bExpected |= bMatch;
+				}
+
+				Check ( bAny==bExpected );
+			}
+		}
+	}
+}
+
+
 int main ( int argc, char ** argv )
 {
+	TestQuorum();
+
 	if ( argc!=2 )
 		return 2;
 
 	for ( unsigned n : { 1u, 127u, 128u, 255u, 256u, 257u, 513u, 1025u } )
-		for ( bool bMembership : { false, true } )
+		for ( int iPayload : { 0, 1, 2 } )
 			for ( auto eAccess : { FileAccess_e::MMAP, FileAccess_e::FILE } )
-				Test ( argv[1], n, bMembership, eAccess );
+				Test ( argv[1], n, iPayload, eAccess );
 
 	for ( unsigned shape=0; shape<3; ++shape )
 		for ( unsigned fields : { 1u, 2u, 33u } )

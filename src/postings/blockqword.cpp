@@ -117,7 +117,7 @@ bool BlockIndexQword_c::LoadLeaf ( RowID_t tMin )
 		return false;
 	}
 
-	if ( !m_tReader.ReadRows(m_sError) || !m_tReader.ReadFields(m_sError) || (!m_bMembership && (!m_tReader.ReadTF(m_sError) || !m_tReader.ReadHitRefs(m_sError))) )
+	if ( !m_tReader.ReadRows(m_sError) || !m_tReader.ReadFields(m_sError) || (m_bReadTF && !m_tReader.ReadTF(m_sError)) || (m_bReadHits && !m_tReader.ReadHitRefs(m_sError)) )
 	{
 		Fail();
 		return false;
@@ -162,8 +162,8 @@ void BlockIndexQword_c::SetDoc ( unsigned i )
 		m_dQwordFields[f] = m_tReader.GetFields()[i][f];
 
 	m_bAllFieldsKnown = true;
-	m_uMatchHits = m_bMembership ? 0 : m_tReader.GetTF()[i];
-	m_iHitlistPos = m_uHitPosition = m_bMembership ? 0 : m_tReader.GetHitRefs()[i];
+	m_uMatchHits = m_bReadTF ? m_tReader.GetTF()[i] : 0;
+	m_iHitlistPos = m_uHitPosition = m_bReadHits ? m_tReader.GetHitRefs()[i] : 0;
 }
 
 
@@ -176,7 +176,7 @@ const CSphMatch & BlockIndexQword_c::GetNextDoc()
 }
 
 
-template<bool MEMBERSHIP>
+template<bool TF, bool HITS>
 int BlockIndexQword_c::ReadDocs ( QwordDoc_t * pDocs, int iMax )
 {
 	int iGot = 0;
@@ -192,8 +192,8 @@ int BlockIndexQword_c::ReadDocs ( QwordDoc_t * pDocs, int iMax )
 			QwordDoc_t & tDoc = pDocs[iGot++];
 			tDoc.m_tRowID = dRows[i];
 			tDoc.m_uFields = dFields[i][0];
-			tDoc.m_uMatchHits = MEMBERSHIP ? 0 : dTF[i];
-			tDoc.m_iHitlistPos = MEMBERSHIP ? 0 : dHitRefs[i];
+			tDoc.m_uMatchHits = TF ? dTF[i] : 0;
+			tDoc.m_iHitlistPos = HITS ? dHitRefs[i] : 0;
 		}
 
 		m_iOrdinal = iEnd;
@@ -206,7 +206,10 @@ int BlockIndexQword_c::ReadDocs ( QwordDoc_t * pDocs, int iMax )
 
 int BlockIndexQword_c::GetNextDocs ( QwordDoc_t * pDocs, int iMax )
 {
-	return m_bMembership ? ReadDocs<true> ( pDocs, iMax ) : ReadDocs<false> ( pDocs, iMax );
+	if ( m_bReadHits )
+		return ReadDocs<true,true> ( pDocs, iMax );
+
+	return m_bReadTF ? ReadDocs<true,false> ( pDocs, iMax ) : ReadDocs<false,false> ( pDocs, iMax );
 }
 
 

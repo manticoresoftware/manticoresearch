@@ -254,7 +254,7 @@ public:
 	int					GetHitsCount() const override { return m_pQword->m_iHits; }
 	uint64_t			GetWordID () const override;
 	void				HintRowID ( RowID_t tRowID ) override;
-	void				SetCollectHits() override { m_bCollectHits = true; }
+	void				SetCollectHits() override;
 	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override { return { float(m_pQword->m_iDocs)*COST_SCALE*60.0f, m_pQword->m_iDocs, 1 }; }
 	void				SetRowidBoundaries ( const RowIdBoundaries_t & tBoundaries ) override;
 
@@ -471,11 +471,18 @@ void ExtAndRightHits_c::Reset ( const ISphQwordSetup & tSetup )
 }
 
 
+struct MultiAndTerm_t
+{
+	ISphQword *		m_pQword;
+	const XQNode_t *	m_pNode;
+};
+
+
 template <bool USE_BM25, bool TEST_FIELDS, bool ROWID_LIMITS>
 class ExtMultiAnd_T : public ExtNode_c
 {
 public:
-						ExtMultiAnd_T ( const VecTraits_T<XQNode_t*> & dXQNodes, const ISphQwordSetup & tSetup );
+						ExtMultiAnd_T ( const VecTraits_T<MultiAndTerm_t> & dTerms, const ISphQwordSetup & tSetup, bool bPositional, const VecTraits_T<MultiAndTerm_t> & dExcluded );
 						~ExtMultiAnd_T() override;
 
 	const ExtDoc_t *	GetDocsChunk() override;
@@ -526,6 +533,7 @@ private:
 		WORD		m_uNodePos;
 		WORD		m_uQueryPos;
 		Hitpos_t	m_uHitpos;
+		int			m_iNode;
 	};
 
 	struct SelectivitySorter_t
@@ -558,6 +566,7 @@ private:
 	bool							m_bFirstChunk {true};
 	bool							m_bCollectHits {false};
 	CSphVector<NodeInfo_t>			m_dNodes;
+	CSphVector<NodeInfo_t>			m_dExcluded;
 	CSphVector<StoredMultiHit_t>	m_dStoredHits;
 	int								m_iNodesSet {0};
 	RowIdBoundaries_t				m_tBoundaries;
@@ -576,6 +585,7 @@ private:
 	FORCE_INLINE float	GetTFIDF() const;
 	int					GetQword ( NodeInfo_t & tNode, ExtQwordsHash_t & hQwords );
 	FORCE_INLINE void	PushNextHit ( int iNode );
+	FORCE_INLINE void	CopySingleHits ( const StoredMultiHit_t & tStoredHit );
 	FORCE_INLINE void	MergeHitsN ( const StoredMultiHit_t & tStoredHit );
 	FORCE_INLINE void	MergeHits2 ( const StoredMultiHit_t & tStoredHit );
 	FORCE_INLINE void	MergeHits3 ( const StoredMultiHit_t & tStoredHit );
@@ -585,7 +595,7 @@ private:
 	void				DoHitMerge ( RowID_t tRowID, HitInfo_t & tLeft, HitInfo_t & tRight );
 	void				DoHitMerge ( RowID_t tRowID, HitInfo_t & tHit1, HitInfo_t & tHit2, HitInfo_t & tHit3 );
 	void				CopyHits ( RowID_t tRowID, HitInfo_t & tHitInfo, int iNode );
-	FORCE_INLINE void	AddHit ( RowID_t tRowID, HitInfo_t & tHit, int iNode );
+	FORCE_INLINE void	AddHit ( RowID_t tRowID, HitInfo_t & tHit );
 
 	static bool			IsHitLess ( const HitInfo_t & tLeft, const HitInfo_t & tRight ) { return tLeft.m_uHitpos<tRight.m_uHitpos || ( tLeft.m_uHitpos==tRight.m_uHitpos && tLeft.m_uQueryPos<=tRight.m_uQueryPos ); }
 };
@@ -665,7 +675,7 @@ protected:
 class ExtNWay_c : public ExtNode_c, public BufferedNode_c
 {
 public:
-						ExtNWay_c ( const CSphVector<ExtNode_i *> & dNodes, const ISphQwordSetup & tSetup );
+						ExtNWay_c ( int iAtomPos, const ISphQwordSetup & tSetup );
 						~ExtNWay_c() override;
 
 	void				Reset ( const ISphQwordSetup & tSetup ) override;
@@ -726,6 +736,7 @@ class ExtNWay_T : public ExtNWay_c, private FSM
 {
 public:
 						ExtNWay_T ( const CSphVector<ExtNode_i *> & dNodes, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
+						ExtNWay_T ( ExtNode_i * pAnd, const VecTraits_T<int> & dAtomPos, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
 
 	const ExtDoc_t *	GetDocsChunk() override;
 	void				CollectHits ( const ExtDoc_t * pDocs ) override;
@@ -748,7 +759,7 @@ protected:
 	DWORD					m_uQposMask {0};
 
 
-							FSMphrase_c ( const CSphVector<ExtNode_i *> & dQwords, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
+							FSMphrase_c ( const VecTraits_T<int> & dAtomPos, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
 
 	inline bool				HitFSM ( const ExtHit_t* pHit, CSphVector<ExtHit_t> & dHits );
 	inline void				ResetFSM();
@@ -775,7 +786,7 @@ protected:
 	DWORD					m_uQposMask = 0;
 
 
-							FSMproximity_c ( const CSphVector<ExtNode_i *> & dQwords, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
+							FSMproximity_c ( const VecTraits_T<int> & dAtomPos, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
 
 	inline bool				HitFSM ( const ExtHit_t * pHit, CSphVector<ExtHit_t> & dHits );
 	inline void				ResetFSM();
@@ -811,7 +822,7 @@ protected:
 	bool					m_bQposMask;
 
 
-							FSMmultinear_c ( const CSphVector<ExtNode_i *> & dNodes, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
+							FSMmultinear_c ( const VecTraits_T<int> & dAtomPos, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
 
 	inline bool				HitFSM ( const ExtHit_t * pHit, CSphVector<ExtHit_t> & dHits );
 	inline void				ResetFSM();
@@ -1162,7 +1173,7 @@ std::unique_ptr<WindowDocsAdapter_i> CreateWindowDocsAdapter ( std::unique_ptr<Q
 
 
 // Membership-only boolean windows over disk qwords. Document consumers use WindowDocsAdapter_c.
-template<bool IS_AND>
+template<bool IS_AND, bool IS_QUORUM=false>
 class ExtWindowBool_T final : public WindowNode_i
 {
 	struct Term_t
@@ -1179,8 +1190,9 @@ public:
 		DWORD m_uFields;
 	};
 
-	ExtWindowBool_T ( const VecTraits_T<Leaf_t> & dLeaves, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds )
+	ExtWindowBool_T ( const VecTraits_T<Leaf_t> & dLeaves, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds, int iThreshold=1 )
 		: m_dTerms ( dLeaves.GetLength() )
+		, m_iThreshold(iThreshold)
 		, m_pWarning ( tSetup.m_pWarning )
 		, m_pStats ( tSetup.m_pStats )
 		, m_iMaxTimer ( tSetup.m_iMaxTimer )
@@ -1189,7 +1201,7 @@ public:
 		{
 			auto & tTerm = m_dTerms[i];
 			tTerm.m_pWord.reset ( CreateQueryWord ( *dLeaves[i].m_pWord, tSetup ) );
-			if constexpr ( IS_AND )
+			if ( IS_AND || dLeaves.GetLength()==1 )
 				if ( tTerm.m_pWord->m_iDocs && int64_t(tTerm.m_pWord->m_iDocs)*32<tSetup.m_pIndex->GetStats().m_iTotalDocuments )
 				{
 					// Reject at the first sparse clause, before allocating the other
@@ -1197,6 +1209,14 @@ public:
 					m_bDense = false;
 					return;
 				}
+
+			if constexpr ( IS_QUORUM )
+				for ( int j=0; j<i; ++j )
+					if ( tTerm.m_pWord->m_sDictWord==m_dTerms[j].m_pWord->m_sDictWord )
+					{
+						m_bDistinct = false;
+						return; // repeated terms require hit-count semantics
+					}
 
 			tTerm.m_pCursor = tTerm.m_pWord->CreatePostingWindow ( dLeaves[i].m_uFields, CursorContext() );
 		}
@@ -1209,11 +1229,14 @@ public:
 	}
 
 	bool IsDense() const { return m_bDense; }
-	const char * GetName() const override { return IS_AND ? "WindowAndCount" : "WindowOrCount"; }
+	bool HasDistinctTerms() const { return m_bDistinct; }
+	const char * GetName() const override { return m_dTerms.GetLength()==1 ? "WindowTermCount" : IS_QUORUM ? "WindowQuorumCount" : IS_AND ? "WindowAndCount" : "WindowOrCount"; }
 
 	CountWindow_t * NextWindow() override
 	{
-		if constexpr ( IS_AND )
+		if constexpr ( IS_QUORUM )
+			return FillQuorumWindow();
+		else if constexpr ( IS_AND )
 			return FillAndWindow();
 		else
 			return FillWindow();
@@ -1324,6 +1347,18 @@ public:
 			return tResult;
 		}
 
+		if constexpr ( IS_QUORUM )
+		{
+			NodeEstimate_t tResult { 0.0f, 0, 0 };
+			for ( const auto & tTerm : m_dTerms )
+				tResult += NodeEstimate_t { float(tTerm.m_pWord->m_iDocs)*COST_SCALE*60.0f, tTerm.m_pWord->m_iDocs, 1 };
+
+			return tResult;
+		}
+
+		if ( m_dTerms.GetLength()==1 )
+			return { float(m_dTerms[0].m_pWord->m_iDocs)*COST_SCALE*60.0f, m_dTerms[0].m_pWord->m_iDocs, 1 };
+
 		// Preserve the legacy OR estimate until a measured window cost model is available.
 		NodeEstimate_t tResult { 0.0f, 0, 0 };
 		for ( const auto & tTerm : m_dTerms )
@@ -1341,6 +1376,8 @@ public:
 
 private:
 	CSphFixedVector<Term_t> m_dTerms;
+	int						m_iThreshold = 1;
+	bool					m_bDistinct = true;
 	CountWindow_t			m_tWindow;
 	RowIdBoundaries_t		m_tBounds;
 	RowIdBoundaries_t		m_tInitialBounds;
@@ -1584,6 +1621,50 @@ private:
 		return bAny;
 	}
 
+	CountWindow_t * FillQuorumWindow()
+	{
+		PostingQuorum_c tQuorum(m_iThreshold);
+		while ( CheckInterrupted() )
+		{
+			if ( AdvanceOrTerms()==INVALID_ROWID )
+				return nullptr;
+
+			RowID_t dStarts[32];
+			ARRAY_FOREACH ( i, m_dTerms )
+				dStarts[i] = m_dTerms[i].m_tNext;
+
+			std::nth_element ( dStarts, dStarts+m_iThreshold-1, dStarts+m_dTerms.GetLength() );
+
+			const RowID_t tFirst = dStarts[m_iThreshold-1];
+			if ( tFirst==INVALID_ROWID || tFirst>m_tBounds.m_tMaxRowID )
+				return nullptr;
+
+			m_tWindow.m_tBase = tFirst & ~(RowID_t(CountWindow_t::ROWS)-1);
+			const auto tRange = WindowRange();
+			tQuorum.Reset();
+			for ( auto & tTerm : m_dTerms )
+			{
+				if ( tTerm.m_tNext==INVALID_ROWID || uint64_t(tTerm.m_tNext)>=tRange.m_uEnd )
+					continue;
+
+				DWORD dBits[CountWindow_t::WORDS] {};
+				const auto tResult = tTerm.m_pCursor->FillOr ( tRange, dBits );
+				tTerm.m_tNext = tResult.m_tNext;
+				m_bStopped |= tResult.m_bStopped;
+				if ( m_bStopped )
+					return nullptr;
+
+				tQuorum.Add(dBits);
+			}
+
+			m_tBounds.m_tMinRowID = RowID_t ( Min ( tRange.m_uEnd, uint64_t(INVALID_ROWID) ) );
+			if ( tQuorum.Finish(m_tWindow.m_dBits) )
+				return &m_tWindow;
+		}
+
+		return nullptr;
+	}
+
 	CountWindow_t * FillWindow()
 	{
 		while ( CheckInterrupted() )
@@ -1603,7 +1684,7 @@ private:
 
 			m_tWindow.m_tBase = tFirst & ~(RowID_t(CountWindow_t::ROWS)-1);
 			const auto tRange = WindowRange();
-			if ( SelectSingleTerm(tRange.m_uEnd) )
+			if ( m_dTerms.GetLength()>1 && SelectSingleTerm(tRange.m_uEnd) )
 				continue;
 
 			const bool bAny = FillOrBitmap(tRange);
@@ -1620,6 +1701,7 @@ private:
 
 using ExtWindowOr_c = ExtWindowBool_T<false>;
 using ExtWindowAnd_c = ExtWindowBool_T<true>;
+using ExtWindowQuorum_c = ExtWindowBool_T<false,true>;
 
 // Check the whole transformed tree before creating any readers. Field specs on
 // boolean parents have already been propagated by the parser; like Create(),
@@ -1657,6 +1739,26 @@ static bool CollectWindowLeaves ( const XQNode_t * pNode, CSphVector<typename Ex
 	return !pNode->dWords().IsEmpty();
 }
 
+
+WindowNode_i * CreateWindowTermCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds )
+{
+	if ( !tSetup.m_pIndex || !tSetup.m_pIndex->GetSettings().m_uPostingsFormat
+		|| tSetup.m_pIndex->GetMatchSchema().GetFieldsCount()>32
+		|| tSetup.m_pIndex->GetSettings().m_eHitless!=SPH_HITLESS_NONE )
+		return nullptr;
+
+	CSphVector<ExtWindowOr_c::Leaf_t> dLeaves;
+	if ( !CollectWindowLeaves<false> ( pNode, dLeaves ) || dLeaves.GetLength()!=1 )
+		return nullptr;
+
+	auto pTerm = std::make_unique<ExtWindowOr_c> ( dLeaves, tSetup, pBounds );
+	if ( !pTerm->IsDense() )
+		return nullptr;
+
+	return pTerm.release();
+}
+
+
 WindowNode_i * CreateWindowOrCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds )
 {
 	if ( !tSetup.m_pIndex || tSetup.m_pIndex->GetMatchSchema().GetFieldsCount()>32
@@ -1686,6 +1788,33 @@ WindowNode_i * CreateWindowAndCountNode ( const XQNode_t * pNode, const ISphQwor
 		return nullptr;
 
 	return pNodeAnd.release();
+}
+
+
+WindowNode_i * CreateWindowQuorumCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds )
+{
+	if ( pNode->GetOp()!=SPH_QUERY_QUORUM || pNode->GetCount() || pNode->m_bVirtuallyPlain || pNode->m_bNotWeighted
+		|| !pNode->dChildren().IsEmpty() || pNode->m_dSpec.m_iFieldMaxPos || pNode->m_dSpec.m_bZoneSpan || !pNode->m_dSpec.m_dZones.IsEmpty()
+		|| !tSetup.m_pIndex || tSetup.m_pIndex->GetMatchSchema().GetFieldsCount()>32 || tSetup.m_pIndex->GetSettings().m_eHitless!=SPH_HITLESS_NONE )
+		return nullptr;
+
+	int iTerms = pNode->dWords().GetLength();
+	int iThreshold = ExtQuorum_c::GetThreshold ( *pNode, iTerms );
+	if ( iTerms>32 || iThreshold<2 || iThreshold>=iTerms )
+		return nullptr;
+
+	CSphVector<ExtWindowQuorum_c::Leaf_t> dLeaves;
+	for ( const auto & tWord : pNode->dWords() )
+	{
+		if ( tWord.m_bFieldStart || tWord.m_bFieldEnd || tWord.m_pPayload || tWord.m_bExpanded || tWord.m_bExcluded
+			|| tWord.m_bRegex || tWord.m_iBlendedGroup!=-1 || tWord.m_sWord.IsEmpty() )
+			return nullptr;
+
+		dLeaves.Add ( { &tWord, pNode->m_dSpec.m_dFieldMask.GetMask32() } );
+	}
+
+	auto pQuorum = std::make_unique<ExtWindowQuorum_c> ( dLeaves, tSetup, pBounds, iThreshold );
+	return pQuorum->HasDistinctTerms() ? pQuorum.release() : nullptr;
 }
 
 
@@ -1730,9 +1859,203 @@ int CountAtomPos ( const CSphVector<T *> & dNodes, const NODE_CHECK & fnCheck )
 }
 
 
+static ExtNode_i * CreateMultiAndTerms ( const VecTraits_T<MultiAndTerm_t> & dTerms, const ISphQwordSetup & tSetup, bool bUseBM25, bool bRowidLimits, bool bPositional, const VecTraits_T<MultiAndTerm_t> & dExcluded = {} )
+{
+	bool bNeedFieldSpec = false;
+	for ( const auto & tTerm : dTerms )
+		bNeedFieldSpec |= !tTerm.m_pNode->m_dSpec.m_dFieldMask.TestAll(true);
+
+	int iSwitch = 4*(bUseBM25?1:0) + 2*(bNeedFieldSpec?1:0) + (bRowidLimits?1:0);
+	switch ( iSwitch )
+	{
+	case 0:	return new ExtMultiAnd_T<false, false, false> ( dTerms, tSetup, bPositional, dExcluded );
+	case 1:	return new ExtMultiAnd_T<false, false, true>  ( dTerms, tSetup, bPositional, dExcluded );
+	case 2:	return new ExtMultiAnd_T<false, true,  false> ( dTerms, tSetup, bPositional, dExcluded );
+	case 3:	return new ExtMultiAnd_T<false, true,  true>  ( dTerms, tSetup, bPositional, dExcluded );
+	case 4:	return new ExtMultiAnd_T<true,  false, false> ( dTerms, tSetup, bPositional, dExcluded );
+	case 5:	return new ExtMultiAnd_T<true,  false, true>  ( dTerms, tSetup, bPositional, dExcluded );
+	case 6:	return new ExtMultiAnd_T<true,  true,  false> ( dTerms, tSetup, bPositional, dExcluded );
+	case 7:	return new ExtMultiAnd_T<true,  true,  true>  ( dTerms, tSetup, bPositional, dExcluded );
+	default:
+		assert ( 0 && "Internal error" );
+		return nullptr;
+	}
+}
+
+
+// Only ordinary terms can bypass their query nodes. Restrictions that need
+// per-term positional checks and compound operands retain the binary tree.
+static bool CanUsePositionalMultiAnd ( const XQNode_t & tNode )
+{
+	if ( tNode.m_dSpec.m_iFieldMaxPos || tNode.m_dSpec.m_dZones.GetLength() || tNode.m_dSpec.m_bZoneSpan || tNode.GetCount() )
+		return false;
+
+	for ( const XQKeyword_t & tWord : tNode.dWords() )
+		if ( tWord.m_bFieldStart || tWord.m_bFieldEnd || tWord.m_pPayload || tWord.m_bExpanded || tWord.m_bExcluded || tWord.m_bRegex || tWord.m_iBlendedGroup!=-1 )
+			return false;
+
+	return true;
+}
+
+
+static bool CollectBlockAndNotTerms ( const XQNode_t & tNode, bool bExcluded, CSphVector<const XQNode_t *> & dTerms, bool bWrapped = false )
+{
+	if ( tNode.GetCount() || tNode.m_dSpec.m_iFieldMaxPos || tNode.m_dSpec.m_dZones.GetLength() || tNode.m_dSpec.m_bZoneSpan )
+		return false;
+
+	if ( bExcluded && tNode.GetOp()==SPH_QUERY_NOT && tNode.dChildren().GetLength()==1 && !bWrapped )
+		return CollectBlockAndNotTerms ( *tNode.dChildren()[0], true, dTerms, true );
+
+	if ( tNode.dChildren().GetLength() )
+	{
+		if ( tNode.GetOp()!=(bExcluded ? SPH_QUERY_OR : SPH_QUERY_AND) )
+			return false;
+
+		for ( const XQNode_t * pChild : tNode.dChildren() )
+		{
+			// Preserve score accumulation order for compound positive operands.
+			if ( !bExcluded && pChild->dChildren().GetLength() )
+				return false;
+
+			if ( !CollectBlockAndNotTerms ( *pChild, bExcluded, dTerms, bWrapped ) )
+				return false;
+		}
+
+		return true;
+	}
+
+	if ( tNode.GetOp()!=SPH_QUERY_AND || tNode.dWords().GetLength()!=1 )
+		return false;
+
+	const auto & tWord = tNode.dWord(0);
+	if ( tWord.m_bFieldStart || tWord.m_bFieldEnd || tWord.m_pPayload || tWord.m_bExpanded || tWord.m_bRegex || tWord.m_iBlendedGroup!=-1 )
+		return false;
+
+	dTerms.Add(&tNode);
+	return true;
+}
+
+
+static ExtNode_i * CreateBlockAndNotNode ( const XQNode_t & tNode, const ISphQwordSetup & tSetup, bool bUseBM25, bool bRowidLimits )
+{
+	if ( tNode.GetOp()!=SPH_QUERY_ANDNOT || tNode.dChildren().GetLength()!=2 || tNode.GetCount() || tSetup.m_bHasWideFields || !tSetup.m_pIndex
+		|| !tSetup.m_pIndex->GetSettings().m_uPostingsFormat || tSetup.m_pIndex->GetSettings().m_eHitless!=SPH_HITLESS_NONE )
+		return nullptr;
+
+	// OR and other optional operands can request hits for rows rejected here.
+	// Keep their existing hit forwarding; block subtraction retains only survivors.
+	for ( const XQNode_t * pChild=&tNode, * pParent=tNode.m_pParent; pParent; pChild=pParent, pParent=pParent->m_pParent )
+		if ( pParent->GetOp()!=SPH_QUERY_AND && !(pParent->GetOp()==SPH_QUERY_ANDNOT && pParent->dChildren()[0]==pChild) )
+			return nullptr;
+
+	CSphVector<const XQNode_t *> dPositiveNodes, dExcludedNodes;
+	if ( !CollectBlockAndNotTerms ( *tNode.dChildren()[0], false, dPositiveNodes ) || !CollectBlockAndNotTerms ( *tNode.dChildren()[1], true, dExcludedNodes ) )
+		return nullptr;
+
+	CSphVector<MultiAndTerm_t> dTerms, dExcluded;
+	bool bBlocks = true;
+	auto Create = [&] ( const VecTraits_T<const XQNode_t *> & dNodes, CSphVector<MultiAndTerm_t> & dWords )
+	{
+		for ( const XQNode_t * pNode : dNodes )
+		{
+			ISphQword * pWord = CreateQueryWord ( pNode->dWord(0), tSetup );
+			dWords.Add ( { pWord, pNode } );
+			bBlocks &= bool(pWord->CreatePostingBlock ( pNode->m_dSpec.m_dFieldMask.GetMask32(), {} ));
+		}
+	};
+	Create ( dPositiveNodes, dTerms );
+	Create ( dExcludedNodes, dExcluded );
+
+	// No subtraction is needed when every excluded term is absent.
+	bBlocks &= dExcluded.any_of ( [] ( const MultiAndTerm_t & tTerm ) { return tTerm.m_pQword->m_iDocs!=0; } );
+	if ( !bBlocks )
+	{
+		for ( auto & tTerm : dTerms )
+			SafeDelete(tTerm.m_pQword);
+
+		for ( auto & tTerm : dExcluded )
+			SafeDelete(tTerm.m_pQword);
+
+		return nullptr;
+	}
+
+	ExtNode_i * pResult = CreateMultiAndTerms ( dTerms, tSetup, bUseBM25, bRowidLimits, false, dExcluded );
+	pResult->SetAtomPos(dTerms[0].m_pQword->m_iAtomPos);
+	return pResult;
+}
+
+
+template <typename T>
+static ExtNode_i * CreatePositionalMultiAnd ( const XQNode_t & tNode, const ISphQwordSetup & tSetup, bool bUseBM25, bool bRowidLimits )
+{
+	if ( !CanUsePositionalMultiAnd(tNode) )
+		return nullptr;
+
+	CSphVector<const XQNode_t *> dNodes;
+	CSphVector<const XQKeyword_t *> dWords;
+	if ( tNode.dChildren().GetLength() )
+	{
+		for ( const XQNode_t * pChild : tNode.dChildren() )
+		{
+			if ( pChild->dChildren().GetLength() || pChild->dWords().GetLength()!=1 || pChild->GetOp()!=SPH_QUERY_AND || !CanUsePositionalMultiAnd(*pChild) )
+				return nullptr;
+
+			dNodes.Add(pChild);
+			dWords.Add ( &pChild->dWord(0) );
+		}
+	} else
+	{
+		for ( const XQKeyword_t & tWord : tNode.dWords() )
+		{
+			dNodes.Add ( &tNode );
+			dWords.Add ( &tWord );
+		}
+	}
+
+	if ( dWords.GetLength()<2 )
+		return nullptr;
+
+	CSphVector<int> dAtomPos;
+	ARRAY_FOREACH ( i, dWords )
+	{
+		if ( dWords[i]->m_iAtomPos<0 || ( i && dWords[i]->m_iAtomPos<=dWords[i-1]->m_iAtomPos ) )
+			return nullptr;
+
+		dAtomPos.Add ( dWords[i]->m_iAtomPos );
+	}
+
+	CSphVector<MultiAndTerm_t> dTerms;
+	bool bHasHits = true;
+	ARRAY_FOREACH ( i, dWords )
+	{
+		ISphQword * pWord = CreateQueryWord ( *dWords[i], tSetup );
+		dTerms.Add ( { pWord, dNodes[i] } );
+		bHasHits &= pWord->m_bHasHitlist;
+	}
+
+	if ( !bHasHits )
+	{
+		for ( auto & tTerm : dTerms )
+			SafeDelete ( tTerm.m_pQword );
+
+		return nullptr;
+	}
+
+	ExtNode_i * pAnd = CreateMultiAndTerms ( dTerms, tSetup, bUseBM25, bRowidLimits, true );
+	return new T ( pAnd, dAtomPos, tNode, tSetup );
+}
+
+
 template < typename T >
 static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwordSetup & tSetup, bool bNeedsHitlist, bool bUseBM25, const RowIdBoundaries_t * pBoundaries )
 {
+	if constexpr ( std::is_same_v<T,ExtPhrase_c> || std::is_same_v<T,ExtProximity_c> || std::is_same_v<T,ExtMultinear_c> )
+	{
+		ExtNode_i * pResult = CreatePositionalMultiAnd<T> ( *pQueryNode, tSetup, bUseBM25, pBoundaries!=nullptr );
+		if ( pResult )
+			return pResult;
+	}
+
 	///////////////////////////////////
 	// virtually plain (expanded) node
 	///////////////////////////////////
@@ -1969,25 +2292,11 @@ static ExtNode_i * CreateTermNode ( ISphQword * pQword, const ISphQwordSetup & t
 
 static ExtNode_i * CreateMultiAndNode ( const VecTraits_T<XQNode_t*> & dXQNodes, const ISphQwordSetup & tSetup, bool bUseBM25, bool bRowidLimits )
 {
-	bool bNeedFieldSpec = false;
-	for ( const auto & i : dXQNodes )
-		bNeedFieldSpec |= !i->m_dSpec.m_dFieldMask.TestAll(true);
+	CSphVector<MultiAndTerm_t> dTerms;
+	for ( const XQNode_t * pNode : dXQNodes )
+		dTerms.Add ( { CreateQueryWord ( pNode->dWord(0), tSetup ), pNode } );
 
-	int iSwitch = 4*(bUseBM25?1:0) + 2*(bNeedFieldSpec?1:0) + (bRowidLimits?1:0);
-	switch ( iSwitch )
-	{
-	case 0:	return new ExtMultiAnd_T<false, false, false> ( dXQNodes, tSetup );
-	case 1:	return new ExtMultiAnd_T<false, false, true>  ( dXQNodes, tSetup );
-	case 2:	return new ExtMultiAnd_T<false, true,  false> ( dXQNodes, tSetup );
-	case 3:	return new ExtMultiAnd_T<false, true,  true>  ( dXQNodes, tSetup );
-	case 4:	return new ExtMultiAnd_T<true,  false, false> ( dXQNodes, tSetup );
-	case 5:	return new ExtMultiAnd_T<true,  false, true>  ( dXQNodes, tSetup );
-	case 6:	return new ExtMultiAnd_T<true,  true,  false> ( dXQNodes, tSetup );
-	case 7:	return new ExtMultiAnd_T<true,  true,  true>  ( dXQNodes, tSetup );
-	default:
-		assert ( 0 && "Internal error" );
-		return nullptr;
-	}
+	return CreateMultiAndTerms ( dTerms, tSetup, bUseBM25, bRowidLimits, false );
 }
 
 
@@ -2722,6 +3031,9 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 		if ( pNode->GetOp()==SPH_QUERY_PHRASE )
 			return CreateMultiNode<ExtPhrase_c> ( pNode, tSetup, true, bUseBM25, pBoundaries );
 
+		if ( ExtNode_i * pBlockAndNot = CreateBlockAndNotNode ( *pNode, tSetup, bUseBM25, bRowidLimits ) )
+			return pBlockAndNot;
+
 		// generic create
 		ExtNode_i * pCur = NULL;
 		for ( int i=0; i<iChildren; i++ )
@@ -2765,6 +3077,7 @@ template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
 inline void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::Init ( ISphQword * pQword, const FieldMask_t & tFields, const ISphQwordSetup & tSetup, bool bNotWeighted )
 {
 	m_pQword = pQword;
+	m_pQword->SetPayloadRequirements ( USE_BM25, m_bCollectHits );
 	m_pWarning = tSetup.m_pWarning;
 	m_bNotWeighted = bNotWeighted;
 	m_iAtomPos = pQword->m_iAtomPos;
@@ -2787,6 +3100,8 @@ ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::ExtTerm_T ( ISphQword * pQword, const IS
 	: m_pQword ( pQword )
 	, m_pWarning ( tSetup.m_pWarning )
 {
+	m_pQword->SetPayloadRequirements ( USE_BM25, m_bCollectHits );
+
 	m_iAtomPos = pQword->m_iAtomPos;
 	m_dQueriedFields.SetAll();
 	m_bHasWideFields = tSetup.m_bHasWideFields;
@@ -2797,6 +3112,16 @@ ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::ExtTerm_T ( ISphQword * pQword, const IS
 		m_pStats = tSetup.m_pStats;
 	}
 }
+
+
+template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
+void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::SetCollectHits()
+{
+	m_bCollectHits = true;
+	if ( m_pQword )
+		m_pQword->SetPayloadRequirements ( USE_BM25, true );
+}
+
 
 template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
 void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::Reset ( const ISphQwordSetup & tSetup )
@@ -3844,25 +4169,36 @@ ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::HitWithQpos_t::HitWithQpos_t (
 	, m_uQueryPos ( uQueryPos )
 {}
 
+
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::ExtMultiAnd_T ( const VecTraits_T<XQNode_t*> & dXQNodes, const ISphQwordSetup & tSetup )
+ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::ExtMultiAnd_T ( const VecTraits_T<MultiAndTerm_t> & dTerms, const ISphQwordSetup & tSetup, bool bPositional, const VecTraits_T<MultiAndTerm_t> & dExcluded )
 	: ExtNode_c { tSetup.m_iMaxTimer }
-	, m_dWordIds ( dXQNodes.GetLength() )
-	, m_tQueue ( dXQNodes.GetLength() )
+	, m_dWordIds ( dTerms.GetLength()+(dExcluded.GetLength() ? dExcluded.GetLength()+1 : 0) )
+	, m_tQueue ( dTerms.GetLength() )
 {
-	m_dNodes.Resize ( dXQNodes.GetLength() );
+	m_dNodes.Resize ( dTerms.GetLength() );
 	ARRAY_FOREACH ( i, m_dNodes )
 	{
 		NodeInfo_t & tNode = m_dNodes[i];
-		const XQNode_t & tXQNode = *dXQNodes[i];
+		const XQNode_t & tXQNode = *dTerms[i].m_pNode;
 
-		tNode.m_pQword = CreateQueryWord ( tXQNode.dWord(0), tSetup );
+		tNode.m_pQword = dTerms[i].m_pQword;
 		assert ( tNode.m_pQword );
 		tNode.m_iAtomPos = tNode.m_pQword->m_iAtomPos;
-		tNode.m_uNodepos = (WORD)i;
+		tNode.m_uNodepos = WORD(i+(bPositional?1:0));
 		tNode.m_bNotWeighted = tXQNode.m_bNotWeighted;
 		tNode.m_dQueriedFields = tXQNode.m_dSpec.m_dFieldMask;
 		tNode.UpdateWideFieldFlag(tSetup);
+	}
+
+	m_dExcluded.Resize(dExcluded.GetLength());
+	ARRAY_FOREACH ( i, m_dExcluded )
+	{
+		auto & tTerm = m_dExcluded[i];
+		tTerm.m_pQword = dExcluded[i].m_pQword;
+		tTerm.m_iAtomPos = tTerm.m_pQword->m_iAtomPos;
+		tTerm.m_dQueriedFields = dExcluded[i].m_pNode->m_dSpec.m_dFieldMask;
+		tTerm.m_bNotWeighted = dExcluded[i].m_pNode->m_bNotWeighted;
 	}
 
 	m_dNodes.Sort ( SelectivitySorter_t() );
@@ -3871,6 +4207,8 @@ ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::ExtMultiAnd_T ( const VecTrait
 	m_pWarning = tSetup.m_pWarning;
 	m_pStats = tSetup.m_pStats;
 	SetupBlocks(tSetup);
+	if ( bPositional )
+		SetQPosReverse();
 }
 
 
@@ -3879,6 +4217,9 @@ ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::~ExtMultiAnd_T()
 {
 	m_pBlockAnd.reset();
 	for ( auto & i : m_dNodes )
+		SafeDelete ( i.m_pQword );
+
+	for ( auto & i : m_dExcluded )
 		SafeDelete ( i.m_pQword );
 }
 
@@ -4003,6 +4344,9 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::SetupBlocks ( const ISphQ
 
 		pAnd->Add(std::move(pCursor));
 	}
+
+	for ( auto & tNode : m_dExcluded )
+		pAnd->AddExcluded ( tNode.m_pQword->CreatePostingWindow ( tNode.m_dQueriedFields.GetMask32(), tContext ) );
 
 	m_pBlockAnd = std::move(pAnd);
 }
@@ -4138,6 +4482,11 @@ const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetDocsChunk(
 	if ( m_pBlockAnd )
 		return GetBlockDocsChunk();
 
+	// Exclusion nodes require block-capable qwords. After reset a missing
+	// producer means a required term is absent from this segment.
+	if ( m_dExcluded.GetLength() )
+		return nullptr;
+
 	if ( m_bFirstChunk )
 	{
 		if ( m_iNodesSet!=m_dNodes.GetLength() || !m_dNodes[0].m_pQword->m_iDocs )
@@ -4234,6 +4583,7 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::InitHitMerge ( HitInfo_t 
 {
 	const NodeInfo_t & tNode = m_dNodes[iNode];
 
+	tHitInfo.m_iNode = iNode;
 	tHitInfo.m_pQword = tNode.m_pQword;
 	assert ( tHitInfo.m_pQword );
 	tHitInfo.m_uNodePos = tNode.m_uNodepos;
@@ -4242,12 +4592,13 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::InitHitMerge ( HitInfo_t 
 	tHitInfo.m_uHitpos = tHitInfo.m_pQword->GetNextHit();
 }
 
+
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::AddHit ( RowID_t tRowID, HitInfo_t & tHit, int iNode )
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::AddHit ( RowID_t tRowID, HitInfo_t & tHit )
 {
 	if constexpr(TEST_FIELDS)
 	{
-		if ( m_dNodes[iNode].m_dQueriedFields.Test ( HITMAN::GetField ( tHit.m_uHitpos ) ) )
+		if ( m_dNodes[tHit.m_iNode].m_dQueriedFields.Test ( HITMAN::GetField ( tHit.m_uHitpos ) ) )
 			m_dHits.Add ( ExtHit_t { tRowID, tHit.m_uHitpos, tHit.m_uQueryPos, tHit.m_uNodePos, 1, 1, 1, 0 } );
 	}
 	else
@@ -4256,17 +4607,19 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::AddHit ( RowID_t tRowID, 
 	tHit.m_uHitpos = tHit.m_pQword->GetNextHit();
 }
 
+
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
 void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::DoHitMerge ( RowID_t tRowID, HitInfo_t & tLeft, HitInfo_t & tRight )
 {
 	while ( tLeft.m_uHitpos!=EMPTY_HIT && tRight.m_uHitpos!=EMPTY_HIT )
 	{		
 		if ( IsHitLess ( tLeft, tRight ) )
-			AddHit ( tRowID, tLeft, 0 );
+			AddHit ( tRowID, tLeft );
 		else
-			AddHit ( tRowID, tRight, 1 );
+			AddHit ( tRowID, tRight );
 	}
 }
+
 
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
 void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::DoHitMerge ( RowID_t tRowID, HitInfo_t & tHit1, HitInfo_t & tHit2, HitInfo_t & tHit3 )
@@ -4274,11 +4627,11 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::DoHitMerge ( RowID_t tRow
 	while ( tHit1.m_uHitpos!=EMPTY_HIT && tHit2.m_uHitpos!=EMPTY_HIT && tHit3.m_uHitpos!=EMPTY_HIT )
 	{
 		if ( IsHitLess ( tHit1, tHit2 ) && IsHitLess ( tHit1, tHit3 ) )
-			AddHit ( tRowID, tHit1, 0 );
+			AddHit ( tRowID, tHit1 );
 		else if ( IsHitLess ( tHit2, tHit1 ) && IsHitLess ( tHit2, tHit3 ) )
-			AddHit ( tRowID, tHit2, 1 );
+			AddHit ( tRowID, tHit2 );
 		else
-			AddHit ( tRowID, tHit3, 2 );
+			AddHit ( tRowID, tHit3 );
 	}
 
 	if ( tHit1.m_uHitpos==EMPTY_HIT )
@@ -4305,6 +4658,16 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CopyHits ( RowID_t tRowID
 		tHitInfo.m_uHitpos = tHitInfo.m_pQword->GetNextHit();
 	}
 }
+
+
+template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CopySingleHits ( const StoredMultiHit_t & tStoredHit )
+{
+	HitInfo_t tHit;
+	InitHitMerge ( tHit, 0, tStoredHit );
+	CopyHits ( tStoredHit.m_tRowID, tHit, 0 );
+}
+
 
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
 void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MergeHits2 ( const StoredMultiHit_t & tStoredHit )
@@ -4417,6 +4780,23 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::PrefetchMatchedHits ( con
 	}
 }
 
+
+// The merge already orders documents, hit positions and increasing query
+// positions. Positional matchers only need the equal-position runs reversed.
+static void ReverseHitQueryPositions ( VecTraits_T<ExtHit_t> dHits )
+{
+	for ( int i=0; i<dHits.GetLength(); )
+	{
+		int iStart = i++;
+		while ( i<dHits.GetLength() && dHits[i].m_tRowID==dHits[iStart].m_tRowID && dHits[i].m_uHitpos==dHits[iStart].m_uHitpos )
+			i++;
+
+		if ( i-iStart>1 )
+			std::reverse ( dHits.Begin()+iStart, dHits.Begin()+i );
+	}
+}
+
+
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
 void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CollectHits ( const ExtDoc_t * pMatched )
 {
@@ -4438,6 +4818,7 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CollectHits ( const ExtDo
 
 		switch ( m_dNodes.GetLength() )
 		{
+		case 1:		CopySingleHits ( *pStoredHit );	break;
 		case 2:		MergeHits2 ( *pStoredHit );	break;
 		case 3:		MergeHits3 ( *pStoredHit );	break;
 		default:	MergeHitsN ( *pStoredHit );	break;
@@ -4454,7 +4835,7 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CollectHits ( const ExtDo
 	m_dStoredHits.Remove ( 0, nProcessed );
 
 	if ( m_bQPosReverse )
-		m_dHits.Sort ( CmpAndHitReverse_fn() );
+		ReverseHitQueryPositions(m_dHits);
 }
 
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
@@ -4474,6 +4855,12 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::Reset ( const ISphQwordSe
 			m_iNodesSet++;
 	}
 	
+	for ( auto & tNode : m_dExcluded )
+	{
+		tNode.m_pQword->Reset();
+		tSetup.QwordSetup(tNode.m_pQword);
+	}
+
 	m_dStoredHits.Resize(0);
 	SetupBlocks(tSetup);
 }
@@ -4516,6 +4903,9 @@ int ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetQwords ( ExtQwordsHash_
 		int iRes = GetQword ( i, hQwords );
 		iMax = Max ( iRes, iMax );
 	}
+
+	for ( auto & tNode : m_dExcluded )
+		GetQword ( tNode, hQwords );
 
 	return iMax;
 }
@@ -4560,6 +4950,14 @@ uint64_t ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetWordID() const
 			m_dWordIds[i] = sphFNV64 ( tNode.m_pQword->m_sDictWord.cstr() );
 	}
 
+	if ( m_dExcluded.GetLength() )
+	{
+		int iOffset = m_dNodes.GetLength();
+		m_dWordIds[iOffset++] = 0; // separate positive and excluded operands
+		for ( const auto & tNode : m_dExcluded )
+			m_dWordIds[iOffset++] = tNode.m_pQword->m_uWordID ? tNode.m_pQword->m_uWordID : sphFNV64(tNode.m_pQword->m_sDictWord.cstr());
+	}
+
 	return sphFNV64 ( m_dWordIds.Begin(), (int) m_dWordIds.GetLengthBytes() );
 }
 
@@ -4601,7 +4999,7 @@ template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
 void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::DebugDump ( int iLevel )
 {
 	DebugIndent ( iLevel );
-	printf ( "ExtMultiAnd\n" );
+	printf ( "%s\n", m_dExcluded.GetLength() ? "ExtMultiAndNot" : "ExtMultiAnd" );
 
 	DebugIndent ( iLevel+1 );
 	for ( const auto & i : m_dNodes )
@@ -4627,6 +5025,12 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::DebugDump ( int iLevel )
 			printf ( "\n" );
 		}
 	}	
+
+	for ( const auto & tNode : m_dExcluded )
+	{
+		DebugIndent(iLevel+1);
+		printf ( "!%s at: %d fields: %08x\n", tNode.m_pQword->m_sWord.cstr(), tNode.m_pQword->m_iAtomPos, tNode.m_dQueriedFields.GetMask32() );
+	}
 }
 
 
@@ -4659,7 +5063,10 @@ NodeEstimate_t ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::Estimate ( int6
 		fRatio *= float(tNode.m_pQword->m_iDocs) / iTotalDocs;
 	}
 
-	return { fCostLeft, int64_t(fRatio*iTotalDocs), m_dNodes.GetLength() };
+	for ( const auto & tNode : m_dExcluded )
+		fCostLeft += CalcQwordReadCost(tNode.m_pQword);
+
+	return { fCostLeft, int64_t(fRatio*iTotalDocs), m_dNodes.GetLength()+m_dExcluded.GetLength() };
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -5022,12 +5429,12 @@ void ExtAndNot_c::DebugDump ( int iLevel )
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtNWay_c::ExtNWay_c ( const CSphVector<ExtNode_i *> & dNodes, const ISphQwordSetup & tSetup )
+ExtNWay_c::ExtNWay_c ( int iAtomPos, const ISphQwordSetup & tSetup )
 	: ExtNode_c { tSetup.m_iMaxTimer }
 {
-	assert ( dNodes.GetLength()>1 );
-	m_iAtomPos = dNodes[0]->GetAtomPos();
+	m_iAtomPos = iAtomPos;
 }
+
 
 ExtNWay_c::~ExtNWay_c ()
 {
@@ -5100,16 +5507,36 @@ inline void ExtNWay_c::ConstructNode ( const CSphVector<ExtNode_i *> & dNodes, c
 
 //////////////////////////////////////////////////////////////////////////
 
+static CSphVector<int> GetAtomPositions ( const CSphVector<ExtNode_i *> & dNodes )
+{
+	CSphVector<int> dAtomPos;
+	for ( const ExtNode_i * pNode : dNodes )
+		dAtomPos.Add ( pNode->GetAtomPos() );
+
+	return dAtomPos;
+}
+
+
 template < class FSM >
 ExtNWay_T<FSM>::ExtNWay_T ( const CSphVector<ExtNode_i *> & dNodes, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
-	: ExtNWay_c ( dNodes, tSetup )
-	, FSM ( dNodes, tNode, tSetup )
+	: ExtNWay_c ( dNodes[0]->GetAtomPos(), tSetup )
+	, FSM ( GetAtomPositions(dNodes), tNode, tSetup )
 {
 	CSphVector<WORD> dPositions ( dNodes.GetLength() );
 	ARRAY_FOREACH ( i, dPositions )
 		dPositions[i] = (WORD) i;
 	dPositions.Sort ( ExtNodeTFExt_fn ( dNodes ) );
 	ConstructNode ( dNodes, dPositions, tSetup );
+}
+
+
+template <class FSM>
+ExtNWay_T<FSM>::ExtNWay_T ( ExtNode_i * pAnd, const VecTraits_T<int> & dAtomPos, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
+	: ExtNWay_c ( dAtomPos[0], tSetup )
+	, FSM ( dAtomPos, tNode, tSetup )
+{
+	m_pNode = pAnd;
+	m_pNode->SetCollectHits();
 }
 
 
@@ -5177,12 +5604,11 @@ void ExtNWay_T<FSM>::DebugDump ( int iLevel )
 
 //////////////////////////////////////////////////////////////////////////
 
-static DWORD GetQposMask ( const CSphVector<ExtNode_i *> & dQwords )
+static DWORD GetQposMask ( const VecTraits_T<int> & dAtomPos )
 {
 	DWORD uQposMask = 0;
-	for ( const ExtNode_i * pNode : dQwords )
+	for ( int iQpos : dAtomPos )
 	{
-		int iQpos = pNode->GetAtomPos();
 		// no more than 32 query terms could be checked, all other skipped
 		if ( iQpos<0x1f )
 			uQposMask |= ( 1 << iQpos );
@@ -5192,22 +5618,23 @@ static DWORD GetQposMask ( const CSphVector<ExtNode_i *> & dQwords )
 }
 
 
-FSMphrase_c::FSMphrase_c ( const CSphVector<ExtNode_i *> & dQwords, const XQNode_t & , const ISphQwordSetup & tSetup )
-	: m_dAtomPos ( dQwords.GetLength() )
+FSMphrase_c::FSMphrase_c ( const VecTraits_T<int> & dAtomPos, const XQNode_t & , const ISphQwordSetup & tSetup )
+	: m_dAtomPos ( dAtomPos.GetLength() )
 {
-	ARRAY_FOREACH ( i, dQwords )
-		m_dAtomPos[i] = dQwords[i]->GetAtomPos();
+	ARRAY_FOREACH ( i, dAtomPos )
+		m_dAtomPos[i] = dAtomPos[i];
 
 	assert ( ( m_dAtomPos.Last()-m_dAtomPos[0]+1 )>0 );
 	m_dQposDelta.Resize ( m_dAtomPos.Last()-m_dAtomPos[0]+1 );
 	ARRAY_FOREACH ( i, m_dQposDelta )
 		m_dQposDelta[i] = -INT_MAX;
 	for ( int i=1; i<(int)m_dAtomPos.GetLength(); i++ )
-		m_dQposDelta [ dQwords[i-1]->GetAtomPos() - dQwords[0]->GetAtomPos() ] = dQwords[i]->GetAtomPos() - dQwords[i-1]->GetAtomPos();
+		m_dQposDelta [ dAtomPos[i-1] - dAtomPos[0] ] = dAtomPos[i] - dAtomPos[i-1];
 
 	if ( tSetup.m_bSetQposMask )
-		m_uQposMask = GetQposMask ( dQwords );
+		m_uQposMask = GetQposMask ( dAtomPos );
 }
+
 
 inline bool FSMphrase_c::HitFSM ( const ExtHit_t * pHit, CSphVector<ExtHit_t> & dHits )
 {
@@ -5266,18 +5693,18 @@ inline void FSMphrase_c::ResetFSM()
 
 //////////////////////////////////////////////////////////////////////////
 
-FSMproximity_c::FSMproximity_c ( const CSphVector<ExtNode_i *> & dQwords, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
+FSMproximity_c::FSMproximity_c ( const VecTraits_T<int> & dAtomPos, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
 	: m_iMaxDistance ( tNode.m_iOpArg )
-	, m_uWordsExpected ( dQwords.GetLength() )
+	, m_uWordsExpected ( dAtomPos.GetLength() )
 {
 	assert ( m_iMaxDistance>0 );
-	m_uMinQpos = dQwords[0]->GetAtomPos();
-	m_uQLen = dQwords.Last()->GetAtomPos() - m_uMinQpos;
+	m_uMinQpos = dAtomPos[0];
+	m_uQLen = dAtomPos.Last() - m_uMinQpos;
 	m_dProx.Resize ( m_uQLen+1 );
 	m_dDeltas.Resize ( m_uQLen+1 );
 
 	if ( tSetup.m_bSetQposMask )
-		m_uQposMask = GetQposMask ( dQwords );
+		m_uQposMask = GetQposMask ( dAtomPos );
 }
 
 
@@ -5388,9 +5815,9 @@ inline void FSMproximity_c::ResetFSM()
 
 //////////////////////////////////////////////////////////////////////////
 
-FSMmultinear_c::FSMmultinear_c ( const CSphVector<ExtNode_i *> & dNodes, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
+FSMmultinear_c::FSMmultinear_c ( const VecTraits_T<int> & dAtomPos, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
 	: m_iNear ( tNode.m_iOpArg )
-	, m_uWordsExpected ( dNodes.GetLength() )
+	, m_uWordsExpected ( dAtomPos.GetLength() )
 	, m_bQposMask ( tSetup.m_bSetQposMask )
 {
 	if ( m_uWordsExpected==2 )
@@ -5403,6 +5830,7 @@ FSMmultinear_c::FSMmultinear_c ( const CSphVector<ExtNode_i *> & dNodes, const X
 	}
 	assert ( m_iNear>0 );
 }
+
 
 inline bool FSMmultinear_c::HitFSM ( const ExtHit_t * pHit, CSphVector<ExtHit_t> & dHits )
 {

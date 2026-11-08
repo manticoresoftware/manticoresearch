@@ -19,6 +19,7 @@ public:
 	PostingWindowResult_t	AdvanceTo ( RowID_t tMin ) final;
 	PostingWindowResult_t	FillOr ( const PostingWindow_t & tWindow, DWORD * pBits ) final;
 	PostingWindowResult_t	FillAnd ( const PostingWindow_t & tWindow, DWORD * pBits ) final;
+	PostingWindowResult_t	FillAndNot ( const PostingWindow_t & tWindow, DWORD * pBits ) final;
 	PostingWindowResult_t	ReadRows ( const PostingWindow_t & tWindow, RowID_t * pRows, int iCapacity ) final;
 	PostingProbeResult_t		Probe ( RowID_t tRow ) final;
 	void					Reset ( bool bHasDocs, const PostingWindowContext_t & tContext ) final;
@@ -36,7 +37,8 @@ private:
 	bool					Matches() const;
 	DWORD					BitmapWord ( unsigned uBit ) const;
 	int					FillDense ( const PostingWindow_t & tWindow, DWORD * pBits, uint64_t uEnd );
-	void					IntersectLeaf ( const PostingWindow_t & tWindow, DWORD * pBits, uint64_t uEnd );
+	template<bool SUBTRACT>
+	void					ApplyLeaf ( const PostingWindow_t & tWindow, DWORD * pBits, uint64_t uEnd );
 	PostingWindowResult_t	Result ( int iRows=0 ) const;
 
 	BlockIndexQword_c &		m_tWord;
@@ -372,12 +374,18 @@ static void ClearWindowBits ( DWORD * pBits, unsigned uBegin, unsigned uEnd )
 }
 
 
-// Intersect only this leaf's covered interval; adjacent leaves can share a word.
-void BlockPostingWindow_c::IntersectLeaf ( const PostingWindow_t & tWindow, DWORD * pBits, uint64_t uEnd )
+// Modify only this leaf's covered interval; adjacent leaves can share a word.
+template<bool SUBTRACT>
+void BlockPostingWindow_c::ApplyLeaf ( const PostingWindow_t & tWindow, DWORD * pBits, uint64_t uEnd )
 {
 	m_uMin = uEnd;
 	if ( m_bDirect && m_tBlock.m_eKind==postings::Rows_e::RANGE )
+	{
+		if constexpr ( SUBTRACT )
+			ClearWindowBits ( pBits, m_tNext-tWindow.m_tBase, unsigned(uEnd-tWindow.m_tBase) );
+
 		return;
+	}
 
 	const auto & dRows = m_tReader.GetRows();
 	uint64_t uRow = m_tNext;
@@ -401,7 +409,11 @@ void BlockPostingWindow_c::IntersectLeaf ( const PostingWindow_t & tWindow, DWOR
 			}
 		}
 
-		pBits[uOffset/32] &= ~uMask | uBits;
+		if constexpr ( SUBTRACT )
+			pBits[uOffset/32] &= ~uBits;
+		else
+			pBits[uOffset/32] &= ~uMask | uBits;
+
 		uRow += uCount;
 	}
 }
@@ -418,12 +430,33 @@ PostingWindowResult_t BlockPostingWindow_c::FillAnd ( const PostingWindow_t & tW
 		{
 			ClearWindowBits ( pBits, uProcessed, m_tNext-tWindow.m_tBase );
 			uint64_t uLeafEnd = std::min ( uEnd, uint64_t(m_tBlock.m_uLast)+1 );
-			IntersectLeaf ( tWindow, pBits, uLeafEnd );
+			ApplyLeaf<false> ( tWindow, pBits, uLeafEnd );
 			uProcessed = unsigned(uLeafEnd-tWindow.m_tBase);
 		}
 
 	// Unvisited rows cannot survive, including when a refill was interrupted.
 	ClearWindowBits ( pBits, uProcessed, iWords*32 );
+	return Result(int(bitmap::Count ( pBits, iWords )));
+}
+
+
+PostingWindowResult_t BlockPostingWindow_c::FillAndNot ( const PostingWindow_t & tWindow, DWORD * pBits )
+{
+	assert ( tWindow.m_tBase<=tWindow.m_tMin && tWindow.m_tMin<=tWindow.m_uEnd && tWindow.m_uEnd<=uint64_t(tWindow.m_tBase)+PostingWindow_t::ROWS );
+	unsigned iWords = unsigned((tWindow.m_uEnd-tWindow.m_tBase+31)/32);
+	uint64_t uEnd = std::min ( tWindow.m_uEnd, uint64_t(INVALID_ROWID) );
+	if ( CheckContinue() )
+		while ( EnsureCandidate(tWindow.m_tMin) && m_tNext<uEnd )
+			ApplyLeaf<true> ( tWindow, pBits, std::min ( uEnd, uint64_t(m_tBlock.m_uLast)+1 ) );
+
+	if ( m_bStopped )
+		std::fill_n ( pBits, iWords, 0 );
+	else
+	{
+		ClearWindowBits ( pBits, 0, tWindow.m_tMin-tWindow.m_tBase );
+		ClearWindowBits ( pBits, unsigned(uEnd-tWindow.m_tBase), iWords*32 );
+	}
+
 	return Result(int(bitmap::Count ( pBits, iWords )));
 }
 
@@ -454,7 +487,7 @@ PostingWindowResult_t BlockPostingWindow_c::ReadRows ( const PostingWindow_t & t
 
 std::unique_ptr<PostingWindow_i> BlockIndexQword_c::CreatePostingWindow ( DWORD uFields, const PostingWindowContext_t & tContext )
 {
-	SetMembershipOnly();
+	SetPayloadRequirements ( false, false );
 	return std::make_unique<BlockPostingWindow_c> ( *this, uFields, tContext );
 }
 
@@ -482,7 +515,7 @@ int BlockPostingWindow_c::Intersect ( const PostingWindow_t & tWindow, DWORD * p
 	}
 
 	ClearWindowBits ( pBits, 0, m_tNext-tWindow.m_tBase );
-	IntersectLeaf ( tWindow, pBits, tWindow.m_uEnd );
+	ApplyLeaf<false> ( tWindow, pBits, tWindow.m_uEnd );
 
 	unsigned iWords = unsigned((tWindow.m_uEnd-tWindow.m_tBase+31)/32);
 	ClearWindowBits ( pBits, unsigned(tWindow.m_uEnd-tWindow.m_tBase), iWords*32 );

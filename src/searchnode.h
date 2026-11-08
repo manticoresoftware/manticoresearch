@@ -151,8 +151,10 @@ public:
 };
 
 // Caller must guarantee disk qwords and a membership-only consumer (ranker=none).
+WindowNode_i * CreateWindowTermCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds );
 WindowNode_i * CreateWindowOrCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds );
 WindowNode_i * CreateWindowAndCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds );
+WindowNode_i * CreateWindowQuorumCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds );
 
 // Takes exclusive ownership of a window-only source; exposes no window capability.
 std::unique_ptr<WindowDocsAdapter_i> CreateWindowDocsAdapter ( std::unique_ptr<QueryNode_i> pSource );

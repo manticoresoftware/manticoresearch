@@ -30,7 +30,7 @@ public:
 	bool				HintRowID ( RowID_t tRow ) override;
 	void				SeekHitlist ( SphOffset_t uOffset ) override;
 	Hitpos_t			GetNextHit() override;
-	void				SetMembershipOnly() override	{ m_bMembership = true; }
+	void				SetPayloadRequirements ( bool bTF, bool bHits ) override	{ m_bReadTF = bTF || bHits; m_bReadHits = bHits; }
 	const char *		GetReadError() const override	{ return m_sError.empty() ? nullptr : m_sError.c_str(); }
 
 	const std::array<uint64_t,postings::COLUMNS> & GetDecodeCounts() const { return m_tReader.GetDecodeCounts(); }
@@ -47,7 +47,7 @@ private:
 	bool			LoadLeaf ( RowID_t tMin );
 	bool			PositionNext();
 	void			SetDoc ( unsigned i );
-	template<bool MEMBERSHIP>
+	template<bool TF, bool HITS>
 	int				ReadDocs ( QwordDoc_t * pDocs, int iMax );
 	void			Fail();
 	void			ResetCursor();
@@ -64,5 +64,6 @@ private:
 	bool		m_bHitEOF = true;
 	bool		m_bOpen = false;
 	bool		m_bEOF = false;
-	bool		m_bMembership = false;
+	bool		m_bReadTF = true;
+	bool		m_bReadHits = true;
 };

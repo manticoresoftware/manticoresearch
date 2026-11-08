@@ -114,7 +114,8 @@ public:
 	virtual int					GetNextDocs ( QwordDoc_t * pDocs, int iMax );
 	virtual void				SeekHitlist ( SphOffset_t uOff ) = 0;
 	virtual Hitpos_t			GetNextHit () = 0;
-	virtual void				SetMembershipOnly() {}
+	// Select payload columns before reading; hit consumers also require term frequencies.
+	virtual void				SetPayloadRequirements ( bool bTF, bool bHits ) {}
 	virtual std::unique_ptr<PostingWindow_i> CreatePostingWindow ( DWORD uFields, const PostingWindowContext_t & tContext );
 	virtual std::unique_ptr<PostingBlock_i> CreatePostingBlock ( DWORD uFields, const PostingWindowContext_t & tContext ) { return nullptr; }
 	virtual bool				WantHitPrefetch() { return false; }

@@ -30,6 +30,9 @@ searchd
 <query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":5}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
 <query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":6}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
 <query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":7}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<!-- Cross-document bucket counts, and the non-emulated multi-aggregation path. -->
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"in":{"id":[1,2]}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":1}},"aggs":{"v":{"terms":{"field":"j.a","size":10}},"ids":{"terms":{"field":"id","size":10}}}}</query>
 <!-- Repeat on a disk chunk. -->
 <query endpoint="sql?mode=raw" method="post">FLUSH RAMCHUNK json_mixed_numeric_facets</query>
 <query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":1}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
@@ -37,6 +40,8 @@ searchd
 <query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":3}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
 <query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":6}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
 <query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":7}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"in":{"id":[1,2]}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":1}},"aggs":{"v":{"terms":{"field":"j.a","size":10}},"ids":{"terms":{"field":"id","size":10}}}}</query>
 <query endpoint="sql?mode=raw" method="post">DROP TABLE json_mixed_numeric_facets</query>
 </httpqueries>
 </test>

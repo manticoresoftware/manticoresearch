@@ -44,6 +44,13 @@ SELECT s, b AS x, COUNT(*) AS n FROM gh5082_columnar GROUP BY s, x ORDER BY s AS
 SELECT s, c AS x, COUNT(*) AS n FROM gh5082_columnar GROUP BY s, x ORDER BY s ASC, x ASC OPTION threads=4;
 SELECT s, b AS x, COUNT(*) AS n FROM gh5082_mixed GROUP BY s, x ORDER BY s ASC, x ASC OPTION threads=4;
 SELECT s, c AS x, COUNT(*) AS n FROM gh5082_mixed GROUP BY s, x ORDER BY s ASC, x ASC OPTION threads=4;
+INSERT INTO gh5082_columnar (id,s,b,c) VALUES (7,'',1,'red');
+FLUSH RAMCHUNK gh5082_columnar;
+INSERT INTO gh5082_columnar (id,s,b,c) VALUES (8,'',1,'red');
+SELECT s, b AS x, COUNT(*) AS n FROM gh5082_columnar WHERE id IN (7,8) GROUP BY s, x ORDER BY s ASC, x ASC OPTION threads=4;
+SELECT s, b AS x, COUNT(*) AS n FROM gh5082_columnar WHERE id IN (7,8) GROUP BY s, b ORDER BY s ASC, x ASC OPTION threads=4;
+FLUSH RAMCHUNK gh5082_columnar;
+SELECT s, b AS x, COUNT(*) AS n FROM gh5082_columnar WHERE id IN (7,8) GROUP BY s, x ORDER BY s ASC, x ASC OPTION threads=4;
 DROP TABLE gh5082_columnar;
 DROP TABLE gh5082_mixed;
 </sphinxql>

@@ -1405,7 +1405,7 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 	tOut.Add ( "html_index_attrs",		m_sHtmlIndexAttrs,		!m_sHtmlIndexAttrs.IsEmpty() );
 	tOut.Add ( "html_remove_elements",	m_sHtmlRemoveElements,	!m_sHtmlRemoveElements.IsEmpty() );
 	tOut.Add ( "index_zones",			m_sZones,				!m_sZones.IsEmpty() );
-	tOut.Add ( "postings_format", "legacy", m_uPostingsFormat ? "block" : "legacy" );
+	tOut.Add ( "postings_format", m_uPostingsFormat ? "block" : "legacy", m_uPostingsFormat!=0 );
 	tOut.Add ( "index_field_lengths",	1,						m_bIndexFieldLens );
 	tOut.Add ( "index_sp",				1,						m_bIndexSP );
 	tOut.Add ( "phrase_boundary_step",	m_iBoundaryStep,		m_iBoundaryStep!=0 );

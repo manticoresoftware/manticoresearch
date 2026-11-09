@@ -686,49 +686,43 @@ CSphGrouper * CreateGrouperStringExpr ( ISphExpr * pExpr, ESphCollation eCollati
 }
 
 
-CSphGrouper * CreateGrouperMulti ( const CSphVector<CSphColumnInfo> & dAttrs, VecRefPtrs_t<ISphExpr *> dJsonKeys, ESphCollation eCollation )
+CSphGrouper * CreateGrouperMulti ( CSphVector<CSphColumnInfo> dAttrs, VecRefPtrs_t<ISphExpr *> dJsonKeys, ESphCollation eCollation )
 {
-	CSphVector<CSphColumnInfo> dGrouperAttrs ( dAttrs );
-	for ( auto & tAttr : dGrouperAttrs )
+	for ( auto & tAttr : dAttrs )
 		if ( tAttr.IsColumnarExpr() )
-		{
-			CSphString sColumnarName;
-			tAttr.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sColumnarName );
-			if ( !sColumnarName.IsEmpty() )
-				tAttr.m_sName = sColumnarName;
-		}
+			tAttr.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &tAttr.m_sName );
 
-	bool bHaveColumnar = dGrouperAttrs.any_of ( []( auto & tAttr ){ return tAttr.IsColumnar() || tAttr.IsColumnarExpr(); } );
-	bool bAllColumnar = dGrouperAttrs.all_of ( []( auto & tAttr ){ return tAttr.IsColumnar() || tAttr.IsColumnarExpr(); } );
+	bool bHaveColumnar = dAttrs.any_of ( []( auto & tAttr ){ return tAttr.IsColumnar() || tAttr.IsColumnarExpr(); } );
+	bool bAllColumnar = dAttrs.all_of ( []( auto & tAttr ){ return tAttr.IsColumnar() || tAttr.IsColumnarExpr(); } );
 
 	if ( bAllColumnar )
-		return CreateGrouperColumnarMulti ( dGrouperAttrs, eCollation );
+		return CreateGrouperColumnarMulti ( dAttrs, eCollation );
 
 	switch ( eCollation )
 	{
 	case SPH_COLLATION_UTF8_GENERAL_CI:
 		if ( bHaveColumnar )
-			return new CSphGrouperMulti<Utf8CIHash_fn,true> ( dGrouperAttrs, std::move(dJsonKeys), eCollation );
+			return new CSphGrouperMulti<Utf8CIHash_fn,true> ( dAttrs, std::move(dJsonKeys), eCollation );
 		else
-			return new CSphGrouperMulti<Utf8CIHash_fn,false> ( dGrouperAttrs, std::move(dJsonKeys), eCollation );
+			return new CSphGrouperMulti<Utf8CIHash_fn,false> ( dAttrs, std::move(dJsonKeys), eCollation );
 
 	case SPH_COLLATION_LIBC_CI:
 		if ( bHaveColumnar )
-			return new CSphGrouperMulti<LibcCIHash_fn,true> ( dGrouperAttrs, std::move(dJsonKeys), eCollation );
+			return new CSphGrouperMulti<LibcCIHash_fn,true> ( dAttrs, std::move(dJsonKeys), eCollation );
 		else
-			return new CSphGrouperMulti<LibcCIHash_fn,false> ( dGrouperAttrs, std::move(dJsonKeys), eCollation );
+			return new CSphGrouperMulti<LibcCIHash_fn,false> ( dAttrs, std::move(dJsonKeys), eCollation );
 
 	case SPH_COLLATION_LIBC_CS:
 		if ( bHaveColumnar )
-			return new CSphGrouperMulti<LibcCSHash_fn,true> ( dGrouperAttrs, std::move(dJsonKeys), eCollation );
+			return new CSphGrouperMulti<LibcCSHash_fn,true> ( dAttrs, std::move(dJsonKeys), eCollation );
 		else
-			return new CSphGrouperMulti<LibcCSHash_fn,false> ( dGrouperAttrs, std::move(dJsonKeys), eCollation );
+			return new CSphGrouperMulti<LibcCSHash_fn,false> ( dAttrs, std::move(dJsonKeys), eCollation );
 
 	default:
 		if ( bHaveColumnar )
-			return new CSphGrouperMulti<BinaryHash_fn,true> ( dGrouperAttrs, std::move(dJsonKeys), eCollation );
+			return new CSphGrouperMulti<BinaryHash_fn,true> ( dAttrs, std::move(dJsonKeys), eCollation );
 		else
-			return new CSphGrouperMulti<BinaryHash_fn,false> ( dGrouperAttrs, std::move(dJsonKeys), eCollation );
+			return new CSphGrouperMulti<BinaryHash_fn,false> ( dAttrs, std::move(dJsonKeys), eCollation );
 	}
 }
 

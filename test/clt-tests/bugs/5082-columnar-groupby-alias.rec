@@ -1,0 +1,52 @@
+––– comment –––
+Regression for #5082: multi-column GROUP BY must resolve columnar SELECT aliases to physical column names,
+both with all-columnar attributes and when grouped together with a rowwise attribute.
+––– block: ../base/start-searchd –––
+––– input –––
+sql() { mysql -h0 -P9306 --skip-table --batch --raw --skip-column-names -e "$1"; }
+compare_groups() {
+  aliased=$(sql "$1") || return 1
+  original=$(sql "$2") || return 1
+  aliased=$(printf '%s\n' "$aliased" | LC_ALL=C sort)
+  original=$(printf '%s\n' "$original" | LC_ALL=C sort)
+  if [ "$aliased" != "$original" ]; then
+    printf 'Aliased result differs from original:\n%s\nvs\n%s\n' "$aliased" "$original"
+    return 1
+  fi
+}
+check_grouping() {
+  for t in gh5082_columnar gh5082_mixed; do
+    compare_groups "SELECT s, b x, COUNT(*) n FROM $t GROUP BY s, x $1" "SELECT s, b x, COUNT(*) n FROM $t GROUP BY s, b $1" || return 1
+    compare_groups "SELECT s, c x, COUNT(*) n FROM $t GROUP BY s, x $1" "SELECT s, c x, COUNT(*) n FROM $t GROUP BY s, c $1" || return 1
+    compare_groups "SELECT s, b x, COUNT(*) n FROM $t GROUP BY x, s $1" "SELECT s, b x, COUNT(*) n FROM $t GROUP BY b, s $1" || return 1
+  done
+  compare_groups "SELECT s y, b x, COUNT(*) n FROM gh5082_columnar GROUP BY y, x $1" "SELECT s y, b x, COUNT(*) n FROM gh5082_columnar GROUP BY s, b $1" || return 1
+}
+sql "DROP TABLE IF EXISTS gh5082_columnar; DROP TABLE IF EXISTS gh5082_mixed; CREATE TABLE gh5082_columnar (s string attribute, b bool, c string attribute) engine='columnar'; CREATE TABLE gh5082_mixed (s string attribute, b bool engine='columnar', c string attribute engine='columnar'); INSERT INTO gh5082_columnar (id,s,b,c) VALUES (1,'a',1,'red'),(2,'a',0,'blue'),(3,'b',1,'red'),(4,'b',1,'red'); INSERT INTO gh5082_mixed (id,s,b,c) VALUES (1,'a',1,'red'),(2,'a',0,'blue'),(3,'b',1,'red'),(4,'b',1,'red');" && echo ready
+––– output –––
+ready
+––– comment –––
+Exercise aliases of numeric and string columnar attributes in RAM chunks.
+––– input –––
+check_grouping && echo 'ram ok'
+––– output –––
+ram ok
+––– comment –––
+Check the same queries when the rows are in a disk chunk.
+––– input –––
+sql "FLUSH RAMCHUNK gh5082_columnar; FLUSH RAMCHUNK gh5082_mixed;" && check_grouping && echo 'disk ok'
+––– output –––
+disk ok
+––– comment –––
+The same groups must merge correctly between RAM and disk and between multiple disk chunks.
+––– input –––
+sql "INSERT INTO gh5082_columnar (id,s,b,c) VALUES (5,'a',1,'red'),(6,'c',0,'blue'); INSERT INTO gh5082_mixed (id,s,b,c) VALUES (5,'a',1,'red'),(6,'c',0,'blue');" && check_grouping "OPTION threads=4" && echo 'mixed chunks ok'
+––– output –––
+mixed chunks ok
+––– input –––
+sql "FLUSH RAMCHUNK gh5082_columnar; FLUSH RAMCHUNK gh5082_mixed;" && check_grouping "OPTION threads=4" && echo 'disk chunks ok'
+––– output –––
+disk chunks ok
+––– input –––
+sql "DROP TABLE gh5082_columnar; DROP TABLE gh5082_mixed;"
+––– output –––

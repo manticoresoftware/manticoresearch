@@ -158,7 +158,7 @@ public:
 	SphOffset_t	GetDocReaderPos() const final						{ return m_tDocs.GetPos(); }
 	SphOffset_t	GetHitReaderPos() const final						{ return m_tHits.GetPos(); }
 
-	void GetHitlistEntry ()
+	FORCE_INLINE void GetHitlistEntry ()
 	{
 		assert ( !m_bHitlistOver );
 		DWORD iDelta = m_tHits.UnzipInt();

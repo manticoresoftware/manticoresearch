@@ -11,12 +11,13 @@
 #include "indexformat.h"
 #include "stream.h"
 
-class BlockIndexQword_c : public DiskIndexQwordTraits_c, private postings::Input_i
+template<bool MAPPED>
+class BlockIndexQword_T : public DiskIndexQwordTraits_c, private postings::Input_i
 {
 public:
 	using is_worddict = std::true_type;
 
-	BlockIndexQword_c ( bool bMini, bool bExcluded, int64_t iIndexId );
+	BlockIndexQword_T ( bool bMini, bool bExcluded, int64_t iIndexId );
 
 	void				Reset() override;
 	void				SetReadErrorTarget ( CSphString * pError ) override	{ m_pQueryError = pError; }
@@ -24,6 +25,7 @@ public:
 	void				SeekDocReader ( SphOffset_t iPos, int iHint ) override;
 	void				SeekHitReader ( SphOffset_t iPos, int iHint ) override;
 	SphOffset_t			GetDocReaderPos() const override;
+	SphOffset_t			GetHitReaderPos() const override;
 	const CSphMatch &	GetNextDoc() override;
 	int					GetNextDocs ( QwordDoc_t * pDocs, int iMax ) override;
 	RowID_t				AdvanceTo ( RowID_t tRow ) override;
@@ -39,10 +41,11 @@ public:
 	std::unique_ptr<PostingBlock_i> CreatePostingBlock ( DWORD uFields, const PostingWindowContext_t & tContext ) override;
 
 private:
-	friend class BlockPostingWindow_c;
+	template<bool> friend class BlockPostingWindow_T;
 	uint64_t		GetSize() const final		{ return m_iDocFileSize; }
 	const uint8_t *	GetMappedData() const final	{ return m_pDocMap; }
 	void			OnDocReaderChanged() final;
+	void			OnHitReaderChanged() final;
 	bool			Read ( uint64_t uOffset, uint8_t * pData, size_t iSize, std::string & sError ) final;
 	bool			LoadLeaf ( RowID_t tMin );
 	bool			PositionNext();
@@ -54,6 +57,9 @@ private:
 
 	postings::Reader_c				m_tReader;
 	const BYTE *					m_pDocMap = nullptr;
+	const BYTE *					m_pHitMap = nullptr;
+	const BYTE *					m_pHitCursor = nullptr;
+	const BYTE *					m_pHitEnd = nullptr;
 	std::string						m_sError;
 	CSphString *					m_pQueryError = nullptr;
 
@@ -67,3 +73,6 @@ private:
 	bool		m_bReadTF = true;
 	bool		m_bReadHits = true;
 };
+
+// Utilities bind readers later; the reader-backed specialization also accepts mapped readers.
+using BlockIndexQword_c = BlockIndexQword_T<false>;

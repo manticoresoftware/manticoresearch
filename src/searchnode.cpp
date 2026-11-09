@@ -500,7 +500,13 @@ public:
 	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override;
 	void				SetRowidBoundaries ( const RowIdBoundaries_t & tBoundaries ) override { m_tBoundaries = tBoundaries; }
 
+	PhraseMatcher_fn	GetPhraseMatcher() override;
+	int				MatchDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch );
+
 private:
+	template<int TERMS>
+	int				MatchPhraseDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch );
+
 	struct NodeInfo_t
 	{
 		ISphQword *		m_pQword {nullptr};
@@ -739,13 +745,23 @@ public:
 						ExtNWay_T ( ExtNode_i * pAnd, const VecTraits_T<int> & dAtomPos, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
 
 	const ExtDoc_t *	GetDocsChunk() override;
+	void				SetCollectHits() override;
 	void				CollectHits ( const ExtDoc_t * pDocs ) override;
 	void				DebugDump ( int iLevel ) override;
+
+private:
+	const ExtDoc_t *	GetLazyPhraseDocs ( PhraseMatcher_fn fnMatcher );
+
+	template<bool COLLECT_HITS>
+	const ExtDoc_t *	GetDocsChunkImpl();
 };
 
 
 class FSMphrase_c
 {
+	template<bool,bool,bool>
+	friend class ExtMultiAnd_T;
+
 protected:
 	struct State_t
 	{
@@ -757,6 +773,7 @@ protected:
 	CSphVector<int>			m_dAtomPos;				///< lets use it as finite automata states and keep references on it
 	CSphVector<State_t>		m_dStates;				///< pointers to states of finite automata
 	DWORD					m_uQposMask {0};
+	bool					m_bCollectHits = false;
 
 
 							FSMphrase_c ( const VecTraits_T<int> & dAtomPos, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
@@ -5541,7 +5558,46 @@ ExtNWay_T<FSM>::ExtNWay_T ( ExtNode_i * pAnd, const VecTraits_T<int> & dAtomPos,
 
 
 template < class FSM >
+void ExtNWay_T<FSM>::SetCollectHits()
+{
+	if constexpr ( std::is_same_v<FSM,FSMphrase_c> )
+		FSM::m_bCollectHits = true;
+}
+
+
+template < class FSM >
 const ExtDoc_t * ExtNWay_T<FSM>::GetDocsChunk()
+{
+	if constexpr ( std::is_same_v<FSM,FSMphrase_c> )
+		if ( !FSM::m_bCollectHits )
+		{
+			if ( auto fnMatcher = m_pNode->GetPhraseMatcher() )
+				return GetLazyPhraseDocs(fnMatcher);
+
+			return GetDocsChunkImpl<false>();
+		}
+
+	return GetDocsChunkImpl<true>();
+}
+
+
+template < class FSM >
+const ExtDoc_t * ExtNWay_T<FSM>::GetLazyPhraseDocs ( PhraseMatcher_fn fnMatcher )
+{
+	while ( const ExtDoc_t * pDocs = m_pNode->GetDocsChunk() )
+	{
+		int iDocs = fnMatcher ( m_pNode, pDocs, m_dDocs, *this, m_dMyHits );
+		if ( iDocs )
+			return ReturnDocsChunk ( iDocs, "phrase" );
+	}
+
+	return nullptr;
+}
+
+
+template < class FSM >
+template<bool COLLECT_HITS>
+const ExtDoc_t * ExtNWay_T<FSM>::GetDocsChunkImpl()
 {
 	if ( !WarmupDocs ( m_pDocs, m_pHits, m_pNode ) )
 		return nullptr;
@@ -5568,6 +5624,17 @@ const ExtDoc_t * ExtNWay_T<FSM>::GetDocsChunk()
 				m_dDocs[iDoc].m_uDocFields = 1<< ( HITMAN::GetField ( pHit->m_uHitpos ) ); // not necessary
 				m_dDocs[iDoc].m_fTFIDF = pDoc->m_fTFIDF;
 				iDoc++;
+
+				if constexpr ( !COLLECT_HITS )
+				{
+					// Document-only consumers need one successful phrase per document.
+					m_dMyHits.Pop();
+					do
+						++pHit;
+					while ( pHit->m_tRowID==pDoc->m_tRowID );
+
+					break;
+				}
 			}
 
 			pHit++;
@@ -5688,6 +5755,113 @@ inline bool FSMphrase_c::HitFSM ( const ExtHit_t * pHit, CSphVector<ExtHit_t> & 
 inline void FSMphrase_c::ResetFSM()
 {
 	m_dStates.Resize(0);
+}
+
+
+template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
+PhraseMatcher_fn ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetPhraseMatcher()
+{
+	if ( !m_bQPosReverse || m_dNodes.GetLength()<2 || m_dNodes.GetLength()>4 )
+		return nullptr;
+
+	for ( const auto & tNode : m_dNodes )
+		if ( tNode.m_bHasWideFields )
+			return nullptr;
+
+	return [] ( ExtNode_i * pNode, const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch )
+	{
+		return static_cast<ExtMultiAnd_T *>(pNode)->MatchDocs ( pDocs, pMatches, tFSM, dScratch );
+	};
+}
+
+
+template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
+int ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MatchDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch )
+{
+	assert ( m_bCollectHits && m_bQPosReverse );
+	PrefetchMatchedHits ( pDocs, m_dStoredHits.Begin() );
+
+	int iDocs = 0;
+	switch ( m_dNodes.GetLength() )
+	{
+	case 2: iDocs = MatchPhraseDocs<2> ( pDocs, pMatches, tFSM, dScratch ); break;
+	case 3: iDocs = MatchPhraseDocs<3> ( pDocs, pMatches, tFSM, dScratch ); break;
+	case 4: iDocs = MatchPhraseDocs<4> ( pDocs, pMatches, tFSM, dScratch ); break;
+	default: assert(false); break;
+	}
+
+	m_dStoredHits.Resize(0);
+	return iDocs;
+}
+
+
+template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
+template<int TERMS>
+int ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MatchPhraseDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch )
+{
+	int iDocs = 0;
+	DWORD uReads = 0;
+	int64_t iHits = 0;
+	const StoredMultiHit_t * pStored = m_dStoredHits.Begin();
+	for ( ; HasDocs(pDocs); ++pDocs, ++pStored )
+	{
+		assert ( pStored!=m_dStoredHits.End() && pStored->m_tRowID==pDocs->m_tRowID );
+		tFSM.ResetFSM();
+
+		HitInfo_t dHeads[TERMS];
+		for ( int i=0; i<TERMS; ++i )
+			InitHitMerge ( dHeads[i], i, *pStored );
+
+		while ( true )
+		{
+			int iNext = -1;
+			for ( int i=0; i<TERMS; ++i )
+			{
+				if ( dHeads[i].m_uHitpos==EMPTY_HIT )
+					continue;
+
+				// Positional consumers receive descending query positions on ties.
+				if ( iNext<0 || dHeads[i].m_uHitpos<dHeads[iNext].m_uHitpos || (dHeads[i].m_uHitpos==dHeads[iNext].m_uHitpos && dHeads[i].m_uQueryPos>dHeads[iNext].m_uQueryPos) )
+					iNext = i;
+			}
+
+			if ( iNext<0 )
+				break;
+
+			auto & tHead = dHeads[iNext];
+			bool bAccepted = true;
+			if constexpr ( TEST_FIELDS )
+				bAccepted = m_dNodes[iNext].m_dQueriedFields.Test ( HITMAN::GetField(tHead.m_uHitpos) );
+
+			if ( bAccepted )
+			{
+				ExtHit_t tHit { pDocs->m_tRowID, tHead.m_uHitpos, tHead.m_uQueryPos, tHead.m_uNodePos, 1, 1, 1, 0 };
+				++iHits;
+				if ( tFSM.HitFSM ( &tHit, dScratch ) )
+				{
+					pMatches[iDocs] = *pDocs;
+					pMatches[iDocs++].m_uDocFields = 1U<<HITMAN::GetField(tHit.m_uHitpos);
+					dScratch.Pop();
+					break;
+				}
+			}
+
+			if ( !(++uReads & 4095) && !CheckContinue() )
+			{
+				if ( m_pStats )
+					m_pStats->m_iFetchedHits += iHits;
+
+				return iDocs;
+			}
+
+			tHead.m_uHitpos = tHead.m_pQword->GetNextHit();
+		}
+	}
+
+	if ( m_pStats )
+		m_pStats->m_iFetchedHits += iHits;
+
+	return iDocs;
 }
 
 
@@ -7431,6 +7605,9 @@ bool NodeCacheContainer_c::WarmupCache ( ExtNode_i * pChild, int iQwords )
 {
 	assert ( pChild );
 	assert ( m_pSetup );
+
+	// Cached subtrees may also serve consumers that need every occurrence.
+	pChild->SetCollectHits();
 
 	m_iAtomPos = pChild->GetAtomPos();
 	const ExtDoc_t * pChunk = pChild->GetDocsChunk();

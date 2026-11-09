@@ -11,10 +11,11 @@
 #include "std/bitcount.h"
 #include <algorithm>
 
-class BlockPostingWindow_c final : public PostingWindow_i, public PostingBlock_i
+template<bool MAPPED>
+class BlockPostingWindow_T final : public PostingWindow_i, public PostingBlock_i
 {
 public:
-	BlockPostingWindow_c ( BlockIndexQword_c & tWord, DWORD uFields, const PostingWindowContext_t & tContext );
+	BlockPostingWindow_T ( BlockIndexQword_T<MAPPED> & tWord, DWORD uFields, const PostingWindowContext_t & tContext );
 
 	PostingWindowResult_t	AdvanceTo ( RowID_t tMin ) final;
 	PostingWindowResult_t	FillOr ( const PostingWindow_t & tWindow, DWORD * pBits ) final;
@@ -41,7 +42,7 @@ private:
 	void					ApplyLeaf ( const PostingWindow_t & tWindow, DWORD * pBits, uint64_t uEnd );
 	PostingWindowResult_t	Result ( int iRows=0 ) const;
 
-	BlockIndexQword_c &		m_tWord;
+	BlockIndexQword_T<MAPPED> &		m_tWord;
 	postings::Reader_c &		m_tReader;
 	const DWORD				m_uFields;
 	PostingWindowContext_t	m_tContext;
@@ -64,14 +65,16 @@ private:
 };
 
 
-BlockPostingWindow_c::BlockPostingWindow_c ( BlockIndexQword_c & tWord, DWORD uFields, const PostingWindowContext_t & tContext )
+template<bool MAPPED>
+BlockPostingWindow_T<MAPPED>::BlockPostingWindow_T ( BlockIndexQword_T<MAPPED> & tWord, DWORD uFields, const PostingWindowContext_t & tContext )
 	: m_tWord(tWord), m_tReader(tWord.m_tReader), m_uFields(uFields)
 {
 	Reset ( tWord.m_iDocs!=0, tContext );
 }
 
 
-void BlockPostingWindow_c::Reset ( bool bHasDocs, const PostingWindowContext_t & tContext )
+template<bool MAPPED>
+void BlockPostingWindow_T<MAPPED>::Reset ( bool bHasDocs, const PostingWindowContext_t & tContext )
 {
 	m_tContext = tContext;
 	m_uMin = 0;
@@ -83,7 +86,8 @@ void BlockPostingWindow_c::Reset ( bool bHasDocs, const PostingWindowContext_t &
 }
 
 
-bool BlockPostingWindow_c::CheckContinue()
+template<bool MAPPED>
+bool BlockPostingWindow_T<MAPPED>::CheckContinue()
 {
 	if ( !m_bStopped && m_tContext.m_fnContinue && !m_tContext.m_fnContinue(m_tContext.m_pContext) )
 		m_bStopped = true;
@@ -92,13 +96,15 @@ bool BlockPostingWindow_c::CheckContinue()
 }
 
 
-PostingWindowResult_t BlockPostingWindow_c::Result ( int iRows ) const
+template<bool MAPPED>
+PostingWindowResult_t BlockPostingWindow_T<MAPPED>::Result ( int iRows ) const
 {
 	return { m_tNext, iRows, m_bStopped };
 }
 
 
-bool BlockPostingWindow_c::LoadLeaf ( RowID_t tMin )
+template<bool MAPPED>
+bool BlockPostingWindow_T<MAPPED>::LoadLeaf ( RowID_t tMin )
 {
 	if ( !CheckContinue() )
 		return false;
@@ -161,7 +167,8 @@ bool BlockPostingWindow_c::LoadLeaf ( RowID_t tMin )
 
 
 // Load at most five bytes: bitmap payloads need neither alignment nor tail padding.
-DWORD BlockPostingWindow_c::BitmapWord ( unsigned uBit ) const
+template<bool MAPPED>
+DWORD BlockPostingWindow_T<MAPPED>::BitmapWord ( unsigned uBit ) const
 {
 	const auto & tData = m_tBlock.m_tPayload;
 	unsigned iByte = uBit/8;
@@ -185,7 +192,8 @@ DWORD BlockPostingWindow_c::BitmapWord ( unsigned uBit ) const
 }
 
 
-bool BlockPostingWindow_c::EnsureCandidate ( RowID_t tMin )
+template<bool MAPPED>
+bool BlockPostingWindow_T<MAPPED>::EnsureCandidate ( RowID_t tMin )
 {
 	m_uMin = std::max ( m_uMin, uint64_t(tMin) );
 	while ( !m_bEOF && !m_bStopped && m_uMin<INVALID_ROWID )
@@ -246,13 +254,15 @@ bool BlockPostingWindow_c::EnsureCandidate ( RowID_t tMin )
 }
 
 
-bool BlockPostingWindow_c::Matches() const
+template<bool MAPPED>
+bool BlockPostingWindow_T<MAPPED>::Matches() const
 {
 	return m_bAllFields || (m_dFields[m_iPos] & m_uFields)!=0;
 }
 
 
-PostingWindowResult_t BlockPostingWindow_c::AdvanceTo ( RowID_t tMin )
+template<bool MAPPED>
+PostingWindowResult_t BlockPostingWindow_T<MAPPED>::AdvanceTo ( RowID_t tMin )
 {
 	if ( CheckContinue() )
 		EnsureCandidate(tMin);
@@ -261,7 +271,8 @@ PostingWindowResult_t BlockPostingWindow_c::AdvanceTo ( RowID_t tMin )
 }
 
 
-PostingProbeResult_t BlockPostingWindow_c::Probe ( RowID_t tRow )
+template<bool MAPPED>
+PostingProbeResult_t BlockPostingWindow_T<MAPPED>::Probe ( RowID_t tRow )
 {
 	if ( CheckContinue() && EnsureCandidate(tRow) && m_tNext==tRow )
 	{
@@ -276,7 +287,8 @@ PostingProbeResult_t BlockPostingWindow_c::Probe ( RowID_t tRow )
 }
 
 
-int BlockPostingWindow_c::FillDense ( const PostingWindow_t & tWindow, DWORD * pBits, uint64_t uEnd )
+template<bool MAPPED>
+int BlockPostingWindow_T<MAPPED>::FillDense ( const PostingWindow_t & tWindow, DWORD * pBits, uint64_t uEnd )
 {
 	unsigned uBegin = m_tNext-tWindow.m_tBase;
 	unsigned uLimit = unsigned(uEnd-tWindow.m_tBase);
@@ -319,7 +331,8 @@ int BlockPostingWindow_c::FillDense ( const PostingWindow_t & tWindow, DWORD * p
 }
 
 
-PostingWindowResult_t BlockPostingWindow_c::FillOr ( const PostingWindow_t & tWindow, DWORD * pBits )
+template<bool MAPPED>
+PostingWindowResult_t BlockPostingWindow_T<MAPPED>::FillOr ( const PostingWindow_t & tWindow, DWORD * pBits )
 {
 	assert ( tWindow.m_tBase<=tWindow.m_tMin && tWindow.m_tMin<=tWindow.m_uEnd && tWindow.m_uEnd<=uint64_t(tWindow.m_tBase)+PostingWindow_t::ROWS );
 	if ( !CheckContinue() )
@@ -375,8 +388,9 @@ static void ClearWindowBits ( DWORD * pBits, unsigned uBegin, unsigned uEnd )
 
 
 // Modify only this leaf's covered interval; adjacent leaves can share a word.
+template<bool MAPPED>
 template<bool SUBTRACT>
-void BlockPostingWindow_c::ApplyLeaf ( const PostingWindow_t & tWindow, DWORD * pBits, uint64_t uEnd )
+void BlockPostingWindow_T<MAPPED>::ApplyLeaf ( const PostingWindow_t & tWindow, DWORD * pBits, uint64_t uEnd )
 {
 	m_uMin = uEnd;
 	if ( m_bDirect && m_tBlock.m_eKind==postings::Rows_e::RANGE )
@@ -419,7 +433,8 @@ void BlockPostingWindow_c::ApplyLeaf ( const PostingWindow_t & tWindow, DWORD * 
 }
 
 
-PostingWindowResult_t BlockPostingWindow_c::FillAnd ( const PostingWindow_t & tWindow, DWORD * pBits )
+template<bool MAPPED>
+PostingWindowResult_t BlockPostingWindow_T<MAPPED>::FillAnd ( const PostingWindow_t & tWindow, DWORD * pBits )
 {
 	assert ( tWindow.m_tBase<=tWindow.m_tMin && tWindow.m_tMin<=tWindow.m_uEnd && tWindow.m_uEnd<=uint64_t(tWindow.m_tBase)+PostingWindow_t::ROWS );
 	unsigned uProcessed = 0;
@@ -440,7 +455,8 @@ PostingWindowResult_t BlockPostingWindow_c::FillAnd ( const PostingWindow_t & tW
 }
 
 
-PostingWindowResult_t BlockPostingWindow_c::FillAndNot ( const PostingWindow_t & tWindow, DWORD * pBits )
+template<bool MAPPED>
+PostingWindowResult_t BlockPostingWindow_T<MAPPED>::FillAndNot ( const PostingWindow_t & tWindow, DWORD * pBits )
 {
 	assert ( tWindow.m_tBase<=tWindow.m_tMin && tWindow.m_tMin<=tWindow.m_uEnd && tWindow.m_uEnd<=uint64_t(tWindow.m_tBase)+PostingWindow_t::ROWS );
 	unsigned iWords = unsigned((tWindow.m_uEnd-tWindow.m_tBase+31)/32);
@@ -461,7 +477,8 @@ PostingWindowResult_t BlockPostingWindow_c::FillAndNot ( const PostingWindow_t &
 }
 
 
-PostingWindowResult_t BlockPostingWindow_c::ReadRows ( const PostingWindow_t & tWindow, RowID_t * pRows, int iCapacity )
+template<bool MAPPED>
+PostingWindowResult_t BlockPostingWindow_T<MAPPED>::ReadRows ( const PostingWindow_t & tWindow, RowID_t * pRows, int iCapacity )
 {
 	assert ( iCapacity>0 );
 	if ( !CheckContinue() )
@@ -485,14 +502,16 @@ PostingWindowResult_t BlockPostingWindow_c::ReadRows ( const PostingWindow_t & t
 }
 
 
-std::unique_ptr<PostingWindow_i> BlockIndexQword_c::CreatePostingWindow ( DWORD uFields, const PostingWindowContext_t & tContext )
+template<bool MAPPED>
+std::unique_ptr<PostingWindow_i> BlockIndexQword_T<MAPPED>::CreatePostingWindow ( DWORD uFields, const PostingWindowContext_t & tContext )
 {
 	SetPayloadRequirements ( false, false );
-	return std::make_unique<BlockPostingWindow_c> ( *this, uFields, tContext );
+	return std::make_unique<BlockPostingWindow_T<MAPPED>> ( *this, uFields, tContext );
 }
 
 
-bool BlockPostingWindow_c::Prepare ( RowID_t tMin, PostingLeaf_t & tLeaf )
+template<bool MAPPED>
+bool BlockPostingWindow_T<MAPPED>::Prepare ( RowID_t tMin, PostingLeaf_t & tLeaf )
 {
 	if ( !CheckContinue() || !EnsureCandidate(tMin) )
 		return false;
@@ -502,7 +521,8 @@ bool BlockPostingWindow_c::Prepare ( RowID_t tMin, PostingLeaf_t & tLeaf )
 }
 
 
-int BlockPostingWindow_c::Intersect ( const PostingWindow_t & tWindow, DWORD * pBits )
+template<bool MAPPED>
+int BlockPostingWindow_T<MAPPED>::Intersect ( const PostingWindow_t & tWindow, DWORD * pBits )
 {
 	assert ( m_bLeaf && tWindow.m_tBase==tWindow.m_tMin && tWindow.m_tMin>=m_tNext && tWindow.m_tMin<tWindow.m_uEnd );
 	assert ( tWindow.m_uEnd<=uint64_t(m_tBlock.m_uLast)+1 && tWindow.m_uEnd<=uint64_t(tWindow.m_tBase)+PostingWindow_t::ROWS );
@@ -523,7 +543,8 @@ int BlockPostingWindow_c::Intersect ( const PostingWindow_t & tWindow, DWORD * p
 }
 
 
-void BlockPostingWindow_c::BuildBitmapOrdinals()
+template<bool MAPPED>
+void BlockPostingWindow_T<MAPPED>::BuildBitmapOrdinals()
 {
 	if ( m_bOrdinals )
 		return;
@@ -537,7 +558,8 @@ void BlockPostingWindow_c::BuildBitmapOrdinals()
 }
 
 
-int BlockPostingWindow_c::FilterRows ( RowID_t * pRows, int iCount )
+template<bool MAPPED>
+int BlockPostingWindow_T<MAPPED>::FilterRows ( RowID_t * pRows, int iCount )
 {
 	if ( !iCount || (m_bDirect && m_tBlock.m_eKind==postings::Rows_e::RANGE) )
 		return iCount;
@@ -567,7 +589,8 @@ int BlockPostingWindow_c::FilterRows ( RowID_t * pRows, int iCount )
 }
 
 
-bool BlockPostingWindow_c::ReadPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits )
+template<bool MAPPED>
+bool BlockPostingWindow_T<MAPPED>::ReadPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits )
 {
 	if ( !iCount )
 		return true;
@@ -618,7 +641,20 @@ bool BlockPostingWindow_c::ReadPayloads ( const RowID_t * pRows, int iCount, Qwo
 }
 
 
-std::unique_ptr<PostingBlock_i> BlockIndexQword_c::CreatePostingBlock ( DWORD uFields, const PostingWindowContext_t & tContext )
+template<bool MAPPED>
+std::unique_ptr<PostingBlock_i> BlockIndexQword_T<MAPPED>::CreatePostingBlock ( DWORD uFields, const PostingWindowContext_t & tContext )
 {
-	return std::make_unique<BlockPostingWindow_c> ( *this, uFields, tContext );
+	return std::make_unique<BlockPostingWindow_T<MAPPED>> ( *this, uFields, tContext );
 }
+
+
+template std::unique_ptr<PostingWindow_i> BlockIndexQword_T<true>::CreatePostingWindow ( DWORD, const PostingWindowContext_t & );
+
+
+template std::unique_ptr<PostingBlock_i> BlockIndexQword_T<true>::CreatePostingBlock ( DWORD, const PostingWindowContext_t & );
+
+
+template std::unique_ptr<PostingWindow_i> BlockIndexQword_T<false>::CreatePostingWindow ( DWORD, const PostingWindowContext_t & );
+
+
+template std::unique_ptr<PostingBlock_i> BlockIndexQword_T<false>::CreatePostingBlock ( DWORD, const PostingWindowContext_t & );

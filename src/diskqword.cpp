@@ -95,6 +95,17 @@ DiskIndexQwordTraits_c * sphCreateDiskIndexQword ( bool bInlineHits, bool bBlock
 }
 
 
+template<bool MAPPED>
+static DiskIndexQwordTraits_c * SpawnBlockQword ( const XQKeyword_t & tWord, DataReaderFactory_c * pDocs, DataReaderFactory_c * pHits, int64_t iIndexId )
+{
+	using Qword_t = BlockIndexQword_T<MAPPED>;
+	if ( !tWord.m_pPayload )
+		return new Qword_t ( tWord.m_bExpanded, tWord.m_bExcluded, iIndexId );
+
+	return new DiskPayloadQword_c<false,BlockReader_t,Qword_t> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, pDocs, pHits, iIndexId );
+}
+
+
 ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) const
 {
 	if ( tWord.m_pPayload && m_bSetupReaders )
@@ -102,9 +113,9 @@ ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) cons
 
 	if ( m_pIndex->GetSettings().m_uPostingsFormat )
 	{
-		BlockIndexQword_c * pWord = !tWord.m_pPayload
-			? new BlockIndexQword_c ( tWord.m_bExpanded, tWord.m_bExcluded, m_pIndex->GetIndexId() )
-			: new DiskPayloadQword_c<false,BlockReader_t,BlockIndexQword_c> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist, m_pIndex->GetIndexId() );
+		DiskIndexQwordTraits_c * pWord = m_pHitlist && m_pHitlist->IsMapped()
+			? SpawnBlockQword<true> ( tWord, m_pDoclist, m_pHitlist, m_pIndex->GetIndexId() )
+			: SpawnBlockQword<false> ( tWord, m_pDoclist, m_pHitlist, m_pIndex->GetIndexId() );
 		pWord->SetReadErrorTarget(m_pError);
 		return pWord;
 	}

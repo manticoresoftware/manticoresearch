@@ -1,4 +1,4 @@
-# Block postings (M1/M2/M3)
+# Block postings (component 2)
 
 Experimental opt-in format: set `postings_format = block` when building a plain
 table, or `postings_format='block'` in `CREATE TABLE`. The default is `legacy`.
@@ -15,6 +15,7 @@ are rejected. One daemon can serve separate legacy and block tables.
 
 Block tables use disk header version 75, RT metadata version 26 and postings
 component version 2. Legacy output retains its existing header/metadata versions.
+Discarded component-3 position experiments require rebuilding their indexes.
 Unknown component versions or required stream codecs are errors. These wire
 layouts are experimental until publication.
 
@@ -26,9 +27,14 @@ staging QwordDoc records. Sparse containers decode row IDs; restricted fields re
 only low-32-bit field masks, with a row fallback for mixed membership. All-field
 queries skip field decoding when the schema fits the requested mask. Membership
 reads no TF, hit-reference or position data. Other consumers currently decode TF
-and references with each posting leaf and seek external positions when needed.
-M4 will replace the transitional external position varints. Native length-normalized BM25 and
-WAND/BMW remain later milestones.
+and references according to their payload requirements and seek external positions when needed.
+Hitlists retain the existing zero-terminated packed-hit varints and per-document
+byte offsets. Compressed-position experiments are deferred after hot-query
+benchmarks; their codec and checkpoint machinery is not part of this format.
+Query construction selects the mapped or buffered hit decoder. Mapped varint
+hitlists decode directly from mapped bytes; buffered-file access keeps its
+existing reader and error handling. Native length-normalized
+BM25 and WAND/BMW remain later milestones.
 
 Encoded column access borrows the immutable file mapping when available. Buffered
 readers reuse byte buffers across leaves. Row-container views retain their own
@@ -107,22 +113,47 @@ posting count and field-mask word count (uint16 each), first/last row and maximu
 TF (uint32 each) and five uint32 section lengths. Sections are rows, fields, TF, hit references and per-field TF.
 Rows use the row-container grammar below. Other integer frames have a uint32
 byte-length prefix. Field masks store one frame per 32-bit mask word. Hit
-references store low/high uint32 frames. Per-field TF contains sorted nonempty
-field entries `(field:uint16, frame length:uint32, integer frame)`.
+references are absolute 64-bit byte offsets into `.spp`, stored in low/high
+uint32 frames. Per-field TF contains sorted nonempty field entries `(field:uint16, frame length:uint32, integer frame)`.
 
 The footer contains `(document count:uint64, summed TF:uint64)` per field.
 Hitless terms store membership counts and zero field TF.
 Positions are always external: existing packed-hit deltas, big-endian varints,
 terminated by zero per document. Singleton/single-hit postings are not inline.
 
+A hit reference points directly to the first varint of that document's hitlist:
+
+```text
+.spi term entry -> .spd term header -> posting leaf
+                                      hit-reference[i] = byte offset
+                                                          |
+                                                          v
+.spp at that offset:                         delta, delta, ..., 0
+```
+
+Deltas reconstruct the existing packed field/position/end-marker values, with
+an initial value of zero for each document. The zero terminator ends the list;
+TF prefix sums are not used to locate it or the next document. A copied byte
+offset remains usable after the posting cursor advances, while its owning
+hitlist file remains alive. Posting ordinals select entries from the reference
+column; they are not position-stream ordinals encoded into a bookmark.
+
+There are no PFOR position frames, position checkpoints, enlarged typed hit
+bookmarks or separate field/end arrays in component 2. Its `.spp` grammar has
+no per-term position codec selector. The compressed-position prototypes were
+removed; revisiting them requires an explicit format/compatibility design and
+new measurements. Retained varints are the selected layout, not an unfinished
+transition to compressed positions.
+
 The `.spe` directory contains `SKP1`, leaf count (uint32), then entries
 `(first:uint32, last:uint32, absolute leaf offset:uint64, max TF:uint32)`.
 The checker compares entries with decoded leaves. M2 seeks by leaf headers;
 using the directory for hierarchical skipping and score pruning is later work.
-Maximum TF alone is not a safe complete score bound for every ranker.
+There is no position directory in `.spe`; hit access uses the per-document
+offsets in `.spd`. Maximum TF alone is not a safe complete score bound for every ranker.
 
 Normal readers trust index data; structural/semantic checks run only in debug
-assertions. `BlockIndexQword_c` and `Reader_c` have no validation-mode flag.
+assertions. `BlockIndexQword_T` and `Reader_c` have no validation-mode flag.
 `indextool --check` constructs a separate `BlockIndexQwordValidation_c`, backed
 by `ReaderValidation_c`; it checks framing and codec payloads before decoding.
 The checker walks every leaf and checks all columns, directory
@@ -131,6 +162,12 @@ are written or checked. The previous experimental component-1 files require
 rebuilding or conversion from legacy; their layout is rejected at table loading.
 Unknown component/codec selection and I/O errors still fail explicitly.
 Lazy readers do not inspect unused columns.
+The entire block qword and its posting-window adapter are specialized for mapped
+or reader-backed hitlists. Query construction selects the specialization from
+the hitlist factory independently of doclist access. Hit seeks, position reporting,
+reader binding and decoding use that compile-time choice. `BlockIndexQword_c` is
+an alias for the reader-backed specialization used by utilities that bind readers
+later; it accepts both file and mmap readers.
 Writers buffer at most one leaf of postings plus one directory entry per leaf.
 
 The implementation reuses FastPFOR's packing kernels, not its codec framing or
@@ -138,10 +175,11 @@ page-wide exception buffers. `fastpfor/PROVENANCE.json` records the upstream
 commit, file paths and SHA-256 hashes. Files there are upstream sources with LF
 normalization only; original copyright/license notices remain intact.
 
-## Stream descriptor and integer frames, version 1 proposal
+## Integer stream descriptors and frames (M1; used by component 2)
 
-Select the integer codec once per logical stream (for example a term's TF or
-position stream). The M1 descriptor is one little-endian uint16 codec ID:
+Select the integer codec once per encoded posting stream (rows, field masks,
+TF or hit references). These frames do not describe `.spp` hitlists. The M1
+descriptor is one little-endian uint16 codec ID:
 FOR=1, PFOR=2, VARINT=3, CONSTANT=4; zero and unknown IDs are errors.
 Read this descriptor once and pass the resulting StreamDesc_t to every block
 operation. It is not prepended to every frame. The term metadata above identifies the stream kind, boundaries and descriptor location.
@@ -153,8 +191,8 @@ IDs remain readable. An older reader that does not implement a required ID
 rejects that stream explicitly. This does not promise that old binaries can
 decode future codecs.
 
-All multibyte integers use little-endian encoding. Frames are independent and
-contain 1..256 unsigned 32-bit integers. The caller supplies the exact frame
+All fixed-width multibyte integers in these frames use little-endian encoding.
+Frames are independent and contain 1..256 unsigned 32-bit integers. The caller supplies the exact frame
 length; the checker rejects trailing bytes. IDs/layouts below are experimental until
 publication. No codec ID or codec override is present in an integer frame:
 
@@ -181,8 +219,9 @@ have exceptions. Width selection minimizes payload size subject to these
 constraints. More than seven exceptions, or high parts exceeding eight bits,
 cause a wider width to be chosen. Zero-exception PFOR is permitted. FOR has none.
 
-VARINT is canonical unsigned LEB128, at most five bytes/value, with no redundant
-zero final group. CONSTANT stores one uint32 per block; it requires every
+The integer-frame VARINT codec is canonical unsigned LEB128, at most five
+bytes/value, with no redundant zero final group. It is distinct from the
+big-endian packed-hit varints used in `.spp`. CONSTANT stores one uint32 per block; it requires every
 value within that block to be equal, but the constant can differ between blocks.
 Blocks cannot independently switch codecs. In M1, a short packed block uses
 zero-padded packing frames under the same stream codec; any future special

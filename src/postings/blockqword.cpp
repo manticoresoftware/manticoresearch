@@ -11,24 +11,46 @@
 #include "disk.h"
 #include <algorithm>
 
-BlockIndexQword_c::BlockIndexQword_c ( bool bMini, bool bExcluded, int64_t ) : DiskIndexQwordTraits_c ( bMini, bExcluded ), m_tReader(*this) {}
+template<bool MAPPED>
+BlockIndexQword_T<MAPPED>::BlockIndexQword_T ( bool bMini, bool bExcluded, int64_t ) : DiskIndexQwordTraits_c ( bMini, bExcluded ), m_tReader(*this) {}
 
 
-void BlockIndexQword_c::OnDocReaderChanged()
+template<bool MAPPED>
+void BlockIndexQword_T<MAPPED>::OnDocReaderChanged()
 {
 	SphOffset_t iSize = 0;
 	m_pDocMap = m_rdDoclist ? m_rdDoclist->GetMapBase(iSize) : nullptr;
 }
 
 
-void BlockIndexQword_c::Reset()
+template<bool MAPPED>
+void BlockIndexQword_T<MAPPED>::OnHitReaderChanged()
+{
+	if constexpr ( MAPPED )
+	{
+		m_pHitMap = m_pHitCursor = m_pHitEnd = nullptr;
+		if ( !m_rdHitlist )
+			return;
+
+		SphOffset_t iSize = 0;
+		m_pHitMap = m_rdHitlist->GetMapBase(iSize);
+		assert ( m_pHitMap );
+		m_pHitCursor = m_pHitMap+m_rdHitlist->GetPos();
+		m_pHitEnd = m_pHitMap+iSize;
+	}
+}
+
+
+template<bool MAPPED>
+void BlockIndexQword_T<MAPPED>::Reset()
 {
 	ResetDecoderState();
 	ResetCursor();
 }
 
 
-void BlockIndexQword_c::ResetCursor()
+template<bool MAPPED>
+void BlockIndexQword_T<MAPPED>::ResetCursor()
 {
 	m_tDoc.m_tRowID = INVALID_ROWID;
 	m_bHitEOF = true;
@@ -40,14 +62,16 @@ void BlockIndexQword_c::ResetCursor()
 }
 
 
-bool BlockIndexQword_c::Setup ( const DiskIndexQwordSetup_c * pSetup )
+template<bool MAPPED>
+bool BlockIndexQword_T<MAPPED>::Setup ( const DiskIndexQwordSetup_c * pSetup )
 {
 	m_pQueryError = pSetup->m_pError;
 	return pSetup->Setup(this);
 }
 
 
-void BlockIndexQword_c::SeekDocReader ( SphOffset_t iPos, int iHint )
+template<bool MAPPED>
+void BlockIndexQword_T<MAPPED>::SeekDocReader ( SphOffset_t iPos, int iHint )
 {
 	ResetCursor();
 	m_iStart = m_iNext = iPos==1 ? postings::FILE_HEADER_SIZE : iPos;
@@ -55,19 +79,34 @@ void BlockIndexQword_c::SeekDocReader ( SphOffset_t iPos, int iHint )
 }
 
 
-void BlockIndexQword_c::SeekHitReader ( SphOffset_t iPos, int iHint )
+template<bool MAPPED>
+void BlockIndexQword_T<MAPPED>::SeekHitReader ( SphOffset_t iPos, int iHint )
 {
 	m_rdHitlist->SeekTo ( iPos==1 ? postings::FILE_HEADER_SIZE : iPos, iHint );
+	if constexpr ( MAPPED )
+		m_pHitCursor = m_pHitMap+m_rdHitlist->GetPos();
 }
 
 
-SphOffset_t BlockIndexQword_c::GetDocReaderPos() const
+template<bool MAPPED>
+SphOffset_t BlockIndexQword_T<MAPPED>::GetDocReaderPos() const
 {
 	return m_iNext;
 }
 
 
-bool BlockIndexQword_c::Read ( uint64_t uOffset, uint8_t * pData, size_t iSize, std::string & sError )
+template<bool MAPPED>
+SphOffset_t BlockIndexQword_T<MAPPED>::GetHitReaderPos() const
+{
+	if constexpr ( MAPPED )
+		return m_pHitCursor-m_pHitMap;
+
+	return m_rdHitlist->GetPos();
+}
+
+
+template<bool MAPPED>
+bool BlockIndexQword_T<MAPPED>::Read ( uint64_t uOffset, uint8_t * pData, size_t iSize, std::string & sError )
 {
 	assert ( uOffset<=GetSize() && iSize<=GetSize()-uOffset && iSize<=INT_MAX );
 	m_rdDoclist->SeekTo ( uOffset, int(iSize) );
@@ -82,7 +121,8 @@ bool BlockIndexQword_c::Read ( uint64_t uOffset, uint8_t * pData, size_t iSize, 
 }
 
 
-void BlockIndexQword_c::Fail()
+template<bool MAPPED>
+void BlockIndexQword_T<MAPPED>::Fail()
 {
 	m_bEOF = true;
 	m_tDoc.m_tRowID = INVALID_ROWID;
@@ -91,7 +131,8 @@ void BlockIndexQword_c::Fail()
 }
 
 
-bool BlockIndexQword_c::LoadLeaf ( RowID_t tMin )
+template<bool MAPPED>
+bool BlockIndexQword_T<MAPPED>::LoadLeaf ( RowID_t tMin )
 {
 	if ( !m_bOpen )
 	{
@@ -129,7 +170,8 @@ bool BlockIndexQword_c::LoadLeaf ( RowID_t tMin )
 }
 
 
-bool BlockIndexQword_c::PositionNext()
+template<bool MAPPED>
+bool BlockIndexQword_T<MAPPED>::PositionNext()
 {
 	while ( !m_bEOF )
 	{
@@ -155,7 +197,8 @@ bool BlockIndexQword_c::PositionNext()
 }
 
 
-void BlockIndexQword_c::SetDoc ( unsigned i )
+template<bool MAPPED>
+void BlockIndexQword_T<MAPPED>::SetDoc ( unsigned i )
 {
 	m_tDoc.m_tRowID = m_tReader.GetRows()[i];
 	for ( unsigned f=0; f<postings::FIELD_WORDS; ++f )
@@ -167,7 +210,8 @@ void BlockIndexQword_c::SetDoc ( unsigned i )
 }
 
 
-const CSphMatch & BlockIndexQword_c::GetNextDoc()
+template<bool MAPPED>
+const CSphMatch & BlockIndexQword_T<MAPPED>::GetNextDoc()
 {
 	if ( PositionNext() )
 		SetDoc(m_iOrdinal++);
@@ -176,8 +220,9 @@ const CSphMatch & BlockIndexQword_c::GetNextDoc()
 }
 
 
+template<bool MAPPED>
 template<bool TF, bool HITS>
-int BlockIndexQword_c::ReadDocs ( QwordDoc_t * pDocs, int iMax )
+int BlockIndexQword_T<MAPPED>::ReadDocs ( QwordDoc_t * pDocs, int iMax )
 {
 	int iGot = 0;
 	while ( iGot<iMax && PositionNext() )
@@ -204,7 +249,8 @@ int BlockIndexQword_c::ReadDocs ( QwordDoc_t * pDocs, int iMax )
 }
 
 
-int BlockIndexQword_c::GetNextDocs ( QwordDoc_t * pDocs, int iMax )
+template<bool MAPPED>
+int BlockIndexQword_T<MAPPED>::GetNextDocs ( QwordDoc_t * pDocs, int iMax )
 {
 	if ( m_bReadHits )
 		return ReadDocs<true,true> ( pDocs, iMax );
@@ -213,14 +259,16 @@ int BlockIndexQword_c::GetNextDocs ( QwordDoc_t * pDocs, int iMax )
 }
 
 
-bool BlockIndexQword_c::HintRowID ( RowID_t tRow )
+template<bool MAPPED>
+bool BlockIndexQword_T<MAPPED>::HintRowID ( RowID_t tRow )
 {
 	m_tHint = std::max ( m_tHint, tRow );
 	return true;
 }
 
 
-RowID_t BlockIndexQword_c::AdvanceTo ( RowID_t tRow )
+template<bool MAPPED>
+RowID_t BlockIndexQword_T<MAPPED>::AdvanceTo ( RowID_t tRow )
 {
 	if ( m_tDoc.m_tRowID!=INVALID_ROWID && m_tDoc.m_tRowID>=tRow )
 		return m_tDoc.m_tRowID;
@@ -230,7 +278,8 @@ RowID_t BlockIndexQword_c::AdvanceTo ( RowID_t tRow )
 }
 
 
-void BlockIndexQword_c::SeekHitlist ( SphOffset_t uOffset )
+template<bool MAPPED>
+void BlockIndexQword_T<MAPPED>::SeekHitlist ( SphOffset_t uOffset )
 {
 	m_iHitPos = EMPTY_HIT;
 	m_bHitEOF = true;
@@ -239,23 +288,38 @@ void BlockIndexQword_c::SeekHitlist ( SphOffset_t uOffset )
 		return;
 
 	assert ( uOffset>=postings::FILE_HEADER_SIZE && uOffset<m_pHitFactory->GetFilesize() );
-	m_rdHitlist->SeekTo ( uOffset, READ_NO_SIZE_HINT );
+	if constexpr ( MAPPED )
+		m_pHitCursor = m_pHitMap+uOffset;
+	else
+		m_rdHitlist->SeekTo ( uOffset, READ_NO_SIZE_HINT );
+
 	m_bHitEOF = false;
 }
 
 
-Hitpos_t BlockIndexQword_c::GetNextHit()
+template<bool MAPPED>
+Hitpos_t BlockIndexQword_T<MAPPED>::GetNextHit()
 {
 	if ( m_bHitEOF || !m_bHasHitlist || !m_sError.empty() )
 		return EMPTY_HIT;
 
-	assert ( m_rdHitlist->GetPos()<m_pHitFactory->GetFilesize() );
-	DWORD uDelta = m_rdHitlist->UnzipInt();
-	if ( const char * sError = m_rdHitlist->GetError() )
+	DWORD uDelta;
+	if constexpr ( MAPPED )
 	{
-		m_sError = sError;
-		Fail();
-		return EMPTY_HIT;
+		assert ( m_pHitMap );
+		RawReader_t tRaw { m_pHitMap, m_pHitCursor, m_pHitEnd };
+		uDelta = tRaw.UnzipInt();
+		m_pHitCursor = tRaw.m_pCur;
+	} else
+	{
+		assert ( m_rdHitlist->GetPos()<m_pHitFactory->GetFilesize() );
+		uDelta = m_rdHitlist->UnzipInt();
+		if ( const char * sError = m_rdHitlist->GetError() )
+		{
+			m_sError = sError;
+			Fail();
+			return EMPTY_HIT;
+		}
 	}
 
 	if ( !uDelta )
@@ -268,3 +332,7 @@ Hitpos_t BlockIndexQword_c::GetNextHit()
 	m_iHitPos += uDelta;
 	return m_iHitPos;
 }
+
+
+template class BlockIndexQword_T<true>;
+template class BlockIndexQword_T<false>;

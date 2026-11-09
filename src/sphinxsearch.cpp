@@ -297,7 +297,7 @@ protected:
 
 public:
 	ExtRanker_WeightSum_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings )
-		: ExtRanker_T<USE_BM25> ( tXQ, tSetup, { tSettings.m_bRowidLimits, tSettings.m_bSkipQCache, false, tSettings.m_tBoundaries } )
+		: ExtRanker_T<USE_BM25> ( tXQ, tSetup, { tSettings.m_bRowidLimits, tSettings.m_bSkipQCache, false, false, false, false, false, tSettings.m_tBoundaries } )
 	{}
 
 	int		GetMatches () override;
@@ -318,7 +318,7 @@ class ExtRanker_None_c : public ExtRanker_T<false>
 
 public:
 	ExtRanker_None_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings )
-		: ExtRanker_T<false> ( tXQ, tSetup, { tSettings.m_bRowidLimits, tSettings.m_bSkipQCache, false, tSettings.m_tBoundaries, tSettings.m_bOrWindows, tSettings.m_bAndWindows, tSettings.m_bQuorumWindows, tSettings.m_bTermWindows } )
+		: ExtRanker_T<false> ( tXQ, tSetup, { tSettings.m_bRowidLimits, tSettings.m_bSkipQCache, false, tSettings.m_bOrWindows, tSettings.m_bAndWindows, tSettings.m_bQuorumWindows, tSettings.m_bTermWindows, tSettings.m_tBoundaries } )
 	{}
 
 	int		GetMatches () override;

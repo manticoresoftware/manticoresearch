@@ -661,12 +661,99 @@ static void TestQuorum()
 }
 
 
+template<typename QWORD>
+static void TestHitReader ( const char * sFile, std::initializer_list<FileAccess_e> dAccess )
+{
+	std::vector<std::vector<DWORD>> dHits { {1,127,128,16384,0x1fffff,0x10000000,UINT32_MAX}, {}, {}, {1}, {1,2} };
+	for ( unsigned i=0; i<9000; ++i )
+		dHits[1].push_back(i+1);
+
+	std::vector<BYTE> dBytes(postings::FILE_HEADER_SIZE);
+	std::vector<SphOffset_t> dStarts;
+	std::vector<std::vector<SphOffset_t>> dPositions;
+	for ( const auto & dDoc : dHits )
+	{
+		dStarts.push_back(dBytes.size());
+		dPositions.emplace_back();
+
+		DWORD uPrevious = 0;
+		for ( DWORD uHit : dDoc )
+		{
+			ZipValueBE ( [&dBytes] ( BYTE uByte ) { dBytes.push_back(uByte); }, uHit-uPrevious );
+			dPositions.back().push_back(dBytes.size());
+			uPrevious = uHit;
+		}
+
+		dBytes.push_back(0);
+		dPositions.back().push_back(dBytes.size());
+	}
+
+	{
+		std::ofstream tFile ( sFile, std::ios::binary | std::ios::trunc );
+		tFile.write ( reinterpret_cast<const char *>(dBytes.data()), dBytes.size() );
+		Check ( bool(tFile) );
+	}
+
+	QWORD tWord ( false, false, 0 );
+	tWord.m_bHasHitlist = true;
+
+	// Rebind the same qword across mapped and buffered readers, including the map tail.
+	for ( auto eAccess : dAccess )
+	{
+		CSphString sError;
+		DataReaderFactoryPtr_c pFactory ( NewProxyReader ( sFile, sError, DataReaderFactory_c::HITS, 1024, eAccess ) );
+		Check ( bool(pFactory) );
+		tWord.SetHitReader(pFactory);
+		tWord.SeekHitReader ( 1, 0 );
+		Check ( tWord.GetHitReaderPos()==postings::FILE_HEADER_SIZE );
+		Check ( tWord.GetNextHit()==EMPTY_HIT );
+		tWord.m_bHasHitlist = false;
+		tWord.SeekHitlist(dStarts[0]);
+		Check ( tWord.GetNextHit()==EMPTY_HIT );
+		tWord.m_bHasHitlist = true;
+
+		for ( bool bReverse : {false,true} )
+			for ( size_t i=0; i<dHits.size(); ++i )
+			{
+				size_t iDoc = bReverse ? dHits.size()-i-1 : i;
+				tWord.Reset();
+				tWord.SeekHitlist(dStarts[iDoc]);
+				Check ( tWord.GetHitReaderPos()==dStarts[iDoc] );
+				for ( size_t j=0; j<dHits[iDoc].size(); ++j )
+				{
+					Check ( tWord.GetNextHit()==dHits[iDoc][j] );
+					Check ( tWord.GetHitReaderPos()==dPositions[iDoc][j] );
+				}
+
+				Check ( tWord.GetNextHit()==EMPTY_HIT );
+				Check ( tWord.GetHitReaderPos()==dPositions[iDoc].back() );
+				Check ( tWord.GetNextHit()==EMPTY_HIT && !tWord.GetReadError() );
+			}
+
+		// A failed doclist open must also prevent a later hit seek from reviving the qword.
+		tWord.SetDocReader(pFactory);
+		tWord.SeekDocReader ( 1, 0 );
+		Check ( tWord.GetNextDoc().m_tRowID==INVALID_ROWID && tWord.GetReadError() );
+		tWord.SeekHitlist(dStarts[0]);
+		Check ( tWord.GetNextHit()==EMPTY_HIT && tWord.GetReadError() );
+		tWord.Reset();
+		tWord.SeekHitlist(dStarts[0]);
+		Check ( tWord.GetNextHit()==dHits[0][0] && !tWord.GetReadError() );
+		tWord.Reset();
+	}
+}
+
+
 int main ( int argc, char ** argv )
 {
 	TestQuorum();
 
 	if ( argc!=2 )
 		return 2;
+
+	TestHitReader<BlockIndexQword_c> ( argv[1], {FileAccess_e::MMAP,FileAccess_e::FILE,FileAccess_e::MMAP} );
+	TestHitReader<BlockIndexQword_T<true>> ( argv[1], {FileAccess_e::MMAP,FileAccess_e::MMAP} );
+	TestHitReader<BlockIndexQword_T<false>> ( argv[1], {FileAccess_e::FILE,FileAccess_e::FILE} );
 
 	for ( unsigned n : { 1u, 127u, 128u, 255u, 256u, 257u, 513u, 1025u } )
 		for ( int iPayload : { 0, 1, 2 } )

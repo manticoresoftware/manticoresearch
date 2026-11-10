@@ -100,6 +100,8 @@ bool ReaderValidation_c::Open ( uint64_t uOffset, std::string & sError )
 			return false;
 		}
 
+	CHECK_DATA ( m_tDesc.m_tRows.m_eCodec!=Codec_e::BASE_DELTA && m_tDesc.m_tFields.m_eCodec!=Codec_e::BASE_DELTA && m_tDesc.m_tTF.m_eCodec!=Codec_e::BASE_DELTA, "invalid integer stream codec" );
+
 	m_uEnd = Get(d.data()+24,8);
 	m_uStats = Get(d.data()+32,8);
 	m_uNext = uOffset+TERM_HEADER_SIZE;
@@ -277,15 +279,36 @@ bool ReaderValidation_c::ReadHitRefs ( std::string & sError )
 
 	m_dHitRefs.fill(0);
 	Bytes_t t = tData;
+	StreamDesc_t tStream = m_tDesc.m_tHitRefs;
+	uint64_t uBase = 0;
+	unsigned uParts = 2;
+	if ( m_tDesc.m_bPositions && tStream.m_eCodec==Codec_e::BASE_DELTA )
+	{
+		CHECK_DATA ( t.m_iSize>=9 && t.m_pData[8]<=1, "invalid base-relative hit reference header" );
+		uBase = Get ( t.m_pData, 8 );
+		uParts = 1+t.m_pData[8];
+		CHECK_DATA ( uBase && uBase<=INT64_MAX, "invalid hit reference base" );
+		t.m_pData += 9;
+		t.m_iSize -= 9;
+		tStream = {Codec_e::PFOR};
+	}
+
 	alignas(16) std::array<uint32_t,MAX_VALUES> dValues;
 	if ( m_tDesc.m_bPositions )
-		for ( unsigned part=0; part<2; ++part )
+		for ( unsigned part=0; part<uParts; ++part )
 		{
-			if ( !Frame ( m_tDesc.m_tHitRefs, t, dValues.data(), m_tLeaf.m_uCount, sError ) )
+			if ( !Frame ( tStream, t, dValues.data(), m_tLeaf.m_uCount, sError ) )
 				return Fail ( sError, "invalid posting hit reference column" );
 
 			for ( unsigned i=0; i<m_tLeaf.m_uCount; ++i )
 				m_dHitRefs[i] |= uint64_t(dValues[i])<<(32*part);
+		}
+
+	if ( uBase )
+		for ( unsigned i=0; i<m_tLeaf.m_uCount; ++i )
+		{
+			CHECK_DATA ( m_dHitRefs[i]<=uint64_t(INT64_MAX)-uBase, "hit reference overflow" );
+			m_dHitRefs[i] += uBase;
 		}
 
 	CHECK_DATA ( !(t.m_iSize), "trailing posting hit reference data" );

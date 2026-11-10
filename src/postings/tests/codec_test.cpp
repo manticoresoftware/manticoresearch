@@ -116,7 +116,7 @@ static void Streams()
 		}
 	}
 
-	for ( auto dBad : { std::vector<uint8_t>{0,0}, {255,255}, {1,1} } )
+	for ( auto dBad : { std::vector<uint8_t>{0,0}, {255,255}, {1,1}, {5,0} } )
 	{
 		StreamDesc_t tUnchanged { Codec_e::PFOR };
 		CHECK ( !ReadStreamDescriptor ( View(dBad), tUnchanged, sError ) );
@@ -190,6 +190,14 @@ static void Corruption()
 
 	for ( auto dBad : { std::vector<uint8_t>{0,0,1,0,2,0,128,0}, {0,0,1,0,5,0,255,255,255,255,31} } )
 		CHECK ( !InspectIntegers ( { Codec_e::VARINT }, View(dBad), tDesc, sError ) );
+
+	std::vector<uint8_t> dPadded ( INTEGER_HEADER_SIZE+16, 0 );
+	dPadded[0] = 1;
+	dPadded[2] = 1;
+	dPadded[4] = 16;
+	dPadded[6] = 1;
+	for ( auto eCodec : { Codec_e::FOR, Codec_e::PFOR } )
+		CHECK ( !InspectIntegers ( {eCodec}, View(dPadded), tDesc, sError ) );
 
 	const std::vector<uint8_t> dBadWidth {32,1,1,0,0,0};
 	CHECK ( !InspectIntegers ( tStream, View(dBadWidth), tDesc, sError ) );
@@ -265,7 +273,7 @@ static void Rows()
 }
 
 
-static void GuardPages()
+static void GuardPages ( StreamDesc_t tStream )
 {
 #ifndef _WIN32
 	const size_t iPage = size_t(sysconf(_SC_PAGESIZE));
@@ -280,8 +288,11 @@ static void GuardPages()
 		for ( unsigned b=0; b<=32; ++b )
 		{
 			std::vector<uint32_t> dValues ( n, b ? UINT32_MAX>>(32-b) : 0 );
+			if ( n>1 )
+				dValues.back() /= 2;
+
 			std::vector<uint8_t> dEncoded;
-			CHECK ( EncodeIntegers ( { Codec_e::PFOR }, dValues.data(), n, dEncoded, sError ) );
+			CHECK ( EncodeIntegers ( tStream, dValues.data(), n, dEncoded, sError ) );
 			auto * pInput = pMap+iPage-dEncoded.size();
 			std::copy ( dEncoded.begin(), dEncoded.end(), pInput );
 			uint32_t dDecoded[MAX_VALUES];
@@ -295,7 +306,7 @@ static void GuardPages()
 			CHECK ( DecodeIntegers ( tStream, { pInput, dEncoded.size() }, pOutput, n, sError ) );
 			CHECK ( std::equal ( dValues.begin(), dValues.end(), pOutput ) );
 			std::vector<uint8_t> dCopy;
-			CHECK ( EncodeIntegers ( { Codec_e::PFOR }, pOutput, n, dCopy, sError ) );
+			CHECK ( EncodeIntegers ( tStream, pOutput, n, dCopy, sError ) );
 			CHECK ( dEncoded==dCopy );
 		}
 
@@ -324,13 +335,63 @@ static void GuardPages()
 }
 
 
+static void ShortArraysAndTails ( Codec_e eCodec )
+{
+	std::string sError;
+	std::vector<uint8_t> dEncoded;
+	std::mt19937 tRandom(0x20261110);
+	for ( unsigned n=1; n<=MAX_VALUES; ++n )
+	{
+		std::vector<uint32_t> dValues(n);
+		for ( auto & uValue : dValues )
+			uValue = tRandom();
+
+		RoundTrip ( dValues, eCodec );
+		for ( uint32_t uValue : {0U,1U,UINT32_MAX} )
+		{
+			std::fill ( dValues.begin(), dValues.end(), uValue );
+			RoundTrip ( dValues, eCodec );
+			CHECK ( EncodeIntegers ( {eCodec}, dValues.data(), n, dEncoded, sError ) );
+			CHECK ( dEncoded.size()==INTEGER_HEADER_SIZE+(uValue==UINT32_MAX ? 5 : 1) );
+		}
+	}
+
+	const uint32_t dShort[] = {1,128,UINT32_MAX};
+	CHECK ( EncodeIntegers ( {eCodec}, dShort, 3, dEncoded, sError ) );
+	CHECK ( dEncoded==std::vector<uint8_t> ( {34,0,3,0,8,0,1,128,1,255,255,255,255,15} ) );
+	IntegerDesc_t tDesc;
+	for ( unsigned i=0; i<dEncoded.size(); ++i )
+		CHECK ( !InspectIntegers ( {eCodec}, {dEncoded.data(),i}, tDesc, sError ) );
+
+	std::vector<uint32_t> dValues ( 129, 0 );
+	dValues[127] = 255;
+	dValues[128] = UINT32_MAX;
+	CHECK ( EncodeIntegers ( {Codec_e::PFOR}, dValues.data(), dValues.size(), dEncoded, sError ) );
+	CHECK ( dEncoded==std::vector<uint8_t> ( {0,1,129,0,7,0,127,255,255,255,255,255,15} ) );
+	CHECK ( InspectIntegers ( {Codec_e::PFOR}, View(dEncoded), tDesc, sError ) );
+	dEncoded[6] = 128;
+	CHECK ( !InspectIntegers ( {Codec_e::PFOR}, View(dEncoded), tDesc, sError ) );
+	dEncoded[6] = 127;
+	dEncoded.back() = 128;
+	CHECK ( !InspectIntegers ( {Codec_e::PFOR}, View(dEncoded), tDesc, sError ) );
+
+	CHECK ( WriteStreamDescriptor ( {Codec_e::BASE_DELTA}, dEncoded, sError ) );
+	StreamDesc_t tRead;
+	CHECK ( ReadStreamDescriptor ( View(dEncoded), tRead, sError ) && tRead.m_eCodec==Codec_e::BASE_DELTA );
+	CHECK ( !EncodeIntegers ( tRead, dShort, 3, dEncoded, sError ) );
+}
+
+
 int main()
 {
+	ShortArraysAndTails ( Codec_e::FOR );
+	ShortArraysAndTails ( Codec_e::PFOR );
 	Golden();
 	Streams();
 	Integers();
 	Corruption();
 	Rows();
-	GuardPages();
+	GuardPages ( {Codec_e::FOR} );
+	GuardPages ( {Codec_e::PFOR} );
 	std::cout << "PASS " << g_iChecks << " checks; backend=" << BackendName() << "; bytes_hash=" << g_uBytesHash << "\n";
 }

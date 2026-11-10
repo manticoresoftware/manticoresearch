@@ -20,6 +20,10 @@ namespace postings
 namespace
 {
 
+constexpr uint8_t PACKED_CONSTANT = 33;
+constexpr uint8_t PACKED_VARINT = 34;
+
+
 bool Fail ( std::string & sError, const char * sMessage )
 {
 	sError = sMessage;
@@ -43,7 +47,7 @@ void WriteLE ( uint8_t * pData, uint32_t uValue, unsigned uBytes )
 
 bool IsKnownCodec ( Codec_e eCodec )
 {
-	return eCodec==Codec_e::FOR || eCodec==Codec_e::PFOR || eCodec==Codec_e::VARINT || eCodec==Codec_e::CONSTANT;
+	return eCodec==Codec_e::FOR || eCodec==Codec_e::PFOR || eCodec==Codec_e::VARINT || eCodec==Codec_e::CONSTANT || eCodec==Codec_e::BASE_DELTA;
 }
 
 unsigned Width ( uint32_t uValue )
@@ -60,7 +64,8 @@ unsigned Width ( uint32_t uValue )
 
 size_t PackedBytes ( size_t iCount, unsigned uWidth )
 {
-	return ((iCount+127)/128)*16*uWidth;
+	assert ( iCount%128==0 );
+	return (iCount/128)*16*uWidth;
 }
 
 void Pack ( const uint32_t * pValues, size_t iCount, unsigned uWidth, uint8_t * pOutput, const Packing_t & tPacking )
@@ -69,8 +74,7 @@ void Pack ( const uint32_t * pValues, size_t iCount, unsigned uWidth, uint8_t * 
 	alignas(16) uint32_t dPacked[128];
 	for ( size_t i=0; i<iCount; i+=128 )
 	{
-		std::fill_n ( dValues, 128, 0 );
-		std::copy_n ( pValues+i, std::min ( size_t(128), iCount-i ), dValues );
+		std::copy_n ( pValues+i, 128, dValues );
 		tPacking.m_fnPack ( dValues, dPacked, uWidth );
 		for ( unsigned j=0; j<4*uWidth; ++j )
 			WriteLE ( pOutput+j*4, dPacked[j], 4 );
@@ -89,13 +93,12 @@ void Unpack ( const uint8_t * pInput, size_t iCount, unsigned uWidth, uint32_t *
 		for ( unsigned j=0; j<4*uWidth; ++j )
 			dPacked[j] = ReadLE ( pInput+j*4, 4 );
 
-		size_t iValues = std::min ( size_t(128), iCount-i );
-		if ( iValues==128 && !(uintptr_t(pValues+i)&15) )
+		if ( !(uintptr_t(pValues+i)&15) )
 			tPacking.m_fnUnpack ( dPacked, pValues+i, uWidth );
 		else
 		{
 			tPacking.m_fnUnpack ( dPacked, dValues, uWidth );
-			std::copy_n ( dValues, iValues, pValues+i );
+			std::copy_n ( dValues, 128, pValues+i );
 		}
 
 		pInput += 16*uWidth;
@@ -180,35 +183,62 @@ Choice_t ChoosePacked ( const uint32_t * pValues, size_t iCount, bool bException
 }
 
 
+void AppendVarint ( std::vector<uint8_t> & dOutput, uint32_t uValue )
+{
+	while ( uValue>=128 )
+	{
+		dOutput.push_back ( uint8_t(uValue & 127) | 128 );
+		uValue >>= 7;
+	}
+
+	dOutput.push_back ( uint8_t(uValue) );
+}
+
+
+void DecodeVarints ( Bytes_t tInput, size_t iCount, uint32_t * pOutput )
+{
+	const uint8_t * p = tInput.m_pData;
+	for ( unsigned i=0; i<iCount; ++i )
+	{
+		uint32_t uValue = 0;
+		unsigned uShift = 0;
+		uint8_t uByte;
+		do
+		{
+			assert ( p<tInput.m_pData+tInput.m_iSize && uShift<35 );
+			uByte = *p++;
+			uValue |= uint32_t(uByte&127)<<uShift;
+			uShift += 7;
+		} while ( uByte&128 );
+		pOutput[i] = uValue;
+	}
+}
+
+
 void DecodePayload ( StreamDesc_t tStream, const IntegerDesc_t & tDesc, uint32_t * pOutput, const Packing_t & tPacking )
 {
 	const auto & tPayload = tDesc.m_tPayload;
-	if ( tStream.m_eCodec==Codec_e::CONSTANT )
-		std::fill_n ( pOutput, tDesc.m_uCount, ReadLE ( tPayload.m_pData, 4 ) );
-	else if ( tStream.m_eCodec==Codec_e::VARINT )
+	bool bPacked = tStream.m_eCodec==Codec_e::FOR || tStream.m_eCodec==Codec_e::PFOR;
+	if ( bPacked && tDesc.m_uWidth==PACKED_CONSTANT )
 	{
-		const uint8_t * p = tPayload.m_pData;
-		for ( unsigned i=0; i<tDesc.m_uCount; ++i )
-		{
-			uint32_t uValue = 0;
-			unsigned uShift = 0;
-			uint8_t uByte;
-			do
-			{
-				assert ( p<tPayload.m_pData+tPayload.m_iSize && uShift<35 );
-				uByte = *p++;
-				uValue |= uint32_t(uByte&127)<<uShift;
-				uShift += 7;
-			} while ( uByte&128 );
-			pOutput[i] = uValue;
-		}
-	}
+		uint32_t uValue;
+		DecodeVarints ( tPayload, 1, &uValue );
+		std::fill_n ( pOutput, tDesc.m_uCount, uValue );
+	} else if ( tStream.m_eCodec==Codec_e::CONSTANT )
+		std::fill_n ( pOutput, tDesc.m_uCount, ReadLE ( tPayload.m_pData, 4 ) );
+	else if ( tStream.m_eCodec==Codec_e::VARINT || (bPacked && tDesc.m_uWidth==PACKED_VARINT) )
+		DecodeVarints ( tPayload, tDesc.m_uCount, pOutput );
 	else
 	{
-		Unpack ( tPayload.m_pData, tDesc.m_uCount, tDesc.m_uWidth, pOutput, tPacking );
-		const uint8_t * pExceptions = tPayload.m_pData+PackedBytes ( tDesc.m_uCount, tDesc.m_uWidth );
+		size_t iPackedCount = tDesc.m_uCount/128*128;
+		Unpack ( tPayload.m_pData, iPackedCount, tDesc.m_uWidth, pOutput, tPacking );
+
+		const uint8_t * pExceptions = tPayload.m_pData+PackedBytes ( iPackedCount, tDesc.m_uWidth );
 		for ( unsigned i=0; i<tDesc.m_uExceptions; ++i )
 			pOutput[pExceptions[2*i]] |= uint32_t(pExceptions[2*i+1])<<tDesc.m_uWidth;
+
+		const uint8_t * pTail = pExceptions+tDesc.m_uExceptions*2;
+		DecodeVarints ( { pTail, size_t(tPayload.m_pData+tPayload.m_iSize-pTail) }, tDesc.m_uCount-iPackedCount, pOutput+iPackedCount );
 	}
 }
 
@@ -251,61 +281,55 @@ bool EncodeIntegers ( StreamDesc_t tStream, const uint32_t * pValues, size_t iCo
 		return Fail ( sError, "Unavailable packing backend" );
 
 	const Codec_e eCodec = tStream.m_eCodec;
-	if ( !IsKnownCodec(eCodec) )
+	if ( !IsKnownCodec(eCodec) || eCodec==Codec_e::BASE_DELTA )
 		return Fail ( sError, "Unknown stream codec" );
 
-	Choice_t tChoice { 0, 0, 0 };
-	if ( eCodec==Codec_e::FOR || eCodec==Codec_e::PFOR )
-		tChoice = ChoosePacked ( pValues, iCount, eCodec==Codec_e::PFOR );
-	else if ( eCodec==Codec_e::VARINT )
-	{
-		for ( size_t i=0; i<iCount; ++i )
-			tChoice.m_iBytes += std::max ( 1u, (Width(pValues[i])+6)/7 );
-	} else
-	{
-		for ( size_t i=1; i<iCount; ++i )
-			if ( pValues[i]!=pValues[0] )
-				return Fail ( sError, "Nonconstant block in constant stream" );
-
-		tChoice.m_iBytes = 4;
-	}
-
-	std::vector<uint8_t> dEncoded ( INTEGER_HEADER_SIZE+tChoice.m_iBytes, 0 );
-	dEncoded[0] = uint8_t(tChoice.m_uWidth);
-	dEncoded[1] = uint8_t(tChoice.m_uExceptions);
-	WriteLE ( dEncoded.data()+2, uint32_t(iCount), 2 );
-	WriteLE ( dEncoded.data()+4, uint32_t(tChoice.m_iBytes), 2 );
-	uint8_t * pOut = dEncoded.data()+INTEGER_HEADER_SIZE;
+	bool bPacked = eCodec==Codec_e::FOR || eCodec==Codec_e::PFOR;
+	bool bConstant = (bPacked || eCodec==Codec_e::CONSTANT) && std::all_of ( pValues+1, pValues+iCount, [pValues] ( uint32_t uValue ) { return uValue==pValues[0]; } );
+	std::vector<uint8_t> dEncoded ( INTEGER_HEADER_SIZE, 0 );
 	if ( eCodec==Codec_e::CONSTANT )
-		WriteLE ( pOut, pValues[0], 4 );
-	else if ( eCodec==Codec_e::VARINT )
 	{
-		for ( size_t i=0; i<iCount; ++i )
-		{
-			uint32_t uValue = pValues[i];
-			while ( uValue>=128 )
-			{
-				*pOut++ = uint8_t(uValue & 127) | 128;
-				uValue >>= 7;
-			}
+		if ( !bConstant )
+			return Fail ( sError, "Nonconstant block in constant stream" );
 
-			*pOut++ = uint8_t(uValue);
-		}
+		dEncoded.resize(INTEGER_HEADER_SIZE+4);
+		WriteLE ( dEncoded.data()+INTEGER_HEADER_SIZE, pValues[0], 4 );
+	} else if ( bPacked && bConstant )
+	{
+		dEncoded[0] = PACKED_CONSTANT;
+		AppendVarint ( dEncoded, pValues[0] );
 	} else
 	{
-		Pack ( pValues, iCount, tChoice.m_uWidth, pOut, *pPacking );
-		pOut += PackedBytes ( iCount, tChoice.m_uWidth );
-		if ( tChoice.m_uExceptions )
-			for ( size_t i=0; i<iCount; ++i )
-			{
-				const uint32_t uHigh = pValues[i]>>tChoice.m_uWidth;
-				if ( uHigh )
+		size_t iPackedCount = bPacked ? iCount/128*128 : 0;
+		if ( iPackedCount )
+		{
+			auto tChoice = ChoosePacked ( pValues, iPackedCount, eCodec==Codec_e::PFOR );
+			dEncoded[0] = uint8_t(tChoice.m_uWidth);
+			dEncoded[1] = uint8_t(tChoice.m_uExceptions);
+			dEncoded.resize(INTEGER_HEADER_SIZE+tChoice.m_iBytes);
+
+			uint8_t * pOut = dEncoded.data()+INTEGER_HEADER_SIZE;
+			Pack ( pValues, iPackedCount, tChoice.m_uWidth, pOut, *pPacking );
+			pOut += PackedBytes ( iPackedCount, tChoice.m_uWidth );
+			if ( tChoice.m_uExceptions )
+				for ( size_t i=0; i<iPackedCount; ++i )
 				{
-					*pOut++ = uint8_t(i);
-					*pOut++ = uint8_t(uHigh);
+					const uint32_t uHigh = pValues[i]>>tChoice.m_uWidth;
+					if ( uHigh )
+					{
+						*pOut++ = uint8_t(i);
+						*pOut++ = uint8_t(uHigh);
+					}
 				}
-			}
+		} else if ( bPacked )
+			dEncoded[0] = PACKED_VARINT;
+
+		for ( size_t i=iPackedCount; i<iCount; ++i )
+			AppendVarint ( dEncoded, pValues[i] );
 	}
+
+	WriteLE ( dEncoded.data()+2, uint32_t(iCount), 2 );
+	WriteLE ( dEncoded.data()+4, uint32_t(dEncoded.size()-INTEGER_HEADER_SIZE), 2 );
 
 	dOutput.swap(dEncoded);
 	return true;
@@ -320,20 +344,32 @@ bool InspectIntegers ( StreamDesc_t tStream, Bytes_t tInput, IntegerDesc_t & tDe
 
 	const auto * p = tInput.m_pData;
 	IntegerDesc_t tParsed { p[0], p[1], uint16_t(ReadLE ( p+2, 2 )), { p+6, ReadLE ( p+4, 2 ) } };
-	if ( !IsKnownCodec(tStream.m_eCodec) )
+	if ( !IsKnownCodec(tStream.m_eCodec) || tStream.m_eCodec==Codec_e::BASE_DELTA )
 		return Fail ( sError, "Unknown stream codec" );
 
 	if ( !tParsed.m_uCount || tParsed.m_uCount>MAX_VALUES || tParsed.m_tPayload.m_iSize!=tInput.m_iSize-INTEGER_HEADER_SIZE )
 		return Fail ( sError, "Invalid integer count or payload length" );
 
-	if ( tStream.m_eCodec==Codec_e::FOR || tStream.m_eCodec==Codec_e::PFOR )
+	bool bPacked = tStream.m_eCodec==Codec_e::FOR || tStream.m_eCodec==Codec_e::PFOR;
+	if ( bPacked && tParsed.m_uWidth>=PACKED_CONSTANT )
+	{
+		if ( tParsed.m_uExceptions || (tParsed.m_uWidth!=PACKED_CONSTANT && tParsed.m_uWidth!=PACKED_VARINT) || (tParsed.m_uWidth==PACKED_VARINT && tParsed.m_uCount>=128) || !ReadVarints ( tParsed.m_tPayload, tParsed.m_uWidth==PACKED_CONSTANT ? 1 : tParsed.m_uCount, nullptr ) )
+			return Fail ( sError, "Invalid constant or short array" );
+
+		tDesc = tParsed;
+		return true;
+	}
+
+	if ( bPacked )
 	{
 		if ( tParsed.m_uWidth>32 || tParsed.m_uExceptions>7 ||
 			(tStream.m_eCodec==Codec_e::FOR && tParsed.m_uExceptions) || (tParsed.m_uWidth==32 && tParsed.m_uExceptions) )
 			return Fail ( sError, "Invalid packing width or exception count" );
 
-		const size_t iPacked = PackedBytes ( tParsed.m_uCount, tParsed.m_uWidth );
-		if ( iPacked+tParsed.m_uExceptions*2!=tParsed.m_tPayload.m_iSize )
+		const size_t iPackedCount = tParsed.m_uCount/128*128;
+		const size_t iPacked = PackedBytes ( iPackedCount, tParsed.m_uWidth );
+		const size_t iPrefix = iPacked+tParsed.m_uExceptions*2;
+		if ( !iPackedCount || iPrefix>tParsed.m_tPayload.m_iSize )
 			return Fail ( sError, "Invalid packed payload length" );
 
 		const uint8_t * pExceptions = tParsed.m_tPayload.m_pData+iPacked;
@@ -341,24 +377,14 @@ bool InspectIntegers ( StreamDesc_t tStream, Bytes_t tInput, IntegerDesc_t & tDe
 		for ( unsigned i=0; i<tParsed.m_uExceptions; ++i )
 		{
 			const unsigned uOrdinal = pExceptions[2*i], uHigh = pExceptions[2*i+1];
-			if ( int(uOrdinal)<=iPrevious || uOrdinal>=tParsed.m_uCount || !uHigh || uHigh>(UINT32_MAX>>tParsed.m_uWidth) )
+			if ( int(uOrdinal)<=iPrevious || uOrdinal>=iPackedCount || !uHigh || uHigh>(UINT32_MAX>>tParsed.m_uWidth) )
 				return Fail ( sError, "Invalid exception ordinal or high bits" );
 
 			iPrevious = int(uOrdinal);
 		}
 
-		// Unused slots in a short final frame must be zero, including crossing words.
-		for ( unsigned i=tParsed.m_uCount%128; i && i<128; ++i )
-		{
-			const unsigned uWidth = tParsed.m_uWidth;
-			const auto * pFrame = tParsed.m_tPayload.m_pData+(tParsed.m_uCount/128)*16*uWidth;
-			for ( unsigned b=0; b<uWidth; ++b )
-			{
-				const unsigned uBit = (i/4)*uWidth+b;
-				if ( ReadLE ( pFrame+((uBit/32)*4+i%4)*4, 4 ) & (uint32_t(1)<<(uBit%32)) )
-					return Fail ( sError, "Nonzero packed padding" );
-			}
-		}
+		if ( !ReadVarints ( { tParsed.m_tPayload.m_pData+iPrefix, tParsed.m_tPayload.m_iSize-iPrefix }, tParsed.m_uCount-iPackedCount, nullptr ) )
+			return Fail ( sError, "Invalid varint tail" );
 	} else
 	{
 		if ( tParsed.m_uWidth || tParsed.m_uExceptions )
@@ -481,7 +507,7 @@ static bool ParseRows ( StreamDesc_t tStream, Bytes_t tInput, RowBlock_t & tBloc
 	if ( !tInput.m_pData || tInput.m_iSize<ROW_HEADER_SIZE || std::memcmp ( tInput.m_pData, "PST1", 4 ) || tInput.m_pData[4]!=1 )
 		return Fail ( sError, "Invalid row block magic/version or truncated header" );
 
-	if ( !IsKnownCodec(tStream.m_eCodec) )
+	if ( !IsKnownCodec(tStream.m_eCodec) || tStream.m_eCodec==Codec_e::BASE_DELTA )
 		return Fail ( sError, "Unknown stream codec" );
 
 	const auto * p = tInput.m_pData;

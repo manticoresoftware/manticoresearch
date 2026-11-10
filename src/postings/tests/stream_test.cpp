@@ -76,6 +76,8 @@ static void Test ( unsigned n, unsigned uFields, Codec_e eCodec, bool bPositions
 	tDesc.m_uFields = uint16_t(uFields);
 	tDesc.m_tRows = {eCodec};
 	tDesc.m_tTF = {eCodec};
+	tDesc.m_tFields = {eCodec};
+	tDesc.m_tHitRefs = { eCodec==Codec_e::PFOR ? Codec_e::BASE_DELTA : eCodec };
 	tDesc.m_bPositions = tDesc.m_bFieldTF = bPositions;
 	std::string sError;
 	Check ( pWriter->Begin ( tDesc, sError ) );
@@ -86,6 +88,8 @@ static void Test ( unsigned n, unsigned uFields, Codec_e eCodec, bool bPositions
 		t.m_uRow = i*3;
 		t.m_uTF = i%29+1;
 		t.m_uHitRef = bPositions ? (uint64_t(1)<<34)+i*333 : 0;
+		if ( bPositions && uFields>1 && i%17==1 )
+			t.m_uHitRef = uint64_t(INT64_MAX)-i;
 		unsigned f = i%uFields;
 		t.m_dFields[f/32] = 1U<<(f%32);
 		t.m_dFieldTF[f] = bPositions ? t.m_uTF : 0;
@@ -94,6 +98,9 @@ static void Test ( unsigned n, unsigned uFields, Codec_e eCodec, bool bPositions
 	}
 
 	Check ( pWriter->Finish(sError) );
+	if ( eCodec==Codec_e::PFOR && bPositions && n==1 )
+		Check ( pWriter->GetLeaves()[0].m_dSizes[3]==20 );
+
 	Reader_c tReader(tMemory);
 	Check ( tReader.Open ( 1, sError ) );
 	unsigned iRow = 0;
@@ -189,22 +196,34 @@ static void Test ( unsigned n, unsigned uFields, Codec_e eCodec, bool bPositions
 		auto nBytes = pWriter->GetLeaves()[0].m_dSizes[c];
 		if ( nBytes )
 		{
-			// Bad row magic, oversized integer frame, or out-of-schema field ID.
-			auto & uByte = tMemory.m_dData[size_t(uOff)];
-			uint8_t uSaved = uByte;
-			uByte = 255;
-			if ( c>0 && c<4 )
-				tMemory.m_dData[size_t(uOff)+3] |= 128;
-			if ( c==4 )
-				tMemory.m_dData[size_t(uOff)+1] = 255;
+			// Corrupt a section's structural marker, then restore the complete original bytes.
+			auto dSaved = tMemory.m_dData;
+			if ( c==3 && eCodec==Codec_e::PFOR )
+				tMemory.m_dData[size_t(uOff)+8] = 255;
+			else
+			{
+				tMemory.m_dData[size_t(uOff)] = 255;
+				if ( c>0 && c<4 )
+					tMemory.m_dData[size_t(uOff)+3] |= 128;
+				if ( c==4 )
+					tMemory.m_dData[size_t(uOff)+1] = 255;
+			}
 
 			Check ( tChecked.Open ( 1, sError ) && tChecked.Next ( 0, sError ) );
 			Check ( !tChecked.Validate(sError) );
-			uByte = uSaved;
-			if ( c>0 && c<4 )
-				tMemory.m_dData[size_t(uOff)+3] &= 127;
-			if ( c==4 )
-				tMemory.m_dData[size_t(uOff)+1] = 0;
+			tMemory.m_dData = dSaved;
+			if ( c==3 && eCodec==Codec_e::PFOR )
+				for ( unsigned uCase=0; uCase<(n>1 ? 3U : 2U); ++uCase )
+				{
+					// Zero/oversized base, then valid base with overflowing relative offsets.
+					std::fill_n ( tMemory.m_dData.data()+uOff, 8, uCase ? 255 : 0 );
+					if ( uCase==2 )
+						tMemory.m_dData[size_t(uOff)+7] = 127;
+
+					Check ( tChecked.Open ( 1, sError ) && tChecked.Next ( 0, sError ) );
+					Check ( !tChecked.ReadHitRefs(sError) );
+					tMemory.m_dData = dSaved;
+				}
 		}
 
 		uOff += nBytes;
@@ -219,7 +238,7 @@ static void Test ( unsigned n, unsigned uFields, Codec_e eCodec, bool bPositions
 int main()
 {
 	for ( auto eCodec : {Codec_e::FOR,Codec_e::PFOR,Codec_e::VARINT} )
-		for ( unsigned n : {1U,255U,256U,257U,1025U} )
+		for ( unsigned n : {1U,7U,127U,128U,129U,255U,256U,257U,1025U} )
 			for ( unsigned f : {1U,33U,256U} )
 				for ( bool bPositions : {false,true} )
 					for ( bool bMapped : {false,true} )

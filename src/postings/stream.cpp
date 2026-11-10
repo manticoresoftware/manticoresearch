@@ -162,6 +162,44 @@ bool Writer_c::Add ( const Posting_t & tPosting, std::string & sError )
 }
 
 
+bool Writer_c::EncodeHitRefs ( std::vector<uint8_t> & dOutput, std::string & sError ) const
+{
+	if ( !m_tDesc.m_bPositions )
+		return true;
+
+	StreamDesc_t tStream = m_tDesc.m_tHitRefs;
+	uint64_t uBase = 0;
+	unsigned uParts = 2;
+	if ( tStream.m_eCodec==Codec_e::BASE_DELTA )
+	{
+		uBase = m_dPostings[0].m_uHitRef;
+		uint64_t uMax = uBase;
+		for ( size_t i=1; i<m_iCount; ++i )
+		{
+			uBase = std::min ( uBase, m_dPostings[i].m_uHitRef );
+			uMax = std::max ( uMax, m_dPostings[i].m_uHitRef );
+		}
+
+		uParts = uMax-uBase>UINT32_MAX ? 2 : 1;
+		Append ( dOutput, uBase, 8 );
+		Append ( dOutput, uParts-1, 1 );
+		tStream = {Codec_e::PFOR};
+	}
+
+	alignas(16) std::array<uint32_t,MAX_VALUES> dValues;
+	for ( unsigned part=0; part<uParts; ++part )
+	{
+		for ( size_t i=0; i<m_iCount; ++i )
+			dValues[i] = uint32_t((m_dPostings[i].m_uHitRef-uBase)>>(32*part));
+
+		if ( !AddFrame ( tStream, dValues.data(), m_iCount, dOutput, sError ) )
+			return false;
+	}
+
+	return true;
+}
+
+
 bool Writer_c::Flush ( std::string & sError )
 {
 	if ( !m_iCount )
@@ -195,15 +233,8 @@ bool Writer_c::Flush ( std::string & sError )
 	if ( !AddFrame ( m_tDesc.m_tTF, dValues.data(), m_iCount, dColumns[2], sError ) )
 		return false;
 
-	if ( m_tDesc.m_bPositions )
-		for ( unsigned part=0; part<2; ++part )
-		{
-			for ( size_t i=0; i<m_iCount; ++i )
-				dValues[i] = uint32_t(m_dPostings[i].m_uHitRef>>(32*part));
-
-			if ( !AddFrame ( m_tDesc.m_tHitRefs, dValues.data(), m_iCount, dColumns[3], sError ) )
-				return false;
-		}
+	if ( !EncodeHitRefs ( dColumns[3], sError ) )
+		return false;
 
 	if ( m_tDesc.m_bFieldTF )
 		for ( unsigned f=0; f<m_tDesc.m_uFields; ++f )
@@ -327,6 +358,8 @@ bool Reader_c::Open ( uint64_t uOffset, std::string & sError )
 			m_bError = true;
 			return false;
 		}
+
+	assert ( m_tDesc.m_tRows.m_eCodec!=Codec_e::BASE_DELTA && m_tDesc.m_tFields.m_eCodec!=Codec_e::BASE_DELTA && m_tDesc.m_tTF.m_eCodec!=Codec_e::BASE_DELTA );
 
 	m_uEnd = Get(d.data()+24,8);
 	m_uStats = Get(d.data()+32,8);
@@ -528,15 +561,36 @@ bool Reader_c::ReadHitRefs ( std::string & sError )
 
 	m_dHitRefs.fill(0);
 	Bytes_t t = tData;
+	StreamDesc_t tStream = m_tDesc.m_tHitRefs;
+	uint64_t uBase = 0;
+	unsigned uParts = 2;
+	if ( m_tDesc.m_bPositions && tStream.m_eCodec==Codec_e::BASE_DELTA )
+	{
+		assert ( t.m_iSize>=9 && t.m_pData[8]<=1 );
+		uBase = Get ( t.m_pData, 8 );
+		uParts = 1+t.m_pData[8];
+		assert ( uBase && uBase<=INT64_MAX );
+		t.m_pData += 9;
+		t.m_iSize -= 9;
+		tStream = {Codec_e::PFOR};
+	}
+
 	alignas(16) std::array<uint32_t,MAX_VALUES> dValues;
 	if ( m_tDesc.m_bPositions )
-		for ( unsigned part=0; part<2; ++part )
+		for ( unsigned part=0; part<uParts; ++part )
 		{
-			if ( !Frame ( m_tDesc.m_tHitRefs, t, dValues.data(), m_tLeaf.m_uCount, sError ) )
+			if ( !Frame ( tStream, t, dValues.data(), m_tLeaf.m_uCount, sError ) )
 				return Fail ( sError, "invalid posting hit reference column" );
 
 			for ( unsigned i=0; i<m_tLeaf.m_uCount; ++i )
 				m_dHitRefs[i] |= uint64_t(dValues[i])<<(32*part);
+		}
+
+	if ( uBase )
+		for ( unsigned i=0; i<m_tLeaf.m_uCount; ++i )
+		{
+			assert ( m_dHitRefs[i]<=uint64_t(INT64_MAX)-uBase );
+			m_dHitRefs[i] += uBase;
 		}
 
 	assert ( !(t.m_iSize) );

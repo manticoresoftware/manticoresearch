@@ -106,15 +106,13 @@ A dictionary posting offset points to a 40-byte term header:
 
 Codec IDs are selected once per term stream; per-field TF uses the TF codec.
 Changing a registered codec selection does not require a component-version bump.
-The initial writer selects PFOR for rows/TF and FOR for masks/references.
+New output selects PFOR (2) for rows, masks and TF, and BASE_DELTA (6) for hit references. FOR/PFOR use constant and short-array modes plus unpadded varint tails. The earlier experimental padded encoding is no longer supported; existing block tables must be reindexed. The enclosing component version remains 2. Legacy-format tables are unaffected.
 
 Each 1..256-posting leaf has a 44-byte header: `BLK1`, byte length (uint32),
 posting count and field-mask word count (uint16 each), first/last row and maximum
 TF (uint32 each) and five uint32 section lengths. Sections are rows, fields, TF, hit references and per-field TF.
 Rows use the row-container grammar below. Other integer frames have a uint32
-byte-length prefix. Field masks store one frame per 32-bit mask word. Hit
-references are absolute 64-bit byte offsets into `.spp`, stored in low/high
-uint32 frames. Per-field TF contains sorted nonempty field entries `(field:uint16, frame length:uint32, integer frame)`.
+byte-length prefix. Field masks store one frame per 32-bit mask word. Hit references decode to absolute 64-bit byte offsets into `.spp`. With BASE_DELTA (6), the section stores a little-endian uint64 base (minimum reference in the leaf), then a one-byte flag (bit 0: high parts present; other bits zero), then a length-prefixed PFOR low-32-bit frame and, only when needed, a PFOR high-32-bit frame. Frames contain offsets relative to the base. All relative offsets fit in uint32 in the common case, even when the base exceeds 4 GiB. The reader adds the base to reconstruct the same stable absolute bookmarks. Unordered references and spans above 4 GiB are supported. Codecs 1-4 in this section use the two-frame absolute low/high layout; ID 6 is valid only for hit-reference sections, not ordinary integer/row streams. Per-field TF contains sorted nonempty field entries `(field:uint16, frame length:uint32, integer frame)`.
 
 The footer contains `(document count:uint64, summed TF:uint64)` per field.
 Hitless terms store membership counts and zero field TF.
@@ -180,12 +178,12 @@ normalization only; original copyright/license notices remain intact.
 Select the integer codec once per encoded posting stream (rows, field masks,
 TF or hit references). These frames do not describe `.spp` hitlists. The M1
 descriptor is one little-endian uint16 codec ID:
-FOR=1, PFOR=2, VARINT=3, CONSTANT=4; zero and unknown IDs are errors.
+FOR=1, PFOR=2, VARINT=3, CONSTANT=4; zero and unknown IDs are errors. BASE_DELTA=6 is reserved for the hit-reference section grammar described above.
 Read this descriptor once and pass the resulting StreamDesc_t to every block
 operation. It is not prepended to every frame. The term metadata above identifies the stream kind, boundaries and descriptor location.
 
 Changing the selected registered codec changes the stream descriptor, not the
-index/component format version. Each ID specifies a stable codec byte grammar;
+index/component format version. After publication, each ID specifies a stable codec byte grammar;
 a future incompatible codec grammar gets a new ID and decoder, while existing
 IDs remain readable. An older reader that does not implement a required ID
 rejects that stream explicitly. This does not promise that old binaries can
@@ -198,22 +196,22 @@ publication. No codec ID or codec override is present in an integer frame:
 
 | Offset | Bytes | Meaning |
 |---|---|---|
-| 0 | 1 | Packed width, 0..32; zero for VARINT/CONSTANT |
+| 0 | 1 | FOR/PFOR: width 0..32, constant mode 33, short-array mode 34; zero for VARINT/CONSTANT |
 | 1 | 1 | Exception count, 0..7; zero except PFOR |
 | 2 | 2 | Value count |
 | 4 | 2 | Payload byte length |
 | 6 | variable | Payload |
 
-FOR/PFOR payloads contain `ceil(count/128)` packing frames. Each frame has four
+FOR/PFOR packed payloads contain `floor(count/128)` packing frames, followed by exceptions (PFOR only) and a varint tail. Each frame has four
 interleaved lanes of 32 values: lane L contains input indices `L+4*j` for j=0..31.
 Pack each lane's low `width` bits in increasing j order, least significant bits
 first. Output words interleave the lanes: word `4*k+L` is word k of lane L.
 Serialize each word little-endian. Each 128-value frame occupies `16*width`
-bytes. Unused values in a short frame must be zero. Width zero has no packed
+bytes. No unused slots are stored. Width zero has no packed
 payload; width 32 preserves all bits. Neither layout nor bytes depend on CPU ISA.
 
 PFOR appends exception pairs `(ordinal:u8, high_bits:u8)` in strictly increasing
-ordinal order across the complete block. Patch `value |= high_bits << width`.
+ordinal order across the packed prefix. Patch `value |= high_bits << width`.
 High bits must be nonzero and fit the remaining 32-bit value; width 32 cannot
 have exceptions. Width selection minimizes payload size subject to these
 constraints. More than seven exceptions, or high parts exceeding eight bits,
@@ -223,21 +221,29 @@ The integer-frame VARINT codec is canonical unsigned LEB128, at most five
 bytes/value, with no redundant zero final group. It is distinct from the
 big-endian packed-hit varints used in `.spp`. CONSTANT stores one uint32 per block; it requires every
 value within that block to be equal, but the constant can differ between blocks.
-Blocks cannot independently switch codecs. In M1, a short packed block uses
-zero-padded packing frames under the same stream codec; any future special
-constant/tail modes must be part of a registered codec's specified grammar,
-not an unrecorded change of decoder.
+Blocks cannot independently switch codecs. The constant/short-array modes and
+varint tails below are part of the FOR/PFOR grammar.
 
 InspectIntegers validates counts, lengths, widths, exceptions, canonical
-varints and packed tail padding using the supplied stream descriptor.
+varints and tail lengths using the supplied stream descriptor.
 DecodeIntegersInto trusts the supplied frame, with validation in debug assertions
 only, and requires disjoint input/output ranges. The checker calls InspectIntegers
-before decoding. Full aligned outputs avoid a decoded scratch copy; short tails
-and unaligned outputs use bounded scratch so the API writes exactly the declared
+before decoding. Full aligned outputs avoid a decoded scratch copy; unaligned packed outputs
+use bounded scratch and varint tails decode directly so the API writes exactly the declared
 count. Encoded input needs no alignment or extra padding. DecodeIntegers retains
 overlap support through a scratch-buffer wrapper; the source must not be changed
 concurrently. DecodeRowsInto and DecodeRows provide the same respective contracts
 for row containers.
+
+### FOR/PFOR constant, short-array and tail modes
+
+The six-byte integer header is retained. Its first byte is either a packed width 0..32, CONSTANT=33, or VARINT=34. The second byte is the exception count; bytes 2..3 are the total value count, and bytes 4..5 are the complete payload length.
+
+- CONSTANT: one canonical uint32 LEB128 value, repeated `count` times. Exception count is zero. Applies at any count, including full blocks.
+- VARINT: `count` canonical uint32 LEB128 values for a non-packed array shorter than 128. Exception count is zero.
+- Width 0..32: pack `floor(count/128)*128` values using the packing layout above (FOR without exceptions, PFOR with optional exceptions). Exceptions refer only to that packed prefix. Append `count%128` canonical uint32 LEB128 values after the exceptions. No unused packed slots are written. Width zero is valid for an all-zero packed prefix with optional exceptions.
+
+Counts remain 1..256. Selection belongs to the FOR/PFOR grammar; no per-block codec ID is added. The earlier padded FOR/PFOR grammar and experimental codec ID 5 have been removed. Membership, TF, field masks and hit references remain independently readable. Singleton dictionary framing and inline position hits are not part of this change.
 
 ## Row container
 

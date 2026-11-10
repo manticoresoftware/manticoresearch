@@ -1,8 +1,9 @@
 # Search prebuilt googletest. If nothing found - download, unpack, build and then search again
 # allow to get googletest from bundle also (instead of download)
 
-set ( GTEST_GITHUB "https://github.com/google/googletest/archive/main.zip" )
-set ( GTEST_ZIP "googletest-master.zip" ) # that is default filename if you download GTEST_GITHUB using browser
+# Keep the fallback compatible with the Windows CI toolchain.
+set ( GTEST_GITHUB "https://github.com/google/googletest/archive/refs/tags/v1.17.0.zip" )
+set ( GTEST_ZIP "googletest-1.17.0.zip" )
 set ( GTEST_URL "${LIBS_BUNDLE}/${GTEST_ZIP}" )
 
 if (TARGET GTest::gmock_main)

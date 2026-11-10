@@ -23,7 +23,7 @@ constexpr size_t ROW_HEADER_SIZE = 20;
 constexpr size_t MAX_BITMAP_BITS = 8192;
 
 // Experimental IDs, isolated from all existing on-disk index formats.
-enum class Codec_e : uint16_t { INVALID = 0, FOR = 1, PFOR = 2, VARINT = 3, CONSTANT = 4 };
+enum class Codec_e : uint16_t { INVALID = 0, FOR = 1, PFOR = 2, VARINT = 3, CONSTANT = 4, BASE_DELTA = 6 };
 enum class Rows_e : uint8_t { AUTO = 0, DELTA = 1, BITMAP = 2, RANGE = 3 };
 enum class Backend_e { AUTO, SCALAR, SIMD };
 

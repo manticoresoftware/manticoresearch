@@ -28,9 +28,9 @@ constexpr size_t COLUMNS = size_t(Column_e::COUNT);
 struct TermDesc_t
 {
 	StreamDesc_t	m_tRows { Codec_e::PFOR };
-	StreamDesc_t	m_tFields { Codec_e::FOR };
+	StreamDesc_t	m_tFields { Codec_e::PFOR };
 	StreamDesc_t	m_tTF { Codec_e::PFOR };
-	StreamDesc_t	m_tHitRefs { Codec_e::FOR };
+	StreamDesc_t	m_tHitRefs { Codec_e::BASE_DELTA };
 
 	uint16_t	m_uFields = 0;
 	bool		m_bPositions = true;
@@ -102,6 +102,7 @@ public:
 
 private:
 	bool	Flush ( std::string & sError );
+	bool	EncodeHitRefs ( std::vector<uint8_t> & dOutput, std::string & sError ) const;
 
 	Output_i &	m_tOutput;
 	TermDesc_t	m_tDesc;

@@ -33,7 +33,7 @@ public:
 
 private:
 	int						DrainDecodedRows ( uint64_t uEnd, RowID_t * pRows, int iCapacity );
-	const RowID_t *			FindDecodedRow ( RowID_t tRow, unsigned iHint ) const;
+	const uint32_t *			FindDecodedRow ( RowID_t tRow, unsigned iHint ) const;
 	void					BuildBitmapOrdinals();
 	bool					CheckContinue();
 	bool					LoadLeaf ( RowID_t tMin );
@@ -599,7 +599,7 @@ int BlockPostingWindow_T<MAPPED>::ReadRows ( const PostingWindow_t & tWindow, Ro
 
 // Reuse a known ordinal when it still identifies the requested row.
 template<bool MAPPED>
-const RowID_t * BlockPostingWindow_T<MAPPED>::FindDecodedRow ( RowID_t tRow, unsigned iHint ) const
+const uint32_t * BlockPostingWindow_T<MAPPED>::FindDecodedRow ( RowID_t tRow, unsigned iHint ) const
 {
 	const auto & dRows = m_tReader.GetRows();
 	if ( iHint<m_tBlock.m_uCount && dRows[iHint]==tRow )
@@ -639,14 +639,14 @@ int BlockPostingWindow_T<MAPPED>::FilterRows ( RowID_t * pRows, int iCount )
 	} else
 	{
 		const auto & dRows = m_tReader.GetRows();
-		const auto pEnd = dRows.begin()+m_tBlock.m_uCount;
+		const auto pEnd = dRows.data()+m_tBlock.m_uCount;
 		auto pRow = FindDecodedRow ( pRows[0], m_iPos );
 		for ( int i=0; i<iCount; ++i )
 		{
 			while ( pRow!=pEnd && *pRow<pRows[i] )
 				++pRow;
 
-			if ( pRow!=pEnd && *pRow==pRows[i] && (m_bAllFields || (m_dFields[pRow-dRows.begin()] & m_uFields)) )
+			if ( pRow!=pEnd && *pRow==pRows[i] && (m_bAllFields || (m_dFields[pRow-dRows.data()] & m_uFields)) )
 			{
 				if ( !iOut )
 					m_iPayloadPos = unsigned(pRow-dRows.data());
@@ -700,11 +700,11 @@ bool BlockPostingWindow_T<MAPPED>::ReadPayloads ( const RowID_t * pRows, int iCo
 		auto pRow = FindDecodedRow ( pRows[0], m_iPayloadPos );
 		for ( int i=0; i<iCount; ++i )
 		{
-			while ( pRow!=dRows.begin()+m_tBlock.m_uCount && *pRow<pRows[i] )
+			while ( pRow!=dRows.data()+m_tBlock.m_uCount && *pRow<pRows[i] )
 				++pRow;
 
-			assert ( pRow!=dRows.begin()+m_tBlock.m_uCount && *pRow==pRows[i] );
-			Store ( i, unsigned(pRow-dRows.begin()) );
+			assert ( pRow!=dRows.data()+m_tBlock.m_uCount && *pRow==pRows[i] );
+			Store ( i, unsigned(pRow-dRows.data()) );
 		}
 
 		m_iPayloadPos = unsigned(pRow-dRows.data())+1;

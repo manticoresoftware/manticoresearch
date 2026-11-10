@@ -1810,26 +1810,51 @@ WindowNode_i * CreateWindowAndCountNode ( const XQNode_t * pNode, const ISphQwor
 }
 
 
+static bool CollectWindowQuorumWords ( const XQNode_t & tNode, CSphVector<ExtWindowQuorum_c::Leaf_t> & dLeaves )
+{
+	if ( tNode.GetCount() || tNode.m_bVirtuallyPlain || tNode.m_bNotWeighted || !tNode.dChildren().IsEmpty()
+		|| tNode.m_dSpec.m_iFieldMaxPos || tNode.m_dSpec.m_bZoneSpan || !tNode.m_dSpec.m_dZones.IsEmpty() )
+		return false;
+
+	for ( const auto & tWord : tNode.dWords() )
+	{
+		if ( tWord.m_bFieldStart || tWord.m_bFieldEnd || tWord.m_pPayload || tWord.m_bExpanded || tWord.m_bExcluded
+			|| tWord.m_bRegex || tWord.m_iBlendedGroup!=-1 || tWord.m_sWord.IsEmpty() )
+			return false;
+
+		dLeaves.Add ( { &tWord, tNode.m_dSpec.m_dFieldMask.GetMask32() } );
+	}
+
+	return true;
+}
+
+
 WindowNode_i * CreateWindowQuorumCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds )
 {
-	if ( pNode->GetOp()!=SPH_QUERY_QUORUM || pNode->GetCount() || pNode->m_bVirtuallyPlain || pNode->m_bNotWeighted
-		|| !pNode->dChildren().IsEmpty() || pNode->m_dSpec.m_iFieldMaxPos || pNode->m_dSpec.m_bZoneSpan || !pNode->m_dSpec.m_dZones.IsEmpty()
+	if ( pNode->GetOp()!=SPH_QUERY_QUORUM || pNode->GetCount() || pNode->m_bNotWeighted
+		|| pNode->m_dSpec.m_iFieldMaxPos || pNode->m_dSpec.m_bZoneSpan || !pNode->m_dSpec.m_dZones.IsEmpty()
 		|| !tSetup.m_pIndex || tSetup.m_pIndex->GetMatchSchema().GetFieldsCount()>32 || tSetup.m_pIndex->GetSettings().m_eHitless!=SPH_HITLESS_NONE )
 		return nullptr;
 
-	int iTerms = pNode->dWords().GetLength();
+	int iTerms = pNode->dChildren().IsEmpty() ? pNode->dWords().GetLength() : pNode->dChildren().GetLength();
 	int iThreshold = ExtQuorum_c::GetThreshold ( *pNode, iTerms );
 	if ( iTerms>32 || iThreshold<2 || iThreshold>=iTerms )
 		return nullptr;
 
 	CSphVector<ExtWindowQuorum_c::Leaf_t> dLeaves;
-	for ( const auto & tWord : pNode->dWords() )
+	if ( pNode->dChildren().IsEmpty() )
 	{
-		if ( tWord.m_bFieldStart || tWord.m_bFieldEnd || tWord.m_pPayload || tWord.m_bExpanded || tWord.m_bExcluded
-			|| tWord.m_bRegex || tWord.m_iBlendedGroup!=-1 || tWord.m_sWord.IsEmpty() )
+		if ( !CollectWindowQuorumWords ( *pNode, dLeaves ) )
+			return nullptr;
+	} else
+	{
+		if ( !pNode->dWords().IsEmpty() )
 			return nullptr;
 
-		dLeaves.Add ( { &tWord, pNode->m_dSpec.m_dFieldMask.GetMask32() } );
+		// Expansion can wrap ordinary words in child nodes without expanding them.
+		for ( const XQNode_t * pChild : pNode->dChildren() )
+			if ( pChild->GetOp()!=SPH_QUERY_AND || pChild->dWords().GetLength()!=1 || !CollectWindowQuorumWords ( *pChild, dLeaves ) )
+				return nullptr;
 	}
 
 	auto pQuorum = std::make_unique<ExtWindowQuorum_c> ( dLeaves, tSetup, pBounds, iThreshold );

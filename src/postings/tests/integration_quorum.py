@@ -71,9 +71,9 @@ def main():
                 "alpha gamma beta", "beta gamma", "common gamma alpha beta",
                 "alpha beta " * 80, "common alpha", "gamma beta alpha"]
 
-    for case in ["plain", "wide_stop", "hitless"]:
+    for case in ["plain", "infix", "wide_stop", "hitless"]:
         fields = ["title", "body"] + (["f" + str(i) for i in range(34)] if case == "wide_stop" else [])
-        options = "min_prefix_len='2'" + (" stopwords='" + args.stopwords + "'" if case == "wide_stop" else "")
+        options = ("min_infix_len='2'" if case == "infix" else "min_prefix_len='2'") + (" stopwords='" + args.stopwords + "'" if case == "wide_stop" else "")
         if case == "hitless":
             options += " hitless_words='all'"
         tables = [args.prefix + "_" + case + "_" + fmt for fmt in ["legacy", "block"]]
@@ -93,7 +93,7 @@ def main():
             case_queries = [q for q in case_queries if 'ranker=expr' not in q]
 
         def compare(stage):
-            if args.expect_windows and case == "plain" and stage in ["mixed", "disk", "merged"]:
+            if args.expect_windows and case in ["plain", "infix"] and stage in ["mixed", "disk", "merged"]:
                 for table in tables:
                     result = sql("SELECT count(*) FROM " + table + " WHERE MATCH('\"alpha beta gamma common\"/2') OPTION threads=1; SHOW META", 1)
                     meta = {x["Variable_name"]: x["Value"] for x in result["data"]}

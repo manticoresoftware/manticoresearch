@@ -608,6 +608,26 @@ SelectIteratorCtx_t::SelectIteratorCtx_t ( const CSphQuery & tQuery, const CSphV
 {}
 
 
+static bool JsonSIFilterFits ( const SIContainer_c & tSI, const CSphFilterSettings & tFilter )
+{
+	if ( tFilter.m_eType==SPH_FILTER_NULL )
+		return true;
+
+	common::AttrType_e eType;
+	if ( !tSI.GetAttrType ( tFilter.m_sAttrName, eType ) )
+		return true;
+
+	switch ( eType )
+	{
+	case common::AttrType_e::UINT32:
+	case common::AttrType_e::INT64:		return tFilter.m_eType==SPH_FILTER_VALUES || tFilter.m_eType==SPH_FILTER_RANGE;
+	case common::AttrType_e::FLOAT:		return tFilter.m_eType==SPH_FILTER_FLOATRANGE;	// the index turns an int range into a float32 one and leaves several int values as they are
+	case common::AttrType_e::STRING:	return tFilter.m_eType==SPH_FILTER_STRING || tFilter.m_eType==SPH_FILTER_STRING_LIST;
+	default:							return false;
+	}
+}
+
+
 bool SelectIteratorCtx_t::IsEnabled_SI ( const CSphFilterSettings & tFilter ) const
 {
 	if ( m_tSI.IsEmpty() )
@@ -634,6 +654,11 @@ bool SelectIteratorCtx_t::IsEnabled_SI ( const CSphFilterSettings & tFilter ) co
 	if ( pCol && pCol->m_eAttrType==SPH_ATTR_STRING && tFilter.m_eType==SPH_FILTER_STRING_LIST && tFilter.m_eMvaFunc!=SPH_MVAFUNC_NONE )
 		return false;
 
+	// json keys get their secondary index column type from the chunk data (the widest type of the key),
+	// so the filter type is not adapted to it: use the index only when the column answers this filter type
+	if ( ( !pCol || pCol->m_eAttrType==SPH_ATTR_JSON ) && !JsonSIFilterFits ( m_tSI, tFilter ) )
+		return false;
+
 	return m_tSI.IsEnabled ( tFilter.m_sAttrName );
 }
 
@@ -642,6 +667,10 @@ bool SelectIteratorCtx_t::IsEnabled_Analyzer ( const CSphFilterSettings & tFilte
 {
 	// columnar string analyzers only support equality comparisons
 	if ( tFilter.m_eType==SPH_FILTER_STRING && tFilter.m_eStrCmpDir!=EStrCmpDir::EQ )
+		return false;
+
+	// they also compare whole strings, while ANY() / ALL() over a string list match words
+	if ( tFilter.m_eType==SPH_FILTER_STRING_LIST && tFilter.m_eMvaFunc!=SPH_MVAFUNC_NONE )
 		return false;
 
 	auto pAttr = m_tIndexSchema.GetAttr ( tFilter.m_sAttrName.cstr() );

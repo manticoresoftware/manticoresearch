@@ -64,6 +64,7 @@ manticore-executor -v
 PHP %{VERSION} (cli) (built: #!/[a-zA-Z]{3}/!# #!/[0-9]{1,2}/!# %{YEAR} %{TIME}) (NTS)
 Copyright (c) The PHP Group
 Zend Engine %{VERSION}, Copyright (c) Zend Technologies
+    with Zend OPcache v%{VERSION}, Copyright (c), by Zend Technologies
 ––– block: start-searchd-dev –––
 ––– block: check-searchd-process –––
 ––– block: check-backup –––

@@ -141,9 +141,9 @@ runs:
           semver_new=$(echo "$version_string" | grep -o '^[0-9][0-9.]*')
         fi
         
-        # Check if semver versions are the same
-        if [ "${{ steps.commit.outputs.semver_original }}" = "$semver_new" ]; then
-          echo "Semver versions are the same ($semver_new), skipping update"
+        # Compare the full build version, not just SemVer.
+        if [ "${{ steps.commit.outputs.original_version }}" = "$version_string" ]; then
+          echo "Full version is unchanged ($version_string), skipping update"
           echo "version_string=${version_string// /-}" >> $GITHUB_OUTPUT
           echo "semver_new=$semver_new" >> $GITHUB_OUTPUT
           echo "skip_update=true" >> $GITHUB_OUTPUT
@@ -189,11 +189,17 @@ runs:
         semver_original="${{ steps.commit.outputs.semver_original }}"
         semver_new="${{ steps.deps.outputs.semver_new }}"
         
-        # Updated title to include version change information
-        title="🆕 Update ${name} version from ${semver_original} to ${semver_new}"
-        commit="Bump ${name} version from ${semver_original} to ${semver_new}"
+        # Use the exact build identity when the semantic version stays the same.
         body_path=$(mktemp)
-        echo "Update [${name}](${repo_url}) version from ${semver_original} to ${semver_new} which includes:" > "$body_path"
+        if [ "$semver_original" = "$semver_new" ]; then
+          title="🆕 Update ${name} build to ${version_string}"
+          commit="Bump ${name} build to ${version_string}"
+          echo "Update [${name}](${repo_url}) build to ${version_string} which includes:" > "$body_path"
+        else
+          title="🆕 Update ${name} version from ${semver_original} to ${semver_new}"
+          commit="Bump ${name} version from ${semver_original} to ${semver_new}"
+          echo "Update [${name}](${repo_url}) version from ${semver_original} to ${semver_new} which includes:" > "$body_path"
+        fi
         echo >> "$body_path"
         echo "$changes" >> "$body_path"
 

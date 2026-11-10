@@ -1,0 +1,68 @@
+––– comment –––
+Plain numeric filters (=, IN, !=, NOT IN, ranges; SQL and HTTP) on a JSON key, without secondary indexes.
+- Keys i / f, docs 1..14: an array matches when any element matches as a scalar of the same type would, like MVA
+  and JSON string arrays; != and NOT IN match when no element does. Scalars keep their old behaviour (numeric
+  strings, doubles and true are converted as before), a missing key never matches. Before the fix an array was
+  read as 0, so j.i = 2 never matched [2] and j.i < 2 matched every array.
+- Key d, docs 21..28: an integer constant must compare a double value as a double. It used to cut the value to an
+  integer, so j.d > 1 missed 1.5, while j.d = 2 matched 2.5 and j.d <= 1 matched 1.5. Integers keep the exact
+  integer comparison, and a double beyond the int64 range matches an open range (j.d > 1 has no upper bound).
+  Docs d: 21=1.5, 22=2.5, 23=2.0, 24=1, 25="1.5", 26=[1.5], 27=10000000001, 28=0.5, 29=-1e30, 30=1e30.
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS json_num; CREATE TABLE json_num (j JSON); INSERT INTO json_num VALUES (1,'{\"i\":[1,2],\"f\":[1.5,2.5]}'), (2,'{\"i\":[2],\"f\":[2.5]}'), (3,'{\"i\":[3],\"f\":[3.5]}'), (4,'{\"i\":[],\"f\":[]}'), (5,'{\"i\":[1,2,3],\"f\":[1.5,2.5,3.5]}'), (6,'{\"i\":[2,2],\"f\":[2.5,2.5]}'), (7,'{}'), (8,'{\"i\":2,\"f\":2.5}'), (9,'{\"i\":3,\"f\":3.5}'), (10,'{\"i\":\"2\"}'), (11,'{\"i\":2.0}'), (12,'{\"i\":[1,\"2\"]}'), (13,'{\"i\":true}'), (14,'{\"i\":[10000000002]}'), (21,'{\"d\":1.5}'), (22,'{\"d\":2.5}'), (23,'{\"d\":2.0}'), (24,'{\"d\":1}'), (25,'{\"d\":\"1.5\"}'), (26,'{\"d\":[1.5]}'), (27,'{\"d\":10000000001}'), (28,'{\"d\":0.5}'), (29,'{\"d\":-1e30}'), (30,'{\"d\":1e30}');" && echo ready
+––– output –––
+ready
+––– input –––
+cat > /tmp/json_num.php <<'PHP'
+<?php
+function post ( $sUrl, $sBody, $sType ) {
+	$tCtx = stream_context_create ( [ 'http' => [ 'method' => 'POST', 'header' => "Content-Type: $sType", 'content' => $sBody, 'ignore_errors' => true ] ] );
+	return json_decode ( file_get_contents ( $sUrl, false, $tCtx ), true );
+}
+function ids ( $dRows, $sKey ) {
+	$dIds = array_map ( 'intval', array_column ( $dRows, $sKey ) );
+	sort ( $dIds );
+	return $dIds;
+}
+foreach ( [ "j.i = 2", "j.i IN (1,2)", "j.i != 2", "j.i NOT IN (1,2)", "j.i > 1", "j.i < 2", "j.i BETWEEN 2 AND 3", "j.i = 10000000002", "j.f = 2.5", "j.f > 2.0", "j.f BETWEEN 2.0 AND 3.0", "j.f < 2.0",
+	"j.d > 1", "j.d = 2", "j.d IN (1,2)", "j.d BETWEEN 1 AND 2", "j.d <= 1", "j.d != 2", "j.d > 10000000000" ] as $sWhere ) {
+	$dRes = post ( 'http://localhost:9308/sql?mode=raw', http_build_query ( [ 'query' => "SELECT id FROM json_num WHERE $sWhere" ] ), 'application/x-www-form-urlencoded' );
+	echo json_encode ( [ 'sql' => $sWhere, 'ids' => empty ( $dRes[0]['error'] ) ? ids ( $dRes[0]['data'], 'id' ) : $dRes[0]['error'] ] ), PHP_EOL;
+}
+foreach ( [ [ 'must', [ 'equals' => [ 'j.i' => 2 ] ] ], [ 'must', [ 'in' => [ 'j.i' => [ 1, 2 ] ] ] ], [ 'must_not', [ 'equals' => [ 'j.i' => 2 ] ] ], [ 'must', [ 'range' => [ 'j.i' => [ 'lt' => 2 ] ] ] ],
+	[ 'must', [ 'range' => [ 'j.d' => [ 'gt' => 1 ] ] ] ], [ 'must', [ 'equals' => [ 'j.d' => 2 ] ] ] ] as [ $sOccur, $tCond ] ) {
+	$dRes = post ( 'http://localhost:9308/search', json_encode ( [ 'table' => 'json_num', 'query' => [ 'bool' => [ $sOccur => [ $tCond ] ] ], 'limit' => 100 ] ), 'application/json' );
+	echo json_encode ( [ 'http' => [ $sOccur => $tCond ], 'ids' => isset ( $dRes['hits'] ) ? ids ( $dRes['hits']['hits'], '_id' ) : $dRes ] ), PHP_EOL;
+}
+PHP
+php /tmp/json_num.php
+––– output –––
+{"sql":"j.i = 2","ids":[1,2,5,6,8,10,11,12]}
+{"sql":"j.i IN (1,2)","ids":[1,2,5,6,8,10,11,12,13]}
+{"sql":"j.i != 2","ids":[3,4,9,13,14]}
+{"sql":"j.i NOT IN (1,2)","ids":[3,4,9,14]}
+{"sql":"j.i > 1","ids":[1,2,3,5,6,8,9,10,11,12,14]}
+{"sql":"j.i < 2","ids":[1,5,12,13]}
+{"sql":"j.i BETWEEN 2 AND 3","ids":[1,2,3,5,6,8,9,10,11,12]}
+{"sql":"j.i = 10000000002","ids":[14]}
+{"sql":"j.f = 2.5","ids":[1,2,5,6,8]}
+{"sql":"j.f > 2.0","ids":[1,2,3,5,6,8,9]}
+{"sql":"j.f BETWEEN 2.0 AND 3.0","ids":[1,2,5,6,8]}
+{"sql":"j.f < 2.0","ids":[1,5]}
+{"sql":"j.d > 1","ids":[21,22,23,25,26,27,30]}
+{"sql":"j.d = 2","ids":[23]}
+{"sql":"j.d IN (1,2)","ids":[23,24]}
+{"sql":"j.d BETWEEN 1 AND 2","ids":[21,23,24,25,26]}
+{"sql":"j.d <= 1","ids":[24,28,29]}
+{"sql":"j.d != 2","ids":[21,22,24,25,26,27,28,29,30]}
+{"sql":"j.d > 10000000000","ids":[27,30]}
+{"http":{"must":{"equals":{"j.i":2}}},"ids":[1,2,5,6,8,10,11,12]}
+{"http":{"must":{"in":{"j.i":[1,2]}}},"ids":[1,2,5,6,8,10,11,12,13]}
+{"http":{"must_not":{"equals":{"j.i":2}}},"ids":[3,4,9,13,14]}
+{"http":{"must":{"range":{"j.i":{"lt":2}}}},"ids":[1,5,12,13]}
+{"http":{"must":{"range":{"j.d":{"gt":1}}}},"ids":[21,22,23,25,26,27,30]}
+{"http":{"must":{"equals":{"j.d":2}}},"ids":[23]}
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE json_num;"; rm -f /tmp/json_num.php
+––– output –––

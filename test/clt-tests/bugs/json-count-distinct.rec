@@ -1,0 +1,44 @@
+––– comment –––
+COUNT(DISTINCT j.key) must count like the same key through an alias (SELECT j.key AS x, COUNT(DISTINCT x)):
+nulls and missing keys are skipped, strings are compared with case, array elements are counted one by one.
+Without an alias it returned 0 (the column was set up for JOIN queries only), and with no filters on a table with
+a JSON secondary index the secondary index counted a null as 0 and strings without case.
+Docs: 1 k=1 s=a a=[1,2]; 2 k=2 s=b a=[1,2]; 3 k=2 s=B a=[3]; 4 k=null a=[]; 5 no keys.
+Table si_cd also has 9995 padding docs equal to doc 1 and a JSON secondary index; table plain_cd has only docs 1..5.
+––– block: ../base/start-searchd –––
+––– input –––
+manticore-load --quiet --json --port=9306 --init="SET GLOBAL auto_optimize=0; DROP TABLE IF EXISTS si_cd; CREATE TABLE si_cd (u int, j JSON secondary_index='1');" --load="INSERT INTO si_cd (id,u,j) VALUES (<increment>,1,'{\"k\":1,\"s\":\"a\",\"a\":[1,2]}')" --batch-size=1000 --threads=2 --total=10000 > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "REPLACE INTO si_cd VALUES (2,1,'{\"k\":2,\"s\":\"b\",\"a\":[1,2]}'), (3,2,'{\"k\":2,\"s\":\"B\",\"a\":[3]}'), (4,2,'{\"k\":null,\"a\":[]}'), (5,3,'{}'); FLUSH RAMCHUNK si_cd; DROP TABLE IF EXISTS plain_cd; CREATE TABLE plain_cd (u int, j JSON); INSERT INTO plain_cd (id,u,j) VALUES (1,1,'{\"k\":1,\"s\":\"a\",\"a\":[1,2]}'), (2,1,'{\"k\":2,\"s\":\"b\",\"a\":[1,2]}'), (3,2,'{\"k\":2,\"s\":\"B\",\"a\":[3]}'), (4,2,'{\"k\":null,\"a\":[]}'), (5,3,'{}');" && echo ready
+––– output –––
+ready
+––– input –––
+cat > /tmp/json_cd.php <<'PHP'
+<?php
+function run ( $sQuery ) {
+	$tCtx = stream_context_create ( [ 'http' => [ 'method' => 'POST', 'header' => 'Content-Type: application/x-www-form-urlencoded', 'content' => http_build_query ( [ 'query' => $sQuery ] ) ] ] );
+	$dRes = json_decode ( file_get_contents ( 'http://localhost:9308/sql?mode=raw', false, $tCtx ), true );
+	if ( !empty ( $dRes[0]['error'] ) )
+		return $dRes[0]['error'];
+	return array_map ( fn ( $tRow ) => (int)$tRow['c'], $dRes[0]['data'] );
+}
+foreach ( [ 'k', 's', 'a' ] as $sKey )
+	echo json_encode ( [
+		'key' => "j.$sKey",
+		'no filter, json SI' => run ( "SELECT COUNT(DISTINCT j.$sKey) c FROM si_cd" ),
+		'no filter, no SI' => run ( "SELECT COUNT(DISTINCT j.$sKey) c FROM plain_cd" ),
+		'where' => run ( "SELECT COUNT(DISTINCT j.$sKey) c FROM si_cd WHERE id>0" ),
+		'group by u' => run ( "SELECT u, COUNT(DISTINCT j.$sKey) c FROM plain_cd GROUP BY u ORDER BY u ASC" ),
+		'alias' => run ( "SELECT j.$sKey AS x, COUNT(DISTINCT x) c FROM si_cd" ),
+	] ), PHP_EOL;
+PHP
+php /tmp/json_cd.php
+––– output –––
+{"key":"j.k","no filter, json SI":[2],"no filter, no SI":[2],"where":[2],"group by u":[2,1,0],"alias":[2]}
+{"key":"j.s","no filter, json SI":[3],"no filter, no SI":[3],"where":[3],"group by u":[2,1,0],"alias":[3]}
+{"key":"j.a","no filter, json SI":[3],"no filter, no SI":[3],"where":[3],"group by u":[2,1,0],"alias":[3]}
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE si_cd; DROP TABLE plain_cd;"; rm -f /tmp/json_cd.php
+––– output –––

@@ -53,6 +53,9 @@ static int CollateLibcCI ( ByteBlob_t dStr1, ByteBlob_t dStr2, bool bDataPtr )
 	return iRes ? iRes : ( dStr1.second-dStr2.second );
 }
 
+/// libc_ci hash LUT, tolower() of every byte (filled by sphCollationInit)
+static BYTE g_dLowerLibcCI[0x100];
+
 /// libc_cs, wrapper for strcoll
 static int CollateLibcCS ( ByteBlob_t dStr1, ByteBlob_t dStr2, bool bDataPtr )
 {
@@ -265,6 +268,10 @@ void sphCollationInit()
 
 	for ( int i=0; i<0x0b; i++ )
 		g_dCollPlanes_UTF8CI [ dWeightPlane[i] ] = g_dCollWeights_UTF8CI + 0x100*i;
+
+	// the libc_ci hash reads this table instead of calling tolower() for every byte
+	for ( int i=0; i<0x100; i++ )
+		g_dLowerLibcCI[i] = (BYTE) tolower(i);
 }
 
 
@@ -353,13 +360,11 @@ uint64_t LibcCSHash_fn::Hash ( const BYTE * pStr, int iLen, uint64_t uPrev )
 uint64_t LibcCIHash_fn::Hash ( const BYTE * pStr, int iLen, uint64_t uPrev )
 {
 	assert ( pStr && iLen );
+	assert ( g_dLowerLibcCI['A']=='a' && "sphCollationInit() was not called" );
 
 	uint64_t uAcc = uPrev;
 	while ( iLen-- )
-	{
-		int iChar = tolower ( *pStr++ );
-		uAcc = sphFNV64_4x ( iChar, uAcc );
-	}
+		uAcc = sphFNV64_4x ( g_dLowerLibcCI[*pStr++], uAcc );
 
 	return uAcc;
 }

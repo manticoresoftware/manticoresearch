@@ -1,0 +1,72 @@
+––– comment –––
+ALL() with one value on a columnar MVA matched an empty MVA (row-wise MVA does not, and neither do ALL() with
+several values or ranges): ALL(tags) = 2 returned the empty doc, ANY(tags) != 2 (NOT ALL(tags) = 2) dropped it.
+Columnar MVA and MVA64 must give the row-wise results in a RAM chunk and a disk chunk, with and without the
+ColumnarScan hint, in SQL and HTTP. Docs: 1 (1,2), 2 (2), 3 (3), 4 () empty, 5 (1,2,3), 6 (2,2).
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS mva_row; DROP TABLE IF EXISTS mva_col; CREATE TABLE mva_row (tags multi, tags64 multi64); CREATE TABLE mva_col (tags multi, tags64 multi64) engine='columnar'; INSERT INTO mva_row VALUES (1,(1,2),(1,2)), (2,(2),(2)), (3,(3),(3)), (4,(),()), (5,(1,2,3),(1,2,3)), (6,(2,2),(2,2)); INSERT INTO mva_col VALUES (1,(1,2),(1,2)), (2,(2),(2)), (3,(3),(3)), (4,(),()), (5,(1,2,3),(1,2,3)), (6,(2,2),(2,2));" && echo ready
+––– output –––
+ready
+––– input –––
+cat > /tmp/mva_all.php <<'PHP'
+<?php
+function post ( $sUrl, $sBody, $sType ) {
+	$tCtx = stream_context_create ( [ 'http' => [ 'method' => 'POST', 'header' => "Content-Type: $sType", 'content' => $sBody, 'ignore_errors' => true ] ] );
+	return json_decode ( file_get_contents ( $sUrl, false, $tCtx ), true );
+}
+function sql ( $sQuery ) {
+	$dRes = post ( 'http://localhost:9308/sql?mode=raw', http_build_query ( [ 'query' => $sQuery ] ), 'application/x-www-form-urlencoded' );
+	return isset ( $dRes[0]['data'] ) ? array_map ( 'intval', array_column ( $dRes[0]['data'], 'id' ) ) : $dRes;
+}
+function http ( $sTable, $sOccur, $sCol ) {
+	$dRes = post ( 'http://localhost:9308/search', json_encode ( [ 'table' => $sTable, 'query' => [ 'bool' => [ $sOccur => [ [ 'equals' => [ "all($sCol)" => 2 ] ] ] ] ], 'limit' => 20, 'sort' => [ [ 'id' => 'asc' ] ] ] ), 'application/json' );
+	return isset ( $dRes['hits'] ) ? array_map ( 'intval', array_column ( $dRes['hits']['hits'], '_id' ) ) : $dRes;
+}
+$sChunk = $argv[1];
+foreach ( [ 'tags', 'tags64' ] as $sCol ) {
+	foreach ( [ "ALL($sCol) = 2", "ALL($sCol) IN (2)", "ANY($sCol) != 2", "ALL($sCol) IN (1,2)" ] as $sCond ) {
+		$dRow = sql ( "SELECT id FROM mva_row WHERE $sCond ORDER BY id ASC" );
+		$bSame = true;
+		foreach ( [ '', "/*+ NO_ColumnarScan($sCol) */", "/*+ ColumnarScan($sCol) */" ] as $sHint )
+			$bSame = $bSame && $dRow===sql ( "SELECT id FROM mva_col WHERE $sCond ORDER BY id ASC $sHint" );
+		echo json_encode ( [ 'chunk' => $sChunk, 'where' => $sCond, 'ids' => $dRow, 'columnar_same' => $bSame ] ), PHP_EOL;
+	}
+	foreach ( [ 'must', 'must_not' ] as $sOccur ) {
+		$dRow = http ( 'mva_row', $sOccur, $sCol );
+		echo json_encode ( [ 'chunk' => $sChunk, 'http' => "$sOccur equals all($sCol) 2", 'ids' => $dRow, 'columnar_same' => $dRow===http ( 'mva_col', $sOccur, $sCol ) ] ), PHP_EOL;
+	}
+}
+PHP
+php /tmp/mva_all.php ram
+––– output –––
+{"chunk":"ram","where":"ALL(tags) = 2","ids":[2,6],"columnar_same":true}
+{"chunk":"ram","where":"ALL(tags) IN (2)","ids":[2,6],"columnar_same":true}
+{"chunk":"ram","where":"ANY(tags) != 2","ids":[1,3,4,5],"columnar_same":true}
+{"chunk":"ram","where":"ALL(tags) IN (1,2)","ids":[1,2,6],"columnar_same":true}
+{"chunk":"ram","http":"must equals all(tags) 2","ids":[2,6],"columnar_same":true}
+{"chunk":"ram","http":"must_not equals all(tags) 2","ids":[1,3,4,5],"columnar_same":true}
+{"chunk":"ram","where":"ALL(tags64) = 2","ids":[2,6],"columnar_same":true}
+{"chunk":"ram","where":"ALL(tags64) IN (2)","ids":[2,6],"columnar_same":true}
+{"chunk":"ram","where":"ANY(tags64) != 2","ids":[1,3,4,5],"columnar_same":true}
+{"chunk":"ram","where":"ALL(tags64) IN (1,2)","ids":[1,2,6],"columnar_same":true}
+{"chunk":"ram","http":"must equals all(tags64) 2","ids":[2,6],"columnar_same":true}
+{"chunk":"ram","http":"must_not equals all(tags64) 2","ids":[1,3,4,5],"columnar_same":true}
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK mva_row; FLUSH RAMCHUNK mva_col;" && php /tmp/mva_all.php disk
+––– output –––
+{"chunk":"disk","where":"ALL(tags) = 2","ids":[2,6],"columnar_same":true}
+{"chunk":"disk","where":"ALL(tags) IN (2)","ids":[2,6],"columnar_same":true}
+{"chunk":"disk","where":"ANY(tags) != 2","ids":[1,3,4,5],"columnar_same":true}
+{"chunk":"disk","where":"ALL(tags) IN (1,2)","ids":[1,2,6],"columnar_same":true}
+{"chunk":"disk","http":"must equals all(tags) 2","ids":[2,6],"columnar_same":true}
+{"chunk":"disk","http":"must_not equals all(tags) 2","ids":[1,3,4,5],"columnar_same":true}
+{"chunk":"disk","where":"ALL(tags64) = 2","ids":[2,6],"columnar_same":true}
+{"chunk":"disk","where":"ALL(tags64) IN (2)","ids":[2,6],"columnar_same":true}
+{"chunk":"disk","where":"ANY(tags64) != 2","ids":[1,3,4,5],"columnar_same":true}
+{"chunk":"disk","where":"ALL(tags64) IN (1,2)","ids":[1,2,6],"columnar_same":true}
+{"chunk":"disk","http":"must equals all(tags64) 2","ids":[2,6],"columnar_same":true}
+{"chunk":"disk","http":"must_not equals all(tags64) 2","ids":[1,3,4,5],"columnar_same":true}
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE mva_row; DROP TABLE mva_col;"; rm -f /tmp/mva_all.php
+––– output –––

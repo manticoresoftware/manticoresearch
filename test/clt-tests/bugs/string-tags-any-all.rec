@@ -1,0 +1,67 @@
+––– comment –––
+ANY() / ALL() over a string list are string tags: ALL('a','b') matches when every listed value is a word of the
+string, ANY() when one is. The row-wise string attribute s is the reference; two other storages must match it:
+- a JSON string array j.s, where the elements are the words (a single string is a one-element array):
+  ALL('a','b') worked as ANY('a','b');
+- a columnar string attribute: ANY() / ALL() compared the whole string, as IN() does.
+Checked in a RAM chunk and, after FLUSH RAMCHUNK, in a disk chunk; columnar with and without the ColumnarScan
+hint; SQL and HTTP. Docs s / j.s: 1 'x y' [x,y], 2 'x' [x], 3 'y z' [y,z], 4 '' [], 5 'x y z' [x,y,z],
+6 'x' "x", 7 'x x' [x,x], 8 'X Y' "X Y" (tags are case-sensitive; a JSON string is not split into words).
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS tags_row; DROP TABLE IF EXISTS tags_col; CREATE TABLE tags_row (s string attribute, j JSON); CREATE TABLE tags_col (s string attribute engine='columnar'); INSERT INTO tags_row VALUES (1,'x y','{\"s\":[\"x\",\"y\"]}'), (2,'x','{\"s\":[\"x\"]}'), (3,'y z','{\"s\":[\"y\",\"z\"]}'), (4,'','{\"s\":[]}'), (5,'x y z','{\"s\":[\"x\",\"y\",\"z\"]}'), (6,'x','{\"s\":\"x\"}'), (7,'x x','{\"s\":[\"x\",\"x\"]}'), (8,'X Y','{\"s\":\"X Y\"}'); INSERT INTO tags_col VALUES (1,'x y'), (2,'x'), (3,'y z'), (4,''), (5,'x y z'), (6,'x'), (7,'x x'), (8,'X Y');" && echo ready
+––– output –––
+ready
+––– input –––
+cat > /tmp/tags.php <<'PHP'
+<?php
+function post ( $sUrl, $sBody, $sType ) {
+	$tCtx = stream_context_create ( [ 'http' => [ 'method' => 'POST', 'header' => "Content-Type: $sType", 'content' => $sBody, 'ignore_errors' => true ] ] );
+	return json_decode ( file_get_contents ( $sUrl, false, $tCtx ), true );
+}
+function sql ( $sQuery ) {
+	$dRes = post ( 'http://localhost:9308/sql?mode=raw', http_build_query ( [ 'query' => $sQuery ] ), 'application/x-www-form-urlencoded' );
+	return isset ( $dRes[0]['data'] ) ? array_map ( 'intval', array_column ( $dRes[0]['data'], 'id' ) ) : $dRes;
+}
+function http ( $sTable, $sOccur, $sField, $sFunc ) {
+	$dRes = post ( 'http://localhost:9308/search', json_encode ( [ 'table' => $sTable, 'query' => [ 'bool' => [ $sOccur => [ [ 'in' => [ "$sFunc($sField)" => [ 'x', 'y' ] ] ] ] ] ], 'limit' => 20, 'sort' => [ [ 'id' => 'asc' ] ] ] ), 'application/json' );
+	return isset ( $dRes['hits'] ) ? array_map ( 'intval', array_column ( $dRes['hits']['hits'], '_id' ) ) : $dRes;
+}
+$sChunk = $argv[1];
+foreach ( [ "ANY('x','y')", "ALL('x','y')", "NOT ANY('x','y')", "NOT ALL('x','y')", "ALL('x')" ] as $sCond ) {
+	$dRow = sql ( "SELECT id FROM tags_row WHERE s $sCond ORDER BY id ASC" );
+	$bColumnar = true;
+	foreach ( [ '', '/*+ NO_ColumnarScan(s) */', '/*+ ColumnarScan(s) */' ] as $sHint )
+		$bColumnar = $bColumnar && $dRow===sql ( "SELECT id FROM tags_col WHERE s $sCond ORDER BY id ASC $sHint" );
+	$bJson = $dRow===sql ( "SELECT id FROM tags_row WHERE j.s $sCond ORDER BY id ASC" );
+	echo json_encode ( [ 'chunk' => $sChunk, 'where' => "s $sCond", 'ids' => $dRow, 'json_same' => $bJson, 'columnar_same' => $bColumnar ] ), PHP_EOL;
+}
+foreach ( [ [ 'must', 'any' ], [ 'must', 'all' ], [ 'must_not', 'all' ] ] as [ $sOccur, $sFunc ] ) {
+	$dRow = http ( 'tags_row', $sOccur, 's', $sFunc );
+	echo json_encode ( [ 'chunk' => $sChunk, 'http' => "$sOccur in $sFunc(s) [x,y]", 'ids' => $dRow, 'json_same' => $dRow===http ( 'tags_row', $sOccur, 'j.s', $sFunc ), 'columnar_same' => $dRow===http ( 'tags_col', $sOccur, 's', $sFunc ) ] ), PHP_EOL;
+}
+PHP
+php /tmp/tags.php ram
+––– output –––
+{"chunk":"ram","where":"s ANY('x','y')","ids":[1,2,3,5,6,7],"json_same":true,"columnar_same":true}
+{"chunk":"ram","where":"s ALL('x','y')","ids":[1,5],"json_same":true,"columnar_same":true}
+{"chunk":"ram","where":"s NOT ANY('x','y')","ids":[4,8],"json_same":true,"columnar_same":true}
+{"chunk":"ram","where":"s NOT ALL('x','y')","ids":[2,3,4,6,7,8],"json_same":true,"columnar_same":true}
+{"chunk":"ram","where":"s ALL('x')","ids":[1,2,5,6,7],"json_same":true,"columnar_same":true}
+{"chunk":"ram","http":"must in any(s) [x,y]","ids":[1,2,3,5,6,7],"json_same":true,"columnar_same":true}
+{"chunk":"ram","http":"must in all(s) [x,y]","ids":[1,5],"json_same":true,"columnar_same":true}
+{"chunk":"ram","http":"must_not in all(s) [x,y]","ids":[2,3,4,6,7,8],"json_same":true,"columnar_same":true}
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK tags_row; FLUSH RAMCHUNK tags_col;" && php /tmp/tags.php disk
+––– output –––
+{"chunk":"disk","where":"s ANY('x','y')","ids":[1,2,3,5,6,7],"json_same":true,"columnar_same":true}
+{"chunk":"disk","where":"s ALL('x','y')","ids":[1,5],"json_same":true,"columnar_same":true}
+{"chunk":"disk","where":"s NOT ANY('x','y')","ids":[4,8],"json_same":true,"columnar_same":true}
+{"chunk":"disk","where":"s NOT ALL('x','y')","ids":[2,3,4,6,7,8],"json_same":true,"columnar_same":true}
+{"chunk":"disk","where":"s ALL('x')","ids":[1,2,5,6,7],"json_same":true,"columnar_same":true}
+{"chunk":"disk","http":"must in any(s) [x,y]","ids":[1,2,3,5,6,7],"json_same":true,"columnar_same":true}
+{"chunk":"disk","http":"must in all(s) [x,y]","ids":[1,5],"json_same":true,"columnar_same":true}
+{"chunk":"disk","http":"must_not in all(s) [x,y]","ids":[2,3,4,6,7,8],"json_same":true,"columnar_same":true}
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE tags_row; DROP TABLE tags_col;"; rm -f /tmp/tags.php
+––– output –––

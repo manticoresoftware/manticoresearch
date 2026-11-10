@@ -81,7 +81,6 @@ class KBufferGroupSorter_T : public CSphMatchQueueTraits, protected BaseGroupSor
 {
 	using MYTYPE = KBufferGroupSorter_T<COMPGROUP,UNIQ,DISTINCT,NOTIFICATIONS>;
 	using BASE = CSphMatchQueueTraits;
-	using BaseGroupSorter_c::AggrDiscard;
 
 public:
 	KBufferGroupSorter_T ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
@@ -181,6 +180,8 @@ public:
 	bool CanBeCloned() const final { return !DISTINCT && BASE::CanBeCloned(); }
 
 protected:
+	using BaseGroupSorter_c::AggrDiscard;
+
 	ESphGroupBy 				m_eGroupBy;     ///< group-by function
 	void OnMatchFree ( CSphMatch & tMatch ) override
 	{

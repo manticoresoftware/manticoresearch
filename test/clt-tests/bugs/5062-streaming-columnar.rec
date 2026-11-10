@@ -1,0 +1,20 @@
+––– comment –––
+#5062: streaming (LIMIT -1, SQL_NO_CACHE) sends every attribute even when SELECT lists only some of them,
+so unselected columnar attributes must be read from columnar storage, not from the absent blob pool (crashed).
+Stored fields are sent only when selected (the third query). Rows: id, [title], lang, tags, tags64, n, value.
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE t (title TEXT, lang STRING engine='columnar', tags MULTI engine='columnar', tags64 MULTI64 engine='columnar', n INT engine='columnar', value INT); INSERT INTO t VALUES (1, 'First', 'en', (2,3), (10000000000,10000000001), 42, 10);"; q() { mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT id, value FROM t LIMIT -1; SELECT /*!40001 SQL_NO_CACHE */ id, value FROM t; SELECT id, title, lang, value FROM t LIMIT -1"; }; q
+––– output –––
+1	en	(2,3)	(10000000000,10000000001)	42	10
+1	en	(2,3)	(10000000000,10000000001)	42	10
+1	First	en	(2,3)	(10000000000,10000000001)	42	10
+––– input –––
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK t"; q
+––– output –––
+1	en	(2,3)	(10000000000,10000000001)	42	10
+1	en	(2,3)	(10000000000,10000000001)	42	10
+1	First	en	(2,3)	(10000000000,10000000001)	42	10
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE t"
+––– output –––

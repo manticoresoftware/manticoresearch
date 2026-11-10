@@ -88,11 +88,15 @@ $ index_converter --config /home/myuser/manticore.conf --index tablename
 $ index_converter --config /home/myuser/manticore.conf --all
 ```
 
-#### Convert tables found in a folder
+#### Convert a table by its path
+
+Without a config file, pass the path to the table files without an extension. For example, for a table stored in `/var/lib/sphinx/test1.sph`, `/var/lib/sphinx/test1.spa` and so on:
 
 ```ini
-$ index_converter  --path /var/lib/manticoresearch/data --all
+$ index_converter --path /var/lib/sphinx/test1
 ```
+
+`--path` converts one table and does not scan a folder; to convert all tables at once, use `--config` with `--all`.
 
 The new version of the table is written by default in the same folder. The previous version's files are saved with the `.old` extension in their name. An exception is the `.spp` (hitlists) file, which is the only table component that didn't have any changes in the new format.
 
@@ -119,11 +123,11 @@ Here's the complete list of `index_converter` options:
 
 * `--config <file>` (`-c <file>` for short) tells index_converter to use the given file as its configuration. Normally, it will look for manticore.conf in the installation directory (e.g. `/usr/local/manticore/etc/manticore.conf` if installed into `/usr/local/sphinx`), followed by the current directory you are in when calling index_converter from the shell.
 * `--index` specifies which table should be converted
-* `--path` - instead of using a config file, a path containing table(s) can be used
+* `--path` - instead of using a config file, converts one table given by the path to its files without an extension
 * `--strip-path` - strips path from filenames referenced by table: stopwords, exceptions and wordforms
 * `--large-docid` - allows converting documents with ids larger than 2^63 and displays a warning; otherwise, conversion exits with an error on the large id. This option was added for Manticore 3.x format compatibility, because Sphinx/Manticore 2.x used unsigned doc id values that could exceed the signed 64-bit display range.
 * `--output-dir <dir>` - writes the new files in a chosen folder rather than the same location as with the existing table files. When this option set, existing table files will remain untouched at their location.
-* `--all` - converts all tables from the config
+* `--all` - converts all tables from the config; requires `--config`
 * `--killlist-target <targets>` sets the target tables for which kill-lists will be applied. This option should be used only in conjunction with the `--index` option
 
 <!-- proofread -->

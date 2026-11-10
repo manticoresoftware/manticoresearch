@@ -27,15 +27,18 @@ public:
 
 	bool					Prepare ( RowID_t tMin, PostingLeaf_t & tLeaf ) final;
 	int						Intersect ( const PostingWindow_t & tWindow, DWORD * pBits ) final;
+	int						ReadRows ( const PostingWindow_t & tWindow, RowID_t * pRows ) final;
 	int						FilterRows ( RowID_t * pRows, int iCount ) final;
 	bool					ReadPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits ) final;
 
 private:
+	int						DrainDecodedRows ( uint64_t uEnd, RowID_t * pRows, int iCapacity );
+	const RowID_t *			FindDecodedRow ( RowID_t tRow, unsigned iHint ) const;
 	void					BuildBitmapOrdinals();
 	bool					CheckContinue();
 	bool					LoadLeaf ( RowID_t tMin );
 	bool					EnsureCandidate ( RowID_t tMin );
-	bool					Matches() const;
+	bool					PassesFieldCheck() const;
 	DWORD					BitmapWord ( unsigned uBit ) const;
 	int					FillDense ( const PostingWindow_t & tWindow, DWORD * pBits, uint64_t uEnd );
 	template<bool SUBTRACT>
@@ -51,7 +54,8 @@ private:
 
 	uint64_t	m_uMin = 0;
 	RowID_t		m_tNext = INVALID_ROWID;
-	unsigned	m_iPos = 0;
+	unsigned	m_iPos = m_iPayloadPos = 0;
+	unsigned	m_iPayloadPos = 0;
 	bool		m_bOpen = false;
 	bool		m_bLeaf = false;
 	bool		m_bEOF = false;
@@ -79,7 +83,7 @@ void BlockPostingWindow_T<MAPPED>::Reset ( bool bHasDocs, const PostingWindowCon
 	m_tContext = tContext;
 	m_uMin = 0;
 	m_tNext = INVALID_ROWID;
-	m_iPos = 0;
+	m_iPos = m_iPayloadPos = 0;
 	m_bOpen = m_bLeaf = m_bStopped = false;
 	m_bEOF = !bHasDocs;
 	m_tBlock = {};
@@ -156,7 +160,7 @@ bool BlockPostingWindow_T<MAPPED>::LoadLeaf ( RowID_t tMin )
 	if ( !m_bDirect && !m_tReader.ReadRows(m_tWord.m_sError) )
 		return false;
 
-	m_iPos = 0;
+	m_iPos = m_iPayloadPos = 0;
 	m_bLeaf = true;
 	m_tWord.m_iNext = m_tReader.GetLeaf().m_uOffset+m_tReader.GetLeaf().m_uBytes;
 	if ( m_tContext.m_pStats )
@@ -220,7 +224,9 @@ bool BlockPostingWindow_T<MAPPED>::EnsureCandidate ( RowID_t tMin )
 		if ( !m_bDirect )
 		{
 			const auto & dRows = m_tReader.GetRows();
-			m_iPos = unsigned(std::lower_bound ( dRows.begin()+m_iPos, dRows.begin()+m_tBlock.m_uCount, uRow )-dRows.begin());
+			if ( m_iPos<m_tBlock.m_uCount && dRows[m_iPos]<uRow )
+				m_iPos = unsigned(std::lower_bound ( dRows.begin()+m_iPos, dRows.begin()+m_tBlock.m_uCount, uRow )-dRows.begin());
+
 			if ( m_iPos<m_tBlock.m_uCount )
 			{
 				m_tNext = dRows[m_iPos];
@@ -255,7 +261,7 @@ bool BlockPostingWindow_T<MAPPED>::EnsureCandidate ( RowID_t tMin )
 
 
 template<bool MAPPED>
-bool BlockPostingWindow_T<MAPPED>::Matches() const
+bool BlockPostingWindow_T<MAPPED>::PassesFieldCheck() const
 {
 	return m_bAllFields || (m_dFields[m_iPos] & m_uFields)!=0;
 }
@@ -276,7 +282,7 @@ PostingProbeResult_t BlockPostingWindow_T<MAPPED>::Probe ( RowID_t tRow )
 {
 	if ( CheckContinue() && EnsureCandidate(tRow) && m_tNext==tRow )
 	{
-		if ( Matches() )
+		if ( PassesFieldCheck() )
 			return { Result(), true };
 
 		m_uMin = uint64_t(tRow)+1;
@@ -350,7 +356,7 @@ PostingWindowResult_t BlockPostingWindow_T<MAPPED>::FillOr ( const PostingWindow
 			while ( m_iPos<m_tBlock.m_uCount && dRows[m_iPos]<uEnd )
 			{
 				RowID_t tRow = dRows[m_iPos];
-				if ( Matches() )
+				if ( PassesFieldCheck() )
 				{
 					unsigned uOffset = tRow-tWindow.m_tBase;
 					pBits[uOffset/32] |= DWORD(1)<<(uOffset%32);
@@ -416,7 +422,7 @@ void BlockPostingWindow_T<MAPPED>::ApplyLeaf ( const PostingWindow_t & tWindow, 
 		{
 			while ( m_iPos<m_tBlock.m_uCount && dRows[m_iPos]<uRow+uCount )
 			{
-				if ( Matches() )
+				if ( PassesFieldCheck() )
 					uBits |= DWORD(1)<<((dRows[m_iPos]-tWindow.m_tBase)%32);
 
 				++m_iPos;
@@ -477,6 +483,29 @@ PostingWindowResult_t BlockPostingWindow_T<MAPPED>::FillAndNot ( const PostingWi
 }
 
 
+// Consume decoded rows sequentially, retaining the first row outside the output or window limit.
+template<bool MAPPED>
+int BlockPostingWindow_T<MAPPED>::DrainDecodedRows ( uint64_t uEnd, RowID_t * pRows, int iCapacity )
+{
+	const auto & dRows = m_tReader.GetRows();
+	int iRows = 0;
+	while ( m_iPos<m_tBlock.m_uCount && dRows[m_iPos]<uEnd )
+	{
+		if ( PassesFieldCheck() )
+		{
+			if ( iRows==iCapacity )
+				break;
+
+			pRows[iRows++] = dRows[m_iPos];
+		}
+
+		m_uMin = uint64_t(dRows[m_iPos++])+1;
+	}
+
+	return iRows;
+}
+
+
 template<bool MAPPED>
 PostingWindowResult_t BlockPostingWindow_T<MAPPED>::ReadRows ( const PostingWindow_t & tWindow, RowID_t * pRows, int iCapacity )
 {
@@ -487,7 +516,19 @@ PostingWindowResult_t BlockPostingWindow_T<MAPPED>::ReadRows ( const PostingWind
 	int iRows = 0;
 	while ( EnsureCandidate(tWindow.m_tMin) && m_tNext<tWindow.m_uEnd )
 	{
-		if ( Matches() )
+		if ( !m_bDirect )
+		{
+			iRows += DrainDecodedRows ( tWindow.m_uEnd, pRows+iRows, iCapacity-iRows );
+			if ( m_iPos<m_tBlock.m_uCount )
+			{
+				m_tNext = m_tReader.GetRows()[m_iPos];
+				return Result(iRows);
+			}
+
+			continue;
+		}
+
+		if ( PassesFieldCheck() )
 		{
 			if ( iRows==iCapacity )
 				break;
@@ -516,7 +557,7 @@ bool BlockPostingWindow_T<MAPPED>::Prepare ( RowID_t tMin, PostingLeaf_t & tLeaf
 	if ( !CheckContinue() || !EnsureCandidate(tMin) )
 		return false;
 
-	tLeaf = { m_tNext, uint64_t(m_tBlock.m_uLast)+1 };
+	tLeaf = { m_tNext, uint64_t(m_tBlock.m_uLast)+1, !m_bDirect };
 	return true;
 }
 
@@ -540,6 +581,31 @@ int BlockPostingWindow_T<MAPPED>::Intersect ( const PostingWindow_t & tWindow, D
 	unsigned iWords = unsigned((tWindow.m_uEnd-tWindow.m_tBase+31)/32);
 	ClearWindowBits ( pBits, unsigned(tWindow.m_uEnd-tWindow.m_tBase), iWords*32 );
 	return int(bitmap::Count ( pBits, iWords ));
+}
+
+
+template<bool MAPPED>
+int BlockPostingWindow_T<MAPPED>::ReadRows ( const PostingWindow_t & tWindow, RowID_t * pRows )
+{
+	assert ( m_bLeaf && !m_bDirect && tWindow.m_tMin>=m_tNext && tWindow.m_tMin<tWindow.m_uEnd );
+	assert ( tWindow.m_uEnd<=uint64_t(m_tBlock.m_uLast)+1 && tWindow.m_uEnd-tWindow.m_tMin<=PostingWindow_t::ROWS );
+	if ( !EnsureCandidate(tWindow.m_tMin) || m_tNext>=tWindow.m_uEnd )
+		return 0;
+
+	m_iPayloadPos = m_iPos;
+	return DrainDecodedRows ( tWindow.m_uEnd, pRows, PostingWindow_t::ROWS );
+}
+
+
+// Reuse a known ordinal when it still identifies the requested row.
+template<bool MAPPED>
+const RowID_t * BlockPostingWindow_T<MAPPED>::FindDecodedRow ( RowID_t tRow, unsigned iHint ) const
+{
+	const auto & dRows = m_tReader.GetRows();
+	if ( iHint<m_tBlock.m_uCount && dRows[iHint]==tRow )
+		return dRows.data()+iHint;
+
+	return std::lower_bound ( dRows.data(), dRows.data()+m_tBlock.m_uCount, tRow );
 }
 
 
@@ -574,14 +640,19 @@ int BlockPostingWindow_T<MAPPED>::FilterRows ( RowID_t * pRows, int iCount )
 	{
 		const auto & dRows = m_tReader.GetRows();
 		const auto pEnd = dRows.begin()+m_tBlock.m_uCount;
-		auto pRow = std::lower_bound ( dRows.begin(), pEnd, pRows[0] );
+		auto pRow = FindDecodedRow ( pRows[0], m_iPos );
 		for ( int i=0; i<iCount; ++i )
 		{
 			while ( pRow!=pEnd && *pRow<pRows[i] )
 				++pRow;
 
 			if ( pRow!=pEnd && *pRow==pRows[i] && (m_bAllFields || (m_dFields[pRow-dRows.begin()] & m_uFields)) )
+			{
+				if ( !iOut )
+					m_iPayloadPos = unsigned(pRow-dRows.data());
+
 				pRows[iOut++] = pRows[i];
+			}
 		}
 	}
 
@@ -626,7 +697,7 @@ bool BlockPostingWindow_T<MAPPED>::ReadPayloads ( const RowID_t * pRows, int iCo
 	} else
 	{
 		const auto & dRows = m_tReader.GetRows();
-		auto pRow = std::lower_bound ( dRows.begin(), dRows.begin()+m_tBlock.m_uCount, pRows[0] );
+		auto pRow = FindDecodedRow ( pRows[0], m_iPayloadPos );
 		for ( int i=0; i<iCount; ++i )
 		{
 			while ( pRow!=dRows.begin()+m_tBlock.m_uCount && *pRow<pRows[i] )
@@ -635,6 +706,8 @@ bool BlockPostingWindow_T<MAPPED>::ReadPayloads ( const RowID_t * pRows, int iCo
 			assert ( pRow!=dRows.begin()+m_tBlock.m_uCount && *pRow==pRows[i] );
 			Store ( i, unsigned(pRow-dRows.begin()) );
 		}
+
+		m_iPayloadPos = unsigned(pRow-dRows.data())+1;
 	}
 
 	return true;

@@ -601,6 +601,18 @@ static void TestBlockPayloads ( const char * sFile, unsigned uShape, FileAccess_
 		QwordDoc_t tDoc;
 		Check ( pCursor->ReadPayloads ( &tLast, 1, &tDoc, true, true ) );
 		Check ( tDoc.m_tRowID==tLast && tDoc.m_uMatchHits==dExpected[0][255].m_uMatchHits && tDoc.m_iHitlistPos==dExpected[0][255].m_iHitlistPos );
+
+		// Payload gathering may revisit earlier rows after membership consumed the leaf.
+		RowID_t dRevisited[] { dExpected[0][0].m_tRowID, tLast };
+		Check ( pCursor->FilterRows ( dRevisited, 2 )==2 );
+
+		QwordDoc_t dRevisitedDocs[2];
+		Check ( pCursor->ReadPayloads ( dRevisited, 2, dRevisitedDocs, true, true ) );
+		Check ( dRevisitedDocs[0].m_tRowID==dExpected[0][0].m_tRowID && dRevisitedDocs[0].m_iHitlistPos==dExpected[0][0].m_iHitlistPos );
+		Check ( dRevisitedDocs[1].m_tRowID==tLast && dRevisitedDocs[1].m_iHitlistPos==dExpected[0][255].m_iHitlistPos );
+		Check ( pCursor->ReadPayloads ( dRevisited, 1, dRevisitedDocs, false, true ) );
+		Check ( dRevisitedDocs[0].m_iHitlistPos==dExpected[0][0].m_iHitlistPos && !dRevisitedDocs[0].m_uMatchHits );
+
 	}
 
 	int iCalls = 0;

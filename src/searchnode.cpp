@@ -504,6 +504,8 @@ public:
 	int				MatchDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch );
 
 private:
+	static constexpr int MAX_LAZY_PHRASE_TERMS = 8;
+
 	template<int TERMS>
 	int				MatchPhraseDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch );
 
@@ -5761,7 +5763,7 @@ inline void FSMphrase_c::ResetFSM()
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
 PhraseMatcher_fn ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetPhraseMatcher()
 {
-	if ( !m_bQPosReverse || m_dNodes.GetLength()<2 || m_dNodes.GetLength()>4 )
+	if ( !m_bQPosReverse || m_dNodes.GetLength()<2 || m_dNodes.GetLength()>MAX_LAZY_PHRASE_TERMS )
 		return nullptr;
 
 	for ( const auto & tNode : m_dNodes )
@@ -5787,7 +5789,7 @@ int ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MatchDocs ( const ExtDoc_t
 	case 2: iDocs = MatchPhraseDocs<2> ( pDocs, pMatches, tFSM, dScratch ); break;
 	case 3: iDocs = MatchPhraseDocs<3> ( pDocs, pMatches, tFSM, dScratch ); break;
 	case 4: iDocs = MatchPhraseDocs<4> ( pDocs, pMatches, tFSM, dScratch ); break;
-	default: assert(false); break;
+	default: iDocs = MatchPhraseDocs<0> ( pDocs, pMatches, tFSM, dScratch ); break;
 	}
 
 	m_dStoredHits.Resize(0);
@@ -5799,6 +5801,9 @@ template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
 template<int TERMS>
 int ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MatchPhraseDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch )
 {
+	const int iTerms = TERMS ? TERMS : m_dNodes.GetLength();
+	assert ( iTerms>=2 && iTerms<=MAX_LAZY_PHRASE_TERMS );
+
 	int iDocs = 0;
 	DWORD uReads = 0;
 	int64_t iHits = 0;
@@ -5808,14 +5813,14 @@ int ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MatchPhraseDocs ( const Ex
 		assert ( pStored!=m_dStoredHits.End() && pStored->m_tRowID==pDocs->m_tRowID );
 		tFSM.ResetFSM();
 
-		HitInfo_t dHeads[TERMS];
-		for ( int i=0; i<TERMS; ++i )
+		HitInfo_t dHeads[TERMS ? TERMS : MAX_LAZY_PHRASE_TERMS];
+		for ( int i=0; i<iTerms; ++i )
 			InitHitMerge ( dHeads[i], i, *pStored );
 
 		while ( true )
 		{
 			int iNext = -1;
-			for ( int i=0; i<TERMS; ++i )
+			for ( int i=0; i<iTerms; ++i )
 			{
 				if ( dHeads[i].m_uHitpos==EMPTY_HIT )
 					continue;

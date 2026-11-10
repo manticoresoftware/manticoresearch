@@ -292,11 +292,15 @@ bool PostingBlockAnd_c::FillCandidates ( uint64_t uEnd )
 
 		RowID_t tFirst = m_tNext;
 		uint64_t uLimit = uEnd;
+		bool bDecoded = false;
 		for ( auto & pCursor : m_dCursors )
 		{
 			PostingLeaf_t tLeaf;
 			if ( !pCursor->Prepare ( tFirst, tLeaf ) )
 				return false;
+
+			if ( pCursor==m_dCursors.front() )
+				bDecoded = tLeaf.m_bDecoded;
 
 			tFirst = std::max ( tFirst, tLeaf.m_tFirst );
 			uLimit = std::min ( uLimit, tLeaf.m_uEnd );
@@ -309,41 +313,13 @@ bool PostingBlockAnd_c::FillCandidates ( uint64_t uEnd )
 		uLimit = std::min ( uLimit, uint64_t(tFirst)+PostingWindow_t::ROWS );
 
 		PostingWindow_t tWindow { tFirst, tFirst, uLimit };
-		int iWords = int((uLimit-tFirst+31)/32);
-		DWORD dBits[PostingWindow_t::WORDS];
-		std::fill_n ( dBits, iWords, UINT32_MAX );
-
-		int iCount = int(uLimit-tFirst);
-		int iThreshold = std::max ( 1, iCount/32 );
-		size_t iTerm = 0;
-		for ( ; iTerm<m_dCursors.size() && iCount>=iThreshold; ++iTerm )
-			iCount = m_dCursors[iTerm]->Intersect ( tWindow, dBits );
-
-		m_iCount = 0;
-		if ( iCount>=iThreshold && iTerm==m_dCursors.size() )
+		if ( bDecoded && m_dExcluded.empty() )
 		{
-			for ( auto & pCursor : m_dExcluded )
-			{
-				auto tResult = pCursor->FillAndNot ( tWindow, dBits );
-				if ( tResult.m_bStopped )
-					return false;
-
-				iCount = tResult.m_iRows;
-				if ( !iCount )
-					break;
-			}
-
-			if ( iCount )
-				ExtractRows ( tFirst, dBits, iWords );
-		} else if ( iCount )
-		{
-			ExtractRows ( tFirst, dBits, iWords );
-			for ( ; iTerm<m_dCursors.size() && m_iCount; ++iTerm )
-				m_iCount = m_dCursors[iTerm]->FilterRows ( m_dRows.data(), m_iCount );
-
-			if ( !SubtractRows() )
-				return false;
-		}
+			m_iCount = m_dCursors.front()->ReadRows ( tWindow, m_dRows.data() );
+			for ( size_t i=1; i<m_dCursors.size() && m_iCount; ++i )
+				m_iCount = m_dCursors[i]->FilterRows ( m_dRows.data(), m_iCount );
+		} else if ( !IntersectBitmap(tWindow) )
+			return false;
 
 		m_tNext = RowID_t(uLimit);
 		m_iRead = 0;
@@ -352,6 +328,48 @@ bool PostingBlockAnd_c::FillCandidates ( uint64_t uEnd )
 	}
 
 	return false;
+}
+
+
+bool PostingBlockAnd_c::IntersectBitmap ( const PostingWindow_t & tWindow )
+{
+	int iWords = int((tWindow.m_uEnd-tWindow.m_tBase+31)/32);
+	DWORD dBits[PostingWindow_t::WORDS];
+	std::fill_n ( dBits, iWords, UINT32_MAX );
+
+	int iCount = int(tWindow.m_uEnd-tWindow.m_tBase);
+	int iThreshold = std::max ( 1, iCount/32 );
+	size_t iTerm = 0;
+	for ( ; iTerm<m_dCursors.size() && iCount>=iThreshold; ++iTerm )
+		iCount = m_dCursors[iTerm]->Intersect ( tWindow, dBits );
+
+	m_iCount = 0;
+	if ( iCount>=iThreshold && iTerm==m_dCursors.size() )
+	{
+		for ( auto & pCursor : m_dExcluded )
+		{
+			auto tResult = pCursor->FillAndNot ( tWindow, dBits );
+			if ( tResult.m_bStopped )
+				return false;
+
+			iCount = tResult.m_iRows;
+			if ( !iCount )
+				break;
+		}
+
+		if ( iCount )
+			ExtractRows ( tWindow.m_tBase, dBits, iWords );
+	} else if ( iCount )
+	{
+		ExtractRows ( tWindow.m_tBase, dBits, iWords );
+		for ( ; iTerm<m_dCursors.size() && m_iCount; ++iTerm )
+			m_iCount = m_dCursors[iTerm]->FilterRows ( m_dRows.data(), m_iCount );
+
+		if ( !SubtractRows() )
+			return false;
+	}
+
+	return true;
 }
 
 

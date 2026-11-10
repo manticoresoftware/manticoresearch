@@ -92,6 +92,7 @@ struct PostingLeaf_t
 {
 	RowID_t		m_tFirst = INVALID_ROWID;
 	uint64_t	m_uEnd = 0;
+	bool		m_bDecoded = false;
 };
 
 // Exclusive posting view for candidate intersection followed by lazy payload
@@ -109,6 +110,10 @@ public:
 	// Its payloads remain available to ReadPayloads(). The window is at most
 	// ROWS long; clear padding through the last accessed word.
 	virtual int		Intersect ( const PostingWindow_t & tWindow, DWORD * pBits ) = 0;
+
+	// Copy matching rows from a decoded prepared leaf within the window, without
+	// refilling it. Requires m_bDecoded; output capacity must be at least ROWS.
+	virtual int		ReadRows ( const PostingWindow_t & tWindow, RowID_t * pRows ) = 0;
 
 	// Compact sorted candidates to exact field-aware matches in the prepared leaf.
 	virtual int		FilterRows ( RowID_t * pRows, int iCount ) = 0;
@@ -141,6 +146,7 @@ public:
 
 private:
 	bool	FillCandidates ( uint64_t uEnd );
+	bool	IntersectBitmap ( const PostingWindow_t & tWindow );
 	void	ExtractRows ( RowID_t tBase, const DWORD * pBits, int iWords );
 	bool	SubtractRows();
 

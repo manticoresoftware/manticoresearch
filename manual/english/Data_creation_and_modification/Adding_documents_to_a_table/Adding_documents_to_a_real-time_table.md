@@ -904,6 +904,8 @@ Run `SET bulk_import=<table>` before `BEGIN` and before any uncommitted write on
 
 `COMMIT` publishes the rows collected since the previous `COMMIT` or `ROLLBACK` as one disk chunk. `ROLLBACK` discards those rows. In both cases, bulk import remains enabled so you can start another batch. Run `SET bulk_import=0` to discard any uncommitted rows, disable bulk import, and release this connection's reservation. Writes to the table resume after the reservation is released. Closing the connection does the same. Autocommit cannot be changed while bulk import is enabled.
 
+For a sharded table, SQL works differently: see [Shared bulk import into a sharded table](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Shared-bulk-import-into-a-sharded-table).
+
 #### HTTP `/bulk`
 
 Add `bulk_import=<table>` to a Manticore `/bulk` request. The request body remains standard newline-delimited JSON (NDJSON), and each operation must be `insert` or `create` for the bound table:
@@ -937,6 +939,8 @@ In a request body, an empty line ends and publishes the current batch; the end o
 For a typical import, send the complete NDJSON body in one request as shown above. Close the HTTP connection when the import is complete to release the table for other writes.
 
 The endpoint supports chunked transfer encoding, so it can process bodies larger than `max_packet_size` without buffering the whole request.
+
+For a sharded table, `/bulk` works differently: see [Shared bulk import into a sharded table](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Shared-bulk-import-into-a-sharded-table).
 
 #### Shared HTTP bulk import
 
@@ -990,6 +994,39 @@ PURGE BULK_IMPORT FROM TABLE products OPTION clear_sessions=1;
 
 The cancel stops the indexers, releases the table and removes the staging files; chunks published earlier stay in the table. A commit answers `409` with `shared_busy` while a data request of a vanished client still counts as running, until that request times out; the cancel does not wait for it. Once the table is released, `SHOW LOCKS` no longer lists it, and a new Shared load can start. See [`PURGE BULK_IMPORT`](../../Node_info_and_management/PURGE.md#PURGE-BULK_IMPORT) for details.
 
+#### Shared bulk import into a sharded table
+
+A [sharded table](../../Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md) with replication factor `1` also takes a Shared HTTP bulk import, and SQL `INSERT` statements can feed the same load. Name the sharded table and send all requests of one load to the same node:
+
+```bash
+curl -sS -X POST -H 'Content-Type: application/x-ndjson' --data-binary @part1.ndjson \
+  'http://localhost:9308/bulk?bulk_import=sharded_products'
+```
+
+That node routes every document to the shard that a regular `INSERT` into the sharded table would choose, after the same ID conversion and auto-ID assignment, and streams it to a Shared pool of that shard. The first document of the load starts a pool, with one indexer, on every shard of the table; for the memory an indexer needs, see [Shared HTTP bulk import](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Shared-HTTP-bulk-import). The pool of a shard on another node runs on that node, so every node with shards of the table needs its `indexer` next to `searchd`, and a version of Manticore Search that supports this load: an older node fails the load at its first document. A sharded table takes only this load, so a request needs no `shared`; `shared=N` and `INDEXER_RT_BULK_SHARED_POOL_SIZE` are ignored: every shard that received documents gets one new disk chunk. The responses, `shared_join` and the empty-line commit work as described above; a broken request drops up to 32 KiB of unwritten data per local shard and up to 256 KiB per remote shard it reached. A load started on another node is refused at its first document.
+
+SQL is one more client of the same load. On a connection to the node that coordinates the load, run `SET bulk_import=<sharded table>`; then every `INSERT` works as a data request and `COMMIT` as the commit request:
+
+```sql
+SET bulk_import=sharded_products;
+INSERT INTO sharded_products(id,title,price) VALUES
+  (101,'Crossbody Bag with Tassel',19.85),
+  (102,'Microfiber Sheet Set',19.99);
+COMMIT;
+```
+
+Unlike SQL bulk import into a real-time table, the load belongs to the sharded table, not to the connection. `SET bulk_import=<sharded table>` reserves nothing: the shards are reserved from the first document, as described above. Other SQL connections and HTTP requests can feed the same load, and `SET bulk_import=0` or a closed connection leave it open. `COMMIT` answers an error while another request is writing to the load, and when there is no load to commit. An invalid `INSERT` fails the whole load, as an invalid document does. `ROLLBACK` is not supported: `PURGE BULK_IMPORT FROM TABLE <sharded table> OPTION clear_sessions=1` cancels the load.
+
+The commit publishes all the shards at once: every indexer builds its chunk at the same time, so the commit takes about as long as the largest shard. A shard that fails does not stop the others. If any shard fails, the shards that succeeded keep their chunks, and the commit answers `500` with `shared_failed` and an error that names the first failed shard and its error, followed by how many shards were published and how many were not. If the reply of a remote shard to the commit is lost, the error says that its commit is not confirmed; that shard may still have published its chunk. A `KILL` of the commit request fails the local shards that are still building; remote shards have already received the commit and finish it.
+
+Until the commit, every failure fails the whole load and cancels the pools on all its shards: an invalid document, a shard that cannot start a pool (it is locked by another bulk import or by a running ordinary write, it belongs to a replication cluster, it is a local shard changed after the sharded table was loaded, or its node has no `indexer`), a failed write to a shard, and any failed call to a remote shard, including a lost connection or a timeout. Only the calls that start, commit or cancel a pool on a remote shard are repeated after a lost connection or a timeout, as many times as `agent_retry_count` of the sharded table sets (0 by default) and `agent_retry_delay` apart, since repeating them is safe; a call with documents is repeated up to the same number of times, but only when its connection is not established within `agent_connect_timeout`, since the shard then received nothing. After such a failure the next commit returns the error and removes the load, or `PURGE` cancels it, and the whole load must be repeated. The cancel is best effort: a shard whose node it did not reach keeps its pool, and the next load is refused on that shard until `PURGE` removes it. A client that breaks its own request, or a `KILL`, still fails only that request. A document with a cluster prefix is checked as a regular `INSERT` into the sharded table checks it.
+
+While the load runs, every shard of the table is reserved as the table of a Shared pool is: an ordinary write to the sharded table fails with `table is locked` on such a shard, and an ordinary commit that spans several shards can apply its changes to some of them before it stops on a reserved one. A direct Shared request into a shard of the load is refused. `SHOW LOCKS` and `@files` show the shards by their own names.
+
+A shard pool stays on its node until the load is committed or cancelled, also when the node that coordinates the load stops or crashes. Cancel it with `PURGE BULK_IMPORT FROM TABLE <sharded table> OPTION clear_sessions=1` on any node that has the sharded table, or by the shard name on the node of the shard. `PURGE` reports the nodes it could not reach; repeat it when they are back. A shard that was starting its pool while the load was cancelled can keep that pool; repeat `PURGE` after the start has finished. `DROP TABLE` of the sharded table on the node that coordinates the load cancels the load and the pools of its shards, with the same best effort, unless a commit is already running: that commit finishes; a pool left on an unreachable node can then be removed only by the shard name on that node. A daemon shutdown cancels the load it coordinates and the pools of its own shards, but not the pools on other nodes; cancel those with `PURGE`.
+
+Duplicate document IDs follow the rules below for each shard: a document ID always goes to the same shard, so the first row with an ID in the load stays, and a published row replaces a row with the same ID.
+
 #### Elasticsearch `/_bulk`
 
 The Elasticsearch-compatible `/_bulk` endpoint does not support direct-to-disk `bulk_import`; use SQL or Manticore `/bulk`.
@@ -1038,7 +1075,7 @@ While the table has an open Shared pool, `PURGE` is refused; `PURGE BULK_IMPORT 
 
 #### Current limitations
 
-* The target must be one existing, unfrozen local real-time table that is not a replication-cluster member. Distributed, sharded, replicated, percolate, and plain tables are not supported.
+* The target must be one existing, unfrozen local real-time table that is not a replication-cluster member, or, for Manticore `/bulk` and SQL, a sharded table with replication factor `1` (see [Shared bulk import into a sharded table](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Shared-bulk-import-into-a-sharded-table)). Distributed, replicated, percolate, and plain tables are not supported.
 * SQL supports only `INSERT`. Manticore `/bulk` accepts `insert`, `create` and bare documents; `index`, `replace`, `update`, and `delete` are rejected.
 * A document ID is converted as in a regular `INSERT`, including [attr_autoconv_strict](../../Server_settings/Searchd.md#attr_autoconv_strict). A row without an ID, or with an ID that converts to 0, gets an [auto-generated ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID); the response does not return generated IDs, and a repeated load adds such rows again. UUID document IDs are not supported.
 * Static builds are not supported.

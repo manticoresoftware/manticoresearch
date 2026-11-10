@@ -168,9 +168,13 @@ bool ConvertInsertDocId ( const SqlInsert_t & tVal, int iRow, int iQuerySchemaId
 
 ResultAndIndex_t AddShardIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bLoadMeta, CSphString & sError, StrVec_t * pWarnings=nullptr );
 
+// write routing: the route target of a document id, as an ordinary write picks it
+int GetShardTargetOrdinal ( const ShardIndex_c & tShard, int64_t iDocID );
+
 bool EnsureNoPendingShardTxn ( const ClientSession_c & tSession, CSphString & sError );
 void RollbackShardTxn ( ShardTxnState_t & tShardTxn );
 bool CommitShardTxn ( ClientSession_c & tSession, CSphString & sError, CSphVector<int64_t> * pCommittedDocIDs = nullptr, int * pDeletedCount = nullptr );
 void HandleCommandShardWrite ( GenericOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq );
+void SendShardWriteRequestPreamble ( ISphOutputBuffer & tOut, DWORD uHeartbeatIntervalMs, const CSphString & sTargetName );
 bool AddDocumentShard ( const SqlStmt_t & tStmt, const ShardIndex_c & tShard, StmtErrorReporter_i & tOut, int & iAffectedRows );
 bool DeleteDocumentShard ( const SqlStmt_t & tStmt, const ShardIndex_c & tShard, StmtErrorReporter_i & tOut, int & iAffectedRows );

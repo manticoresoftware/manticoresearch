@@ -48,6 +48,10 @@ CREATE TABLE c:cluster_sharded shards='10' rf='3' timeout='60'
 
 If the timeout is exceeded, the table creation will fail, and you'll need to retry with a longer timeout value.
 
+#### Bulk loading a Sharded Table
+
+A sharded table with `rf='1'` takes a [shared bulk import](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Shared-bulk-import-into-a-sharded-table) over HTTP `/bulk` or SQL: documents go straight to new disk chunks of the shards they are routed to, one chunk per shard, and become searchable at the commit.
+
 #### Dropping a Sharded Table
 
 To drop a sharded table, use the standard `DROP TABLE` command. In a clustered environment, specify the cluster name in the table name to properly target the table you want to drop. `IF EXISTS` is supported.

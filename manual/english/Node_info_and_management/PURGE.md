@@ -28,6 +28,12 @@ To publish the staged documents instead, commit the pool with a request without 
 
 `OPTION clear_sessions=1` does not cancel private bulk import sessions: a private session releases the table with `SET bulk_import=0` or when its connection closes.
 
-The statement requires an existing local real-time table that is not in a replication cluster. It removes only direct-to-disk staging state and does not change the table schema or indexed documents. If the staging root is absent, the statement succeeds without making any changes. In configless mode, `DROP TABLE` also removes the table's direct-to-disk staging root and cancels its Shared pool.
+The statement requires an existing local real-time table that is not in a replication cluster, or a sharded or distributed table. It removes only direct-to-disk staging state and does not change the table schema or indexed documents. If the staging root is absent, the statement succeeds without making any changes. In configless mode, `DROP TABLE` also removes the table's direct-to-disk staging root and cancels its Shared pool.
+
+### Sharded and distributed tables
+
+For a sharded or distributed table, the statement first handles the [Shared bulk import into the sharded table](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Shared-bulk-import-into-a-sharded-table) that this node coordinates: without the option it is refused while that load is open or failed, and with `OPTION clear_sessions=1` it cancels the load; while the load is being published the statement is refused and purges nothing, repeat it after the commit finishes. Then it runs for every local real-time table of the sharded or distributed table (other local tables have no bulk import state and are skipped), and sends the same statement for every table of every agent, to every mirror. Make sure that no private bulk import is active on any of these tables. A table that fails does not stop the others: the statement answers with an error that lists each failed table or unreachable agent, while the others are purged. Repeat it when an unreachable node is back.
+
+Run it on any node that has the sharded table to cancel the shard pools left by a load whose coordinating node stopped or crashed. It cancels any open Shared pool of those tables, not only the pools of one load.
 
 <!-- proofread -->

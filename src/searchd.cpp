@@ -59,6 +59,7 @@
 #include "daemon/notifier.h"
 #include "facetutils.h"
 #include "indexer_rt_bulk.h"
+#include "searchd_shard_bulk.h"
 #include "daemon/daemon_ipc.h"
 #include "api_reply_stream.h"
 
@@ -248,7 +249,7 @@ int64_t g_iNextSystemdWatchdogTick = -1;
 static const char * g_dApiCommands[SEARCHD_COMMAND_TOTAL] =
 {
 	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs", "query", "ping", "delete", "set",  "insert", "replace", "commit", "suggest", "json",
-	"callpq", "clusterpq", "getfield", "shard_write", "optimize"
+	"callpq", "clusterpq", "getfield", "shard_write", "optimize", "shard_bulk"
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -3302,6 +3303,7 @@ void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLengt
 		case SEARCHD_COMMAND_GETFIELD:	HandleCommandGetField ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_SHARD_WRITE: HandleCommandShardWrite ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_OPTIMIZE:	HandleCommandOptimize ( tOut, uCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_SHARD_BULK: HandleCommandShardBulk ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_SUGGEST:	HandleCommandSuggest ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_PERSIST: break; // already processes, here just for stat
 
@@ -5113,9 +5115,7 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 
 	if ( pSession->m_tIndexerRtBulk.IsEnabled() )
 	{
-		if ( !bCommit )
-			AbortIndexerRtBulkBatch ( *pSession );
-		else if ( !FinalizeIndexerRtBulk ( *pSession, sError ) )
+		if ( !( bCommit ? FinalizeIndexerRtBulk ( *pSession, sError ) : RollbackIndexerRtBulk ( *pSession, sError ) ) )
 		{
 			tOut.Error ( "%s", sError.cstr() );
 			return;
@@ -10007,7 +10007,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 			auto pSession = session::Info().GetClientSession();
 			bool bOk = false;
 			if ( !tStmt.m_sIndex.IsEmpty() )
-				bOk = ActivateIndexerRtBulk ( *pSession, tStmt.m_sIndex, sError );
+				bOk = ActivateIndexerRtBulk ( *pSession, tStmt.m_sIndex, sError, true );
 			else if ( !tStmt.m_iSetValue )
 			{
 				CleanupIndexerRtBulk ( *pSession );
@@ -10437,6 +10437,55 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const CSphString & sIndex, const CS
 }
 
 
+static bool PurgeRtBulkImport ( const CSphString & sTable, bool bClearSessions, CSphString & sError )
+{
+	auto pServed = GetServed ( sTable );
+	if ( !pServed || pServed->m_eType!=IndexType_e::RT || ServedDesc_t::IsCluster ( pServed ) )
+	{
+		sError.SetSprintf ( "PURGE BULK_IMPORT requires an existing local RT table; table '%s' is absent or unsupported", sTable.cstr() );
+		return false;
+	}
+
+	CSphString sRoot;
+	{
+		RIdx_T<const RtIndex_i *> pRt { pServed };
+		sRoot = GetIndexerRtBulkRoot ( *pRt.Ptr() );
+	}
+	pServed = nullptr;
+
+	return PurgeSharedBulkImport ( sTable, bClearSessions, sError ) && RemoveIndexerRtBulkRoot ( sTable, sRoot, sError );
+}
+
+
+// By the name of a distributed or shard table: the load into the shard table that this node runs, then every local
+// table by its name, then the agent tables; a failure of a table does not stop the others.
+static bool PurgeDistrBulkImport ( const DistributedIndex_t & tDistr, const CSphString & sTable, bool bClearSessions, CSphString & sError )
+{
+	if ( !PurgeShardBulkLoad ( sTable, bClearSessions, sError ) )
+		return false; // open without the option, or being published: its targets are busy with it
+
+	SearchFailuresLog_c dFailures;
+	for ( const CSphString & sLocal : tDistr.m_dLocal )
+	{
+		auto pLocal = GetServed ( sLocal );
+		if ( !pLocal || pLocal->m_eType!=IndexType_e::RT || ServedDesc_t::IsCluster ( pLocal ) )
+			continue; // no bulk_import state there
+		pLocal = nullptr;
+		if ( !PurgeRtBulkImport ( sLocal, bClearSessions, sError ) )
+			dFailures.Submit ( sLocal, sTable.cstr(), sError.cstr() );
+	}
+
+	PurgeRemoteBulkImport ( tDistr, sTable, bClearSessions, dFailures );
+	if ( dFailures.IsEmpty() )
+		return true;
+
+	StringBuilder_c sReport;
+	dFailures.BuildReport ( sReport );
+	sError = sReport.cstr();
+	return false;
+}
+
+
 static void HandleMysqlPurge ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	if ( !sphCheckWeCanModify ( tOut ) )
@@ -10448,28 +10497,12 @@ static void HandleMysqlPurge ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		return;
 	}
 
-	auto pServed = GetServed ( tStmt.m_sIndex );
-	if ( !pServed || pServed->m_eType!=IndexType_e::RT || ServedDesc_t::IsCluster ( pServed ) )
-	{
-		tOut.ErrorEx ( "PURGE BULK_IMPORT requires an existing local RT table; table '%s' is absent or unsupported", tStmt.m_sIndex.cstr() );
-		return;
-	}
-
-	CSphString sRoot;
-	{
-		RIdx_T<const RtIndex_i *> pRt { pServed };
-		sRoot = GetIndexerRtBulkRoot ( *pRt.Ptr() );
-	}
-	pServed = nullptr;
-
 	CSphString sError;
-	if ( !PurgeSharedBulkImport ( tStmt.m_sIndex, tStmt.m_iIntParam!=0, sError ) )
-	{
-		tOut.Error ( sError.cstr() );
-		return;
-	}
-
-	if ( !RemoveIndexerRtBulkRoot ( tStmt.m_sIndex, sRoot, sError ) )
+	auto pDistr = GetServed ( tStmt.m_sIndex ) ? cDistributedIndexRefPtr_t() : GetDistr ( tStmt.m_sIndex );
+	const bool bPurged = pDistr
+		? PurgeDistrBulkImport ( *pDistr, tStmt.m_sIndex, tStmt.m_iIntParam!=0, sError )
+		: PurgeRtBulkImport ( tStmt.m_sIndex, tStmt.m_iIntParam!=0, sError );
+	if ( !bPurged )
 	{
 		tOut.Error ( sError.cstr() );
 		return;
@@ -17366,6 +17399,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	ReplicationServiceStart ( eBs );
 	searchd::AddShutdownCb ( BuddyShutdown );
 	searchd::AddShutdownCb ( ShutdownSharedBulkImport );
+	searchd::AddShutdownCb ( ShutdownShardBulkImport );
 	// --test should not guess buddy path
 	// otherwise daemon generates warning message that counts as bad daemon restart by ubertest
 	if ( bWithBuddy.value_or (!bTestMode) )

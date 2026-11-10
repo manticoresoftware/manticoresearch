@@ -426,7 +426,7 @@ static int JumpConsistentHash ( uint64_t uKey, int iBuckets )
 	return static_cast<int> ( iBucket );
 }
 
-static int GetShardTargetOrdinal ( const ShardIndex_c & tShard, int64_t iDocID )
+int GetShardTargetOrdinal ( const ShardIndex_c & tShard, int64_t iDocID )
 {
 	int iTargets = tShard.m_dRouteTargets.GetLength();
 	assert ( iTargets > 0 );

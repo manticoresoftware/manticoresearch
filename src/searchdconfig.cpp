@@ -21,6 +21,7 @@
 #include "binlog.h"
 #include "global_idf.h"
 #include "indexer_rt_bulk.h"
+#include "searchd_shard_bulk.h"
 
 using namespace Threads;
 
@@ -1768,6 +1769,8 @@ static bool DropDistrIndex ( const CSphString & sIndex, bool bForce, CSphString 
 		return false;
 
 	g_pDistIndexes->Delete(sIndex);
+	if ( pDistr->GetType()==IndexType_e::SHARD )
+		DropShardBulkImport ( sIndex );
 
 	return true;
 }

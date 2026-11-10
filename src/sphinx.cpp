@@ -38,7 +38,6 @@
 #include "indexformat.h"
 #include "diskqword.h"
 #include "postings/disk.h"
-#include "postings/diskvalidation.h"
 #include "indexcheck.h"
 #include "coroutine.h"
 #include "columnarlib.h"
@@ -1071,7 +1070,6 @@ private:
 	// common stuff
 	int								m_iLockFD;
 	CSphSourceStats					m_tStats;			///< my stats
-	PostingNormStats_t				m_tPostingNorms;
 	CSphFixedVector<int64_t>		m_dFieldLens;	///< total per-field lengths summed over entire indexed data, in tokens
 	CSphString						m_sKeepAttrs;			///< retain attributes of that index reindexing //fixme! build only
 	StrVec_t						m_dKeepAttrs;		// fixme! build only
@@ -2931,7 +2929,6 @@ void CSphIndex_VLN::PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t
 	tBuildHeader.m_iDocinfo = m_iDocinfo;
 	tBuildHeader.m_iDocinfoIndex = m_iDocinfoIndex;
 	tBuildHeader.m_iMinMaxIndex = m_iMinMaxIndex;
-	tBuildHeader.m_tPostingNorms = m_tPostingNorms;
 
 	if ( bCopyDictHeader )
 		*(DictHeader_t*)&tBuildHeader = *(DictHeader_t*)&m_tWordlist;
@@ -3638,7 +3635,7 @@ void CSphHitBuilder::DoclistEndEntry ( Hitpos_t uLastPos )
 	{
 		if ( !(m_tWord.m_iDocs & HITLESS_DOC_MASK) )
 		{
-			bool bPositions = std::any_of ( m_tPosting.m_dFieldTF.begin(), m_tPosting.m_dFieldTF.end(), [] ( DWORD uTF ) { return uTF!=0; } );
+			bool bPositions = m_eHitless!=SPH_HITLESS_ALL && !(m_tWord.m_iDocs & HITLESS_DOC_FLAG);
 			if ( !m_pBlockWriter->Begin ( m_iPostingFields, bPositions, *m_pLastError ) )
 			{
 				m_bError = true;
@@ -3936,9 +3933,6 @@ void CSphHitBuilder::cidxHit ( AggregateHit_t * pHit )
 
 		// update matched fields mask
 		m_dLastDocFields.Set ( HITMAN::GetField ( pHit->m_iWordPos ) );
-
-		if ( m_pBlockWriter )
-			++m_tPosting.m_dFieldTF[HITMAN::GetField(pHit->m_iWordPos)];
 
 		m_uLastDocHits++;
 		m_tWord.m_iHits++;
@@ -5993,8 +5987,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				{
 					auto uLength = pSource->m_tDocInfo.GetAttr ( m_tSchema.GetAttr ( i+iFieldLens ).m_tLocator );
 					m_dFieldLens[i] += uLength;
-					if ( m_tSettings.m_uPostingsFormat )
-						m_tPostingNorms.Add ( i, uLength );
 				}
 			}
 
@@ -6837,12 +6829,6 @@ bool CSphIndex_VLN::ConvertPostings ( const CSphString & sOutput, CSphString & s
 		return false;
 	}
 
-	if ( !m_tSettings.m_bIndexFieldLens || m_tSchema.GetAttrId_FirstFieldLen()<0 )
-	{
-		sError = "conversion requires existing index_field_lengths=1; otherwise rebuild into a separate block table";
-		return false;
-	}
-
 	if ( !Lock() )
 	{
 		sError = GetLastError();
@@ -6899,26 +6885,6 @@ bool CSphIndex_VLN::ConvertPostings ( const CSphString & sOutput, CSphString & s
 	tWrite.m_pDict = pDict;
 	if ( !tBuilder.cidxDone ( 16*1024*1024, tSettings.m_iMinInfixLen, m_pTokenizer->GetMaxCodepointLength(), &tHeader ) )
 		return false;
-
-	// Lengths are copied unchanged; collect their immutable statistics over the same row IDs.
-	tHeader.m_tPostingNorms = {};
-	auto dIterators = CreateAllColumnarIterators ( m_pColumnar.get(), m_tSchema );
-	CSphVector<PlainOrColumnar_t> dNormAttrs;
-	for ( int f=0; f<m_tSchema.GetFieldsCount(); ++f )
-		dNormAttrs.Add ( CreatePlainOrColumnar ( m_tSchema, m_tSchema.GetAttr(m_tSchema.GetAttrId_FirstFieldLen()+f) ) );
-
-	for ( RowID_t tRow=0; tRow<m_iDocinfo; ++tRow )
-	{
-		if ( !(tRow&4095) && sphInterrupted() )
-		{
-			sError = "posting conversion interrupted";
-			return false;
-		}
-
-		const CSphRowitem * pRow = GetRawAttrs() ? GetRawAttrs()+int64_t(tRow)*m_tSchema.GetRowSize() : nullptr;
-		ARRAY_FOREACH ( f, dNormAttrs )
-			tHeader.m_tPostingNorms.Add ( f, dNormAttrs[f].Get ( tRow, pRow, dIterators ) );
-	}
 
 	for ( const auto & tExt : sphGetExts() )
 	{
@@ -10094,25 +10060,6 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 		return LOAD_E::GeneralError_e;
 
 	SetFieldFilter ( std::move ( pFieldFilter ) );
-
-	if ( m_tSettings.m_uPostingsFormat )
-	{
-		Bson_c tNorms ( tBson.ChildByName("posting_norms") );
-		if ( m_bDebugCheck )
-		{
-			if ( !postings::CheckNorms ( tNorms, m_tSchema, m_iDocinfo, m_tSettings.m_bIndexFieldLens ) )
-			{
-				m_sLastError = "invalid or missing block posting length statistics";
-				return LOAD_E::GeneralError_e;
-			}
-		} else
-			assert ( postings::CheckNorms ( tNorms, m_tSchema, m_iDocinfo, m_tSettings.m_bIndexFieldLens ) );
-
-		int iField = 0;
-		Bson_c(tNorms.ChildByName("field_docs")).ForEach ( [&] ( const NodeHandle_t & tNode ) { m_tPostingNorms.m_dDocs[iField++] = Int(tNode); } );
-		iField = 0;
-		Bson_c(tNorms.ChildByName("field_tokens")).ForEach ( [&] ( const NodeHandle_t & tNode ) { m_tPostingNorms.m_dTokens[iField++] = Int(tNode); } );
-	}
 
 	auto tIndexFieldsLenNode = tBson.ChildByName ( "index_fields_lens" );
 	if ( m_tSettings.m_bIndexFieldLens )

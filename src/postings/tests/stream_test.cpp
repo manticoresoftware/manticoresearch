@@ -7,6 +7,7 @@
 // did not, you can find it at http://www.gnu.org/
 
 #include "stream.h"
+#include "shortlist.h"
 #include "streamvalidation.h"
 #include <algorithm>
 #include <cstdlib>
@@ -78,9 +79,10 @@ static void Test ( unsigned n, unsigned uFields, Codec_e eCodec, bool bPositions
 	tDesc.m_tTF = {eCodec};
 	tDesc.m_tFields = {eCodec};
 	tDesc.m_tHitRefs = { eCodec==Codec_e::PFOR ? Codec_e::BASE_DELTA : eCodec };
-	tDesc.m_bPositions = tDesc.m_bFieldTF = bPositions;
+	tDesc.m_bPositions = bPositions;
 	std::string sError;
 	Check ( pWriter->Begin ( tDesc, sError ) );
+
 	std::vector<Posting_t> dExpected;
 	for ( unsigned i=0; i<n; ++i )
 	{
@@ -92,17 +94,17 @@ static void Test ( unsigned n, unsigned uFields, Codec_e eCodec, bool bPositions
 			t.m_uHitRef = uint64_t(INT64_MAX)-i;
 		unsigned f = i%uFields;
 		t.m_dFields[f/32] = 1U<<(f%32);
-		t.m_dFieldTF[f] = bPositions ? t.m_uTF : 0;
 		dExpected.push_back(t);
 		Check ( pWriter->Add ( t, sError ) );
 	}
 
 	Check ( pWriter->Finish(sError) );
 	if ( eCodec==Codec_e::PFOR && bPositions && n==1 )
-		Check ( pWriter->GetLeaves()[0].m_dSizes[3]==20 );
+		Check ( pWriter->GetLeaves()[0].m_dSizes[3]==5 );
 
 	Reader_c tReader(tMemory);
 	Check ( tReader.Open ( 1, sError ) );
+
 	unsigned iRow = 0;
 	while ( true )
 	{
@@ -112,12 +114,16 @@ static void Test ( unsigned n, unsigned uFields, Codec_e eCodec, bool bPositions
 
 		RowBlock_t tBlock;
 		Check ( tReader.ReadRowBlock ( tBlock, sError ) );
-		std::vector<uint8_t> dPayload ( tBlock.m_tPayload.m_pData, tBlock.m_tPayload.m_pData+tBlock.m_tPayload.m_iSize );
+
+		std::vector<uint8_t> dPayload;
+		if ( tBlock.m_tPayload.m_iSize )
+			dPayload.assign ( tBlock.m_tPayload.m_pData, tBlock.m_tPayload.m_pData+tBlock.m_tPayload.m_iSize );
+
 		alignas(16) std::array<uint32_t,MAX_VALUES> dLowFields;
 		Check ( tReader.ReadLowFields ( dLowFields.data(), sError ) );
 		Check ( std::equal ( dPayload.begin(), dPayload.end(), tBlock.m_tPayload.m_pData ) );
 		Check ( tReader.ReadRows(sError) && tReader.ReadFields(sError) );
-		Check ( tReader.GetDecodeCounts()[2]==0 && tReader.GetDecodeCounts()[3]==0 && tReader.GetDecodeCounts()[4]==0 );
+		Check ( tReader.GetDecodeCounts()[2]==0 && tReader.GetDecodeCounts()[3]==0 );
 		for ( unsigned i=0; i<tReader.GetLeaf().m_uCount; ++i, ++iRow )
 		{
 			Check ( dLowFields[i]==dExpected[iRow].m_dFields[0] );
@@ -127,8 +133,10 @@ static void Test ( unsigned n, unsigned uFields, Codec_e eCodec, bool bPositions
 	}
 
 	Check ( iRow==n );
-	uint64_t uHeaders = TERM_HEADER_SIZE+pWriter->GetLeaves().size()*LEAF_HEADER_SIZE;
+
+	uint64_t uHeaders = n<=SHORT_LIST_MAX ? SHORT_HEADER_SIZE : TERM_HEADER_SIZE+pWriter->GetLeaves().size()*LEAF_HEADER_SIZE;
 	Check ( bMapped ? tMemory.m_uReadBytes==uHeaders : tMemory.m_uReadBytes>uHeaders );
+
 	ReaderValidation_c tChecked(tMemory);
 	Check ( tReader.Open ( 1, sError ) );
 	Check ( tChecked.Open ( 1, sError ) );
@@ -140,22 +148,8 @@ static void Test ( unsigned n, unsigned uFields, Codec_e eCodec, bool bPositions
 		if ( tChecked.IsEOF() )
 			break;
 
-		// Keep field-TF bytes alive while unrelated columns overwrite buffered input.
-		if ( bPositions )
-		{
-			std::array<uint32_t,MAX_VALUES> dTF;
-			Check ( tChecked.ReadFieldTF ( 0, dTF, sError ) );
-		}
-
 		Check ( tChecked.Validate(sError) );
 		Check ( tReader.ReadRows(sError) && tReader.ReadFields(sError) && tReader.ReadTF(sError) && tReader.ReadHitRefs(sError) );
-		if ( bPositions )
-			for ( unsigned f=0; f<uFields; ++f )
-			{
-				std::array<uint32_t,MAX_VALUES> dTrusted, dChecked;
-				Check ( tReader.ReadFieldTF ( f, dTrusted, sError ) && tChecked.ReadFieldTF ( f, dChecked, sError ) );
-				Check ( dTrusted==dChecked );
-			}
 
 		auto dCounts = tChecked.GetDecodeCounts();
 		Check ( tChecked.Validate(sError) );
@@ -172,25 +166,24 @@ static void Test ( unsigned n, unsigned uFields, Codec_e eCodec, bool bPositions
 		}
 	}
 
-	std::array<FieldStats_t,MAX_FIELDS> dStats;
-	Check ( tChecked.ReadStats ( dStats, sError ) );
-	for ( unsigned f=0; f<uFields; ++f )
-	{
-		uint64_t uDocs=0, uTF=0;
-		for ( unsigned i=f; i<n; i+=uFields )
-		{
-			++uDocs;
-			uTF += bPositions ? dExpected[i].m_uTF : 0;
-		}
-
-		Check ( dStats[f].m_uDocs==uDocs && dStats[f].m_uTF==uTF );
-	}
-
 	Check ( tChecked.Open ( 1, sError ) && tChecked.Next ( dExpected.back().m_uRow, sError ) && tChecked.ReadRows(sError) );
 	Check ( tChecked.GetDecodeCounts()[0]==1 && tChecked.GetDecodeCounts()[2]==0 );
 	Check ( tChecked.GetRows()[tChecked.GetLeaf().m_uCount-1]==dExpected.back().m_uRow );
+	Check ( tReader.Open ( 1, sError ) && tReader.Next ( dExpected.back().m_uRow+1, sError ) && tReader.IsEOF() );
+	if ( n<=SHORT_LIST_MAX )
+	{
+		// Impossible count, flags, field count, field ID, max TF and section extent.
+		for ( auto tBad : { std::pair<unsigned,uint8_t>{6,0}, {6,17}, {7,128}, {9,2}, {11,2}, {12,0}, {17,255} } )
+		{
+			auto dSaved = tMemory.m_dData;
+			tMemory.m_dData[1+tBad.first] = tBad.second;
+			Check ( !tChecked.Open ( 1, sError ) );
+			tMemory.m_dData = dSaved;
+		}
+	}
+
 	// The checker rejects malformed section metadata before decoding its payload.
-	uint64_t uOff = 1+TERM_HEADER_SIZE+LEAF_HEADER_SIZE;
+	uint64_t uOff = pWriter->GetLeaves()[0].m_uOffset+pWriter->GetLeaves()[0].m_uHeaderSize;
 	for ( unsigned c=0; c<COLUMNS; ++c )
 	{
 		auto nBytes = pWriter->GetLeaves()[0].m_dSizes[c];
@@ -198,21 +191,20 @@ static void Test ( unsigned n, unsigned uFields, Codec_e eCodec, bool bPositions
 		{
 			// Corrupt a section's structural marker, then restore the complete original bytes.
 			auto dSaved = tMemory.m_dData;
-			if ( c==3 && eCodec==Codec_e::PFOR )
+			if ( n<=SHORT_LIST_MAX )
+				std::fill_n ( tMemory.m_dData.data()+uOff, nBytes, 128 );
+			else if ( c==3 && eCodec==Codec_e::PFOR )
 				tMemory.m_dData[size_t(uOff)+8] = 255;
 			else
 			{
 				tMemory.m_dData[size_t(uOff)] = 255;
 				if ( c>0 && c<4 )
 					tMemory.m_dData[size_t(uOff)+3] |= 128;
-				if ( c==4 )
-					tMemory.m_dData[size_t(uOff)+1] = 255;
 			}
 
-			Check ( tChecked.Open ( 1, sError ) && tChecked.Next ( 0, sError ) );
-			Check ( !tChecked.Validate(sError) );
+			Check ( !(tChecked.Open ( 1, sError ) && tChecked.Next ( 0, sError ) && tChecked.Validate(sError)) );
 			tMemory.m_dData = dSaved;
-			if ( c==3 && eCodec==Codec_e::PFOR )
+			if ( n>SHORT_LIST_MAX && c==3 && eCodec==Codec_e::PFOR )
 				for ( unsigned uCase=0; uCase<(n>1 ? 3U : 2U); ++uCase )
 				{
 					// Zero/oversized base, then valid base with overflowing relative offsets.
@@ -235,10 +227,69 @@ static void Test ( unsigned n, unsigned uFields, Codec_e eCodec, bool bPositions
 }
 
 
+static void TestAdjacentTerms()
+{
+	Memory_c tMemory;
+	auto pWriter = std::make_unique<Writer_c>(tMemory);
+	TermDesc_t tDesc;
+	tDesc.m_uFields = 256;
+	std::string sError;
+	std::vector<uint64_t> dOffsets;
+	for ( unsigned n : { 1U, 2U, 16U, 17U, 257U, 1U } )
+	{
+		dOffsets.push_back(tMemory.GetPos());
+		Check ( pWriter->Begin ( tDesc, sError ) );
+		for ( unsigned i=0; i<n; ++i )
+		{
+			Posting_t t;
+			t.m_uRow = UINT32_MAX-n+i-1;
+			t.m_uTF = UINT32_MAX;
+			t.m_uHitRef = uint64_t(INT64_MAX)-i;
+			t.m_dFields[7] = 1U<<31;
+			Check ( pWriter->Add ( t, sError ) );
+		}
+
+		Check ( pWriter->Finish(sError) );
+	}
+
+	dOffsets.push_back(tMemory.GetPos());
+
+	Reader_c tReader(tMemory);
+	ReaderValidation_c tChecked(tMemory);
+	for ( size_t iTerm=dOffsets.size()-1; iTerm>0; --iTerm )
+	{
+		Check ( tReader.Open ( dOffsets[iTerm-1], sError ) && tChecked.Open ( dOffsets[iTerm-1], sError ) );
+		Check ( tReader.GetEnd()==dOffsets[iTerm] && tChecked.GetEnd()==dOffsets[iTerm] );
+		while ( true )
+		{
+			Check ( tReader.Next ( 0, sError ) && tChecked.Next ( 0, sError ) );
+			Check ( tReader.IsEOF()==tChecked.IsEOF() );
+			if ( tReader.IsEOF() )
+				break;
+
+			Check ( tChecked.Validate(sError) );
+			Check ( tReader.ReadRows(sError) && tReader.ReadTF(sError) && tReader.ReadHitRefs(sError) );
+
+			uint32_t dFields[MAX_VALUES];
+			Check ( tReader.ReadLowFields ( dFields, sError ) );
+			for ( unsigned i=0; i<tReader.GetLeaf().m_uCount; ++i )
+			{
+				Check ( !dFields[i] && tChecked.GetFields()[i][7]==(1U<<31) );
+				Check ( tReader.GetRows()[i]==tChecked.GetRows()[i] );
+				Check ( tReader.GetTF()[i]==UINT32_MAX );
+				Check ( tReader.GetHitRefs()[i]==tChecked.GetHitRefs()[i] );
+			}
+		}
+	}
+}
+
+
 int main()
 {
+	TestAdjacentTerms();
+
 	for ( auto eCodec : {Codec_e::FOR,Codec_e::PFOR,Codec_e::VARINT} )
-		for ( unsigned n : {1U,7U,127U,128U,129U,255U,256U,257U,1025U} )
+		for ( unsigned n : {1U,2U,3U,4U,7U,8U,15U,16U,17U,127U,128U,129U,255U,256U,257U,1025U} )
 			for ( unsigned f : {1U,33U,256U} )
 				for ( bool bPositions : {false,true} )
 					for ( bool bMapped : {false,true} )

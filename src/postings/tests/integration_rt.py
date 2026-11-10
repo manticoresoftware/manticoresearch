@@ -21,6 +21,7 @@ def main():
     parser.add_argument("--url", required=True, help="Private daemon HTTP endpoint")
     parser.add_argument("--prefix", default="postings_m2")
     parser.add_argument("--access", choices=["mmap", "file"], default="mmap")
+    parser.add_argument("--field-lengths", choices=["0", "1"], default=None)
     parser.add_argument("--output", required=True, help="Result JSON outside the source tree")
     args = parser.parse_args()
     assert re.fullmatch(r"[a-z][a-z0-9_]*", args.prefix)
@@ -51,8 +52,13 @@ def main():
         tables = [args.prefix + "_" + case + "_" + fmt for fmt in ["legacy", "block"]]
         for table, fmt in zip(tables, ["legacy", "block"]):
             sql("CREATE TABLE " + table + " (" + ",".join(f + " text" for f in fields) +
-                ",grp int) postings_format='" + fmt + "' index_field_lengths='1' " + options +
+                ",grp int) postings_format='" + fmt + "' " + options +
+                (" index_field_lengths='" + args.field_lengths + "'" if args.field_lengths else "") +
                 " access_doclists='" + args.access + "' access_hitlists='" + args.access + "'")
+            columns = sql("DESCRIBE " + table)[0]["data"]
+            lengths = [column for column in columns if column["Type"] == "tokencount"]
+            assert bool(lengths) == (args.field_lengths == "1"), (table, columns)
+            checks.append({"case": case, "stage": "field_lengths", "enabled": bool(lengths)})
 
         sql("ALTER TABLE " + tables[1] + " postings_format='block' dict='crc'",
             "postings_format=block requires dict=keywords or dict=keywords_32k")
@@ -91,6 +97,12 @@ def main():
             queries += ["SELECT count(*) FROM {} WHERE MATCH('@f33 common')",
                         "SELECT count(*) FROM {} WHERE MATCH('comm*')"]
 
+        for count in [1, 2, 3, 4, 8, 16, 17]:
+            term = "short" + str(count)
+            for match in [term, "common " + term, "rare | " + term, "@body " + term]:
+                queries.append("SELECT id,weight() FROM {} WHERE MATCH('" + match +
+                               "') ORDER BY id ASC LIMIT 2000 OPTION ranker=bm25")
+
         def compare(stage, expected_docs):
             for query in queries:
                 a, b = [sql(query.format(table))[0]["data"] for table in tables]
@@ -106,6 +118,7 @@ def main():
             for i in range(start, min(start + 128, 1026)):
                 texts = ["common alpha " + ("rare" if i % 127 == 0 else "beta"),
                          "common " + "alpha beta " * (i % 4)]
+                texts[1] += " " + " ".join("short" + str(count) for count in [1, 2, 3, 4, 8, 16, 17] if i <= count)
                 texts += ["wide common" if f == i % 34 else "" for f in range(len(fields) - 2)]
                 values.append("(" + str(i) + "," + ",".join("'" + x + "'" for x in texts) + "," + str(i % 9) + ")")
             for table in tables:

@@ -118,12 +118,6 @@ bool BlockIndexQwordValidation_c::LoadLeaf()
 
 	if ( m_tReader.IsEOF() )
 	{
-		if ( !ValidateStats() )
-		{
-			Fail();
-			return false;
-		}
-
 		m_bEOF = true;
 		m_iNext = m_tReader.GetEnd();
 		return false;
@@ -262,37 +256,6 @@ bool BlockIndexQwordValidation_c::ValidateLeaf()
 
 	auto & t = m_tValidation;
 	t.m_dLeaves.push_back(m_tReader.GetLeaf());
-	const auto & tDesc = m_tReader.GetDesc();
-	t.m_dFieldTF.resize ( tDesc.m_bFieldTF ? tDesc.m_uFields : 0 );
-	for ( unsigned f=0; f<tDesc.m_uFields; ++f )
-	{
-		if ( tDesc.m_bFieldTF && !m_tReader.ReadFieldTF ( f, t.m_dFieldTF[f], m_sError ) )
-			return false;
-
-		for ( unsigned i=0; i<m_tReader.GetLeaf().m_uCount; ++i )
-		{
-			t.m_dStats[f].m_uDocs += bool(m_tReader.GetFields()[i][f/32] & (1U<<(f%32)));
-			if ( tDesc.m_bFieldTF )
-				t.m_dStats[f].m_uTF += t.m_dFieldTF[f][i];
-		}
-	}
-
-	return true;
-}
-
-
-bool BlockIndexQwordValidation_c::ValidateStats()
-{
-	std::array<postings::FieldStats_t,postings::MAX_FIELDS> dStored;
-	if ( !m_tReader.ReadStats ( dStored, m_sError ) )
-		return false;
-
-	for ( unsigned f=0; f<m_tReader.GetDesc().m_uFields; ++f )
-		if ( dStored[f].m_uDocs!=m_tValidation.m_dStats[f].m_uDocs || dStored[f].m_uTF!=m_tValidation.m_dStats[f].m_uTF )
-		{
-			m_sError = "posting field statistics mismatch";
-			return false;
-		}
 
 	return true;
 }
@@ -300,17 +263,23 @@ bool BlockIndexQwordValidation_c::ValidateStats()
 
 bool BlockIndexQwordValidation_c::ValidateHits()
 {
-	if ( !m_tReader.GetDesc().m_bFieldTF )
-		return true;
-
+	uint64_t uTotal = 0;
 	for ( unsigned f=0; f<postings::MAX_FIELDS; ++f )
 	{
-		uint32_t uExpected = f<m_tValidation.m_dFieldTF.size() ? m_tValidation.m_dFieldTF[f][m_iOrdinal-1] : 0;
-		if ( uExpected!=m_tValidation.m_dHitTF[f] )
+		bool bExpected = (m_tReader.GetFields()[m_iOrdinal-1][f/32] & (1U<<(f%32)))!=0;
+		if ( bExpected!=bool(m_tValidation.m_dHitTF[f]) )
 		{
-			m_sError = "per-field posting frequency/hit list mismatch";
+			m_sError = "posting field mask/hit list mismatch";
 			return false;
 		}
+
+		uTotal += m_tValidation.m_dHitTF[f];
+	}
+
+	if ( uTotal!=m_tReader.GetTF()[m_iOrdinal-1] )
+	{
+		m_sError = "posting frequency/hit list mismatch";
+		return false;
 	}
 
 	return true;

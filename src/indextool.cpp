@@ -1148,7 +1148,7 @@ Commands are:
 -h, --help			display this help message
 -v				display version information
 --check <TABLE>			perform table consistency check
---convert-postings <TABLE> <OUTPUT_BASE>  convert one offline disk table/chunk to separate block-format files; requires field lengths and a keyword dictionary
+--convert-postings <TABLE> <OUTPUT_BASE>  convert one offline disk table/chunk to separate block-format files; requires a keyword dictionary
 --fix-docid-lookup <TABLE>	fix a v.71/v.72 table whose header was rewritten by ALTER without converting the docid lookup (manticoresearch#4852): converts the .spt and stamps the fixed header version, offline
 --check-disk-chunk <CHUNK_ID>	perform single disk chunk consistency check (to be used together with --check or --docstore-bad-ids)
 --check-id-dups <CHUNK_ID>	check if there are duplicate ids (to be used together with --check)

@@ -179,23 +179,10 @@ protected:
 
 std::unique_ptr<ISphKeywordsBlockReader> CreateKeywordsBlockReader ( const BYTE * pBuf, int iSkiplistBlockSize, DictFormat_e eDictFormat );
 
-struct PostingNormStats_t
-{
-	uint64_t	m_dDocs[SPH_MAX_FIELDS] {};
-	uint64_t	m_dTokens[SPH_MAX_FIELDS] {};
-
-	void Add ( int iField, uint64_t uLength )
-	{
-		m_dDocs[iField] += uLength!=0;
-		m_dTokens[iField] += uLength;
-	}
-};
-
 // header of a disk index or chunk
 struct BuildHeader_t : public CSphSourceStats, public DictHeader_t
 {
 	BuildHeader_t() = default;
-	PostingNormStats_t	m_tPostingNorms;
 
 	DWORD			m_uFormatVersion = 0;	// version to stamp into the header; 0 = current INDEX_FORMAT_VERSION
 	explicit BuildHeader_t ( const CSphSourceStats & tStat )

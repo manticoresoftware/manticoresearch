@@ -95,7 +95,6 @@ static void Test ( const char * sFile, unsigned uCount, int iPayload, FileAccess
 		t.m_uTF = i%7+1;
 		t.m_uHitRef = (uint64_t(1)<<34)+i*29;
 		t.m_dFields[i%8] = 1U<<(i%32);
-		t.m_dFieldTF[(i%8)*32+i%32] = t.m_uTF;
 		Check ( pWriter->Add ( t, sError ) );
 	}
 
@@ -198,7 +197,6 @@ static void TestWindows ( const char * sFile, unsigned uShape, unsigned uFieldCo
 		t.m_uHitRef = 8+i;
 		unsigned f = bUniform ? 1 : i%uFieldCount;
 		t.m_dFields[f/32] = 1U<<(f%32);
-		t.m_dFieldTF[f] = 1;
 		Check ( pWriter->Add ( t, sError ) );
 	}
 
@@ -279,7 +277,7 @@ static void TestWindows ( const char * sFile, unsigned uShape, unsigned uFieldCo
 
 		Check ( !a.GetReadError() && a.m_uCalls==0 );
 		const auto & dCounts = a.GetDecodeCounts();
-		Check ( !dCounts[2] && !dCounts[3] && !dCounts[4] );
+		Check ( !dCounts[2] && !dCounts[3] );
 		if ( bUniform && uShape!=2 )
 			Check ( !dCounts[0] && dCounts[1]>0 );
 
@@ -382,7 +380,6 @@ static void TestBlockPayloads ( const char * sFile, unsigned uShape, FileAccess_
 
 			unsigned f = (i+iTerm)%2;
 			t.m_dFields[0] = 1U<<f;
-			t.m_dFieldTF[f] = t.m_uTF;
 			Check ( pWriter->Add ( t, sError ) );
 			dExpected[iTerm].push_back ( { t.m_uRow, t.m_dFields[0], t.m_uTF, SphOffset_t(t.m_uHitRef) } );
 		}
@@ -767,7 +764,7 @@ int main ( int argc, char ** argv )
 	TestHitReader<BlockIndexQword_T<true>> ( argv[1], {FileAccess_e::MMAP,FileAccess_e::MMAP} );
 	TestHitReader<BlockIndexQword_T<false>> ( argv[1], {FileAccess_e::FILE,FileAccess_e::FILE} );
 
-	for ( unsigned n : { 1u, 127u, 128u, 255u, 256u, 257u, 513u, 1025u } )
+	for ( unsigned n : { 1u, 2u, 3u, 4u, 8u, 16u, 17u, 127u, 128u, 255u, 256u, 257u, 513u, 1025u } )
 		for ( int iPayload : { 0, 1, 2 } )
 			for ( auto eAccess : { FileAccess_e::MMAP, FileAccess_e::FILE } )
 				Test ( argv[1], n, iPayload, eAccess );

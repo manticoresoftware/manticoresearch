@@ -1,4 +1,4 @@
-# Block postings (component 2)
+# Block postings (component 4)
 
 Experimental opt-in format: set `postings_format = block` when building a plain
 table, or `postings_format='block'` in `CREATE TABLE`. The default is `legacy`.
@@ -14,8 +14,9 @@ ATTACH (including into an empty table), merge, chunk loading and reconfiguration
 are rejected. One daemon can serve separate legacy and block tables.
 
 Block tables use disk header version 75, RT metadata version 26 and postings
-component version 2. Legacy output retains its existing header/metadata versions.
-Discarded component-3 position experiments require rebuilding their indexes.
+component version 4. Legacy output retains its existing header/metadata versions.
+Earlier experimental block components (including 2 and 3) require reindexing;
+this reader does not retain their layouts. Legacy tables remain readable.
 Unknown component versions or required stream codecs are errors. These wire
 layouts are experimental until publication.
 
@@ -39,8 +40,7 @@ BM25 and WAND/BMW remain later milestones.
 Encoded column access borrows the immutable file mapping when available. Buffered
 readers reuse byte buffers across leaves. Row-container views retain their own
 buffer until the next leaf, so field reads cannot overwrite a bitmap in use.
-Other column views are consumed before their backing storage changes; lazy
-per-field TF similarly retains a mapping view or its own file buffer. The reader
+Other column views are consumed before their backing storage changes. The reader
 decodes into its destination arrays through the non-overlapping
 `DecodeIntegersInto`/`DecodeRowsInto` APIs; delta rows are prefix-summed in place.
 Full 128-value packing frames use the destination directly when it is 16-byte
@@ -62,11 +62,12 @@ mlocked/resident maps avoid readahead and buffered file readers retain their
 existing read buffering. This does not eagerly decode TF/positions or add CPU
 cache-line prefetch instructions.
 
-`index_field_lengths=1` is enabled for block tables. Existing row-addressable
-token-count attributes are the exact norm store; immutable per-field nonempty
-document counts and summed lengths are stored in the chunk header. Per-term
-field document counts and summed TF are stored separately. Hitless terms
-advertise no positions/per-field TF; they cannot supply those scoring inputs.
+Block format does not enable `index_field_lengths`. The option retains its normal
+default and can be enabled explicitly for expressions/rankers that require it.
+There are no additional BM25A norm statistics in the chunk header, per-term field
+statistics, or per-field TF columns. Total posting TF and maximum TF per leaf
+remain available for existing ranking and future score bounds. Hitless terms
+store TF and field membership but no hit references.
 Full-text field schema changes require rebuilding a block table; ordinary
 attribute ALTER remains supported.
 
@@ -76,46 +77,79 @@ Offline conversion creates a separate plain table/disk chunk:
 indextool --config source.conf --convert-postings SOURCE OUTPUT_BASE
 ```
 
-The source must use a word dictionary, already have field lengths and be
-offline/unlocked. Existing
-destination files are rejected. Attributes, row IDs, dead-row maps and other
+The source must use a word dictionary and be offline/unlocked. Existing
+destination files are rejected. Field-length attributes are not required. Attributes, row IDs, dead-row maps and other
 table data are preserved; all postings and external positions are rewritten.
-Sources without lengths need rebuilding into a separate block table. Converting
-an RT table as a whole is not implemented: convert offline plain tables/chunks
+Converting an RT table as a whole is not implemented: convert offline plain tables/chunks
 and attach only to a separately created block RT table. The header is written
 last. No conversion or mandatory rewrite occurs at daemon startup.
 
-## Term and leaf framing (component 2)
+## Term and leaf framing (component 4)
 
 The `.spd`, `.spp` and `.spe` files start with byte 1, a four-byte magic
 (`BPD1`, `BPH1`, `BPS1`) and little-endian uint32 component version.
 
-A dictionary posting offset points to a 40-byte term header:
+A dictionary posting offset points to either a short-list record (1..16 documents)
+or a normal term header. A normal term starts with this 32-byte header:
 
 | Offset | Bytes | Meaning |
 |---|---|---|
 | 0 | 4 | `PST2` |
 | 4 | 2 | Component version |
-| 6 | 2 | Capabilities: positions=1, per-field TF=2 |
+| 6 | 2 | Capabilities: positions=1 |
 | 8 | 2 | Field count, 1..256 |
 | 10 | 2 | Reserved, zero |
 | 12 | 8 | Four uint16 codec IDs: rows, fields, TF, hit references |
 | 20 | 4 | Reserved, zero |
 | 24 | 8 | Absolute term end |
-| 32 | 8 | Absolute statistics footer offset |
 
-Codec IDs are selected once per term stream; per-field TF uses the TF codec.
+Codec IDs are selected once per normal term stream.
 Changing a registered codec selection does not require a component-version bump.
-New output selects PFOR (2) for rows, masks and TF, and BASE_DELTA (6) for hit references. FOR/PFOR use constant and short-array modes plus unpadded varint tails. The earlier experimental padded encoding is no longer supported; existing block tables must be reindexed. The enclosing component version remains 2. Legacy-format tables are unaffected.
+New output selects PFOR (2) for rows, masks and TF, and BASE_DELTA (6) for hit references. FOR/PFOR use constant and short-array modes plus unpadded varint tails. The earlier experimental padded encoding is no longer supported; existing block tables must be reindexed. The enclosing component version is 4. Legacy-format tables are unaffected.
 
-Each 1..256-posting leaf has a 44-byte header: `BLK1`, byte length (uint32),
-posting count and field-mask word count (uint16 each), first/last row and maximum
-TF (uint32 each) and five uint32 section lengths. Sections are rows, fields, TF, hit references and per-field TF.
+Each 1..256-posting normal leaf has a 40-byte header: `BLK1`, byte length (uint32),
+posting count and field code (uint16 each), first/last row and maximum TF
+(uint32 each) and four uint32 section lengths. Sections are rows, fields, TF and
+hit references. A field code with bit 15 set contains an implicit single field ID
+in its low bits: every posting belongs to that field, and the field section is
+empty. Otherwise the code is the number of 32-bit mask words. A zero-length TF
+section means every posting has the stored maximum TF; this includes TF=1.
 Rows use the row-container grammar below. Other integer frames have a uint32
-byte-length prefix. Field masks store one frame per 32-bit mask word. Hit references decode to absolute 64-bit byte offsets into `.spp`. With BASE_DELTA (6), the section stores a little-endian uint64 base (minimum reference in the leaf), then a one-byte flag (bit 0: high parts present; other bits zero), then a length-prefixed PFOR low-32-bit frame and, only when needed, a PFOR high-32-bit frame. Frames contain offsets relative to the base. All relative offsets fit in uint32 in the common case, even when the base exceeds 4 GiB. The reader adds the base to reconstruct the same stable absolute bookmarks. Unordered references and spans above 4 GiB are supported. Codecs 1-4 in this section use the two-frame absolute low/high layout; ID 6 is valid only for hit-reference sections, not ordinary integer/row streams. Per-field TF contains sorted nonempty field entries `(field:uint16, frame length:uint32, integer frame)`.
+byte-length prefix. Field masks store one frame per 32-bit mask word. Hit references decode to absolute 64-bit byte offsets into `.spp`. With BASE_DELTA (6), the section stores a little-endian uint64 base (minimum reference in the leaf), then a one-byte flag (bit 0: high parts present; other bits zero), then a length-prefixed PFOR low-32-bit frame and, only when needed, a PFOR high-32-bit frame. Frames contain offsets relative to the base. All relative offsets fit in uint32 in the common case, even when the base exceeds 4 GiB. The reader adds the base to reconstruct the same stable absolute bookmarks. Unordered references and spans above 4 GiB are supported. Codecs 1-4 in this section use the two-frame absolute low/high layout; ID 6 is valid only for hit-reference sections, not ordinary integer/row streams.
 
-The footer contains `(document count:uint64, summed TF:uint64)` per field.
-Hitless terms store membership counts and zero field TF.
+There is no statistics footer.
+
+### Singleton and short-list records
+
+Lists of 1..16 documents use one `PSS1` record instead of a term header plus leaf
+header and framed columns. Its fixed header is 24 bytes:
+
+| Offset | Bytes | Meaning |
+|---|---|---|
+| 0 | 4 | `PSS1` |
+| 4 | 2 | Total record bytes |
+| 6 | 1 | Document count, 1..16 |
+| 7 | 1 | Positions present (bit 0); other bits zero |
+| 8 | 2 | Field count, 1..256 |
+| 10 | 2 | Implicit single field ID, or 256 for explicit masks |
+| 12 | 4 | Maximum TF |
+| 16 | 8 | Four uint16 section lengths: rows, fields, TF, hit references |
+
+Columns use unsigned little-endian base-128 varints without padding or individual
+frame headers. Rows store the first absolute row ID followed by positive gaps.
+Explicit masks are ordered by 32-bit mask word, then posting. TFs are stored only
+when they differ; otherwise maximum TF is their common value. Hit references
+store a minimum absolute base and one relative offset per document. A singleton
+stores only the base, without a redundant zero offset. An implicit single field
+requires no mask bytes. Hitless records omit references entirely.
+
+The short-record kind defines this fixed varint encoding; normal streams retain
+their codec selectors. Section lengths let consumers skip TF and references.
+Readers expose short lists through the same leaf/window and qword interfaces.
+The last row is obtained by decoding at most 16 row IDs; no bitmap or per-row
+record reconstruction is needed merely to open the list. Maximum TF is retained
+in both normal and short records.
+
 Positions are always external: existing packed-hit deltas, big-endian varints,
 terminated by zero per document. Singleton/single-hit postings are not inline.
 
@@ -137,7 +171,7 @@ hitlist file remains alive. Posting ordinals select entries from the reference
 column; they are not position-stream ordinals encoded into a bookmark.
 
 There are no PFOR position frames, position checkpoints, enlarged typed hit
-bookmarks or separate field/end arrays in component 2. Its `.spp` grammar has
+bookmarks or separate field/end arrays in component 4. Its `.spp` grammar has
 no per-term position codec selector. The compressed-position prototypes were
 removed; revisiting them requires an explicit format/compatibility design and
 new measurements. Retained varints are the selected layout, not an unfinished
@@ -155,7 +189,7 @@ assertions. `BlockIndexQword_T` and `Reader_c` have no validation-mode flag.
 `indextool --check` constructs a separate `BlockIndexQwordValidation_c`, backed
 by `ReaderValidation_c`; it checks framing and codec payloads before decoding.
 The checker walks every leaf and checks all columns, directory
-entries, footer statistics and per-field TF against external hits. No CRC fields
+entries, field masks and total TF against external hits. No CRC fields
 are written or checked. The previous experimental component-1 files require
 rebuilding or conversion from legacy; their layout is rejected at table loading.
 Unknown component/codec selection and I/O errors still fail explicitly.
@@ -173,7 +207,7 @@ page-wide exception buffers. `fastpfor/PROVENANCE.json` records the upstream
 commit, file paths and SHA-256 hashes. Files there are upstream sources with LF
 normalization only; original copyright/license notices remain intact.
 
-## Integer stream descriptors and frames (M1; used by component 2)
+## Integer stream descriptors and frames (M1; used by component 4)
 
 Select the integer codec once per encoded posting stream (rows, field masks,
 TF or hit references). These frames do not describe `.spp` hitlists. The M1

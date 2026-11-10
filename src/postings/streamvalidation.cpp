@@ -7,6 +7,7 @@
 // did not, you can find it at http://www.gnu.org/
 
 #include "streamvalidation.h"
+#include "shortlist.h"
 #include <algorithm>
 #include <cassert>
 #include <cstring>
@@ -77,20 +78,55 @@ bool ReaderValidation_c::Open ( uint64_t uOffset, std::string & sError )
 	m_bError = false;
 	m_bHaveLeaf = false;
 	m_dLoaded.fill(false);
-	m_pFieldTF.reset();
 	m_dDecodeCounts.fill(0);
-	std::array<uint8_t,TERM_HEADER_SIZE> d;
-	CHECK_DATA ( uOffset<=m_tInput.GetSize() && d.size()<=m_tInput.GetSize()-uOffset, "truncated posting term header" );
-	if ( !m_tInput.Read ( uOffset, d.data(), d.size(), sError ) )
+	m_tLeaf = {};
+	std::array<uint8_t,TERM_HEADER_SIZE> d {};
+	CHECK_DATA ( uOffset<=m_tInput.GetSize() && 8<=m_tInput.GetSize()-uOffset, "truncated posting term header" );
+	if ( !m_tInput.Read ( uOffset, d.data(), 8, sError ) )
 		return Fail ( sError, "truncated posting term header" );
 
-	CHECK_DATA ( !std::memcmp ( d.data(), "PST2", 4 ) && Get(d.data()+4,2)==COMPONENT_VERSION, "invalid posting component/version" );
+	bool bShort = !std::memcmp ( d.data(), "PSS1", 4 );
+	size_t iHeader = bShort ? SHORT_HEADER_SIZE : TERM_HEADER_SIZE;
+	CHECK_DATA ( iHeader<=m_tInput.GetSize()-uOffset, "truncated posting term header" );
+	if ( !m_tInput.Read ( uOffset+8, d.data()+8, iHeader-8, sError ) )
+		return Fail ( sError, "truncated posting term header" );
+
+	if ( bShort )
+	{
+		m_tDesc = {};
+		m_tDesc.m_bPositions = d[7]&1;
+		m_tDesc.m_uFields = uint16_t(Get(d.data()+8,2));
+		m_tLeaf.m_bShort = true;
+		m_tLeaf.m_uOffset = uOffset;
+		m_tLeaf.m_uHeaderSize = SHORT_HEADER_SIZE;
+		m_tLeaf.m_uBytes = uint32_t(Get(d.data()+4,2));
+		m_tLeaf.m_uCount = d[6];
+		m_tLeaf.m_uFieldWords = (m_tDesc.m_uFields+31)/32;
+		m_tLeaf.m_uSingleField = uint16_t(Get(d.data()+10,2));
+		m_tLeaf.m_uMaxTF = uint32_t(Get(d.data()+12,4));
+		uint64_t uBytes = SHORT_HEADER_SIZE;
+		for ( size_t i=0; i<COLUMNS; ++i )
+		{
+			m_tLeaf.m_dSizes[i] = uint32_t(Get(d.data()+16+2*i,2));
+			uBytes += m_tLeaf.m_dSizes[i];
+		}
+
+		if ( !ShortCheck<true> ( !(d[7]&~1U) && m_tDesc.m_uFields && m_tDesc.m_uFields<=MAX_FIELDS && m_tLeaf.m_uCount && m_tLeaf.m_uCount<=SHORT_LIST_MAX && m_tLeaf.m_uMaxTF && uBytes==m_tLeaf.m_uBytes && uBytes<=m_tInput.GetSize()-uOffset && m_tLeaf.m_dSizes[0] && (m_tLeaf.m_uSingleField==MAX_FIELDS ? m_tLeaf.m_dSizes[1]!=0 : m_tLeaf.m_uSingleField<m_tDesc.m_uFields && !m_tLeaf.m_dSizes[1]) && bool(m_tLeaf.m_dSizes[3])==m_tDesc.m_bPositions, sError ) )
+			return Fail ( sError, "invalid short posting header" );
+
+		m_uEnd = uOffset+uBytes;
+		m_uNext = uOffset;
+		m_bEOF = false;
+		return true;
+	}
+
+	if ( std::memcmp ( d.data(), "PST2", 4 ) || Get(d.data()+4,2)!=COMPONENT_VERSION )
+		return Fail ( sError, "unsupported posting component/version" );
 
 	unsigned uFlags = unsigned(Get(d.data()+6,2));
-	CHECK_DATA ( !((uFlags&~3U) || Get(d.data()+10,2) || Get(d.data()+20,4) || ((uFlags&2) && !(uFlags&1))), "unsupported posting capabilities" );
+	CHECK_DATA ( !((uFlags&~1U) || Get(d.data()+10,2) || Get(d.data()+20,4)), "unsupported posting capabilities" );
 
 	m_tDesc.m_bPositions = (uFlags&1)!=0;
-	m_tDesc.m_bFieldTF = (uFlags&2)!=0;
 	m_tDesc.m_uFields = uint16_t(Get(d.data()+8,2));
 	StreamDesc_t * dStreams[] = { &m_tDesc.m_tRows, &m_tDesc.m_tFields, &m_tDesc.m_tTF, &m_tDesc.m_tHitRefs };
 	for ( unsigned i=0; i<4; ++i )
@@ -103,9 +139,8 @@ bool ReaderValidation_c::Open ( uint64_t uOffset, std::string & sError )
 	CHECK_DATA ( m_tDesc.m_tRows.m_eCodec!=Codec_e::BASE_DELTA && m_tDesc.m_tFields.m_eCodec!=Codec_e::BASE_DELTA && m_tDesc.m_tTF.m_eCodec!=Codec_e::BASE_DELTA, "invalid integer stream codec" );
 
 	m_uEnd = Get(d.data()+24,8);
-	m_uStats = Get(d.data()+32,8);
 	m_uNext = uOffset+TERM_HEADER_SIZE;
-	CHECK_DATA ( !(!m_tDesc.m_uFields || m_tDesc.m_uFields>MAX_FIELDS || m_uStats<=m_uNext || m_uStats>m_uEnd || m_uEnd>m_tInput.GetSize() || m_uEnd-m_uStats!=16*uint64_t(m_tDesc.m_uFields)), "invalid posting term extents" );
+	CHECK_DATA ( !(!m_tDesc.m_uFields || m_tDesc.m_uFields>MAX_FIELDS || m_uEnd<=m_uNext || m_uEnd>m_tInput.GetSize()), "invalid posting term extents" );
 
 	m_bEOF = false;
 	return true;
@@ -117,18 +152,28 @@ bool ReaderValidation_c::Next ( uint32_t uMinRow, std::string & sError )
 	if ( m_bError )
 		return false;
 
+	if ( m_tLeaf.m_bShort && !m_bEOF && m_uNext!=m_uEnd )
+	{
+		m_bHaveLeaf = true;
+		if ( !ReadRows(sError) )
+			return false;
+
+		m_uNext = m_uEnd;
+		if ( m_tLeaf.m_uLast>=uMinRow )
+			return true;
+	}
+
 	while ( !m_bEOF )
 	{
-		if ( m_uNext==m_uStats )
+		if ( m_uNext==m_uEnd )
 		{
 			m_bEOF = true;
 			m_dLoaded.fill(false);
-			m_pFieldTF.reset();
 			return true;
 		}
 
 		std::array<uint8_t,LEAF_HEADER_SIZE> d;
-		CHECK_DATA ( m_uNext<=m_uStats && d.size()<=m_uStats-m_uNext, "truncated posting leaf header" );
+		CHECK_DATA ( m_uNext<=m_uEnd && d.size()<=m_uEnd-m_uNext, "truncated posting leaf header" );
 		if ( !m_tInput.Read ( m_uNext, d.data(), d.size(), sError ) )
 			return Fail ( sError, "truncated posting leaf header" );
 
@@ -138,7 +183,9 @@ bool ReaderValidation_c::Next ( uint32_t uMinRow, std::string & sError )
 		t.m_uOffset = m_uNext;
 		t.m_uBytes = uint32_t(Get(d.data()+4,4));
 		t.m_uCount = uint16_t(Get(d.data()+8,2));
-		t.m_uFieldWords = uint16_t(Get(d.data()+10,2));
+		unsigned uFieldCode = unsigned(Get(d.data()+10,2));
+		t.m_uSingleField = (uFieldCode&0x8000) ? uint16_t(uFieldCode&0x7fff) : MAX_FIELDS;
+		t.m_uFieldWords = (uFieldCode&0x8000) ? (m_tDesc.m_uFields+31)/32 : uint16_t(uFieldCode);
 		t.m_uFirst = uint32_t(Get(d.data()+12,4));
 		t.m_uLast = uint32_t(Get(d.data()+16,4));
 		t.m_uMaxTF = uint32_t(Get(d.data()+20,4));
@@ -149,14 +196,13 @@ bool ReaderValidation_c::Next ( uint32_t uMinRow, std::string & sError )
 			uBytes += t.m_dSizes[i];
 		}
 
-		CHECK_DATA ( !(uBytes!=t.m_uBytes || uBytes>MAX_LEAF_BYTES || uBytes>m_uStats-m_uNext || !t.m_uCount || t.m_uCount>MAX_VALUES || t.m_uLast==UINT32_MAX || t.m_uFirst>t.m_uLast || (m_bHaveLeaf && t.m_uFirst<=m_uPrevious) || t.m_uFieldWords!=(m_tDesc.m_uFields+31)/32 || !t.m_uMaxTF || !t.m_dSizes[0] || !t.m_dSizes[1] || !t.m_dSizes[2] || bool(t.m_dSizes[3])!=m_tDesc.m_bPositions || bool(t.m_dSizes[4])!=m_tDesc.m_bFieldTF), "invalid posting leaf extents/order/capabilities" );
+		CHECK_DATA ( !(uBytes!=t.m_uBytes || uBytes>MAX_LEAF_BYTES || uBytes>m_uEnd-m_uNext || !t.m_uCount || t.m_uCount>MAX_VALUES || t.m_uLast==UINT32_MAX || t.m_uFirst>t.m_uLast || (m_bHaveLeaf && t.m_uFirst<=m_uPrevious) || t.m_uFieldWords!=(m_tDesc.m_uFields+31)/32 || !t.m_uMaxTF || !t.m_dSizes[0] || (t.m_uSingleField==MAX_FIELDS ? !t.m_dSizes[1] : t.m_uSingleField>=m_tDesc.m_uFields || t.m_dSizes[1]) || bool(t.m_dSizes[3])!=m_tDesc.m_bPositions), "invalid posting leaf extents/order/capabilities" );
 
 		m_uPrevious = t.m_uLast;
 		m_bHaveLeaf = true;
 		m_uNext += t.m_uBytes;
 		m_tLeaf = t;
 		m_dLoaded.fill(false);
-		m_pFieldTF.reset();
 		if ( t.m_uLast>=uMinRow )
 			return true;
 	}
@@ -170,7 +216,7 @@ bool ReaderValidation_c::ReadColumn ( Column_e eColumn, Bytes_t & tData, std::ve
 	CHECK_DATA ( !(m_bError || m_bEOF || !m_bHaveLeaf), "no current posting leaf" );
 
 	size_t iColumn = size_t(eColumn);
-	uint64_t uOffset = m_tLeaf.m_uOffset+LEAF_HEADER_SIZE;
+	uint64_t uOffset = m_tLeaf.m_uOffset+m_tLeaf.m_uHeaderSize;
 	for ( size_t i=0; i<iColumn; ++i )
 		uOffset += m_tLeaf.m_dSizes[i];
 
@@ -197,6 +243,19 @@ bool ReaderValidation_c::ReadRows ( std::string & sError )
 	if ( m_dLoaded[0] )
 		return !m_bError;
 
+	if ( m_tLeaf.m_bShort )
+	{
+		Bytes_t tData;
+		if ( !ReadColumn ( Column_e::ROWS, tData, m_dReadBuffer, sError ) || !ShortRows<true> ( tData, m_tLeaf.m_uCount, m_dRows.data(), sError ) )
+			return Fail ( sError, "invalid short posting rows" );
+
+		m_tLeaf.m_uFirst = m_dRows[0];
+		m_tLeaf.m_uLast = m_dRows[m_tLeaf.m_uCount-1];
+		m_dLoaded[0] = true;
+		++m_dDecodeCounts[0];
+		return true;
+	}
+
 	Bytes_t tData;
 	if ( !ReadColumn ( Column_e::ROWS, tData, m_dReadBuffer, sError ) )
 		return false;
@@ -219,16 +278,38 @@ bool ReaderValidation_c::ReadFields ( std::string & sError )
 	if ( m_dLoaded[1] )
 		return !m_bError;
 
+	if ( m_tLeaf.m_uSingleField!=MAX_FIELDS )
+	{
+		std::fill_n ( m_dFields.begin(), m_tLeaf.m_uCount, std::array<uint32_t,FIELD_WORDS>{} );
+		for ( unsigned i=0; i<m_tLeaf.m_uCount; ++i )
+			m_dFields[i][m_tLeaf.m_uSingleField/32] = 1U<<(m_tLeaf.m_uSingleField%32);
+
+		m_dLoaded[1] = true;
+		++m_dDecodeCounts[1];
+		return true;
+	}
+
 	Bytes_t tData;
 	if ( !ReadColumn ( Column_e::FIELDS, tData, m_dReadBuffer, sError ) )
 		return false;
 
 	Bytes_t t = tData;
-	m_dFields.fill({});
+	std::fill_n ( m_dFields.begin(), m_tLeaf.m_uCount, std::array<uint32_t,FIELD_WORDS>{} );
+
 	alignas(16) std::array<uint32_t,MAX_VALUES> dValues;
 	for ( unsigned f=0; f<m_tLeaf.m_uFieldWords; ++f )
 	{
-		if ( !Frame ( m_tDesc.m_tFields, t, dValues.data(), m_tLeaf.m_uCount, sError ) )
+		if ( m_tLeaf.m_bShort )
+		{
+			for ( unsigned i=0; i<m_tLeaf.m_uCount; ++i )
+			{
+				uint64_t uValue;
+				if ( !ShortValue<true> ( t, uValue, sError ) || !ShortCheck<true> ( uValue<=UINT32_MAX, sError ) )
+					return Fail ( sError, "invalid short posting fields" );
+
+				dValues[i] = uint32_t(uValue);
+			}
+		} else if ( !Frame ( m_tDesc.m_tFields, t, dValues.data(), m_tLeaf.m_uCount, sError ) )
 			return Fail ( sError, "invalid posting field column" );
 
 		for ( unsigned i=0; i<m_tLeaf.m_uCount; ++i )
@@ -250,12 +331,26 @@ bool ReaderValidation_c::ReadTF ( std::string & sError )
 	if ( m_dLoaded[2] )
 		return !m_bError;
 
+	if ( !m_tLeaf.m_dSizes[2] )
+	{
+		std::fill_n ( m_dTF.data(), m_tLeaf.m_uCount, m_tLeaf.m_uMaxTF );
+		m_dLoaded[2] = true;
+		++m_dDecodeCounts[2];
+		return true;
+	}
+
 	Bytes_t tData;
 	if ( !ReadColumn ( Column_e::TF, tData, m_dReadBuffer, sError ) )
 		return false;
 
 	Bytes_t t = tData;
-	if ( !Frame ( m_tDesc.m_tTF, t, m_dTF.data(), m_tLeaf.m_uCount, sError ) )
+	if ( m_tLeaf.m_bShort )
+	{
+		if ( !ShortIntegers<true> ( t, m_tLeaf.m_uCount, m_dTF.data(), sError ) )
+			return Fail ( sError, "invalid short posting frequencies" );
+
+		t.m_iSize = 0;
+	} else if ( !Frame ( m_tDesc.m_tTF, t, m_dTF.data(), m_tLeaf.m_uCount, sError ) )
 		return Fail ( sError, "invalid posting TF column" );
 
 	CHECK_DATA ( !t.m_iSize, "trailing posting TF data" );
@@ -277,7 +372,17 @@ bool ReaderValidation_c::ReadHitRefs ( std::string & sError )
 	if ( !ReadColumn ( Column_e::HITREFS, tData, m_dReadBuffer, sError ) )
 		return false;
 
-	m_dHitRefs.fill(0);
+	std::fill_n ( m_dHitRefs.begin(), m_tLeaf.m_uCount, 0 );
+	if ( m_tLeaf.m_bShort )
+	{
+		if ( m_tDesc.m_bPositions && !ShortHitRefs<true> ( tData, m_tLeaf.m_uCount, m_dHitRefs.data(), sError ) )
+			return Fail ( sError, "invalid short posting hit references" );
+
+		m_dLoaded[3] = true;
+		++m_dDecodeCounts[3];
+		return true;
+	}
+
 	Bytes_t t = tData;
 	StreamDesc_t tStream = m_tDesc.m_tHitRefs;
 	uint64_t uBase = 0;
@@ -321,83 +426,8 @@ bool ReaderValidation_c::ReadHitRefs ( std::string & sError )
 }
 
 
-bool ReaderValidation_c::ReadFieldTF ( unsigned uField, std::array<uint32_t,MAX_VALUES> & dTF, std::string & sError )
-{
-	CHECK_DATA ( !(m_bError || m_bEOF || !m_bHaveLeaf || uField>=m_tDesc.m_uFields || !m_tDesc.m_bFieldTF), "per-field posting frequencies unavailable" );
-
-	if ( !m_pFieldTF )
-	{
-		auto pCache = std::make_unique<FieldTFCache_t>();
-		if ( !ReadColumn ( Column_e::FIELD_TF, pCache->m_tData, pCache->m_dBuffer, sError ) )
-			return false;
-
-		Bytes_t t = pCache->m_tData;
-		int iPrevious = -1;
-		while ( t.m_iSize )
-		{
-			CHECK_DATA ( !(t.m_iSize<6), "truncated per-field frequency entry" );
-
-			unsigned f = unsigned(Get(t.m_pData,2));
-			size_t n = size_t(Get(t.m_pData+2,4));
-			CHECK_DATA ( !(f>=m_tDesc.m_uFields || int(f)<=iPrevious || n>t.m_iSize-6), "invalid per-field frequency directory" );
-
-			iPrevious = int(f);
-			pCache->m_dOffsets[f] = size_t(t.m_pData-pCache->m_tData.m_pData)+2;
-			t.m_pData += 6+n;
-			t.m_iSize -= 6+n;
-		}
-
-		m_pFieldTF = std::move(pCache);
-	}
-
-	auto & dValues = m_pFieldTF->m_dValues[uField];
-	if ( dValues.empty() )
-	{
-		dValues.resize(m_tLeaf.m_uCount);
-		size_t iOffset = m_pFieldTF->m_dOffsets[uField];
-		if ( iOffset )
-		{
-			const uint8_t * p = m_pFieldTF->m_tData.m_pData+iOffset;
-			Bytes_t t { p, 4+size_t(Get(p,4)) };
-			if ( !Frame ( m_tDesc.m_tTF, t, dValues.data(), m_tLeaf.m_uCount, sError ) )
-				return Fail ( sError, "invalid per-field frequency frame" );
-		}
-
-		++m_dDecodeCounts[4];
-	}
-
-	dTF.fill(0);
-	std::copy ( dValues.begin(), dValues.end(), dTF.begin() );
-	return true;
-}
-
-
-bool ReaderValidation_c::ReadStats ( std::array<FieldStats_t,MAX_FIELDS> & dStats, std::string & sError )
-{
-	if ( m_bError )
-		return false;
-
-	CHECK_DATA ( !(m_uEnd<=m_uStats), "posting term is not open" );
-
-	std::vector<uint8_t> d ( size_t(m_uEnd-m_uStats) );
-	if ( !m_tInput.Read ( m_uStats, d.data(), d.size(), sError ) )
-		return Fail ( sError, "posting statistics read failed" );
-
-	dStats.fill({});
-	for ( unsigned f=0; f<m_tDesc.m_uFields; ++f )
-	{
-		dStats[f].m_uDocs = Get(d.data()+16*f,8);
-		dStats[f].m_uTF = Get(d.data()+16*f+8,8);
-		CHECK_DATA ( !(m_tDesc.m_bFieldTF ? dStats[f].m_uTF<dStats[f].m_uDocs : dStats[f].m_uTF!=0), "invalid posting term field statistics" );
-	}
-
-	return true;
-}
-
-
 bool ReaderValidation_c::CheckFields ( std::string & sError )
 {
-
 	for ( unsigned i=0; i<m_tLeaf.m_uCount; ++i )
 	{
 		uint32_t uAny = 0;
@@ -445,29 +475,6 @@ bool ReaderValidation_c::Validate ( std::string & sError )
 {
 	if ( !ReadRows(sError) || !ReadFields(sError) || !ReadTF(sError) || !ReadHitRefs(sError) )
 		return false;
-
-	if ( !m_tDesc.m_bFieldTF )
-		return true;
-
-	std::array<uint64_t,MAX_VALUES> dTotals {};
-	std::array<uint32_t,MAX_VALUES> dTF;
-	for ( unsigned f=0; f<m_tDesc.m_uFields; ++f )
-	{
-		if ( !ReadFieldTF ( f, dTF, sError ) )
-			return false;
-
-		for ( unsigned i=0; i<m_tLeaf.m_uCount; ++i )
-		{
-			if ( bool(dTF[i])!=bool(m_dFields[i][f/32] & (1U<<(f%32))) )
-				return Fail ( sError, "per-field frequency/membership mismatch" );
-
-			dTotals[i] += dTF[i];
-		}
-	}
-
-	for ( unsigned i=0; i<m_tLeaf.m_uCount; ++i )
-		if ( dTotals[i]!=m_dTF[i] )
-			return Fail ( sError, "per-field/total frequency mismatch" );
 
 	return true;
 }

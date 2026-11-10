@@ -71,7 +71,6 @@ bool DiskWriter_c::Begin ( unsigned uFields, bool bPositions, CSphString & sErro
 	TermDesc_t tDesc;
 	tDesc.m_uFields = uint16_t(uFields);
 	tDesc.m_bPositions = bPositions;
-	tDesc.m_bFieldTF = bPositions;
 	if ( m_tWriter.Begin ( tDesc, m_sError ) )
 		return true;
 

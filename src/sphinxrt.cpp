@@ -4593,11 +4593,6 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	RowID_t tNextRowID = 0;
 	int iStride = m_tSchema.GetRowSize();
 	auto iStrideBytes = sizeof ( CSphRowitem ) * iStride;
-	CSphVector<PlainOrColumnar_t> dPostingNormAttrs;
-	if ( m_tSettings.m_uPostingsFormat )
-		for ( int f=0; f<m_tSchema.GetFieldsCount(); ++f )
-			dPostingNormAttrs.Add ( CreatePlainOrColumnar ( m_tSchema, m_tSchema.GetAttr(m_tSchema.GetAttrId_FirstFieldLen()+f) ) );
-
 	CSphFixedVector<CSphRowitem> dNewRow { iStride };
 	CSphRowitem * pNewRow = dNewRow.Begin();
 	ARRAY_FOREACH ( i, tCtx.m_tRamSegments )
@@ -4613,8 +4608,6 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 		{
 			const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID*iStride;
 			tMinMaxBuilder.Collect(pRow);
-			ARRAY_FOREACH ( f, dPostingNormAttrs )
-				tCtx.m_tPostingNorms.Add ( f, dPostingNormAttrs[f].Get ( tRowID, pRow, dColumnarIterators ) );
 
 			if ( pBlobLocatorAttr )
 			{
@@ -4881,7 +4874,6 @@ static bool WriteBlockPosting ( postings::DiskWriter_c & tBlockWriter, CSphWrite
 		{
 			unsigned f = HITMAN::GetField(uValue);
 			tPosting.m_dFields[f/32] |= 1U<<(f%32);
-			++tPosting.m_dFieldTF[f];
 			tWriterHits.ZipInt ( uValue-std::exchange(uLastHit,uValue) );
 		};
 

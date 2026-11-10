@@ -996,26 +996,6 @@ void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t 
 		sJson.NamedVal ( "field_filter_settings", tFieldFilterSettings );
 	}
 
-	if ( tWriteHeader.m_pSettings->m_uPostingsFormat )
-	{
-		sJson.Named ( "posting_norms" );
-		auto tNormObject = sJson.ObjectW();
-		sJson.NamedString ( "storage", "field_lengths" );
-		sJson.NamedVal ( "version", 1 );
-		{
-			sJson.Named ( "field_docs" );
-			auto tArray = sJson.Array();
-			for ( int i=0; i<tWriteHeader.m_pSchema->GetFieldsCount(); ++i )
-				sJson << tBuildHeader.m_tPostingNorms.m_dDocs[i];
-		}
-		{
-			sJson.Named ( "field_tokens" );
-			auto tArray = sJson.Array();
-			for ( int i=0; i<tWriteHeader.m_pSchema->GetFieldsCount(); ++i )
-				sJson << tBuildHeader.m_tPostingNorms.m_dTokens[i];
-		}
-	}
-
 	// average field lengths
 	if ( tWriteHeader.m_pSettings->m_bIndexFieldLens )
 	{

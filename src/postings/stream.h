@@ -15,14 +15,14 @@
 namespace postings
 {
 
-constexpr unsigned COMPONENT_VERSION = 2;
+constexpr unsigned COMPONENT_VERSION = 4;
 constexpr size_t MAX_FIELDS = 256;
 constexpr size_t FIELD_WORDS = MAX_FIELDS/32;
-constexpr size_t TERM_HEADER_SIZE = 40;
-constexpr size_t LEAF_HEADER_SIZE = 44;
+constexpr size_t TERM_HEADER_SIZE = 32;
+constexpr size_t LEAF_HEADER_SIZE = 40;
 constexpr size_t MAX_LEAF_BYTES = 512*1024;
 
-enum class Column_e { ROWS, FIELDS, TF, HITREFS, FIELD_TF, COUNT };
+enum class Column_e { ROWS, FIELDS, TF, HITREFS, COUNT };
 constexpr size_t COLUMNS = size_t(Column_e::COUNT);
 
 struct TermDesc_t
@@ -34,7 +34,6 @@ struct TermDesc_t
 
 	uint16_t	m_uFields = 0;
 	bool		m_bPositions = true;
-	bool		m_bFieldTF = true;
 };
 
 struct Posting_t
@@ -44,13 +43,6 @@ struct Posting_t
 	uint64_t	m_uHitRef = 0;
 
 	std::array<uint32_t,FIELD_WORDS>	m_dFields {};
-	std::array<uint32_t,MAX_FIELDS>		m_dFieldTF {};
-};
-
-struct FieldStats_t
-{
-	uint64_t	m_uDocs = 0;
-	uint64_t	m_uTF = 0;
 };
 
 struct Leaf_t
@@ -62,6 +54,9 @@ struct Leaf_t
 	uint32_t	m_uMaxTF = 0;
 	uint16_t	m_uCount = 0;
 	uint16_t	m_uFieldWords = 0;
+	uint16_t	m_uSingleField = MAX_FIELDS;
+	uint16_t	m_uHeaderSize = LEAF_HEADER_SIZE;
+	bool		m_bShort = false;
 
 	std::array<uint32_t,COLUMNS>	m_dSizes {};
 };
@@ -101,6 +96,7 @@ public:
 	const std::vector<Leaf_t> &	GetLeaves() const	{ return m_dLeaves; }
 
 private:
+	bool	WriteShort ( std::string & sError );
 	bool	Flush ( std::string & sError );
 	bool	EncodeHitRefs ( std::vector<uint8_t> & dOutput, std::string & sError ) const;
 
@@ -108,7 +104,6 @@ private:
 	TermDesc_t	m_tDesc;
 
 	std::array<Posting_t,MAX_VALUES>	m_dPostings;
-	std::array<FieldStats_t,MAX_FIELDS>	m_dStats {};
 	std::vector<Leaf_t>					m_dLeaves;
 
 	size_t		m_iCount = 0;
@@ -140,8 +135,6 @@ public:
 	bool				ReadFields ( std::string & sError );
 	bool				ReadTF ( std::string & sError );
 	bool				ReadHitRefs ( std::string & sError );
-	bool				ReadFieldTF ( unsigned uField, std::array<uint32_t,MAX_VALUES> & dTF, std::string & sError );
-	bool				ReadStats ( std::array<FieldStats_t,MAX_FIELDS> & dStats, std::string & sError );
 
 	bool				IsEOF() const	{ return m_bEOF; }
 	uint64_t			GetEnd() const	{ return m_uEnd; }
@@ -162,16 +155,6 @@ private:
 	bool	CheckTF ( std::string & sError );
 	bool	CheckHitRefs ( std::string & sError );
 
-	struct FieldTFCache_t
-	{
-		Bytes_t					m_tData;
-		std::vector<uint8_t>	m_dBuffer; // owns buffered input while other columns reuse m_dReadBuffer
-
-		std::array<size_t,MAX_FIELDS>					m_dOffsets {};
-		std::array<std::vector<uint32_t>,MAX_FIELDS>	m_dValues;
-	};
-
-	std::unique_ptr<FieldTFCache_t>	m_pFieldTF;
 	Input_i &						m_tInput;
 	std::vector<uint8_t>			m_dReadBuffer;
 	std::vector<uint8_t>			m_dRowBuffer;
@@ -181,7 +164,6 @@ private:
 
 	uint64_t	m_uNext = 0;
 	uint64_t	m_uEnd = 0;
-	uint64_t	m_uStats = 0;
 	uint32_t	m_uPrevious = 0;
 	bool		m_bHaveLeaf = false;
 	bool		m_bEOF = true;

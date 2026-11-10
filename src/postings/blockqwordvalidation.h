@@ -38,15 +38,12 @@ private:
 	void			Fail();
 	void			ResetCursor();
 	bool			ValidateLeaf();
-	bool			ValidateStats();
 	bool			ValidateHits();
 	bool			ReadCheckedHit ( DWORD & uDelta );
 
 	struct Validation_t
 	{
-		std::array<postings::FieldStats_t,postings::MAX_FIELDS>	m_dStats {};
 		std::array<uint32_t,postings::MAX_FIELDS>				m_dHitTF {};
-		std::vector<std::array<uint32_t,postings::MAX_VALUES>>	m_dFieldTF;
 		std::vector<postings::Leaf_t>							m_dLeaves;
 	};
 

@@ -25,8 +25,6 @@ public:
 	bool				ReadFields ( std::string & sError );
 	bool				ReadTF ( std::string & sError );
 	bool				ReadHitRefs ( std::string & sError );
-	bool				ReadFieldTF ( unsigned uField, std::array<uint32_t,MAX_VALUES> & dTF, std::string & sError );
-	bool				ReadStats ( std::array<FieldStats_t,MAX_FIELDS> & dStats, std::string & sError );
 	bool				Validate ( std::string & sError );
 
 	bool				IsEOF() const	{ return m_bEOF; }
@@ -48,16 +46,6 @@ private:
 	bool	CheckTF ( std::string & sError );
 	bool	CheckHitRefs ( std::string & sError );
 
-	struct FieldTFCache_t
-	{
-		Bytes_t					m_tData;
-		std::vector<uint8_t>	m_dBuffer; // owns buffered input while other columns reuse m_dReadBuffer
-
-		std::array<size_t,MAX_FIELDS>					m_dOffsets {};
-		std::array<std::vector<uint32_t>,MAX_FIELDS>	m_dValues;
-	};
-
-	std::unique_ptr<FieldTFCache_t>	m_pFieldTF;
 	Input_i &						m_tInput;
 	std::vector<uint8_t>			m_dReadBuffer;
 	TermDesc_t						m_tDesc;
@@ -65,7 +53,6 @@ private:
 
 	uint64_t	m_uNext = 0;
 	uint64_t	m_uEnd = 0;
-	uint64_t	m_uStats = 0;
 	uint32_t	m_uPrevious = 0;
 	bool		m_bHaveLeaf = false;
 	bool		m_bEOF = true;

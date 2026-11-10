@@ -7,6 +7,7 @@
 // did not, you can find it at http://www.gnu.org/
 
 #include "stream.h"
+#include "shortlist.h"
 #include <algorithm>
 #include <cassert>
 #include <cstring>
@@ -52,15 +53,48 @@ bool Error ( std::string & sError, const char * sMessage )
 }
 
 
-bool Header ( const TermDesc_t & tDesc, uint64_t uEnd, uint64_t uStats, std::array<uint8_t,TERM_HEADER_SIZE> & dHeader, std::string & sError )
+void AppendShortValue ( std::vector<uint8_t> & dOutput, uint64_t uValue )
 {
-	assert ( tDesc.m_uFields && tDesc.m_uFields<=MAX_FIELDS && (!tDesc.m_bFieldTF || tDesc.m_bPositions) );
+	while ( uValue>=128 )
+	{
+		dOutput.push_back ( uint8_t(uValue&127) | 128 );
+		uValue >>= 7;
+	}
+
+	dOutput.push_back ( uint8_t(uValue) );
+}
+
+
+unsigned SingleField ( const Posting_t * pPostings, unsigned uCount, unsigned uFields )
+{
+	unsigned uField = MAX_FIELDS;
+	for ( unsigned f=0; f<uFields; ++f )
+		if ( pPostings[0].m_dFields[f/32] & (1U<<(f%32)) )
+		{
+			if ( uField!=MAX_FIELDS )
+				return MAX_FIELDS;
+
+			uField = f;
+		}
+
+	for ( unsigned i=1; i<uCount; ++i )
+		if ( pPostings[i].m_dFields!=pPostings[0].m_dFields )
+			return MAX_FIELDS;
+
+	return uField;
+}
+
+
+bool Header ( const TermDesc_t & tDesc, uint64_t uEnd, std::array<uint8_t,TERM_HEADER_SIZE> & dHeader, std::string & sError )
+{
+	assert ( tDesc.m_uFields && tDesc.m_uFields<=MAX_FIELDS );
 
 	dHeader.fill(0);
 	std::memcpy ( dHeader.data(), "PST2", 4 );
 	Put ( dHeader.data()+4, COMPONENT_VERSION, 2 );
-	Put ( dHeader.data()+6, unsigned(tDesc.m_bPositions) | (unsigned(tDesc.m_bFieldTF)<<1), 2 );
+	Put ( dHeader.data()+6, unsigned(tDesc.m_bPositions), 2 );
 	Put ( dHeader.data()+8, tDesc.m_uFields, 2 );
+
 	StreamDesc_t dStreams[] = { tDesc.m_tRows, tDesc.m_tFields, tDesc.m_tTF, tDesc.m_tHitRefs };
 	for ( unsigned i=0; i<4; ++i )
 	{
@@ -72,7 +106,6 @@ bool Header ( const TermDesc_t & tDesc, uint64_t uEnd, uint64_t uStats, std::arr
 	}
 
 	Put ( dHeader.data()+24, uEnd, 8 );
-	Put ( dHeader.data()+32, uStats, 8 );
 	return true;
 }
 
@@ -113,16 +146,15 @@ bool Writer_c::Begin ( const TermDesc_t & tDesc, std::string & sError )
 	assert ( !m_bOpen );
 
 	std::array<uint8_t,TERM_HEADER_SIZE> dHeader;
-	if ( !Header ( tDesc, 0, 0, dHeader, sError ) )
+	if ( !Header ( tDesc, 0, dHeader, sError ) )
 		return false;
 
 	m_tDesc = tDesc;
 	m_uStart = m_tOutput.GetPos();
 	m_iCount = 0;
 	m_bHaveRows = false;
-	m_dStats.fill({});
 	m_dLeaves.clear();
-	m_bOpen = m_tOutput.Write ( {dHeader.data(),dHeader.size()}, sError );
+	m_bOpen = true;
 	return m_bOpen;
 }
 
@@ -132,24 +164,15 @@ bool Writer_c::Add ( const Posting_t & tPosting, std::string & sError )
 	assert ( m_bOpen && tPosting.m_uRow!=UINT32_MAX && (!m_bHaveRows || tPosting.m_uRow>m_uLast) && tPosting.m_uTF );
 	assert ( !m_tDesc.m_bPositions || (tPosting.m_uHitRef && tPosting.m_uHitRef<=INT64_MAX) );
 #ifndef NDEBUG
-	uint64_t uTF = 0;
 	bool bFields = false;
 	for ( unsigned i=0; i<MAX_FIELDS; ++i )
 	{
 		bool bSet = (tPosting.m_dFields[i/32] & (1U<<(i%32)))!=0;
-		assert ( i<m_tDesc.m_uFields || (!bSet && !tPosting.m_dFieldTF[i]) );
-		assert ( !m_tDesc.m_bFieldTF || bSet==(tPosting.m_dFieldTF[i]!=0) );
+		assert ( i<m_tDesc.m_uFields || !bSet );
 		bFields |= bSet;
-		uTF += tPosting.m_dFieldTF[i];
 	}
-	assert ( bFields && (!m_tDesc.m_bFieldTF || uTF==tPosting.m_uTF) );
+	assert ( bFields );
 #endif
-
-	for ( unsigned i=0; i<m_tDesc.m_uFields; ++i )
-	{
-		m_dStats[i].m_uDocs += (tPosting.m_dFields[i/32]>>(i%32))&1;
-		m_dStats[i].m_uTF += m_tDesc.m_bFieldTF ? tPosting.m_dFieldTF[i] : 0;
-	}
 
 	m_dPostings[m_iCount++] = tPosting;
 	m_uLast = tPosting.m_uRow;
@@ -200,10 +223,92 @@ bool Writer_c::EncodeHitRefs ( std::vector<uint8_t> & dOutput, std::string & sEr
 }
 
 
+bool Writer_c::WriteShort ( std::string & sError )
+{
+	std::array<std::vector<uint8_t>,COLUMNS> dColumns;
+	unsigned uSingleField = SingleField ( m_dPostings.data(), unsigned(m_iCount), m_tDesc.m_uFields );
+	uint32_t uMaxTF = 0, uPrevious = 0;
+	uint64_t uBase = m_dPostings[0].m_uHitRef;
+	bool bConstantTF = true;
+	for ( size_t i=0; i<m_iCount; ++i )
+	{
+		const auto & t = m_dPostings[i];
+		AppendShortValue ( dColumns[0], t.m_uRow-uPrevious );
+		uPrevious = t.m_uRow;
+		uMaxTF = std::max ( uMaxTF, t.m_uTF );
+		bConstantTF &= t.m_uTF==m_dPostings[0].m_uTF;
+		uBase = std::min ( uBase, t.m_uHitRef );
+	}
+
+	if ( uSingleField==MAX_FIELDS )
+		for ( unsigned f=0; f<(m_tDesc.m_uFields+31)/32; ++f )
+			for ( size_t i=0; i<m_iCount; ++i )
+				AppendShortValue ( dColumns[1], m_dPostings[i].m_dFields[f] );
+
+	if ( !bConstantTF )
+		for ( size_t i=0; i<m_iCount; ++i )
+			AppendShortValue ( dColumns[2], m_dPostings[i].m_uTF );
+
+	if ( m_tDesc.m_bPositions )
+	{
+		AppendShortValue ( dColumns[3], uBase );
+		if ( m_iCount>1 )
+			for ( size_t i=0; i<m_iCount; ++i )
+				AppendShortValue ( dColumns[3], m_dPostings[i].m_uHitRef-uBase );
+	}
+
+	Leaf_t tLeaf;
+	tLeaf.m_uOffset = m_uStart;
+	tLeaf.m_uCount = uint16_t(m_iCount);
+	tLeaf.m_uFirst = m_dPostings[0].m_uRow;
+	tLeaf.m_uLast = m_dPostings[m_iCount-1].m_uRow;
+	tLeaf.m_uMaxTF = uMaxTF;
+	tLeaf.m_uFieldWords = (m_tDesc.m_uFields+31)/32;
+	tLeaf.m_uSingleField = uint16_t(uSingleField);
+	tLeaf.m_uHeaderSize = SHORT_HEADER_SIZE;
+	tLeaf.m_bShort = true;
+	tLeaf.m_uBytes = SHORT_HEADER_SIZE;
+	std::array<uint8_t,SHORT_HEADER_SIZE> dHeader {};
+	std::memcpy ( dHeader.data(), "PSS1", 4 );
+	dHeader[6] = uint8_t(m_iCount);
+	dHeader[7] = m_tDesc.m_bPositions;
+	Put ( dHeader.data()+8, m_tDesc.m_uFields, 2 );
+	Put ( dHeader.data()+10, uSingleField, 2 );
+	Put ( dHeader.data()+12, uMaxTF, 4 );
+	for ( size_t i=0; i<COLUMNS; ++i )
+	{
+		tLeaf.m_dSizes[i] = uint32_t(dColumns[i].size());
+		tLeaf.m_uBytes += tLeaf.m_dSizes[i];
+		Put ( dHeader.data()+16+2*i, tLeaf.m_dSizes[i], 2 );
+	}
+
+	assert ( tLeaf.m_uBytes<=UINT16_MAX );
+	Put ( dHeader.data()+4, tLeaf.m_uBytes, 2 );
+	if ( !m_tOutput.Write ( {dHeader.data(),dHeader.size()}, sError ) )
+		return false;
+
+	for ( const auto & dColumn : dColumns )
+		if ( !m_tOutput.Write ( Bytes(dColumn), sError ) )
+			return false;
+
+	m_dLeaves.push_back(tLeaf);
+	m_iCount = 0;
+	m_bOpen = false;
+	return true;
+}
+
+
 bool Writer_c::Flush ( std::string & sError )
 {
 	if ( !m_iCount )
 		return true;
+
+	if ( m_dLeaves.empty() )
+	{
+		std::array<uint8_t,TERM_HEADER_SIZE> dHeader;
+		if ( !Header ( m_tDesc, 0, dHeader, sError ) || !m_tOutput.Write ( {dHeader.data(),dHeader.size()}, sError ) )
+			return false;
+	}
 
 	std::array<std::vector<uint8_t>,COLUMNS> dColumns;
 	alignas(16) std::array<uint32_t,MAX_VALUES> dValues;
@@ -214,7 +319,8 @@ bool Writer_c::Flush ( std::string & sError )
 		return false;
 
 	unsigned uWords = (m_tDesc.m_uFields+31)/32;
-	for ( unsigned f=0; f<uWords; ++f )
+	unsigned uSingleField = SingleField ( m_dPostings.data(), unsigned(m_iCount), m_tDesc.m_uFields );
+	for ( unsigned f=0; uSingleField==MAX_FIELDS && f<uWords; ++f )
 	{
 		for ( size_t i=0; i<m_iCount; ++i )
 			dValues[i] = m_dPostings[i].m_dFields[f];
@@ -230,29 +336,11 @@ bool Writer_c::Flush ( std::string & sError )
 		uMaxTF = std::max ( uMaxTF, dValues[i] );
 	}
 
-	if ( !AddFrame ( m_tDesc.m_tTF, dValues.data(), m_iCount, dColumns[2], sError ) )
+	if ( !std::all_of ( dValues.begin(), dValues.begin()+m_iCount, [uMaxTF] ( uint32_t uTF ) { return uTF==uMaxTF; } ) && !AddFrame ( m_tDesc.m_tTF, dValues.data(), m_iCount, dColumns[2], sError ) )
 		return false;
 
 	if ( !EncodeHitRefs ( dColumns[3], sError ) )
 		return false;
-
-	if ( m_tDesc.m_bFieldTF )
-		for ( unsigned f=0; f<m_tDesc.m_uFields; ++f )
-		{
-			bool bPresent = false;
-			for ( size_t i=0; i<m_iCount; ++i )
-			{
-				dValues[i] = m_dPostings[i].m_dFieldTF[f];
-				bPresent |= dValues[i]!=0;
-			}
-
-			if ( !bPresent )
-				continue;
-
-			Append ( dColumns[4], f, 2 );
-			if ( !AddFrame ( m_tDesc.m_tTF, dValues.data(), m_iCount, dColumns[4], sError ) )
-				return false;
-		}
 
 	Leaf_t tLeaf;
 	tLeaf.m_uOffset = m_tOutput.GetPos();
@@ -261,11 +349,12 @@ bool Writer_c::Flush ( std::string & sError )
 	tLeaf.m_uLast = m_dPostings[m_iCount-1].m_uRow;
 	tLeaf.m_uMaxTF = uMaxTF;
 	tLeaf.m_uFieldWords = uint16_t(uWords);
+	tLeaf.m_uSingleField = uint16_t(uSingleField);
 	tLeaf.m_uBytes = LEAF_HEADER_SIZE;
 	std::array<uint8_t,LEAF_HEADER_SIZE> dHeader {};
 	std::memcpy ( dHeader.data(), "BLK1", 4 );
 	Put ( dHeader.data()+8, tLeaf.m_uCount, 2 );
-	Put ( dHeader.data()+10, uWords, 2 );
+	Put ( dHeader.data()+10, uSingleField==MAX_FIELDS ? uWords : (0x8000|uSingleField), 2 );
 	Put ( dHeader.data()+12, tLeaf.m_uFirst, 4 );
 	Put ( dHeader.data()+16, tLeaf.m_uLast, 4 );
 	Put ( dHeader.data()+20, uMaxTF, 4 );
@@ -294,22 +383,14 @@ bool Writer_c::Finish ( std::string & sError )
 {
 	assert ( m_bOpen && m_bHaveRows );
 
+	if ( m_dLeaves.empty() && m_iCount<=SHORT_LIST_MAX )
+		return WriteShort(sError);
+
 	if ( !Flush(sError) )
 		return false;
 
-	uint64_t uStats = m_tOutput.GetPos();
-	std::vector<uint8_t> dStats;
-	for ( unsigned i=0; i<m_tDesc.m_uFields; ++i )
-	{
-		Append ( dStats, m_dStats[i].m_uDocs, 8 );
-		Append ( dStats, m_dStats[i].m_uTF, 8 );
-	}
-
-	if ( !m_tOutput.Write ( Bytes(dStats), sError ) )
-		return false;
-
 	std::array<uint8_t,TERM_HEADER_SIZE> dHeader;
-	if ( !Header ( m_tDesc, m_tOutput.GetPos(), uStats, dHeader, sError ) || !m_tOutput.Patch ( m_uStart, {dHeader.data(),dHeader.size()}, sError ) )
+	if ( !Header ( m_tDesc, m_tOutput.GetPos(), dHeader, sError ) || !m_tOutput.Patch ( m_uStart, {dHeader.data(),dHeader.size()}, sError ) )
 		return false;
 
 	m_bOpen = false;
@@ -334,22 +415,56 @@ bool Reader_c::Open ( uint64_t uOffset, std::string & sError )
 	m_bHaveLeaf = false;
 	m_dLoaded.fill(false);
 	m_tRowData = {};
-	m_pFieldTF.reset();
 	m_dDecodeCounts.fill(0);
-	std::array<uint8_t,TERM_HEADER_SIZE> d;
-	assert ( uOffset<=m_tInput.GetSize() && d.size()<=m_tInput.GetSize()-uOffset );
-	if ( !m_tInput.Read ( uOffset, d.data(), d.size(), sError ) )
+	m_tLeaf = {};
+	std::array<uint8_t,TERM_HEADER_SIZE> d {};
+	assert ( uOffset<=m_tInput.GetSize() && 8<=m_tInput.GetSize()-uOffset );
+	if ( !m_tInput.Read ( uOffset, d.data(), 8, sError ) )
 		return Fail ( sError, "truncated posting term header" );
+
+	bool bShort = !std::memcmp ( d.data(), "PSS1", 4 );
+	size_t iHeader = bShort ? SHORT_HEADER_SIZE : TERM_HEADER_SIZE;
+	assert ( iHeader<=m_tInput.GetSize()-uOffset );
+	if ( !m_tInput.Read ( uOffset+8, d.data()+8, iHeader-8, sError ) )
+		return Fail ( sError, "truncated posting term header" );
+
+	if ( bShort )
+	{
+		m_tDesc = {};
+		m_tDesc.m_bPositions = d[7]&1;
+		m_tDesc.m_uFields = uint16_t(Get(d.data()+8,2));
+		m_tLeaf.m_bShort = true;
+		m_tLeaf.m_uOffset = uOffset;
+		m_tLeaf.m_uHeaderSize = SHORT_HEADER_SIZE;
+		m_tLeaf.m_uBytes = uint32_t(Get(d.data()+4,2));
+		m_tLeaf.m_uCount = d[6];
+		m_tLeaf.m_uFieldWords = (m_tDesc.m_uFields+31)/32;
+		m_tLeaf.m_uSingleField = uint16_t(Get(d.data()+10,2));
+		m_tLeaf.m_uMaxTF = uint32_t(Get(d.data()+12,4));
+		uint64_t uBytes = SHORT_HEADER_SIZE;
+		for ( size_t i=0; i<COLUMNS; ++i )
+		{
+			m_tLeaf.m_dSizes[i] = uint32_t(Get(d.data()+16+2*i,2));
+			uBytes += m_tLeaf.m_dSizes[i];
+		}
+
+		if ( !ShortCheck<false> ( !(d[7]&~1U) && m_tDesc.m_uFields && m_tDesc.m_uFields<=MAX_FIELDS && m_tLeaf.m_uCount && m_tLeaf.m_uCount<=SHORT_LIST_MAX && m_tLeaf.m_uMaxTF && uBytes==m_tLeaf.m_uBytes && uBytes<=m_tInput.GetSize()-uOffset && m_tLeaf.m_dSizes[0] && (m_tLeaf.m_uSingleField==MAX_FIELDS ? m_tLeaf.m_dSizes[1]!=0 : m_tLeaf.m_uSingleField<m_tDesc.m_uFields && !m_tLeaf.m_dSizes[1]) && bool(m_tLeaf.m_dSizes[3])==m_tDesc.m_bPositions, sError ) )
+			return Fail ( sError, "invalid short posting header" );
+
+		m_uEnd = uOffset+uBytes;
+		m_uNext = uOffset;
+		m_bEOF = false;
+		return true;
+	}
 
 	if ( std::memcmp ( d.data(), "PST2", 4 ) || Get(d.data()+4,2)!=COMPONENT_VERSION )
 		return Fail ( sError, "unsupported posting component/version" );
 
 	unsigned uFlags = unsigned(Get(d.data()+6,2));
-	if ( (uFlags&~3U) || Get(d.data()+10,2) || Get(d.data()+20,4) || ((uFlags&2) && !(uFlags&1)) )
+	if ( (uFlags&~1U) || Get(d.data()+10,2) || Get(d.data()+20,4) )
 		return Fail ( sError, "unsupported posting capabilities" );
 
 	m_tDesc.m_bPositions = (uFlags&1)!=0;
-	m_tDesc.m_bFieldTF = (uFlags&2)!=0;
 	m_tDesc.m_uFields = uint16_t(Get(d.data()+8,2));
 	StreamDesc_t * dStreams[] = { &m_tDesc.m_tRows, &m_tDesc.m_tFields, &m_tDesc.m_tTF, &m_tDesc.m_tHitRefs };
 	for ( unsigned i=0; i<4; ++i )
@@ -362,9 +477,8 @@ bool Reader_c::Open ( uint64_t uOffset, std::string & sError )
 	assert ( m_tDesc.m_tRows.m_eCodec!=Codec_e::BASE_DELTA && m_tDesc.m_tFields.m_eCodec!=Codec_e::BASE_DELTA && m_tDesc.m_tTF.m_eCodec!=Codec_e::BASE_DELTA );
 
 	m_uEnd = Get(d.data()+24,8);
-	m_uStats = Get(d.data()+32,8);
 	m_uNext = uOffset+TERM_HEADER_SIZE;
-	assert ( !(!m_tDesc.m_uFields || m_tDesc.m_uFields>MAX_FIELDS || m_uStats<=m_uNext || m_uStats>m_uEnd || m_uEnd>m_tInput.GetSize() || m_uEnd-m_uStats!=16*uint64_t(m_tDesc.m_uFields)) );
+	assert ( !(!m_tDesc.m_uFields || m_tDesc.m_uFields>MAX_FIELDS || m_uEnd<=m_uNext || m_uEnd>m_tInput.GetSize()) );
 
 	m_bEOF = false;
 	return true;
@@ -376,19 +490,29 @@ bool Reader_c::Next ( uint32_t uMinRow, std::string & sError )
 	if ( m_bError )
 		return false;
 
+	if ( m_tLeaf.m_bShort && !m_bEOF && m_uNext!=m_uEnd )
+	{
+		m_bHaveLeaf = true;
+		if ( !ReadRows(sError) )
+			return false;
+
+		m_uNext = m_uEnd;
+		if ( m_tLeaf.m_uLast>=uMinRow )
+			return true;
+	}
+
 	while ( !m_bEOF )
 	{
-		if ( m_uNext==m_uStats )
+		if ( m_uNext==m_uEnd )
 		{
 			m_bEOF = true;
 			m_dLoaded.fill(false);
 			m_tRowData = {};
-			m_pFieldTF.reset();
 			return true;
 		}
 
 		std::array<uint8_t,LEAF_HEADER_SIZE> d;
-		assert ( m_uNext<=m_uStats && d.size()<=m_uStats-m_uNext );
+		assert ( m_uNext<=m_uEnd && d.size()<=m_uEnd-m_uNext );
 		if ( !m_tInput.Read ( m_uNext, d.data(), d.size(), sError ) )
 			return Fail ( sError, "truncated posting leaf header" );
 
@@ -398,7 +522,9 @@ bool Reader_c::Next ( uint32_t uMinRow, std::string & sError )
 		t.m_uOffset = m_uNext;
 		t.m_uBytes = uint32_t(Get(d.data()+4,4));
 		t.m_uCount = uint16_t(Get(d.data()+8,2));
-		t.m_uFieldWords = uint16_t(Get(d.data()+10,2));
+		unsigned uFieldCode = unsigned(Get(d.data()+10,2));
+		t.m_uSingleField = (uFieldCode&0x8000) ? uint16_t(uFieldCode&0x7fff) : MAX_FIELDS;
+		t.m_uFieldWords = (uFieldCode&0x8000) ? (m_tDesc.m_uFields+31)/32 : uint16_t(uFieldCode);
 		t.m_uFirst = uint32_t(Get(d.data()+12,4));
 		t.m_uLast = uint32_t(Get(d.data()+16,4));
 		t.m_uMaxTF = uint32_t(Get(d.data()+20,4));
@@ -409,7 +535,7 @@ bool Reader_c::Next ( uint32_t uMinRow, std::string & sError )
 			uBytes += t.m_dSizes[i];
 		}
 
-		assert ( !(uBytes!=t.m_uBytes || uBytes>MAX_LEAF_BYTES || uBytes>m_uStats-m_uNext || !t.m_uCount || t.m_uCount>MAX_VALUES || t.m_uLast==UINT32_MAX || t.m_uFirst>t.m_uLast || (m_bHaveLeaf && t.m_uFirst<=m_uPrevious) || t.m_uFieldWords!=(m_tDesc.m_uFields+31)/32 || !t.m_uMaxTF || !t.m_dSizes[0] || !t.m_dSizes[1] || !t.m_dSizes[2] || bool(t.m_dSizes[3])!=m_tDesc.m_bPositions || bool(t.m_dSizes[4])!=m_tDesc.m_bFieldTF) );
+		assert ( !(uBytes!=t.m_uBytes || uBytes>MAX_LEAF_BYTES || uBytes>m_uEnd-m_uNext || !t.m_uCount || t.m_uCount>MAX_VALUES || t.m_uLast==UINT32_MAX || t.m_uFirst>t.m_uLast || (m_bHaveLeaf && t.m_uFirst<=m_uPrevious) || t.m_uFieldWords!=(m_tDesc.m_uFields+31)/32 || !t.m_uMaxTF || !t.m_dSizes[0] || (t.m_uSingleField==MAX_FIELDS ? !t.m_dSizes[1] : t.m_uSingleField>=m_tDesc.m_uFields || t.m_dSizes[1]) || bool(t.m_dSizes[3])!=m_tDesc.m_bPositions) );
 
 		m_uPrevious = t.m_uLast;
 		m_bHaveLeaf = true;
@@ -417,7 +543,6 @@ bool Reader_c::Next ( uint32_t uMinRow, std::string & sError )
 		m_tLeaf = t;
 		m_dLoaded.fill(false);
 		m_tRowData = {};
-		m_pFieldTF.reset();
 		if ( t.m_uLast>=uMinRow )
 			return true;
 	}
@@ -431,7 +556,7 @@ bool Reader_c::ReadColumn ( Column_e eColumn, Bytes_t & tData, std::vector<uint8
 	assert ( !(m_bError || m_bEOF || !m_bHaveLeaf) );
 
 	size_t iColumn = size_t(eColumn);
-	uint64_t uOffset = m_tLeaf.m_uOffset+LEAF_HEADER_SIZE;
+	uint64_t uOffset = m_tLeaf.m_uOffset+m_tLeaf.m_uHeaderSize;
 	for ( size_t i=0; i<iColumn; ++i )
 		uOffset += m_tLeaf.m_dSizes[i];
 
@@ -455,6 +580,15 @@ bool Reader_c::ReadColumn ( Column_e eColumn, Bytes_t & tData, std::vector<uint8
 
 bool Reader_c::ReadRowBlock ( RowBlock_t & tBlock, std::string & sError )
 {
+	if ( m_tLeaf.m_bShort )
+	{
+		if ( !ReadRows(sError) )
+			return false;
+
+		tBlock = { m_tLeaf.m_uCount==1 ? Rows_e::RANGE : Rows_e::DELTA, m_tLeaf.m_uCount, m_tLeaf.m_uFirst, m_tLeaf.m_uLast, {} };
+		return true;
+	}
+
 	if ( !m_tRowData.m_pData && !ReadColumn ( Column_e::ROWS, m_tRowData, m_dRowBuffer, sError ) )
 		return false;
 
@@ -469,6 +603,25 @@ bool Reader_c::ReadRowBlock ( RowBlock_t & tBlock, std::string & sError )
 
 bool Reader_c::ReadLowFields ( uint32_t * pFields, std::string & sError )
 {
+	if ( m_tLeaf.m_uSingleField!=MAX_FIELDS )
+	{
+		uint32_t uMask = m_tLeaf.m_uSingleField<32 ? 1U<<m_tLeaf.m_uSingleField : 0;
+		std::fill_n ( pFields, m_tLeaf.m_uCount, uMask );
+		++m_dDecodeCounts[size_t(Column_e::FIELDS)];
+		return true;
+	}
+
+	if ( m_tLeaf.m_bShort )
+	{
+		if ( !ReadFields(sError) )
+			return false;
+
+		for ( unsigned i=0; i<m_tLeaf.m_uCount; ++i )
+			pFields[i] = m_dFields[i][0];
+
+		return true;
+	}
+
 	Bytes_t tData;
 	if ( !ReadColumn ( Column_e::FIELDS, tData, m_dReadBuffer, sError ) )
 		return false;
@@ -482,6 +635,19 @@ bool Reader_c::ReadRows ( std::string & sError )
 {
 	if ( m_dLoaded[0] )
 		return !m_bError;
+
+	if ( m_tLeaf.m_bShort )
+	{
+		Bytes_t tData;
+		if ( !ReadColumn ( Column_e::ROWS, tData, m_dReadBuffer, sError ) || !ShortRows<false> ( tData, m_tLeaf.m_uCount, m_dRows.data(), sError ) )
+			return Fail ( sError, "invalid short posting rows" );
+
+		m_tLeaf.m_uFirst = m_dRows[0];
+		m_tLeaf.m_uLast = m_dRows[m_tLeaf.m_uCount-1];
+		m_dLoaded[0] = true;
+		++m_dDecodeCounts[0];
+		return true;
+	}
 
 	RowBlock_t tBlock;
 	if ( !ReadRowBlock ( tBlock, sError ) )
@@ -501,16 +667,38 @@ bool Reader_c::ReadFields ( std::string & sError )
 	if ( m_dLoaded[1] )
 		return !m_bError;
 
+	if ( m_tLeaf.m_uSingleField!=MAX_FIELDS )
+	{
+		std::fill_n ( m_dFields.begin(), m_tLeaf.m_uCount, std::array<uint32_t,FIELD_WORDS>{} );
+		for ( unsigned i=0; i<m_tLeaf.m_uCount; ++i )
+			m_dFields[i][m_tLeaf.m_uSingleField/32] = 1U<<(m_tLeaf.m_uSingleField%32);
+
+		m_dLoaded[1] = true;
+		++m_dDecodeCounts[1];
+		return true;
+	}
+
 	Bytes_t tData;
 	if ( !ReadColumn ( Column_e::FIELDS, tData, m_dReadBuffer, sError ) )
 		return false;
 
 	Bytes_t t = tData;
-	m_dFields.fill({});
+	std::fill_n ( m_dFields.begin(), m_tLeaf.m_uCount, std::array<uint32_t,FIELD_WORDS>{} );
+
 	alignas(16) std::array<uint32_t,MAX_VALUES> dValues;
 	for ( unsigned f=0; f<m_tLeaf.m_uFieldWords; ++f )
 	{
-		if ( !Frame ( m_tDesc.m_tFields, t, dValues.data(), m_tLeaf.m_uCount, sError ) )
+		if ( m_tLeaf.m_bShort )
+		{
+			for ( unsigned i=0; i<m_tLeaf.m_uCount; ++i )
+			{
+				uint64_t uValue;
+				if ( !ShortValue<false> ( t, uValue, sError ) || !ShortCheck<false> ( uValue<=UINT32_MAX, sError ) )
+					return Fail ( sError, "invalid short posting fields" );
+
+				dValues[i] = uint32_t(uValue);
+			}
+		} else if ( !Frame ( m_tDesc.m_tFields, t, dValues.data(), m_tLeaf.m_uCount, sError ) )
 			return Fail ( sError, "invalid posting field column" );
 
 		for ( unsigned i=0; i<m_tLeaf.m_uCount; ++i )
@@ -532,12 +720,26 @@ bool Reader_c::ReadTF ( std::string & sError )
 	if ( m_dLoaded[2] )
 		return !m_bError;
 
+	if ( !m_tLeaf.m_dSizes[2] )
+	{
+		std::fill_n ( m_dTF.data(), m_tLeaf.m_uCount, m_tLeaf.m_uMaxTF );
+		m_dLoaded[2] = true;
+		++m_dDecodeCounts[2];
+		return true;
+	}
+
 	Bytes_t tData;
 	if ( !ReadColumn ( Column_e::TF, tData, m_dReadBuffer, sError ) )
 		return false;
 
 	Bytes_t t = tData;
-	if ( !Frame ( m_tDesc.m_tTF, t, m_dTF.data(), m_tLeaf.m_uCount, sError ) )
+	if ( m_tLeaf.m_bShort )
+	{
+		if ( !ShortIntegers<false> ( t, m_tLeaf.m_uCount, m_dTF.data(), sError ) )
+			return Fail ( sError, "invalid short posting frequencies" );
+
+		t.m_iSize = 0;
+	} else if ( !Frame ( m_tDesc.m_tTF, t, m_dTF.data(), m_tLeaf.m_uCount, sError ) )
 		return Fail ( sError, "invalid posting TF column" );
 
 	assert ( !t.m_iSize );
@@ -559,7 +761,17 @@ bool Reader_c::ReadHitRefs ( std::string & sError )
 	if ( !ReadColumn ( Column_e::HITREFS, tData, m_dReadBuffer, sError ) )
 		return false;
 
-	m_dHitRefs.fill(0);
+	std::fill_n ( m_dHitRefs.begin(), m_tLeaf.m_uCount, 0 );
+	if ( m_tLeaf.m_bShort )
+	{
+		if ( m_tDesc.m_bPositions && !ShortHitRefs<false> ( tData, m_tLeaf.m_uCount, m_dHitRefs.data(), sError ) )
+			return Fail ( sError, "invalid short posting hit references" );
+
+		m_dLoaded[3] = true;
+		++m_dDecodeCounts[3];
+		return true;
+	}
+
 	Bytes_t t = tData;
 	StreamDesc_t tStream = m_tDesc.m_tHitRefs;
 	uint64_t uBase = 0;
@@ -603,83 +815,8 @@ bool Reader_c::ReadHitRefs ( std::string & sError )
 }
 
 
-bool Reader_c::ReadFieldTF ( unsigned uField, std::array<uint32_t,MAX_VALUES> & dTF, std::string & sError )
-{
-	assert ( !(m_bError || m_bEOF || !m_bHaveLeaf || uField>=m_tDesc.m_uFields || !m_tDesc.m_bFieldTF) );
-
-	if ( !m_pFieldTF )
-	{
-		auto pCache = std::make_unique<FieldTFCache_t>();
-		if ( !ReadColumn ( Column_e::FIELD_TF, pCache->m_tData, pCache->m_dBuffer, sError ) )
-			return false;
-
-		Bytes_t t = pCache->m_tData;
-		int iPrevious = -1;
-		while ( t.m_iSize )
-		{
-			assert ( !(t.m_iSize<6) );
-
-			unsigned f = unsigned(Get(t.m_pData,2));
-			size_t n = size_t(Get(t.m_pData+2,4));
-			assert ( !(f>=m_tDesc.m_uFields || int(f)<=iPrevious || n>t.m_iSize-6) );
-
-			iPrevious = int(f);
-			pCache->m_dOffsets[f] = size_t(t.m_pData-pCache->m_tData.m_pData)+2;
-			t.m_pData += 6+n;
-			t.m_iSize -= 6+n;
-		}
-
-		m_pFieldTF = std::move(pCache);
-	}
-
-	auto & dValues = m_pFieldTF->m_dValues[uField];
-	if ( dValues.empty() )
-	{
-		dValues.resize(m_tLeaf.m_uCount);
-		size_t iOffset = m_pFieldTF->m_dOffsets[uField];
-		if ( iOffset )
-		{
-			const uint8_t * p = m_pFieldTF->m_tData.m_pData+iOffset;
-			Bytes_t t { p, 4+size_t(Get(p,4)) };
-			if ( !Frame ( m_tDesc.m_tTF, t, dValues.data(), m_tLeaf.m_uCount, sError ) )
-				return Fail ( sError, "invalid per-field frequency frame" );
-		}
-
-		++m_dDecodeCounts[4];
-	}
-
-	dTF.fill(0);
-	std::copy ( dValues.begin(), dValues.end(), dTF.begin() );
-	return true;
-}
-
-
-bool Reader_c::ReadStats ( std::array<FieldStats_t,MAX_FIELDS> & dStats, std::string & sError )
-{
-	if ( m_bError )
-		return false;
-
-	assert ( !(m_uEnd<=m_uStats) );
-
-	std::vector<uint8_t> d ( size_t(m_uEnd-m_uStats) );
-	if ( !m_tInput.Read ( m_uStats, d.data(), d.size(), sError ) )
-		return Fail ( sError, "posting statistics read failed" );
-
-	dStats.fill({});
-	for ( unsigned f=0; f<m_tDesc.m_uFields; ++f )
-	{
-		dStats[f].m_uDocs = Get(d.data()+16*f,8);
-		dStats[f].m_uTF = Get(d.data()+16*f+8,8);
-		assert ( !(m_tDesc.m_bFieldTF ? dStats[f].m_uTF<dStats[f].m_uDocs : dStats[f].m_uTF!=0) );
-	}
-
-	return true;
-}
-
-
 bool Reader_c::CheckFields ( std::string & sError )
 {
-
 	for ( unsigned i=0; i<m_tLeaf.m_uCount; ++i )
 	{
 		uint32_t uAny = 0;

@@ -1178,7 +1178,7 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 	}
 
 	m_uPostingsFormat = sPostings=="block" ? postings::COMPONENT_VERSION : 0;
-	m_bIndexFieldLens = m_uPostingsFormat || hIndex.GetInt ( "index_field_lengths" )!=0;
+	m_bIndexFieldLens = hIndex.GetInt ( "index_field_lengths" )!=0;
 	m_sIndexTokenFilter = hIndex.GetStr ( "index_token_filter" );
 	m_tBlobUpdateSpace = hIndex.GetSize64 ( "attr_update_reserve", DEFAULT_ATTR_UPDATE_RESERVE );
 	m_bBinlog = hIndex.GetBool ( "binlog", true );

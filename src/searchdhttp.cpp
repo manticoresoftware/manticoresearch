@@ -2964,16 +2964,10 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 		}
 	} ();
 
-	bool bHandlerResult = false;
-	if ( bJsonEndpoint )
-	{
-		auto fnProcess = Threads::WithCopiedCrashQuery ( [&] { bHandlerResult = pHandler->Process(); } );
-		Threads::Coro::Continue ( std::move ( fnProcess ), 1024 * 1024 );
-	}
-	else
-		bHandlerResult = pHandler->Process();
-
-	tRes.m_bOk = bHandlerResult;
+	// cJSON limits nesting to 1000 levels, so JSON handlers use a 1 MiB stack.
+	// Revisit this size if the parser or its nesting limit changes.
+	auto fnProcess = Threads::WithCopiedCrashQuery ( [&] { tRes.m_bOk = pHandler->Process(); } );
+	Threads::Coro::Continue ( bJsonEndpoint ? 1024 * 1024 : -1, std::move ( fnProcess ) );
 	tRes.m_sError = pHandler->GetError();
 	tRes.m_eReplyHttpCode = pHandler->GetStatusCode();
 	// error with status code 403 Forbidden should not route into buddy

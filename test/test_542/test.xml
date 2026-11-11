@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>Issue #5090: add first rowwise blob attribute to columnar table</name>
+
+<requires>
+	<force-rt/>
+	<columnar/>
+</requires>
+<skip_indexer/>
+<skip_db/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+	auto_optimize = 0
+}
+</config>
+
+<custom_test><![CDATA[
+$results = array();
+$ql->Reconnect();
+
+$check = function ( $name, $sql, $expected ) use ( $ql, &$results )
+{
+	$actual = $ql->Query ( $sql );
+	$results[] = $name . ': ' . ( $actual===$expected ? 'ok' : "got [$actual], expected [$expected]" );
+};
+
+// No rowwise attributes at all: the disk chunk's original row stride is zero.
+$check ( 'create', "CREATE TABLE t (id bigint, url string attribute, title text) engine='columnar'", 'OK' );
+$check ( 'insert first chunk', "INSERT INTO t (id,url,title) VALUES (1,'a','x'),(2,'b','y')", 'OK' );
+$check ( 'flush first chunk', 'FLUSH RAMCHUNK t', 'OK' );
+$check ( 'insert second chunk', "INSERT INTO t (id,url,title) VALUES (3,'c','z')", 'OK' );
+$check ( 'flush second chunk', 'FLUSH RAMCHUNK t', 'OK' );
+$check ( 'insert ram row', "INSERT INTO t (id,url,title) VALUES (4,'d','w')", 'OK' );
+
+$check ( 'add first blob', "ALTER TABLE t ADD COLUMN summary string engine='rowwise'", 'OK' );
+$check ( 'read empty blobs', 'SELECT id, url, summary FROM t ORDER BY id ASC', "1 | a | \n2 | b | \n3 | c | \n4 | d | \n4 rows" );
+$check ( 'read filtered blob', "SELECT id, summary FROM t WHERE url='a' LIMIT 1", "1 | \n1 rows" );
+$check ( 'update disk blob', "UPDATE t SET summary='disk' WHERE id=1", 'OK' );
+$check ( 'read updated disk blob', "SELECT id, summary FROM t WHERE id=1", "1 | disk\n1 rows" );
+$check ( 'update ram blob', "UPDATE t SET summary='ram' WHERE id=4", 'OK' );
+$check ( 'read updated ram blob', "SELECT id, summary FROM t WHERE id=4", "4 | ram\n1 rows" );
+
+$ql->Disconnect();
+$restart = RestartDaemon();
+$results[] = 'restart: ' . ( $restart==='stop=ok, return code=0; start=ok, return code=0' ? 'ok' : $restart );
+$ql->Connect();
+$check ( 'read after restart', 'SELECT id, summary FROM t ORDER BY id ASC', "1 | disk\n2 | \n3 | \n4 | ram\n4 rows" );
+
+$check ( 'drop first blob', 'ALTER TABLE t DROP COLUMN summary', 'OK' );
+$check ( 'read without blob', 'SELECT id, url FROM t ORDER BY id ASC', "1 | a\n2 | b\n3 | c\n4 | d\n4 rows" );
+$check ( 'readd first blob', "ALTER TABLE t ADD COLUMN summary string engine='rowwise'", 'OK' );
+$check ( 'read readded blob', 'SELECT id, summary FROM t ORDER BY id ASC', "1 | \n2 | \n3 | \n4 | \n4 rows" );
+$check ( 'drop t', 'DROP TABLE t', 'OK' );
+
+// Control case: a mixed columnar/rowwise table has a nonzero original row stride.
+$check ( 'create mixed', "CREATE TABLE mixed (id bigint, url string attribute, n int engine='rowwise', title text) engine='columnar'", 'OK' );
+$check ( 'insert mixed', "INSERT INTO mixed (id,url,n,title) VALUES (10,'x',7,'one'),(11,'y',8,'two')", 'OK' );
+$check ( 'flush mixed', 'FLUSH RAMCHUNK mixed', 'OK' );
+$check ( 'add mixed blob', "ALTER TABLE mixed ADD COLUMN summary string engine='rowwise'", 'OK' );
+$check ( 'read mixed', 'SELECT id, n, summary FROM mixed ORDER BY id ASC', "10 | 7 | \n11 | 8 | \n2 rows" );
+$check ( 'update mixed', "UPDATE mixed SET summary='ten' WHERE id=10", 'OK' );
+$check ( 'read updated mixed', 'SELECT id, n, summary FROM mixed ORDER BY id ASC', "10 | 7 | ten\n11 | 8 | \n2 rows" );
+$check ( 'drop mixed', 'DROP TABLE mixed', 'OK' );
+]]></custom_test>
+</test>

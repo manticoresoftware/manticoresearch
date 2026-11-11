@@ -54,7 +54,7 @@ class IndexAlterHelper_c
 {
 public:
 	virtual			~IndexAlterHelper_c() = default;
-	virtual bool	Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride ) const { return false; }
+	virtual bool	Alter_IsMinMax ( RowID_t tRowID ) const { return false; }
 
 protected:
 	bool			Alter_AddRemoveRowwiseAttr ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, const CSphRowitem * pDocinfo, DWORD uNumRows, const BYTE * pBlobPool, WriteWrapper_c & tSPAWriter, WriteWrapper_c & tSPBWriter, bool bAddAttr, const CSphString & sAttrName );

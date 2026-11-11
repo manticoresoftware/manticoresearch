@@ -54,24 +54,36 @@ searchd {{
             text=True, stderr=subprocess.PIPE, timeout=15
         ).strip()
 
+    def rows(statement):
+        # Some test-kit mysql clients use ASCII tables even with -N -B.
+        # Accept both tab-separated output and MySQL's table format.
+        for line in sql(statement).splitlines():
+            line = line.strip()
+            if not line or line.startswith("+"):
+                continue
+            if line.startswith("|"):
+                yield [cell.strip() for cell in line.strip("|").split("|")]
+            else:
+                yield [cell.strip() for cell in line.split("\t")]
+
     def status(name):
-        return int(sql(f"SHOW STATUS LIKE '{name}'").split("\t")[1])
+        values = [cells[1] for cells in rows(f"SHOW STATUS LIKE '{name}'")
+                  if len(cells) == 2 and cells[0] == name]
+        assert len(values) == 1, (name, values)
+        return int(values[0])
 
     def select(threads, limit="LIMIT 200"):
-        output = sql(
+        statement = (
             f"SELECT id FROM issue5085 WHERE MATCH('needle common') "
             f"ORDER BY id ASC {limit} OPTION threads={threads}; SHOW META;"
         )
-        ids = []
-        total_found = None
-        for line in output.splitlines():
-            fields = line.split("\t")
-            if len(fields) == 1:
-                ids.append(int(fields[0]))
-            elif fields[0] == "total_found":
-                total_found = int(fields[1])
-        assert total_found is not None, "SHOW META did not return total_found"
-        return ids, total_found
+        data = list(rows(statement))
+        ids = [int(cells[0]) for cells in data
+               if len(cells) == 1 and cells[0].isdigit()]
+        counts = [int(cells[1]) for cells in data
+                  if len(cells) == 2 and cells[0] == "total_found"]
+        assert len(counts) == 1, (statement, data)
+        return ids, counts[0]
 
     run("indexer", "--quiet", "--config", str(config), "--all")
     started = False

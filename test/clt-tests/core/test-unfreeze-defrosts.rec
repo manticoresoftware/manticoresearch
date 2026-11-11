@@ -15,7 +15,15 @@ expected="$3"
 previous=-1
 stable=0
 while true; do
-  count=$(mysql -h0 -P9306 -sN -e "SELECT COUNT(*) FROM $table")
+  raw=$(mysql -h0 -P9306 -sN -e "SELECT COUNT(*) FROM $table")
+  count=$(printf '%s\n' "$raw" | awk '
+    /^[[:space:]]*[0-9]+[[:space:]]*$/ { print $1; next }
+    /^\|[[:space:]]*[0-9]+[[:space:]]*\|$/ { gsub(/[|[:space:]]/, ""); print }
+  ')
+  if [[ ! "$count" =~ ^[0-9]+$ ]]; then
+    echo "Unexpected COUNT(*) result: $raw" >&2
+    exit 1
+  fi
   if [ "$mode" = blocked ]; then
     if (( count >= expected )); then
       echo "Writes completed before UNFREEZE ($count)" >&2

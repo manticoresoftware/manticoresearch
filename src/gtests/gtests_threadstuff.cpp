@@ -68,6 +68,96 @@ TEST ( ThreadPool, Counter100c )
 		Counter100c();
 }
 
+TEST ( ThreadPool, CrashQueryIsCoroutineLocal )
+{
+	using namespace Threads;
+	static const BYTE dParent[] = { 'p', 'a', 'r', 'e', 'n', 't' };
+	static const BYTE dChild[] = { 'c', 'h', 'i', 'l', 'd' };
+	static const BYTE dOther[] = { 'o', 't', 'h', 'e', 'r' };
+
+	auto pOtherPool = MakeThreadPool ( 1, "crash-context" );
+	CallCoroutine ( [&] {
+		CrashQueryScope_c tConnection;
+		EXPECT_FALSE ( IsFilled ( GlobalCrashQueryGetRef().m_dQuery ) );
+		{
+			CrashQueryScope_c tRequest;
+			auto & tParent = GlobalCrashQueryGetRef();
+			EXPECT_FALSE ( IsFilled ( tParent.m_dQuery ) );
+			tParent.m_dQuery = { dParent, sizeof ( dParent ) };
+
+			// Switching schedulers must not change the active request.
+			auto pOriginalScheduler = Coro::CurrentScheduler();
+			Coro::MoveTo ( pOtherPool.operator->() );
+			EXPECT_EQ ( GlobalCrashQueryGetRef().m_dQuery.first, dParent );
+			Coro::MoveTo ( pOriginalScheduler );
+			EXPECT_EQ ( GlobalCrashQueryGetRef().m_dQuery.first, dParent );
+
+			// The deferred callback runs outside the coroutine stack.
+			auto fnResume = CurrentRestarter ( false );
+			Coro::YieldWith ( [&] {
+				EXPECT_EQ ( GlobalCrashQueryGetRef().m_dQuery.first, dParent );
+				fnResume();
+			} );
+			EXPECT_EQ ( GlobalCrashQueryGetRef().m_dQuery.first, dParent );
+
+			// Ordinary subtasks do not inherit a request accidentally.
+			{
+				auto dWaiter = DefferedRestarter();
+				Coro::Co ( [&] {
+					auto & tChild = GlobalCrashQueryGetRef();
+					EXPECT_FALSE ( IsFilled ( tChild.m_dQuery ) );
+					tChild.m_dQuery = { dOther, sizeof ( dOther ) };
+					Coro::SleepMsec ( 1 );
+					EXPECT_EQ ( GlobalCrashQueryGetRef().m_dQuery.first, dOther );
+				}, dWaiter );
+				WaitForDeffered ( std::move ( dWaiter ) );
+			}
+			EXPECT_EQ ( GlobalCrashQueryGetRef().m_dQuery.first, dParent );
+
+			// Explicit propagation, as in ExecuteN, is preserved across suspension.
+			{
+				auto dWaiter = DefferedRestarter();
+				Coro::Co ( WithCopiedCrashQuery ( [&] {
+					auto & tChild = GlobalCrashQueryGetRef();
+					EXPECT_EQ ( tChild.m_dQuery.first, dParent );
+					tChild.m_dQuery = { dChild, sizeof ( dChild ) };
+					Coro::SleepMsec ( 1 );
+					EXPECT_EQ ( GlobalCrashQueryGetRef().m_dQuery.first, dChild );
+				} ), dWaiter );
+				WaitForDeffered ( std::move ( dWaiter ) );
+			}
+			EXPECT_EQ ( GlobalCrashQueryGetRef().m_dQuery.first, dParent );
+
+			Coro::Continue ( 0, [&] {
+				EXPECT_EQ ( GlobalCrashQueryGetRef().m_dQuery.first, dParent );
+			} );
+
+			{
+				CrashQueryScope_c tNested;
+				EXPECT_FALSE ( IsFilled ( GlobalCrashQueryGetRef().m_dQuery ) );
+				GlobalCrashQueryGetRef().m_dQuery = { dOther, sizeof ( dOther ) };
+			}
+			EXPECT_EQ ( GlobalCrashQueryGetRef().m_dQuery.first, dParent );
+
+			// An independent Go task must not inherit the parent's SQL.
+			Coro::Event_c tDone;
+			Coro::Go ( [&] {
+				EXPECT_FALSE ( IsFilled ( GlobalCrashQueryGetRef().m_dQuery ) );
+				tDone.SetEvent();
+			}, Coro::CurrentScheduler() );
+			tDone.WaitEvent();
+			EXPECT_EQ ( GlobalCrashQueryGetRef().m_dQuery.first, dParent );
+		}
+		// Completed request must not leak into the next one.
+		EXPECT_FALSE ( IsFilled ( GlobalCrashQueryGetRef().m_dQuery ) );
+		{
+			CrashQueryScope_c tNextRequest;
+			EXPECT_FALSE ( IsFilled ( GlobalCrashQueryGetRef().m_dQuery ) );
+		}
+	} );
+	pOtherPool->StopAll();
+}
+
 const char* SH()
 {
 	auto pSched = Threads::Coro::CurrentScheduler();

@@ -182,6 +182,10 @@ class Worker_c final: public details::SchedulerOperation_t
 	// chain nested workers via TLS
 	void * m_pPreviousWorker = nullptr;
 
+	// A worker owns its crash context; the TLS pointer selects the active worker.
+	CrashQuery_t m_tCrashQuery;
+	CrashQuery_t * m_pPreviousCrashQuery = nullptr;
+
 	// operative stuff to be as near as possible
 	void * m_pCurrentTaskInfo = nullptr;
 	int64_t m_tmCpuTimeBase = 0; // add sphCpuTime() to this value to get truly cpu time ticks
@@ -204,6 +208,12 @@ class Worker_c final: public details::SchedulerOperation_t
 		return uWorker.fetch_add ( 1, std::memory_order_relaxed );
 	}
 
+	// Synchronous continuations are another stack for the same request.
+	static CrashQuery_t ContinuationCrashQuery () noexcept
+	{
+		return CurrentWorker() ? GlobalCrashQuerySnapshot() : CrashQuery_t {};
+	}
+
 	enum class TimePoint_e : bool { fromresume, realtime };
 	inline void CheckEngageTimer ( TimePoint_e eKind )
 	{
@@ -218,6 +228,7 @@ class Worker_c final: public details::SchedulerOperation_t
 	{
 		auto& tMyThd = MyThd();
 		m_pPreviousWorker = std::exchange ( tMyThd.m_pWorker, this );
+		m_pPreviousCrashQuery = GlobalCrashQuerySwap ( &m_tCrashQuery );
 		m_pPrevTlsMsg = tMyThd.m_pTlsMsg.exchange ( &m_sTlsMsg, std::memory_order_relaxed );
 		m_pCurrentTaskInfo = tMyThd.m_pTaskInfo.exchange ( m_pCurrentTaskInfo, std::memory_order_relaxed );
 		m_tmCpuTimeBase -= sphThreadCpuTimer();
@@ -233,6 +244,7 @@ class Worker_c final: public details::SchedulerOperation_t
 		auto& tMyThd = MyThd();
 		m_pCurrentTaskInfo = tMyThd.m_pTaskInfo.exchange ( m_pCurrentTaskInfo, std::memory_order_relaxed );
 		tMyThd.m_pTlsMsg.store ( m_pPrevTlsMsg, std::memory_order_relaxed );
+		GlobalCrashQuerySwap ( m_pPreviousCrashQuery );
 		std::exchange ( tMyThd.m_pWorker, m_pPreviousWorker );
 	}
 
@@ -301,7 +313,14 @@ private:
 		while ( !m_tState.m_uState.compare_exchange_weak ( uPrevState, uPrevState & ~CoroState_t::Running_e, std::memory_order_relaxed ) );
 
 		if ( m_fnYieldWithProceeder )
-			std::exchange ( m_fnYieldWithProceeder, nullptr )();
+		{
+			// This callback runs outside the suspended coroutine stack, but
+			// must not see crash context left behind by another worker.
+			auto fnProceed = std::exchange ( m_fnYieldWithProceeder, nullptr );
+			auto * pPrevious = GlobalCrashQuerySwap ( &m_tCrashQuery );
+			fnProceed();
+			GlobalCrashQuerySwap ( pPrevious );
+		}
 	}
 
 	inline void Run() noexcept
@@ -339,6 +358,7 @@ public:
 	// May refer to parent's task info as read-only. For changes has dedicated mini info, also can create and use it's own local.
 	static void StartOther ( Handler fnHandler, Scheduler_i * pScheduler, size_t iStack, Waiter_t tWait )
 	{
+		// Background/secondary work starts empty; query jobs opt in using WithCopiedCrashQuery().
 		( new Worker_c ( myinfo::OwnMini ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack ) )->Schedule ();
 	}
 
@@ -347,7 +367,9 @@ public:
 	// Parent thread at the moment blocked and may display info about it
 	static void StartCall ( Handler fnHandler, Scheduler_i* pScheduler, Waiter_t tWait )
 	{
-		( new Worker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ) ) )->Schedule ( true );
+		auto * pWorker = new Worker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ) );
+		pWorker->m_tCrashQuery = GlobalCrashQuerySnapshot();
+		pWorker->Schedule ( true );
 	}
 
 	// from Coro::Continue -> all continuations (main purpose - continue with extended stack).
@@ -355,12 +377,15 @@ public:
 	// Parent thread is not blocked and may freely switch to another tasks
 	static void StartContinuation ( Handler fnHandler, Scheduler_i * pScheduler, size_t iStack, Waiter_t tWait )
 	{
-		( new Worker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack ) )->ScheduleContinuation ();
+		auto * pWorker = new Worker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack );
+		pWorker->m_tCrashQuery = ContinuationCrashQuery();
+		pWorker->ScheduleContinuation();
 	}
 
 	ATTRIBUTE_NO_SANITIZE_ADDRESS static void MockRun ( Handler fnHandler, VecTraits_T<BYTE> dStack )
 	{
 		Worker_c tAction ( std::move ( fnHandler ), dStack );
+		tAction.m_tCrashQuery = GlobalCrashQuerySnapshot();
 		auto pOldStack = Threads::TopOfStack ();
 		Threads::SetTopStack ( &dStack.Last() );
 		{
@@ -373,7 +398,9 @@ public:
 	// secondary context worker.
 	Worker_c* MakeWorker ( Handler fnHandler ) const
 	{
-		return new Worker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), CurrentScheduler () );
+		auto * pWorker = new Worker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), CurrentScheduler () );
+		pWorker->m_tCrashQuery = m_tCrashQuery;
+		return pWorker;
 	}
 
 	inline void Restart ( bool bVip = true ) noexcept
@@ -873,7 +900,7 @@ int64_t GetThrottlingPeriodUS ()
 
 void RescheduleAndKeepCrashQuery ( bool bVip ) noexcept
 {
-	CrashQueryKeeper_c _;
+	// Crash context is restored by CoroGuardEnter on every resume.
 	Coro::Worker()->Reschedule ( bVip ); // timer will be automatically re-engaged on resume
 }
 

@@ -2917,6 +2917,8 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 	// Keeps the decoded /bulk blob stream alive while the handler reads it.
 	std::unique_ptr<CharStream_c> pDecodedSource;
 	std::unique_ptr<HttpHandler_c> pHandler = CreateHttpHandler ( tRes.m_eEndpoint, tSource, sSrcQuery, hOptions, eRequestType, bCompressed, pDecodedSource );
+	// Handler and decoded source may own query/index strings.
+	AT_SCOPE_EXIT ( [] { GlobalCrashQueryGetRef() = {}; } );
 	if ( !pHandler )
 	{
 		if ( tRes.m_eEndpoint == EHTTP_ENDPOINT::INDEX )
@@ -2961,6 +2963,7 @@ void ProcessHttpJsonQuery ( const CSphString & sQuery, OptionsHash_t & hOptions,
 	http_method eReqType = HTTP_POST;
 
 	BlobStream_c tQuery ( sQuery );
+	CrashQueryScope_c tCrashQueryScope;
 	Str_t sSrcQuery;
 	// no need to issue authentification as it checked at the API interface 
 	HttpProcessResult_t tRes = ProcessHttpQuery ( tQuery, sSrcQuery, hOptions, dResult, false, eReqType, true, false );
@@ -2992,6 +2995,9 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 		int iFullLength = ParsedBodyLength() + ( (int)m_tParser.content_length > 0 ? (int)m_tParser.content_length : 0 );
 		pSource = std::make_unique<RawSocketStream_c> ( &tIn, iFullLength, bCompressed );
 	}
+
+	// Scope ends before pSource and its request buffer are destroyed.
+	CrashQueryScope_c tCrashQueryScope;
 
 	EHTTP_ENDPOINT eEndpoint = StrToHttpEndpoint ( m_sEndpoint );
 	if ( IsLogManagementEnabled() && eEndpoint==EHTTP_ENDPOINT::TOTAL && m_sEndpoint.Ends ( "_bulk" ) )

@@ -101,6 +101,8 @@ public:
 	virtual						~QueryNode_i() = default;
 
 	// Capabilities describe this node, never an unfiltered descendant.
+	// Attach a borrowed candidate prefilter before iteration starts.
+	virtual bool				SetCandidateFilter ( PostingCandidateFilter_i * ) { return false; }
 	virtual ExtNode_i *			GetDocsNode() { return nullptr; }
 	virtual CountWindowIterator_i * GetCountWindows() { return nullptr; }
 	virtual void				Reset ( const ISphQwordSetup & tSetup ) = 0;
@@ -128,9 +130,9 @@ class ExtNode_i : public QueryNode_i
 {
 public:
 	static ExtNode_i *			Create ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25, const RowIdBoundaries_t * pBoundaries );
-	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25, bool bRowidLimits );
-	static ExtNode_i *			Create ( ISphQword * pQword, const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25, bool bRowidLimits );
-	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const ISphQwordSetup & tSetup, DictRefPtr_c pZonesDict, bool bUseBM25, bool bRowidLimits );
+	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25 );
+	static ExtNode_i *			Create ( ISphQword * pQword, const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25 );
+	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const ISphQwordSetup & tSetup, DictRefPtr_c pZonesDict, bool bUseBM25 );
 
 	ExtNode_i *					GetDocsNode() final { return this; }
 

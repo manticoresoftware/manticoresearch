@@ -230,6 +230,75 @@ PostingWindowResult_t PostingWindow_i::FillAndNot ( const PostingWindow_t & tWin
 	return tResult;
 }
 
+/////////////////////////////////////////////////////////////////////
+
+PostingBlockTerm_c::PostingBlockTerm_c ( std::unique_ptr<PostingBlock_i> pCursor, PostingCandidateFilter_i & tFilter, const PostingWindowContext_t & tContext )
+	: m_pCursor ( std::move(pCursor) )
+	, m_tFilter ( tFilter )
+	, m_tContext(tContext)
+{}
+
+
+bool PostingBlockTerm_c::FillRows ( RowID_t tMin, uint64_t uEnd )
+{
+	PostingLeaf_t tLeaf;
+	if ( !m_pCursor->Prepare ( tMin, tLeaf ) )
+		return false;
+
+	RowID_t tFirst = std::max ( tMin, tLeaf.m_tFirst );
+	uint64_t uWindowEnd = (uint64_t(tFirst)/PostingWindow_t::ROWS+1)*PostingWindow_t::ROWS;
+	uint64_t uLimit = std::min ( { uEnd, tLeaf.m_uEnd, uWindowEnd } );
+	if ( tFirst>=uLimit )
+		return false;
+
+	PostingWindow_t tWindow { tFirst, tFirst, uLimit };
+	m_iRead = 0;
+	m_iCount = m_pCursor->ReadRows ( tWindow, m_dRows.data() );
+
+	m_tNext = RowID_t(uLimit);
+	return true;
+}
+
+
+PostingCandidateRows_t PostingBlockTerm_c::ReadRows ( RowID_t tMin, uint64_t uEnd, int iCapacity )
+{
+	assert ( iCapacity>0 );
+	uEnd = std::min ( uEnd, uint64_t(INVALID_ROWID) );
+	while ( true )
+	{
+		if ( m_tContext.m_fnContinue && !m_tContext.m_fnContinue(m_tContext.m_pContext) )
+			return {};
+
+		RowID_t tFirst = m_iRead<m_iCount ? m_dRows[m_iRead] : m_tNext;
+		tFirst = m_tFilter.AdvanceTo ( std::max ( tFirst, tMin ) );
+		if ( tFirst>=uEnd )
+			return {};
+
+		m_iRead = int(std::lower_bound ( m_dRows.begin()+m_iRead, m_dRows.begin()+m_iCount, tFirst )-m_dRows.begin());
+		if ( m_iRead==m_iCount )
+		{
+			if ( !FillRows ( std::max ( tFirst, m_tNext ), uEnd ) )
+				return {};
+
+			if ( !m_iCount )
+				continue;
+		}
+
+		int iCount = std::min ( iCapacity, m_iCount-m_iRead );
+		while ( iCount && m_dRows[m_iRead+iCount-1]>=uEnd )
+			--iCount;
+
+		if ( !iCount )
+			return {};
+
+		RowID_t * pRows = m_dRows.data()+m_iRead;
+		m_iRead += iCount;
+		iCount = m_tFilter.SelectRows ( pRows, iCount );
+		if ( iCount )
+			return { pRows, iCount };
+	}
+}
+
 
 PostingBlockAnd_c::PostingBlockAnd_c ( const PostingWindowContext_t & tContext ) : m_tContext(tContext) {}
 
@@ -290,7 +359,10 @@ bool PostingBlockAnd_c::FillCandidates ( uint64_t uEnd )
 		if ( m_tContext.m_fnContinue && !m_tContext.m_fnContinue(m_tContext.m_pContext) )
 			return false;
 
-		RowID_t tFirst = m_tNext;
+		RowID_t tFirst = m_pFilter ? m_pFilter->AdvanceTo(m_tNext) : m_tNext;
+		if ( tFirst>=uEnd )
+			return false;
+
 		uint64_t uLimit = uEnd;
 		bool bDecoded = false;
 		for ( auto & pCursor : m_dCursors )
@@ -313,7 +385,7 @@ bool PostingBlockAnd_c::FillCandidates ( uint64_t uEnd )
 		uLimit = std::min ( uLimit, uint64_t(tFirst)+PostingWindow_t::ROWS );
 
 		PostingWindow_t tWindow { tFirst, tFirst, uLimit };
-		if ( bDecoded && m_dExcluded.empty() )
+		if ( (bDecoded || m_dCursors.size()==1) && m_dExcluded.empty() )
 		{
 			m_iCount = m_dCursors.front()->ReadRows ( tWindow, m_dRows.data() );
 			for ( size_t i=1; i<m_dCursors.size() && m_iCount; ++i )
@@ -379,19 +451,28 @@ PostingCandidateRows_t PostingBlockAnd_c::ReadRows ( RowID_t tMin, uint64_t uEnd
 	uEnd = std::min ( uEnd, uint64_t(INVALID_ROWID) );
 	m_tNext = std::max ( m_tNext, tMin );
 	m_iRead = int(std::lower_bound ( m_dRows.begin()+m_iRead, m_dRows.begin()+m_iCount, tMin )-m_dRows.begin());
-	if ( m_iRead==m_iCount && !m_bDone )
-		m_bDone = !FillCandidates(uEnd);
+	while ( !m_bDone )
+	{
+		if ( m_iRead==m_iCount )
+			m_bDone = !FillCandidates(uEnd);
 
-	if ( m_bDone || m_iRead==m_iCount || m_dRows[m_iRead]>=uEnd )
-		return {};
+		if ( m_bDone || m_iRead==m_iCount || m_dRows[m_iRead]>=uEnd )
+			return {};
 
-	int iCount = std::min ( iCapacity, m_iCount-m_iRead );
-	while ( iCount && m_dRows[m_iRead+iCount-1]>=uEnd )
-		--iCount;
+		int iCount = std::min ( iCapacity, m_iCount-m_iRead );
+		while ( iCount && m_dRows[m_iRead+iCount-1]>=uEnd )
+			--iCount;
 
-	const RowID_t * pRows = m_dRows.data()+m_iRead;
-	m_iRead += iCount;
-	return { pRows, iCount };
+		RowID_t * pRows = m_dRows.data()+m_iRead;
+		m_iRead += iCount;
+		if ( m_pFilter )
+			iCount = m_pFilter->SelectRows ( pRows, iCount );
+
+		if ( iCount )
+			return { pRows, iCount };
+	}
+
+	return {};
 }
 
 

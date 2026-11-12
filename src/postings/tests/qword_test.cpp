@@ -354,6 +354,97 @@ static void TestWindows ( const char * sFile, unsigned uShape, unsigned uFieldCo
 }
 
 
+class AllRowsFilter_c final : public PostingCandidateFilter_i
+{
+public:
+	RowID_t	AdvanceTo ( RowID_t tMin ) final { return tMin; }
+	int		SelectRows ( RowID_t *, int iCount ) final { return iCount; }
+};
+
+
+static void TestBlockRows ( const DataReaderFactoryPtr_c & pFactory, uint64_t uStart, const std::vector<QwordDoc_t> & dExpected, DWORD uFields, bool bDirect )
+{
+	for ( int iMode=0; iMode<3; ++iMode )
+	{
+		CountingQword_c tWord;
+		tWord.SetDocReader(pFactory);
+		tWord.m_iDocs = int(dExpected.size());
+		tWord.SeekDocReader ( uStart, 0 );
+
+		auto pCursor = tWord.CreatePostingBlock ( uFields, {} );
+		auto * pPayloads = pCursor.get();
+		AllRowsFilter_c tFilter;
+		std::unique_ptr<PostingBlockTerm_c> pTerm;
+		PostingBlockAnd_c tAnd({});
+		if ( iMode==1 )
+			pTerm = std::make_unique<PostingBlockTerm_c> ( std::move(pCursor), tFilter, PostingWindowContext_t{} );
+		else if ( iMode==2 )
+			tAnd.Add(std::move(pCursor));
+
+		RowID_t tMin = dExpected.front().m_tRowID+5;
+		uint64_t uEnd = uint64_t(dExpected.back().m_tRowID)+1;
+		size_t iExpected = 0;
+		while ( iExpected<dExpected.size() && dExpected[iExpected].m_tRowID<tMin )
+			++iExpected;
+
+		for ( unsigned iTurn=0; tMin<uEnd; ++iTurn )
+		{
+			Check ( iTurn<10000 );
+
+			const int dSizes[] = { 1, 31, 32, 33, 127, PostingWindow_t::ROWS };
+			int iSize = dSizes[iTurn%6];
+			std::array<RowID_t,PostingWindow_t::ROWS+1> dRows;
+			dRows.back() = INVALID_ROWID;
+
+			PostingCandidateRows_t tRows;
+			if ( iMode==0 )
+			{
+				PostingLeaf_t tLeaf;
+				if ( !pCursor->Prepare ( tMin, tLeaf ) )
+					break;
+
+				RowID_t tFirst = std::max ( tMin, tLeaf.m_tFirst );
+				uint64_t uLimit = std::min ( { uEnd, tLeaf.m_uEnd, uint64_t(tFirst)+iSize } );
+				tRows = { dRows.data(), pCursor->ReadRows ( { tFirst, tFirst, uLimit }, dRows.data() ) };
+				tMin = RowID_t(uLimit);
+				Check ( dRows.back()==INVALID_ROWID );
+			} else
+			{
+				tRows = iMode==1 ? pTerm->ReadRows ( tMin, uEnd, iSize ) : tAnd.ReadRows ( tMin, uEnd, iSize );
+				if ( !tRows.m_iCount )
+					break;
+
+				tMin = tRows.m_pRows[tRows.m_iCount-1]+1;
+			}
+
+			Check ( tRows.m_iCount<=iSize );
+			Check ( !tWord.GetDecodeCounts()[2] && !tWord.GetDecodeCounts()[3] );
+
+			std::array<QwordDoc_t,PostingWindow_t::ROWS> dDocs;
+			Check ( pPayloads->ReadPayloads ( tRows.m_pRows, tRows.m_iCount, dDocs.data(), false, false ) );
+			for ( int i=0; i<tRows.m_iCount; ++i )
+			{
+				while ( iExpected<dExpected.size() && !(dExpected[iExpected].m_uFields & uFields) )
+					++iExpected;
+
+				Check ( iExpected<dExpected.size() );
+				const auto & tExpected = dExpected[iExpected++];
+				Check ( tRows.m_pRows[i]==tExpected.m_tRowID && dDocs[i].m_tRowID==tExpected.m_tRowID );
+				Check ( dDocs[i].m_uFields==tExpected.m_uFields && !dDocs[i].m_uMatchHits && !dDocs[i].m_iHitlistPos );
+			}
+		}
+
+		while ( iExpected<dExpected.size() && !(dExpected[iExpected].m_uFields & uFields) )
+			++iExpected;
+
+		Check ( iExpected==dExpected.size() && !tWord.GetReadError() );
+		// Full bitmap/range leaves stay encoded; the three-row tail may use deltas.
+		if ( bDirect )
+			Check ( tWord.GetDecodeCounts()[0]<=1 );
+	}
+}
+
+
 static void TestBlockPayloads ( const char * sFile, unsigned uShape, FileAccess_e eAccess, bool bRestricted, RowID_t tBase )
 {
 	MemoryOutput_c tOutput;
@@ -395,6 +486,7 @@ static void TestBlockPayloads ( const char * sFile, unsigned uShape, FileAccess_
 	CSphString sReadError;
 	DataReaderFactoryPtr_c pFactory ( NewProxyReader ( sFile, sReadError, DataReaderFactory_c::DOCS, 1024, eAccess ) );
 	Check ( bool(pFactory) );
+	TestBlockRows ( pFactory, dStarts[0], dExpected[0], bRestricted ? 1U : UINT32_MAX, !bRestricted && uShape!=2 );
 	for ( unsigned mode=0; mode<4; ++mode )
 	{
 		std::array<CountingQword_c,3> dWords;
@@ -591,7 +683,12 @@ static void TestBlockPayloads ( const char * sFile, unsigned uShape, FileAccess_
 		std::fill_n ( dBits, PostingWindow_t::WORDS, UINT32_MAX );
 
 		PostingWindow_t tWindow { tLast, tLast, tLeaf.m_uEnd };
-		Check ( pCursor->Intersect ( tWindow, dBits )==1 );
+		if ( iTry==1 )
+		{
+			RowID_t dRows[PostingWindow_t::ROWS];
+			Check ( pCursor->ReadRows ( tWindow, dRows )==1 && dRows[0]==tLast );
+		} else
+			Check ( pCursor->Intersect ( tWindow, dBits )==1 );
 		Check ( pCursor->FilterRows ( &tLast, 1 )==1 );
 		Check ( !tWord.GetDecodeCounts()[2] && !tWord.GetDecodeCounts()[3] );
 
@@ -782,7 +879,7 @@ int main ( int argc, char ** argv )
 	for ( unsigned shape=0; shape<3; ++shape )
 		for ( auto access : { FileAccess_e::MMAP, FileAccess_e::FILE } )
 			for ( bool restricted : { false, true } )
-				for ( RowID_t base : { 4093u, UINT32_MAX-200000u } )
+				for ( RowID_t base : { 4093u, UINT32_MAX-(shape==0 ? 2050u : shape==1 ? 3075u : 198850u)-1 } )
 					TestBlockPayloads ( argv[1], shape, access, restricted, base );
 
 	Check ( !std::remove(argv[1]) );

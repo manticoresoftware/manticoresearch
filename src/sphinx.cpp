@@ -16,6 +16,8 @@
 #include "sphinxquery/xqparser.h"
 #include "sphinxutils.h"
 #include "sphinxsort.h"
+#include "sortbound.h"
+#include "sortfilter.h"
 #include "fileutils.h"
 #include "sphinxexpr.h"
 #include "sphinxfilter.h"
@@ -1126,7 +1128,7 @@ private:
 	bool						MultiScan ( CSphQueryResult& tResult, const CSphQuery& tQuery, const VecTraits_T<ISphMatchSorter*>& dSorters, const CSphMultiQueryArgs& tArgs, int64_t tmMaxTimer ) const;
 
 	template<bool USE_KLIST, bool RANDOMIZE, bool USE_FACTORS, bool HAS_SORT_CALC, bool HAS_WEIGHT_FILTER, bool HAS_FILTER_CALC, bool HAS_CUTOFF>
-	void						MatchExtended ( CSphQueryContext & tCtx, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *>& dSorters, ISphRanker * pRanker, int iTag, int iIndexWeight, int iCutoff ) const;
+	void						MatchExtended ( CSphQueryContext & tCtx, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *>& dSorters, ISphRanker * pRanker, int iTag, int iIndexWeight, int iCutoff, SortBound_c * pSortBound ) const;
 
 	const CSphRowitem *			FindDocinfo ( DocID_t tDocID ) const;
 
@@ -8255,7 +8257,7 @@ static void PrefetchGroupBlobs ( const CSphMatch * pMatches, int iCount, const C
 
 
 template<bool USE_KLIST, bool RANDOMIZE, bool USE_FACTORS, bool HAS_SORT_CALC, bool HAS_WEIGHT_FILTER, bool HAS_FILTER_CALC, bool HAS_CUTOFF>
-void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, ISphRanker * pRanker, int iTag, int iIndexWeight, int iCutoff ) const
+void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, ISphRanker * pRanker, int iTag, int iIndexWeight, int iCutoff, SortBound_c * pSortBound ) const
 {
 	if ( !iCutoff )
 		return;
@@ -8280,6 +8282,9 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQ
 	CSphMatch * pMatch = pRanker->GetMatchesBuffer();
 	while (true)
 	{
+		if ( pSortBound )
+			pSortBound->Update();
+
 		// ranker does profile switches internally in GetMatches()
 		int iMatches = pRanker->GetMatches();
 		if ( iMatches<=0 )
@@ -12574,6 +12579,13 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 		tCtx.m_bSkipQCache = true;
 	}
 
+	SortBound_c tSortBound;
+	bool bSortBound = CanUseSortBound ( tQuery, dSorters, tArgs, bRanklessCount ) && tSortBound.Setup ( tQuery, m_tSchema, *dSorters[0] );
+	const CSphColumnInfo * pSortAttr = bSortBound ? m_tSchema.GetAttr ( tSortBound.GetAttr().cstr() ) : nullptr;
+	bSortBound &= pSortAttr && !pSortAttr->IsColumnar() && !pSortAttr->m_tLocator.m_bDynamic && m_pDocinfoIndex;
+	if ( bSortBound )
+		tCtx.m_bSkipQCache = true;
+
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
 	std::unique_ptr<ISphRanker> pRanker = sphCreateRanker ( tXQ, tQuery, tRankerSettings, tMeta, tTermSetup, tCtx, tMaxSorterSchema, true );
@@ -12656,6 +12668,15 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 		}
 	}
 
+	std::unique_ptr<SortBoundFilter_c> pSortFilter;
+	if ( bSortBound && !pIterator )
+	{
+		const SIContainer_c * pSortSI = m_tSI.IsEnabled(tSortBound.GetAttr()) && tQuery.m_dIndexHints.IsEmpty() ? &m_tSI : nullptr;
+		pSortFilter = std::make_unique<SortBoundFilter_c> ( tSortBound, pSortAttr->m_tLocator, GetRawAttrs(), m_pDocinfoIndex, RowID_t(m_iDocinfo), m_tSchema.GetRowSize(), pSortSI );
+		if ( !pRanker->SetCandidateFilter(pSortFilter.get()) )
+			pSortFilter.reset();
+	}
+
 	if ( !AddLateKNNDistFilter ( tQuery, bKNNIteratorCreated, tCtx, tFlx, tMeta ) )
 		return false;
 
@@ -12696,12 +12717,15 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 	switch ( iIndex )
 	{
 #define DECL_FNSCAN( _, n, params ) case n: MatchExtended<!!(n&64), !!(n&32), !!(n&16), !!(n&8), !!(n&4), !!(n&2), !!(n&1)> params; break;
-	BOOST_PP_REPEAT ( 128, DECL_FNSCAN, ( tCtx, tQuery, dSorters, pRanker.get(), iMyTag, tArgs.m_iIndexWeight, iCutoff ) )
+	BOOST_PP_REPEAT ( 128, DECL_FNSCAN, ( tCtx, tQuery, dSorters, pRanker.get(), iMyTag, tArgs.m_iIndexWeight, iCutoff, pSortFilter ? &tSortBound : nullptr ) )
 #undef DECL_FNSCAN
 		default:
 			assert ( 0 && "Internal error" );
 			break;
 	}
+
+	if ( pSortFilter )
+		FinalizeSortBound ( *pSortFilter, tSortBound, *pRanker, tMeta );
 
 	if ( !tMeta.m_sError.IsEmpty() )
 		return false;

@@ -99,8 +99,15 @@ public:
 	/// return sorted entries count, might be less than length due of aggregate filtering phase
 	virtual int			Flatten ( CSphMatch * pTo ) = 0;
 
-	/// get a pointer to the worst element, NULL if there is no fixed location
-	virtual const CSphMatch * GetWorst() const { return nullptr; }
+	/// Borrow the worst element until the next mutation, or nullptr if unavailable.
+	/// With pFull, report whether logical top-K is full; the element may be a conservative older threshold.
+	virtual const CSphMatch * GetWorst ( bool * pFull = nullptr ) const
+	{
+		if ( pFull )
+			*pFull = false;
+
+		return nullptr;
+	}
 
 	/// returns whether the sorter can be cloned to distribute processing over multi threads
 	/// (delete and update sorters are too complex by side effects and can't be cloned)

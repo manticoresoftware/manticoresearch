@@ -56,9 +56,9 @@ add_subdirectory ( postings )
 
 # main bunch of sources (for libsphinx)
 add_library ( lmanticore STATIC sphinx.cpp sphinxutils.cpp
-		sphinxsort.cpp sortsetup.cpp sphinxexpr.cpp sphinxfilter.cpp sphinxsearch.cpp sphinxrt.cpp accumulator.cpp uuid_docid.cpp
+		sphinxsort.cpp sortsetup.cpp sortbound.cpp sortfilter.cpp sphinxexpr.cpp sphinxfilter.cpp sphinxsearch.cpp sphinxrt.cpp accumulator.cpp uuid_docid.cpp
 		sphinxjson.cpp sphinxaot.cpp sphinxplugin.cpp sphinxudf.c sphinxqcache.cpp 
-		attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp postingwindow.cpp fastcount.cpp diskqword.cpp postings/disk.cpp postings/blockqword.cpp postings/blockwindow.cpp postings/blockqwordvalidation.cpp json/cJSON_test.c sphinxpq.cpp
+		attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp postingwindow.cpp termproducer.cpp fastcount.cpp diskqword.cpp postings/disk.cpp postings/blockqword.cpp postings/blockwindow.cpp postings/blockqwordvalidation.cpp json/cJSON_test.c sphinxpq.cpp
 		global_idf.cpp docstore.cpp lz4/lz4.c lz4/lz4hc.c snippetfunctor.cpp snippetindex.cpp
 		snippetstream.cpp snippetpassage.cpp threadutils.cpp sphinxversion.cpp datareader.cpp
 		indexformat.cpp indexsettings.cpp fileutils.cpp threads_detached.cpp hazard_pointer.cpp
@@ -90,7 +90,7 @@ int main() { return 0; }" SEARCH_TARGET_X86 )
 
 		check_cxx_compiler_flag ( "${SEARCH_BRANCH_ALIGNMENT_FLAG}" SEARCH_HAVE_BRANCH_ALIGNMENT )
 		if ( SEARCH_HAVE_BRANCH_ALIGNMENT )
-			set_property ( SOURCE sphinxsearch.cpp diskqword.cpp postingwindow.cpp postings/blockwindow.cpp APPEND PROPERTY COMPILE_OPTIONS "${SEARCH_BRANCH_ALIGNMENT_FLAG}" )
+			set_property ( SOURCE sphinxsearch.cpp diskqword.cpp postingwindow.cpp termproducer.cpp postings/blockwindow.cpp APPEND PROPERTY COMPILE_OPTIONS "${SEARCH_BRANCH_ALIGNMENT_FLAG}" )
 		endif ()
 		unset ( SEARCH_BRANCH_ALIGNMENT_FLAG )
 	endif ()
@@ -166,7 +166,7 @@ set ( HEADERS sphinxfilter.h sphinxint.h sphinxpq.h sphinxrt.h
 		sphinxsort.h sphinxutils.h sphinxexpr.h sphinx.h sphinxjson.h sphinxplugin.h sphinxqcache.h
 		sphinxsearch.h sphinxstd.h sphinxudf.h lz4/lz4.h lz4/lz4hc.h http/http_parser.h secondaryindex.h
 		searchnode.h fastcount.h diskqword.h killlist.h attribute.h accumulator.h uuid_docid.h global_idf.h event.h threadutils.h threadutils_impl.h
-		hazard_pointer.h task_info.h mini_timer.h collation.h histogram.h sortsetup.h
+		hazard_pointer.h task_info.h mini_timer.h collation.h histogram.h sortsetup.h sortbound.h sortfilter.h
 		indexsettings.h columnarlib.h fileio.h memio.h memio_impl.h queryprofile.h columnarfilter.h columnargrouper.h fileutils.h
 		libutils.h conversion.h columnarsort.h sortcomp.h binlog_defs.h binlog.h ${MANTICORE_BINARY_DIR}/config/config.h
 		chunksearchctx.h indexfilebase.h indexfiles.h attrindex_builder.h queryfilter.h aggregate.h secondarylib.h

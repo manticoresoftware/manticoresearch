@@ -111,8 +111,8 @@ public:
 	// ROWS long; clear padding through the last accessed word.
 	virtual int		Intersect ( const PostingWindow_t & tWindow, DWORD * pBits ) = 0;
 
-	// Copy matching rows from a decoded prepared leaf within the window, without
-	// refilling it. Requires m_bDecoded; output capacity must be at least ROWS.
+	// Enumerate matching rows within the prepared leaf, retaining it for payload reads.
+	// Handles decoded rows, bitmaps and ranges; output capacity must be at least ROWS.
 	virtual int		ReadRows ( const PostingWindow_t & tWindow, RowID_t * pRows ) = 0;
 
 	// Compact sorted candidates to exact field-aware matches in the prepared leaf.
@@ -129,6 +129,43 @@ struct PostingCandidateRows_t
 	int				m_iCount = 0;
 };
 
+// A conservative prefilter. May retain false positives
+class PostingCandidateFilter_i
+{
+public:
+	virtual ~PostingCandidateFilter_i() = default;
+
+	virtual RowID_t	AdvanceTo ( RowID_t tMin ) = 0;
+	virtual int		SelectRows ( RowID_t * pRows, int iCount ) = 0;
+
+	// Create a fresh cursor sharing the threshold and pruning state.
+	virtual std::unique_ptr<PostingCandidateFilter_i> CloneCursor() { return nullptr; }
+};
+
+// Retains one term's leaf while bounded candidate batches are consumed and their
+// payloads gathered. Batches never cross an aligned membership window.
+class PostingBlockTerm_c
+{
+public:
+	PostingBlockTerm_c ( std::unique_ptr<PostingBlock_i> pCursor, PostingCandidateFilter_i & tFilter, const PostingWindowContext_t & tContext );
+
+	PostingCandidateRows_t	ReadRows ( RowID_t tMin, uint64_t uEnd, int iCapacity );
+	PostingBlock_i &		GetCursor() { return *m_pCursor; }
+
+private:
+	bool	FillRows ( RowID_t tMin, uint64_t uEnd );
+
+	std::unique_ptr<PostingBlock_i>	m_pCursor;
+	PostingCandidateFilter_i &		m_tFilter;
+	PostingWindowContext_t			m_tContext;
+	std::array<RowID_t,PostingWindow_t::ROWS> m_dRows;
+
+	RowID_t	m_tNext = 0;
+	int		m_iCount = 0;
+	int		m_iRead = 0;
+};
+
+
 // Intersects leaf-bounded intervals, then holds every participating leaf until
 // the returned rows' payloads have been gathered. Excluded terms only supply
 // exact membership; sparse survivors use row probes.
@@ -139,6 +176,7 @@ public:
 
 	void					Add ( std::unique_ptr<PostingBlock_i> pCursor );
 	void					AddExcluded ( std::unique_ptr<PostingWindow_i> pCursor );
+	void					SetCandidateFilter ( PostingCandidateFilter_i * pFilter ) { m_pFilter = pFilter; }
 	PostingBlock_i &		GetCursor ( int i )	{ return *m_dCursors[i]; }
 
 	// Sorted rows in [min,end), valid (with their payloads) until the next call.
@@ -153,6 +191,8 @@ private:
 	std::vector<std::unique_ptr<PostingBlock_i>>	m_dCursors;
 	std::vector<std::unique_ptr<PostingWindow_i>>	m_dExcluded;
 	std::array<RowID_t,PostingWindow_t::ROWS>		m_dRows;
+
+	PostingCandidateFilter_i * m_pFilter = nullptr;
 
 	PostingWindowContext_t	m_tContext;
 	RowID_t					m_tNext = 0;

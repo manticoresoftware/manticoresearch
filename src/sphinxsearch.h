@@ -180,6 +180,7 @@ public:
 	virtual bool				UsedCountWindows() const { return false; }
 	virtual const char *		GetCountWindowName() const { return nullptr; }
 	virtual bool				IsCache() const { return false; }
+	virtual bool				SetCandidateFilter ( PostingCandidateFilter_i * ) { return false; }
 	virtual void				FinalizeCache ( const ISphSchema & ) {}
 
 	virtual NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const = 0;

@@ -181,6 +181,15 @@ public:
 	// skip caching when SI iterators used as qcache will see the full-text without SI filters as SI modify filters
 	void						DisableCaching() { SafeReleaseAndZero ( m_pQcacheEntry ); }
 
+	bool						SetCandidateFilter ( PostingCandidateFilter_i * pFilter ) override
+	{
+		if ( !m_pRoot || !m_pRoot->SetCandidateFilter(pFilter) )
+			return false;
+
+		DisableCaching();
+		return true;
+	}
+
 	NodeEstimate_t				Estimate ( int64_t iTotalDocs ) const override;
 
 public:
@@ -753,14 +762,14 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup,
 
 		tDot.m_sWord.SetSprintf ( "%c%s", MAGIC_CODE_ZONE, m_dZones[i].cstr() );
 		auto& pStartTerm = m_dZoneStartTerm.Add();
-		pStartTerm.reset ( ExtNode_i::Create ( tDot, tSetup, pZonesDict, false, tSettings.m_bRowidLimits ) );
+		pStartTerm.reset ( ExtNode_i::Create ( tDot, tSetup, pZonesDict, false ) );
 		assert ( pStartTerm );
 		pStartTerm->SetCollectHits();
 		m_dZoneStart[i] = nullptr;
 
 		tDot.m_sWord.SetSprintf ( "%c/%s", MAGIC_CODE_ZONE, m_dZones[i].cstr() );
 		auto& pEndTerm = m_dZoneEndTerm.Add();
-		pEndTerm.reset ( ExtNode_i::Create ( tDot, tSetup, pZonesDict, false, tSettings.m_bRowidLimits ) );
+		pEndTerm.reset ( ExtNode_i::Create ( tDot, tSetup, pZonesDict, false ) );
 		assert ( pEndTerm );
 		pEndTerm->SetCollectHits();
 		m_dZoneEnd[i] = nullptr;

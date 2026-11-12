@@ -21,7 +21,7 @@ The included items are:
 * `keyword[N]`: The n-th keyword used in the search query. Note that the keyword can be presented as a wildcard, e.g., `abc*`.
 * `docs[N]`: The total number of documents (or records) containing the n-th keyword from the search query. If the keyword is presented as a wildcard, this value represents the sum of documents for all expanded sub-keywords, potentially exceeding the actual number of matched documents.
 * `hits[N]`: The total number of occurrences (or hits) of the n-th keyword across all documents.
-* `index`: Information about the utilized index (e.g., secondary index).
+* `index`: Information about the utilized index (e.g., secondary index). `SortBoundSI` and `SortBoundMinMax` identify competitive candidate pruning using a secondary index or rowwise min/max blocks, respectively. Different disk chunks can choose different sources; a chunk uses only one. When this pruning skips candidates, `total_relation` is `gte`.
 
 <!--
 data for the following examples:

@@ -19,12 +19,21 @@
 struct ClusterSyncedRequest_t : ClusterRequest_t
 {
 	Wsrep::GlobalTid_t m_tGtid; // GTID received
-	int64_t m_iClusterEpoch = 0;
+	int64_t m_iFilesSeqNo = 0;
 	StrVec_t m_dIndexes;		// index list received
 	bool m_bSendFilesSuccess = true;
 	CSphString m_sMsg;
+	bool m_bIst = false;		// donor bypasses SST, the joiner catches up by IST
 };
 
+// the joiner either accepts the state transfer or refuses it; a refusal is a valid reply, not a transport error
+struct ClusterSyncedReply_t
+{
+	bool m_bAccepted = true;
+	CSphString m_sReason;
+};
+
+// false with TlsMsg error on transport failure or when the joiner refused the state transfer
 bool SendClusterSynced ( const VecAgentDesc_t & dDesc, const ClusterSyncedRequest_t & tRequest, const CSphString & sUser );
 
 

@@ -1,0 +1,51 @@
+A node that missed ALTER CLUSTER ADD can not receive the added table (a file blocks its path): both rejoin attempts fail, the cluster stays closed with the reason in last_error, the daemon keeps running.
+––– block: ../base/replication/rejoin-setup –––
+––– block: ../base/replication/rejoin-pause-node3 –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE t1 (title text, v int)"; mysql -h0 -P1306 -e "INSERT INTO t1 (id,title,v) VALUES (1,'x',1)"; timeout 60 mysql -h0 -P1306 -e "ALTER CLUSTER v1 ADD t1"; echo $?
+––– output –––
+0
+––– comment –––
+A regular file where node 3 would create the t1 directory makes every SST of t1 to node 3 fail
+––– input –––
+touch /var/log/manticore-3/t1; kill -CONT $P3; echo "node 3 resumed"
+––– output –––
+node 3 resumed
+––– input –––
+timeout 90 bash -c 'until mysql -h0 -P3306 -e "SHOW STATUS LIKE '\''cluster_v1_last_error'\''\G" | grep -q "failed 2 times"; do sleep 0.5; done'; echo "gave up $?"
+––– output –––
+gave up 0
+––– input –––
+for v in node_state indexes; do echo "$v $(mysql -h0 -P3306 -e "SHOW STATUS LIKE 'cluster_v1_$v'\G" | awk '/Value:/{print $2}')"; done; kill -0 $P3 && echo alive
+––– output –––
+node_state closed
+indexes t0
+alive
+––– input –––
+L=/var/log/manticore-3/searchd.log; chk() { grep -q -- "$2" $L && echo "yes: $1" || echo "no: $1"; }; chk 'IST refused on files seqno' "files seqno 1 differs from donor files seqno 3 on IST"; chk 'attempt 1' "rejoin by SST, attempt 1 of 2"; chk 'attempt 2' "rejoin by SST, attempt 2 of 2"; chk 'SST 1 started' "rejoin started, attempt 1"; chk 'SST 2 started' "rejoin started, attempt 2"; chk 'gave up' "rejoin by SST failed 2 times"; grep -c 'rejoin by SST, attempt' $L; grep -c 'CRASH DUMP' $L; grep -c 'watchdog: main process .* forked ok' $L
+––– output –––
+yes: IST refused on files seqno
+yes: attempt 1
+yes: attempt 2
+yes: SST 1 started
+yes: SST 2 started
+yes: gave up
+2
+0
+1
+––– input –––
+for p in 1306 2306; do echo "$p $(mysql -h0 -P$p -e "SHOW STATUS LIKE 'cluster_v1_node_state'\G" | awk '/Value:/{print $2}')"; done
+––– output –––
+1306 synced
+2306 synced
+––– comment –––
+The closed cluster keeps its tables readable on node 3; last_error carries the reason
+––– input –––
+mysql -h0 -P3306 -e "SHOW STATUS LIKE 'cluster_v1_last_error'\G" | grep -o "rejoin by SST failed 2 times: .*" | cut -c1-200
+––– output –––
+rejoin by SST failed 2 times: #!/.+/!#
+––– input –––
+echo "t0 $(mysql -h0 -P3306 -N -e "SELECT id FROM t0" | grep -Eo "[0-9]+" | xargs)"
+––– output –––
+t0 1
+––– block: ../base/replication/node-starts –––

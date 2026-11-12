@@ -12,11 +12,14 @@
 #include <boost/system/error_code.hpp>
 #include <ostream>
 #include <stdlib.h>
+#include <optional>
 #include <type_traits>
 
 #include "indexer_rt_bulk.h"
 #include "coroutine.h"
 #include "searchd_shard_bulk.h"
+#include "searchd_shard.h"
+#include "searchdreplication.h"
 
 #include <boost/version.hpp>
 #if BOOST_VERSION >= 108800
@@ -269,6 +272,45 @@ bool ListIndexerRtBulkFiles ( const CSphString & sRoot, CSphVector<IndexerRtBulk
 	}
 
 	return ListStagingDir ( sRoot, dFiles, sError );
+}
+
+
+// A directory of one replicated chunk in a staging root; the root is created on demand, the directory must be new.
+bool CreateIndexerRtBulkDir ( const CSphString & sRoot, const CSphString & sDir, CSphString & sError )
+{
+	if ( !PrepareStagingRoot ( sRoot, sError ) )
+		return false;
+
+	boost::system::error_code tError;
+	if ( fs::create_directory ( sDir.cstr(), tError ) )
+		return true;
+
+	if ( !tError )
+		sError.SetSprintf ( "bulk staging directory '%s' already exists", sDir.cstr() );
+	else
+		sError.SetSprintf ( "failed to create bulk staging directory '%s': %s", sDir.cstr(), tError.message().c_str() );
+	return false;
+}
+
+
+bool RenameIndexerRtBulkDir ( const CSphString & sFrom, const CSphString & sTo, CSphString & sError )
+{
+	boost::system::error_code tError;
+	fs::rename ( sFrom.cstr(), sTo.cstr(), tError );
+	if ( !tError )
+		return true;
+
+	sError.SetSprintf ( "failed to rename bulk staging directory '%s' to '%s': %s", sFrom.cstr(), sTo.cstr(), tError.message().c_str() );
+	return false;
+}
+
+
+void RemoveIndexerRtBulkDir ( const CSphString & sDir )
+{
+	boost::system::error_code tError;
+	fs::remove_all ( sDir.cstr(), tError );
+	if ( tError )
+		sphWarning ( "failed to remove bulk staging directory '%s': %s", sDir.cstr(), tError.message().c_str() );
 }
 
 
@@ -941,7 +983,8 @@ struct IndexerRtBulkTarget_t
 };
 
 
-static bool CheckIndexerRtBulkTarget ( const CSphString & sTable, IndexerRtBulkTarget_t & tTarget, CSphString & sError )
+// bClusterAllowed: a target of a load into a shard table stays out of clusters
+static bool CheckIndexerRtBulkTarget ( const CSphString & sTable, bool bClusterAllowed, IndexerRtBulkTarget_t & tTarget, CSphString & sError )
 {
 	tTarget.m_pServed = GetServed ( sTable );
 	if ( !tTarget.m_pServed )
@@ -956,7 +999,7 @@ static bool CheckIndexerRtBulkTarget ( const CSphString & sTable, IndexerRtBulkT
 		return false;
 	}
 
-	if ( ServedDesc_t::IsCluster ( tTarget.m_pServed ) )
+	if ( !bClusterAllowed && ServedDesc_t::IsCluster ( tTarget.m_pServed ) )
 	{
 		sError.SetSprintf ( "bulk_import does not support cluster table '%s'", sTable.cstr() );
 		return false;
@@ -1022,10 +1065,10 @@ static bool RecheckTarget ( ClientSession_c & tSession, CSphString & sError, con
 
 
 // Take the write reservation of the target and make sure the table did not change meanwhile.
-static bool ReserveIndexerRtBulkTarget ( const CSphString & sTable, ServedIndexWriteReservation_c & tReservation, IndexerRtBulkTarget_t & tCurrent, CSphString & sError )
+static bool ReserveIndexerRtBulkTarget ( const CSphString & sTable, bool bClusterAllowed, ServedIndexWriteReservation_c & tReservation, IndexerRtBulkTarget_t & tCurrent, CSphString & sError )
 {
 	IndexerRtBulkTarget_t tTarget;
-	if ( !CheckIndexerRtBulkTarget ( sTable, tTarget, sError ) )
+	if ( !CheckIndexerRtBulkTarget ( sTable, bClusterAllowed, tTarget, sError ) )
 		return false;
 
 	if ( !CheckIndexerRtBulkExecutable ( sError ) )
@@ -1038,7 +1081,7 @@ static bool ReserveIndexerRtBulkTarget ( const CSphString & sTable, ServedIndexW
 		return false;
 	}
 
-	if ( !CheckIndexerRtBulkTarget ( sTable, tCurrent, sError ) )
+	if ( !CheckIndexerRtBulkTarget ( sTable, bClusterAllowed, tCurrent, sError ) )
 		return false;
 	if ( !tNew.Matches ( tCurrent.m_pServed ) || tCurrent.m_iIndexId!=tTarget.m_iIndexId || tCurrent.m_iAlterGeneration!=tTarget.m_iAlterGeneration )
 	{
@@ -1087,7 +1130,7 @@ bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTab
 
 	IndexerRtBulkTarget_t tCurrent;
 	ServedIndexWriteReservation_c tReservation;
-	if ( !ReserveIndexerRtBulkTarget ( sTable, tReservation, tCurrent, sError ) )
+	if ( !ReserveIndexerRtBulkTarget ( sTable, true, tReservation, tCurrent, sError ) )
 		return false;
 
 	tState.m_sTable = sTable;
@@ -1392,6 +1435,14 @@ bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, E
 		CleanupIndexerRtBulk ( tSession );
 		return false;
 	}
+
+	// the cluster prefix of the rows as an ordinary write into the table checks it; a bare document takes the cluster of the table (E25)
+	if ( !tStmt.m_bBulkImportDoc && !ValidateClusterStatement ( tStmt.m_sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ) ) )
+	{
+		TlsMsg::MoveError ( sError );
+		return false;
+	}
+
 	const CSphSchema & tSchema = pRt->GetMatchSchema();
 	IndexerRtBulkInputMap_t tMap;
 	if ( !PrepareIndexerRtBulkInputMap ( tSchema, tStmt, tMap, eError, sError ) )
@@ -1600,7 +1651,7 @@ void SharedBulkPool_c::Leave()
 SharedBulkResult_e SharedBulkPool_c::Start ( CSphString & sError )
 {
 	IndexerRtBulkTarget_t tTarget;
-	if ( !ReserveIndexerRtBulkTarget ( m_sTable, m_tReservation, tTarget, sError ) )
+	if ( !ReserveIndexerRtBulkTarget ( m_sTable, !m_iLoadId, m_tReservation, tTarget, sError ) )
 		return SharedBulkResult_e::PRECONDITION;
 
 	m_iIndexId = tTarget.m_iIndexId;
@@ -1936,6 +1987,7 @@ struct SharedBulkRequest_c::Impl_t
 	SharedBulkPoolRefPtr_c m_pPool;	// the pool this request is admitted to
 	StringBuilder_c m_sCsv;			// unwritten tail, less than a batch
 	int64_t m_iRows = 0;
+	std::optional<CSphString> m_sCluster; // the cluster of the table, read once per request
 
 	IndexerRtBulkLayout_t m_tLayout; // insert layout of the current pool
 
@@ -2066,6 +2118,19 @@ SharedBulkResult_e SharedBulkRequest_c::Stage ( const SqlStmt_t & tStmt, CSphStr
 		auto eStarted = tImpl.m_pPool->WaitStarted ( sError );
 		if ( eStarted!=SharedBulkResult_e::STAGED )
 			return eStarted;
+	}
+
+	// the cluster prefix of the row as an ordinary write into the table checks it; a bare document takes the cluster of the table (E25)
+	if ( !tImpl.m_sCluster )
+	{
+		auto pServed = GetServed ( tImpl.m_sTable );
+		tImpl.m_sCluster = pServed ? pServed->m_sCluster : CSphString();
+	}
+	if ( !tStmt.m_bBulkImportDoc && !ValidateClusterStatement ( tStmt.m_sIndex, *tImpl.m_sCluster, tStmt.m_sCluster, IsHttpStmt ( tStmt ) ) )
+	{
+		TlsMsg::MoveError ( sError );
+		Fail ( sError );
+		return SharedBulkResult_e::FAILED_INPUT;
 	}
 	if ( !tImpl.m_tLayout.Prepare ( tPool.m_tSchema, tPool.m_dCsvAttrOrder, tStmt, sError ) )
 	{

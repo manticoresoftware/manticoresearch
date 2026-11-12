@@ -1,0 +1,56 @@
+bulk_import into a cluster table over private HTTP on node 1 and over Shared HTTP with shared=2 on node 2: every chunk goes through its own attach command, the rows are the same on every node.
+––– block: ../base/replication/bulk-cluster-setup –––
+––– input –––
+gen() { for ((i=$1; i<=$2; i++)); do printf '{"insert":{"cluster":"v1","table":"t","id":%d,"doc":{"title":"title %d","v":%d}}}\n' "$i" "$i" "$i"; done; }; gen 1 1000 > /tmp/p.ndjson; gen 1001 3000 > /tmp/a.ndjson; gen 3001 5000 > /tmp/b.ndjson; printf '\n' > /tmp/commit.ndjson; post() { curl -sS -X POST "http://127.0.0.1:$1/bulk?bulk_import=t$2" -H 'Content-Type: application/x-ndjson' --data-binary @"$3" -w ' HTTP %{http_code}\n'; }; echo ok
+––– output –––
+ok
+––– input –––
+post 1308 '' /tmp/p.ndjson
+––– output –––
+{"items":[{"bulk":{"table":"t","_id":0,"created":1000,"deleted":0,"updated":0,"result":"created","status":201}}],"current_line":1001,"skipped_lines":0,"errors":false,"error":""} HTTP 200
+––– input –––
+source /tmp/bc.sh; st t
+––– output –––
+node 1: synced count=1000 sum=500500 last_committed=2 files_seqno=2 repl=0
+node 2: synced count=1000 sum=500500 last_committed=2 files_seqno=2 repl=0
+node 3: synced count=1000 sum=500500 last_committed=2 files_seqno=2 repl=0
+––– input –––
+post 2308 '&shared=2' /tmp/a.ndjson > /tmp/a.reply & post 2308 '&shared=2' /tmp/b.ndjson > /tmp/b.reply & wait; cat /tmp/a.reply /tmp/b.reply
+––– output –––
+{"items":[],"current_line":2000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":2000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+––– input –––
+post 2308 '&shared' /tmp/commit.ndjson
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+––– input –––
+source /tmp/bc.sh; st t; grep -c "attach command finished in .* result 1" /var/log/manticore-2/searchd.log
+––– output –––
+node 1: synced count=5000 sum=12502500 last_committed=4 files_seqno=4 repl=0
+node 2: synced count=5000 sum=12502500 last_committed=4 files_seqno=4 repl=0
+node 3: synced count=5000 sum=12502500 last_committed=4 files_seqno=4 repl=0
+2
+––– comment –––
+Rows without "cluster" are refused with the text of an ordinary /bulk insert (E21): the ordinary insert, a private bulk_import and a Shared one; nothing changes
+––– input –––
+printf '{"insert":{"table":"t","id":9001,"doc":{"title":"x","v":0}}}\n' > /tmp/n.ndjson; post 1308 '' /tmp/n.ndjson | sed 's/^/import: /'; curl -sS -X POST "http://127.0.0.1:1308/bulk" -H 'Content-Type: application/x-ndjson' --data-binary @/tmp/n.ndjson -w ' HTTP %{http_code}\n' | sed 's/^/plain: /'; post 2308 '&shared' /tmp/n.ndjson | sed 's/^/shared: /'; post 2308 '&shared' /tmp/commit.ndjson | sed 's/^/shared commit: /'; source /tmp/bc.sh; for n in 1 2 3; do echo "node $n count=$(m $n 'SELECT COUNT(*) FROM t')"; done
+––– output –––
+import: {"items":[{"insert":{"error":{"type":"table 't' is a part of cluster 'v1', use 'v1:t'","table":"t"},"status":409}}],"current_line":1,"skipped_lines":1,"errors":true,"error":"table 't' is a part of cluster 'v1', use 'v1:t'"} HTTP 500
+plain: {"items":[{"insert":{"error":{"type":"table 't' is a part of cluster 'v1', use 'v1:t'","table":"t"},"status":409}}],"current_line":1,"skipped_lines":1,"errors":true,"error":"table 't' is a part of cluster 'v1', use 'v1:t'"} HTTP 500
+shared: {"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"table 't' is a part of cluster 'v1', use 'v1:t'","error_code":"shared_failed","shared_state":"failed"} HTTP 400
+shared commit: {"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"table 't' is a part of cluster 'v1', use 'v1:t'","error_code":"shared_failed","shared_state":"failed"} HTTP 500
+node 1 count=5000
+node 2 count=5000
+node 3 count=5000
+––– comment –––
+A bare document has no place for the cluster and takes the cluster of the table (E25): private on node 1 and Shared on node 2, the rows on all nodes
+––– input –––
+for ((i=6001; i<=6050; i++)); do printf '{"id":%d,"title":"bare %d","v":%d}\n' $i $i $i; done > /tmp/bp.ndjson; for ((i=6051; i<=6100; i++)); do printf '{"id":%d,"title":"bare %d","v":%d}\n' $i $i $i; done > /tmp/bs.ndjson; post 1308 '' /tmp/bp.ndjson | sed 's/^/private: /'; post 2308 '&shared' /tmp/bs.ndjson | sed 's/^/shared: /'; post 2308 '&shared' /tmp/commit.ndjson | sed 's/^/shared commit: /'; source /tmp/bc.sh; st t
+––– output –––
+private: {"items":[{"bulk":{"table":"t","_id":0,"created":50,"deleted":0,"updated":0,"result":"created","status":201}}],"current_line":51,"skipped_lines":0,"errors":false,"error":""} HTTP 200
+shared: {"items":[],"current_line":50,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+shared commit: {"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+node 1: synced count=5100 sum=13107550 last_committed=6 files_seqno=6 repl=0
+node 2: synced count=5100 sum=13107550 last_committed=6 files_seqno=6 repl=0
+node 3: synced count=5100 sum=13107550 last_committed=6 files_seqno=6 repl=0
+––– block: ../base/replication/node-starts –––

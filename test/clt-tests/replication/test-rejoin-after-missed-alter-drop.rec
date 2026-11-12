@@ -1,0 +1,57 @@
+A node paused with SIGSTOP misses ALTER CLUSTER DROP; on IST it refuses on the files seqno and rejoins by full SST; the dropped table loses the cluster mark and takes plain writes.
+––– block: ../base/replication/rejoin-setup –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE t1 (title text, v int)"; mysql -h0 -P1306 -e "ALTER CLUSTER v1 ADD t1"; mysql -h0 -P1306 -e "INSERT INTO v1:t1 (id,title,v) VALUES (1,'x',1)"; echo $?
+––– output –––
+0
+––– input –––
+timeout 30 bash -c 'until [ "$(mysql -h0 -P3306 -NB -e "SELECT COUNT(*) FROM t1" 2>/dev/null | grep -Eo "[0-9]+")" = 1 ]; do sleep 0.5; done'; mysql -h0 -P3306 -e "SHOW STATUS LIKE 'cluster_v1_indexes'\G" | grep Value
+––– output –––
+  Value: #!/(t0,t1|t1,t0)/!#
+––– block: ../base/replication/rejoin-pause-node3 –––
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER v1 DROP t1"; mysql -h0 -P1306 -e "INSERT INTO v1:t0 (id,title,v) VALUES (2,'b',2)"; echo $?
+––– output –––
+0
+––– input –––
+LC=$(mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_v1_last_committed'\G" | awk '/Value:/{print $2}'); mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_v1_indexes'\G" | grep Value
+––– output –––
+  Value: t0
+––– comment –––
+Resume node 3: it refuses IST on the files seqno and rejoins by full SST without a restart
+––– input –––
+kill -CONT $P3; echo "node 3 resumed"
+––– output –––
+node 3 resumed
+––– input –––
+timeout 60 bash -c 'v() { mysql -h0 -P3306 -e "SHOW STATUS LIKE '\''cluster_v1_$1'\''\G" | awk "/Value:/{print \$2}"; }; until [ "$(v node_state)" = synced ] && [ "$(v last_committed)" = "'$LC'" ]; do sleep 0.5; done'; echo "synced $?"
+––– output –––
+synced 0
+––– input –––
+for v in node_state status indexes; do echo "$v $(mysql -h0 -P3306 -e "SHOW STATUS LIKE 'cluster_v1_$v'\G" | awk '/Value:/{print $2}')"; done
+––– output –––
+node_state synced
+status primary
+indexes t0
+––– comment –––
+t1 left the cluster while node 3 was away: on node 3 it is a plain local table again, written without the cluster prefix
+––– input –––
+mysql -h0 -P3306 -e "INSERT INTO t1 (id,title,v) VALUES (3,'z',3)"; echo $?; mysql -h0 -P3306 -e "INSERT INTO v1:t1 (id,title,v) VALUES (4,'w',4)" 2>&1
+––– output –––
+0
+ERROR 1064 (42000) at line 1: table 't1' is not in any cluster, use just 't1'
+––– input –––
+kill -0 $P3 && echo alive; for t in t0 t1; do echo "$t $(mysql -h0 -P3306 -N -e "SELECT id FROM $t" | grep -Eo "[0-9]+" | sort -n | xargs)"; done
+––– output –––
+alive
+t0 1 2
+t1 1 3
+––– input –––
+L=/var/log/manticore-3/searchd.log; chk() { grep -q -- "$2" $L && echo "yes: $1" || echo "no: $1"; }; chk 'IST chosen' 'State gap can be likely serviced using IST'; chk 'IST refused on files seqno' "differs from donor files seqno [0-9]* on IST"; chk 'rejoin attempt 1' "rejoin by SST, attempt 1 of 2"; grep -c 'CRASH DUMP' $L; grep -c 'watchdog: main process .* forked ok' $L
+––– output –––
+yes: IST chosen
+yes: IST refused on files seqno
+yes: rejoin attempt 1
+0
+1
+––– block: ../base/replication/node-starts –––

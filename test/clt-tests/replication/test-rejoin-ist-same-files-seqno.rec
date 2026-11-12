@@ -1,0 +1,33 @@
+A node paused with SIGSTOP misses only writes; the files seqno is unchanged, so it catches up by IST and no rejoin by SST starts.
+––– block: ../base/replication/rejoin-setup –––
+––– block: ../base/replication/rejoin-pause-node3 –––
+––– input –––
+for k in 2 3 4; do mysql -h0 -P1306 -e "INSERT INTO v1:t0 (id,title,v) VALUES ($k,'b',$k)"; done; echo $?; LC=$(mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_v1_last_committed'\G" | awk '/Value:/{print $2}'); echo "last_committed $LC"
+––– output –––
+0
+last_committed 5
+––– input –––
+kill -CONT $P3; echo "node 3 resumed"
+––– output –––
+node 3 resumed
+––– input –––
+timeout 60 bash -c 'v() { mysql -h0 -P3306 -e "SHOW STATUS LIKE '\''cluster_v1_$1'\''\G" | awk "/Value:/{print \$2}"; }; until [ "$(v node_state)" = synced ] && [ "$(v last_committed)" = 5 ]; do sleep 0.5; done'; echo "synced $?"
+––– output –––
+synced 0
+––– input –––
+kill -0 $P3 && echo alive; echo "t0 $(mysql -h0 -P3306 -N -e "SELECT id FROM t0" | grep -Eo "[0-9]+" | sort -n | xargs)"
+––– output –––
+alive
+t0 1 2 3 4
+––– comment –––
+IST accepted from the node position; no files seqno refusal, no rejoin, no full SST after the first join
+––– input –––
+L=/var/log/manticore-3/searchd.log; chk() { grep -q -- "$2" $L && echo "yes: $1" || echo "no: $1"; }; chk 'IST chosen' 'State gap can be likely serviced using IST'; chk 'IST join sync seqno 2' "join sync 'v1', gtid [^ ]*:2, files seqno 1, sent ok, tables 1, ist 1"; chk 'files seqno refusal' "differs from donor files seqno"; chk 'rejoin' "rejoin by SST"; grep -c "ist 0," $L; grep -c 'CRASH DUMP' $L
+––– output –––
+yes: IST chosen
+yes: IST join sync seqno 2
+no: files seqno refusal
+no: rejoin
+1
+0
+––– block: ../base/replication/node-starts –––

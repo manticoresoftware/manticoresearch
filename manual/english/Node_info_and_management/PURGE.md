@@ -28,7 +28,7 @@ To publish the staged documents instead, commit the pool with a request without 
 
 `OPTION clear_sessions=1` does not cancel private bulk import sessions: a private session releases the table with `SET bulk_import=0` or when its connection closes.
 
-The statement requires an existing local real-time table that is not in a replication cluster, or a sharded or distributed table. It removes only direct-to-disk staging state and does not change the table schema or indexed documents. If the staging root is absent, the statement succeeds without making any changes. In configless mode, `DROP TABLE` also removes the table's direct-to-disk staging root and cancels its Shared pool.
+The statement requires an existing local real-time table, or a sharded or distributed table. For a table in a replication cluster it purges only the node where it runs; it is refused while a [bulk import chunk of the table](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import-into-a-replicated-table) waits for its attach command on that node, and `OPTION clear_sessions=1` removes such a chunk anyway. A node that missed the attach command of a chunk it received, for example because it was out of the cluster at that moment, keeps the chunk after the load has ended and refuses `PURGE` the same way until `OPTION clear_sessions=1` or a restart of the daemon. It removes only direct-to-disk staging state and does not change the table schema or indexed documents. If the staging root is absent, the statement succeeds without making any changes. In configless mode, `DROP TABLE` also removes the table's direct-to-disk staging root and cancels its Shared pool.
 
 ### Sharded and distributed tables
 

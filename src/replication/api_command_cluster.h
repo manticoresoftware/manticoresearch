@@ -41,11 +41,15 @@ enum class E_CLUSTER : WORD
 	EXIT_UPDATE_NODES	= 14,
 	GET_NODE_AUTH		= 15,
 	CHECK_NODE			= 16,
+	CHUNK_RESERVE		= 17,
+	CHUNK_PREPARE		= 18,
+	CHUNK_ABORT			= 19,
 };
 
 inline constexpr bool IsClusterHeartbeatCommand ( E_CLUSTER eCmd )
 {
-	return eCmd==E_CLUSTER::FILE_RESERVE || eCmd==E_CLUSTER::FILE_SEND || eCmd==E_CLUSTER::INDEX_ADD_LOCAL;
+	return eCmd==E_CLUSTER::FILE_RESERVE || eCmd==E_CLUSTER::FILE_SEND || eCmd==E_CLUSTER::INDEX_ADD_LOCAL
+		|| eCmd==E_CLUSTER::CHUNK_RESERVE || eCmd==E_CLUSTER::CHUNK_PREPARE || eCmd==E_CLUSTER::CHUNK_ABORT;
 }
 
 inline constexpr const char* szClusterCmd ( E_CLUSTER eCmd )
@@ -68,6 +72,9 @@ inline constexpr const char* szClusterCmd ( E_CLUSTER eCmd )
 	case E_CLUSTER::EXIT_UPDATE_NODES: return "exit_update_nodes";
 	case E_CLUSTER::GET_NODE_AUTH: return "get_node_auth";
 	case E_CLUSTER::CHECK_NODE: return "check_node";
+	case E_CLUSTER::CHUNK_RESERVE: return "chunk_reserve";
+	case E_CLUSTER::CHUNK_PREPARE: return "chunk_prepare";
+	case E_CLUSTER::CHUNK_ABORT: return "chunk_abort";
 	default: return "unknown";
 	}
 }

@@ -1,0 +1,24 @@
+A node can not receive the chunk (its staging root is a regular file): CHUNK_RESERVE fails there, the commit fails, the other nodes drop the chunk by CHUNK_ABORT, no node attaches anything and the files seqno does not change; the next load after the fix works.
+––– block: ../base/replication/bulk-cluster-setup –––
+––– input –––
+R=/var/log/manticore-2/t/t.indexer-rt-bulk; rm -rf $R; touch $R; source /tmp/bc.sh; load 1 t 1 1000
+––– output –––
+ERROR 1064 (42000) at line 5: '127.0.0.1:2312': remote error: [127.0.0.1] failed to create bulk staging root '/var/log/manticore-2/t/t.indexer-rt-bulk': File exists
+––– input –––
+source /tmp/bc.sh; st t
+––– output –––
+node 1: synced count=0 sum= last_committed=1 files_seqno=1 repl=0
+node 2: synced count=0 sum= last_committed=1 files_seqno=1 repl=0
+node 3: synced count=0 sum= last_committed=1 files_seqno=1 repl=0
+––– input –––
+rm -f /var/log/manticore-2/t/t.indexer-rt-bulk; source /tmp/bc.sh; load 1 t 1 1000; echo "rc $?"; st t
+––– output –––
+rc 0
+node 1: synced count=1000 sum=500500 last_committed=2 files_seqno=2 repl=0
+node 2: synced count=1000 sum=500500 last_committed=2 files_seqno=2 repl=0
+node 3: synced count=1000 sum=500500 last_committed=2 files_seqno=2 repl=0
+––– input –––
+grep -cE "bulk_import chunk [0-9]+ of table 't': abort" /var/log/manticore-3/searchd.log
+––– output –––
+1
+––– block: ../base/replication/node-starts –––

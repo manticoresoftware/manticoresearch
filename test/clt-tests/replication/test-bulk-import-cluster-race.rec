@@ -1,0 +1,33 @@
+Cluster commands between the delivery of a bulk_import chunk and its attach command (test pause on node 1): TRUNCATE is ordered first and the chunk goes into the empty table on every node; ALTER CLUSTER DROP makes the loading node refuse the command, the chunk is dropped on every node and the rows stay.
+––– input –––
+export BULK_PAUSE_1=15000; echo ok
+––– output –––
+ok
+––– block: ../base/replication/bulk-cluster-setup –––
+––– input –––
+source /tmp/bc.sh; m 2 "INSERT INTO v1:t (id,title,v) VALUES (90001,'a',1),(90002,'b',2)"; load 1 t 1 1000 > /tmp/l1.out & waitpause 1 1; echo "paused $?"; m 2 "TRUNCATE TABLE v1:t"; echo "truncate $?"
+––– output –––
+paused 0
+truncate 0
+––– input –––
+wait; cat /tmp/l1.out; source /tmp/bc.sh; st t
+––– output –––
+node 1: synced count=1000 sum=500500 last_committed=4 files_seqno=4 repl=0
+node 2: synced count=1000 sum=500500 last_committed=4 files_seqno=4 repl=0
+node 3: synced count=1000 sum=500500 last_committed=4 files_seqno=4 repl=0
+––– input –––
+source /tmp/bc.sh; load 1 t 2001 500 > /tmp/l2.out & waitpause 1 2; echo "paused $?"; for n in 1 2 3; do echo "node $n repl=$(repl $n)"; done; m 2 "ALTER CLUSTER v1 DROP t"; echo "drop $?"
+––– output –––
+paused 0
+node 1 repl=1
+node 2 repl=1
+node 3 repl=1
+drop 0
+––– input –––
+wait; cat /tmp/l2.out; source /tmp/bc.sh; for n in 1 2 3; do echo "node $n count=$(m $n 'SELECT COUNT(*) FROM t') files_seqno=$(seqno $n) repl=$(repl $n)"; done
+––– output –––
+ERROR 1064 (42000) at line 4: table 't' doesn't belong to cluster 'v1'
+node 1 count=1000 files_seqno=5 repl=0
+node 2 count=1000 files_seqno=5 repl=0
+node 3 count=1000 files_seqno=5 repl=0
+––– block: ../base/replication/node-starts –––

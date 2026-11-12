@@ -1,0 +1,24 @@
+A node is away when a bulk_import into a cluster table commits: the chunk goes to the nodes in the view only; the node comes back, refuses IST on the files seqno and rejoins by SST without a restart (P1), then has the rows.
+––– block: ../base/replication/bulk-cluster-setup –––
+––– block: ../base/replication/rejoin-pause-node3 –––
+––– input –––
+source /tmp/bc.sh; load 1 t 1 1000; echo "rc $?"; for n in 1 2; do echo "node $n count=$(m $n 'SELECT COUNT(*) FROM t') files_seqno=$(seqno $n)"; done
+––– output –––
+rc 0
+node 1 count=1000 files_seqno=2
+node 2 count=1000 files_seqno=2
+––– input –––
+kill -CONT $P3; source /tmp/bc.sh; waitsynced 3 1; echo "synced $?"; kill -0 $P3 && echo alive; st t
+––– output –––
+synced 0
+alive
+node 1: synced count=1000 sum=500500 last_committed=2 files_seqno=2 repl=0
+node 2: synced count=1000 sum=500500 last_committed=2 files_seqno=2 repl=0
+node 3: synced count=1000 sum=500500 last_committed=2 files_seqno=2 repl=0
+––– input –––
+L=/var/log/manticore-3/searchd.log; chk() { grep -q -- "$2" $L && echo "yes: $1" || echo "no: $1"; }; chk 'IST refused on files seqno' "files seqno 1 differs from donor files seqno 2 on IST"; chk 'rejoin attempt 1' "rejoin by SST, attempt 1 of 2"; grep -c 'CRASH DUMP' $L
+––– output –––
+yes: IST refused on files seqno
+yes: rejoin attempt 1
+0
+––– block: ../base/replication/node-starts –––

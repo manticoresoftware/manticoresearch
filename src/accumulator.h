@@ -53,6 +53,7 @@ enum class ReplCmd_e {
 	AUTH_ADD,
 	AUTH_DELETE,
 	CLUSTER_ALTER_UPDATE_USER,
+	BULK_IMPORT_ATTACH,
 
 	TOTAL
 };
@@ -61,6 +62,7 @@ struct CSphReconfigureSettings;
 class InsertDocData_c;
 struct RtSegment_t;
 class MemoryWriter_c;
+struct BulkChunkAttach_t;
 
 // command trait
 struct ReplicationCommand_t
@@ -70,7 +72,7 @@ struct ReplicationCommand_t
 	WORD 					m_uVersion = 0;
 	CSphString				m_sIndex; // move to accumulator
 	CSphString				m_sCluster;
-	int64_t					m_iClusterEpoch = 0;
+	int64_t					m_iOrderSeqNo = -1; // seqno Galera gave this command; set on each node before an isolated command is applied
 
 	// add
 	std::unique_ptr<StoredQuery_i> m_pStored;
@@ -91,6 +93,10 @@ struct ReplicationCommand_t
 	AttrUpdateSharedPtr_t m_pUpdateAPI;
 	bool m_bBlobUpdate = false;
 	const CSphQuery * m_pUpdateCond = nullptr;
+
+	// bulk_import attach
+	uint64_t				m_uBulkChunkId = 0;
+	BulkChunkAttach_t *		m_pBulkChunkAttach = nullptr; // the loading node reads the outcome here; nullptr on the other nodes
 };
 
 struct ReplicatedCommand_t

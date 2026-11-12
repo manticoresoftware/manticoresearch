@@ -20,6 +20,7 @@
 #include "cluster_recv_state_cleanup.h"
 #include "cluster_sst_progress.h"
 #include "cluster_check_node.h"
+#include "cluster_bulk_chunk.h"
 
 void operator<< ( ISphOutputBuffer& tOut, const ClusterRequest_t& tReq )
 {
@@ -159,7 +160,7 @@ void HandleAPICommandCluster ( GenericOutputBuffer_c & tOut, WORD uCommandVer, I
 		break;
 
 	case E_CLUSTER::SYNCED:
-		ReceiveClusterSynced ( tOut, tBuf, sCluster );
+		ReceiveClusterSynced ( tOut, tBuf, sCluster, szClient );
 		break;
 
 	case E_CLUSTER::GET_NODES:
@@ -200,6 +201,18 @@ void HandleAPICommandCluster ( GenericOutputBuffer_c & tOut, WORD uCommandVer, I
 
 	case E_CLUSTER::CHECK_NODE:
 		ReceiveClusterCheckNode ( tOut, tBuf, sCluster );
+		break;
+
+	case E_CLUSTER::CHUNK_RESERVE:
+		bWireAligned = ReceiveClusterChunkReserve ( tOut, tBuf, sCluster, uCommandVer, uHeartbeatIntervalMs );
+		break;
+
+	case E_CLUSTER::CHUNK_PREPARE:
+		bWireAligned = ReceiveClusterChunkPrepare ( tOut, tBuf, sCluster, uCommandVer, uHeartbeatIntervalMs );
+		break;
+
+	case E_CLUSTER::CHUNK_ABORT:
+		bWireAligned = ReceiveClusterChunkAbort ( tOut, tBuf, sCluster, uCommandVer, uHeartbeatIntervalMs );
 		break;
 
 	default:

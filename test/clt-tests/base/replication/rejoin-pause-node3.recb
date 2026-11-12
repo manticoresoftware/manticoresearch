@@ -1,0 +1,16 @@
+––– comment –––
+Pause node 3 (the pid file holds the worker, not the watchdog) and wait until nodes 1 and 2 drop it from the view
+––– input –––
+P3=$(cat /var/log/manticore-3/searchd.pid); kill -STOP $P3; echo "node 3 stopped"
+––– output –––
+node 3 stopped
+––– input –––
+timeout 60 bash -c 'v() { mysql -h0 -P$1 -e "SHOW STATUS LIKE '\''cluster_v1_nodes_view'\''\G" | awk "/Value:/{print \$2}" | tr , "\n" | grep -c :replication; }; until [ "$(v 1306)" = 2 ] && [ "$(v 2306)" = 2 ]; do sleep 0.5; done'; echo "evicted $?"
+––– output –––
+evicted 0
+––– comment –––
+nodes_set still lists node 3; ALTER CLUSTER ADD asks every node of nodes_set for its state and a paused node holds the call up to 120 s, so drop node 3 from nodes_set first
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER v1 UPDATE nodes"; mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_v1_nodes_set'\G" | grep Value
+––– output –––
+  Value: 127.0.0.1:1312,127.0.0.1:2312

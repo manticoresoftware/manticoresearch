@@ -1,0 +1,43 @@
+A node stopped cleanly misses one write; after a restart Galera takes its position from grastate.dat and asks for IST. The node accepts it: no refusal, no abort by Galera, no full SST.
+––– block: ../base/replication/rejoin-setup –––
+––– input –––
+export INSTANCE=3; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; echo "stopped $?"; L3=$(wc -l < /var/log/manticore-3/searchd.log)
+––– output –––
+stopped 0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO v1:t0 (id,title,v) VALUES (2,'b',2)"; echo $?; LC=$(mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_v1_last_committed'\G" | awk '/Value:/{print $2}'); echo "last_committed $LC"
+––– output –––
+0
+last_committed 3
+––– input –––
+export INSTANCE=3; stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; echo "started $?"
+––– output –––
+started 0
+––– input –––
+timeout 90 bash -c 'v() { mysql -h0 -P3306 -e "SHOW STATUS LIKE '\''cluster_v1_$1'\''\G" 2>/dev/null | awk "/Value:/{print \$2}"; }; until [ "$(v node_state)" = synced ] && [ "$(v last_committed)" = 3 ]; do sleep 0.5; done'; echo "synced $?"
+––– output –––
+synced 0
+––– input –––
+echo "t0 $(mysql -h0 -P3306 -N -e "SELECT id FROM t0" | grep -Eo "[0-9]+" | sort -n | xargs)"
+––– output –––
+t0 1 2
+––– comment –––
+Log of node 3 after the restart: Galera starts from the saved position 2, the donor sends IST from it and the node accepts it; no stale refusal, no abort, no full SST
+––– input –––
+A=$(tail -n +$((L3+1)) /var/log/manticore-3/searchd.log); chk() { echo "$A" | grep -q -- "$2" && echo "yes: $1" || echo "no: $1"; }; chk 'saved position' 'End state: [0-9a-f-]*:2 '; chk 'IST chosen' 'State gap can be likely serviced using IST'; chk 'IST join sync seqno 2' "join sync 'v1', gtid [^ ]*:2, files seqno 1, sent ok, tables 1, ist 1"; chk 'IST received' 'IST received: [0-9a-f-]*:3'; chk 'stale IST' 'stale IST request'; chk 'abort' 'Will never receive state'; echo "full SST $(echo "$A" | grep -c "join sync 'v1', .*, ist 0,")"
+––– output –––
+yes: saved position
+yes: IST chosen
+yes: IST join sync seqno 2
+yes: IST received
+no: stale IST
+no: abort
+full SST 0
+––– comment –––
+Node 3 started twice (the first start and the restart of this test), no process was killed by a signal and none wrote a crash dump
+––– input –––
+for n in 1 2 3; do L=/var/log/manticore-$n/searchd.log; echo "node $n starts=$(grep -c 'watchdog: main process .* forked ok' $L) killed=$(grep -c 'killed dirtily' $L) dumps=$(grep -c 'CRASH DUMP' $L)"; done
+––– output –––
+node 1 starts=1 killed=0 dumps=0
+node 2 starts=1 killed=0 dumps=0
+node 3 starts=2 killed=0 dumps=0

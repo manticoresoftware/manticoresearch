@@ -17,6 +17,7 @@
 #include "searchdha.h"
 #include "searchdreplication.h"
 #include "replication/api_command_cluster.h"
+#include "replication/cluster_bulk_chunk.h"
 #include "global_idf.h"
 #include "searchdssl.h"
 #include "searchdddl.h"
@@ -10214,6 +10215,83 @@ void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString
 }
 
 
+// A chunk of a cluster table: the checks of this node, then the chunk goes to the other nodes and one command attaches it
+// on every node, this one included. This node keeps no chunk object: the command loads the chunk from repl-<id>/ as the
+// other nodes do.
+static DiskAttachRes_e AttachIndexerRtBulkChunkToCluster ( const CSphString & sTable, const ServedIndexWriteReservation_c & tReservation, int64_t iIndexId, int iAlterGeneration, std::unique_ptr<CSphIndex> pPlain, bool & bTargetStale, CSphString & sError )
+{
+	CSphString sCluster;
+	CSphString sRoot;
+	{
+		auto pServed = GetServed ( sTable );
+		if ( !tReservation.Matches ( pServed ) )
+		{
+			bTargetStale = true;
+			sError.SetSprintf ( "table '%s' was replaced while finalizing bulk_import", sTable.cstr() );
+			return DiskAttachRes_e::NOT_ATTACHED;
+		}
+
+		RIdx_T<RtIndex_i *> pRt { pServed };
+		if ( pRt->GetIndexId()!=iIndexId || pRt->GetAlterGeneration()!=iAlterGeneration )
+		{
+			bTargetStale = true;
+			sError.SetSprintf ( "table '%s' was altered while finalizing bulk_import", sTable.cstr() );
+			return DiskAttachRes_e::NOT_ATTACHED;
+		}
+
+		if ( !CanAttachIndexerRtBulkChunk ( *pRt.Ptr(), *pPlain, sError ) )
+		{
+			bTargetStale = true;
+			return DiskAttachRes_e::NOT_ATTACHED;
+		}
+		sCluster = pServed->m_sCluster;
+		sRoot = GetIndexerRtBulkRoot ( *pRt.Ptr() );
+	}
+
+	const uint64_t uId = NewBulkChunkId();
+
+	CSphString sDir = BulkChunkDir ( sRoot, uId, false );
+	if ( !CreateIndexerRtBulkDir ( sRoot, sDir, sError ) )
+		return DiskAttachRes_e::NOT_ATTACHED;
+	RegisterBulkChunk ( sCluster, sTable, uId );
+
+	if ( pPlain->RenameEx ( SphSprintf ( "%s/chunk", sDir.cstr() ) )!=CSphIndex::RE_OK )
+	{
+		sError.SetSprintf ( "failed moving bulk_import chunk into '%s': %s", sDir.cstr(), pPlain->GetLastError().cstr() );
+		pPlain.reset();
+		DropBulkChunk ( sCluster, sTable, uId );
+		return DiskAttachRes_e::NOT_ATTACHED;
+	}
+	pPlain.reset();
+
+	BulkChunkAttach_t tResult;
+	ReplicateBulkImportChunk ( sCluster, sTable, uId, FindFiles ( SphSprintf ( "%s/*", sDir.cstr() ).cstr() ), tResult );
+	switch ( tResult.m_eResult )
+	{
+	case BulkChunkAttach_e::ATTACHED:
+		return DiskAttachRes_e::OK;
+
+	case BulkChunkAttach_e::SKIPPED:
+		bTargetStale = true;
+		sError.SetSprintf ( "table '%s' left cluster '%s' before bulk_import commit", sTable.cstr(), sCluster.cstr() );
+		return DiskAttachRes_e::NOT_ATTACHED;
+
+	case BulkChunkAttach_e::FAILED:
+		// files seqno is 0 already; the command has returned, so the provider may be disconnected now
+		RejoinClusterBySst ( sCluster );
+		bTargetStale = true;
+		sError.SetSprintf ( "the other nodes of cluster '%s' attached the bulk_import chunk, this node failed and rejoins the cluster by SST: %s", sCluster.cstr(), tResult.m_sError.cstr() );
+		return DiskAttachRes_e::NOT_ATTACHED;
+
+	case BulkChunkAttach_e::NOT_APPLIED:
+	default:
+		sError = tResult.m_sError.IsEmpty() ? CSphString ( "bulk_import chunk was not attached by the cluster" ) : tResult.m_sError;
+		DropBulkChunk ( sCluster, sTable, uId );
+		return DiskAttachRes_e::NOT_ATTACHED;
+	}
+}
+
+
 DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const ServedIndexWriteReservation_c & tReservation, int64_t iIndexId, int iAlterGeneration, const CSphString & sPath, bool & bTargetStale, CSphString & sError )
 {
 	bTargetStale = false;
@@ -10234,13 +10312,9 @@ DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const Serv
 		}
 	}
 
-	auto pPlain = sphCreateIndexPhrase ( "indexer_rt_bulk_chunk", sPath );
-	StrVec_t dWarnings;
-	if ( !pPlain->Prealloc ( false, nullptr, dWarnings ) )
-	{
-		sError.SetSprintf ( "failed loading bulk_import chunk: %s", pPlain->GetLastError().cstr() );
+	auto pPlain = LoadIndexerRtBulkChunk ( sPath, sError );
+	if ( !pPlain )
 		return DiskAttachRes_e::NOT_ATTACHED;
-	}
 
 	if ( pPlain->GetMatchSchema().HasKNNAttrs() && !pPlain->AlterKNN ( sError ) )
 	{
@@ -10248,7 +10322,9 @@ DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const Serv
 		return DiskAttachRes_e::NOT_ATTACHED;
 	}
 
-	bool bFatal = false;
+	if ( ServedDesc_t::IsCluster ( pServed ) )
+		return AttachIndexerRtBulkChunkToCluster ( sTable, tReservation, iIndexId, iAlterGeneration, std::move ( pPlain ), bTargetStale, sError );
+
 	auto eResult = DiskAttachRes_e::NOT_ATTACHED;
 	{
 		auto pCurrent = GetServed ( sTable );
@@ -10267,16 +10343,42 @@ DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const Serv
 			sError.SetSprintf ( "table '%s' changed while finalizing bulk_import", sTable.cstr() );
 			return DiskAttachRes_e::NOT_ATTACHED;
 		}
-		if ( !pRt->CanAttachDiskIndex ( pPlain.get(), sError ) )
-		{
-			bTargetStale = true;
-			return DiskAttachRes_e::NOT_ATTACHED;
-		}
-
-		eResult = pRt->AttachDiskIndexWithMeta ( pPlain.get(), false, bFatal, sError );
+		bool bCantAttach = false;
+		eResult = AttachLoadedIndexerRtBulkChunk ( *pRt.Ptr(), pPlain, bCantAttach, sError );
+		bTargetStale = bCantAttach;
 	}
+	return eResult;
+}
+
+
+std::unique_ptr<CSphIndex> LoadIndexerRtBulkChunk ( const CSphString & sPath, CSphString & sError )
+{
+	auto pChunk = sphCreateIndexPhrase ( "indexer_rt_bulk_chunk", sPath );
+	StrVec_t dWarnings;
+	if ( pChunk->Prealloc ( false, nullptr, dWarnings ) )
+		return pChunk;
+
+	sError.SetSprintf ( "failed loading bulk_import chunk: %s", pChunk->GetLastError().cstr() );
+	return nullptr;
+}
+
+
+bool CanAttachIndexerRtBulkChunk ( const RtIndex_i & tRt, const CSphIndex & tChunk, CSphString & sError )
+{
+	return tRt.CanAttachDiskIndex ( &tChunk, sError );
+}
+
+
+DiskAttachRes_e AttachLoadedIndexerRtBulkChunk ( RtIndex_i & tRt, std::unique_ptr<CSphIndex> & pChunk, bool & bCantAttach, CSphString & sError )
+{
+	bCantAttach = !CanAttachIndexerRtBulkChunk ( tRt, *pChunk, sError );
+	if ( bCantAttach )
+		return DiskAttachRes_e::NOT_ATTACHED;
+
+	bool bFatal = false;
+	auto eResult = tRt.AttachDiskIndexWithMeta ( pChunk.get(), false, bFatal, sError );
 	if ( eResult!=DiskAttachRes_e::NOT_ATTACHED )
-		pPlain.release();
+		pChunk.release(); // the table owns the chunk now
 	return eResult;
 }
 
@@ -10373,12 +10475,6 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const CSphString & sIndex, const CS
 			return;
 		}
 
-		if ( ServedDesc_t::IsCluster ( pServed ) )
-		{
-			tOut.Error ( "FILES format 'bulk_import' does not support cluster tables" );
-			return;
-		}
-
 		CSphString sRoot;
 		{
 			RIdx_T<const RtIndex_i *> pRt { pServed };
@@ -10440,10 +10536,21 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const CSphString & sIndex, const CS
 static bool PurgeRtBulkImport ( const CSphString & sTable, bool bClearSessions, CSphString & sError )
 {
 	auto pServed = GetServed ( sTable );
-	if ( !pServed || pServed->m_eType!=IndexType_e::RT || ServedDesc_t::IsCluster ( pServed ) )
+	if ( !pServed || pServed->m_eType!=IndexType_e::RT )
 	{
 		sError.SetSprintf ( "PURGE BULK_IMPORT requires an existing local RT table; table '%s' is absent or unsupported", sTable.cstr() );
 		return false;
+	}
+
+	// a chunk of a cluster table between its delivery and its attach command, on this node as a receiver or as the loader
+	if ( HasBulkChunkSessions ( sTable ) )
+	{
+		if ( !bClearSessions )
+		{
+			sError.SetSprintf ( "a bulk_import chunk of table '%s' is being replicated; repeat PURGE after it finishes or use OPTION clear_sessions=1", sTable.cstr() );
+			return false;
+		}
+		ForgetBulkChunkSessions ( sTable );
 	}
 
 	CSphString sRoot;
@@ -10468,7 +10575,7 @@ static bool PurgeDistrBulkImport ( const DistributedIndex_t & tDistr, const CSph
 	for ( const CSphString & sLocal : tDistr.m_dLocal )
 	{
 		auto pLocal = GetServed ( sLocal );
-		if ( !pLocal || pLocal->m_eType!=IndexType_e::RT || ServedDesc_t::IsCluster ( pLocal ) )
+		if ( !pLocal || pLocal->m_eType!=IndexType_e::RT )
 			continue; // no bulk_import state there
 		pLocal = nullptr;
 		if ( !PurgeRtBulkImport ( sLocal, bClearSessions, sError ) )

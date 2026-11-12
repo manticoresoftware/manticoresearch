@@ -1,0 +1,72 @@
+The loading node failed to attach its chunk (E18) and waits for its rejoin while another node joins by SST: it refuses to donate the tables without the chunk, the joining node gets the donor's reason and joins after the loading node rejoined. Node 2 is in another Galera segment, so node 1 is the only donor for node 3; ALTER CLUSTER v2 UPDATE nodes towards a stopped node 4 holds the cluster operations lock on node 1 and keeps it in the window.
+––– input –––
+cat > /tmp/bc.sh <<'EOF'
+m() { mysql --skip-table --batch --raw --skip-column-names -h0 -P${1}306 -e "$2" 2>&1; }
+v() { m $1 "SHOW STATUS LIKE 'cluster_v1_$2'" | awk '{print $2}'; }
+rows() { local i=$2 e=$(( $2 + $3 - 1 )) k j s; while [ $i -le $e ]; do k=$(( i + 499 )); [ $k -gt $e ] && k=$e; s="INSERT INTO v1:$1 (id,title,v) VALUES "; for j in $(seq $i $k); do s="$s($j,'title $j',$j),"; done; echo "${s%,};"; i=$(( k + 1 )); done; }
+load() { { echo "SET bulk_import=$2;"; echo "BEGIN;"; rows $2 $3 $4; echo "COMMIT;"; echo "SET bulk_import=0;"; } | mysql -h0 -P${1}306 2>&1; }
+seqno() { grep -o '"files_seqno":[0-9-]*' /var/log/manticore-$1/manticore.json | cut -d: -f2; }
+st() { for n in 1 2 3; do echo "node $n: $(v $n node_state) count=$(m $n "SELECT COUNT(*) FROM $1" | tail -1) files_seqno=$(seqno $n)"; done; }
+pauses() { grep -c 'pause [0-9]* ms before the attach command' /var/log/manticore-$1/searchd.log; }
+waitpause() { for k in $(seq 120); do [ "$(pauses $1)" -ge $2 ] && return 0; sleep 0.5; done; return 1; }
+waitsynced() { for k in $(seq 240); do [ "$(v $1 node_state)" = synced ] && [ "$(v $1 last_committed)" = "$(v $2 last_committed)" ] && return 0; sleep 0.5; done; return 1; }
+EOF
+echo ok
+––– output –––
+ok
+––– input –––
+for i in 1 2 3 4; do export INSTANCE=$i; mkdir -p /var/{run,lib,log}/manticore-$i; P=0; [ $i = 1 ] && P=15000; INDEXER_RT_BULK_CLUSTER_PAUSE_MS=$P stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; done; for i in 1 2 3 4; do timeout 30 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-$i/searchd.log) && echo "node $i started"; done
+––– output –––
+node 1 started
+node 2 started
+node 3 started
+node 4 started
+––– input –––
+mysql -h0 -P1306 -e "CREATE CLUSTER v1"; mysql -h0 -P2306 -e "JOIN CLUSTER v1 AT '127.0.0.1:1312' 'gmcast.segment=1' as options"; mysql -h0 -P1306 -e "CREATE TABLE t (title text, v int)"; mysql -h0 -P1306 -e "ALTER CLUSTER v1 ADD t"; mkdir -p /var/log/manticore-1/v2; O="'evs.suspect_timeout=PT120S;evs.inactive_timeout=PT120S' as options"; mysql -h0 -P1306 -e "CREATE CLUSTER v2 'v2' as path, $O"; mysql -h0 -P4306 -e "JOIN CLUSTER v2 AT '127.0.0.1:1312' $O"; echo $?
+––– output –––
+0
+––– comment –––
+Node 1 fails to attach its chunk; while it waits for its rejoin, ALTER CLUSTER v2 UPDATE nodes holds the cluster operations lock on it: the update waits for the stopped node 4
+––– input –––
+source /tmp/bc.sh; load 1 t 1 1000 > /tmp/l1.out & LP=$!; waitpause 1 1; echo "paused $?"; W4=$(cat /var/log/manticore-4/searchd.pid); P4="$W4 $(pgrep -P $W4)"; kill -STOP $P4; m 1 "ALTER CLUSTER v2 UPDATE nodes" > /dev/null & UP=$!; sleep 1; rm -f $(find /var/log/manticore-1 -maxdepth 4 -path '*repl-*' -name 'chunk.sph'); wait $LP; cat /tmp/l1.out
+––– output –––
+paused 0
+ERROR 1064 (42000) at line 5: the other nodes of cluster 'v1' attached the bulk_import chunk, this node failed and rejoins the cluster by SST: bulk_import chunk #!/[0-9]+/!# of table 't' is not prepared on this node
+––– comment –––
+Node 3 joins while node 1, the only donor of its segment, has no chunk rows: node 1 refuses to donate, the join fails with the donor's reason and node 3 gets no table
+––– input –––
+source /tmp/bc.sh; m 3 "JOIN CLUSTER v1 AT '127.0.0.1:1312'"; echo "node 1 $(v 1 node_state) count=$(m 1 "SELECT COUNT(*) FROM t")"; [ -z "$(v 3 node_state)" ] && echo "node 3 not in cluster"
+––– output –––
+ERROR 1064 (42000) at line 1: the donor did not attach a bulk_import chunk and leaves the cluster, join again
+node 1 synced count=0
+node 3 not in cluster
+––– comment –––
+Once the refused donation is over and node 3 left the group, node 4 resumes, the lock is free and node 1 rejoins by SST
+––– input –––
+source /tmp/bc.sh; L=/var/log/manticore-1/searchd.log; for k in $(seq 120); do grep -q "donate cluster v1 to 127.0.0.1:3312" $L && [ "$(v 2 size)" = 2 ] && break; sleep 0.5; done; echo "size $(v 2 size)"; kill -CONT $P4; wait $UP; for k in $(seq 120); do grep -q "cluster 'v1' rejoin started, attempt 1" $L && break; sleep 0.5; done; waitsynced 1 2; echo "synced $?"
+––– output –––
+size 2
+synced 0
+––– input –––
+source /tmp/bc.sh; m 3 "JOIN CLUSTER v1 AT '127.0.0.1:1312'"; echo $?; waitsynced 3 2; echo "synced $?"; st t
+––– output –––
+0
+synced 0
+node 1: synced count=1000 files_seqno=2
+node 2: synced count=1000 files_seqno=2
+node 3: synced count=1000 files_seqno=2
+––– input –––
+chk() { grep -q -- "$3" /var/log/manticore-$1/searchd.log && echo "yes: $2" || echo "no: $2"; }; chk 1 'donation refused' "refused to donate SST to '127.0.0.1:3312': the donor did not attach a bulk_import chunk"; chk 3 'reason on the joiner' "cmd: synced(5), error: the donor did not attach a bulk_import chunk"; chk 3 'table without the chunk' "join sync 'v1', .*files seqno 0, sent ok"; chk 1 'loading node rejoined' "cluster 'v1' rejoin started, attempt 1"; echo "refusal logged $(grep -c 'cmd: synced(5), error: the donor did not attach a bulk_import chunk' /var/log/manticore-3/searchd.log)"
+––– output –––
+yes: donation refused
+yes: reason on the joiner
+no: table without the chunk
+yes: loading node rejoined
+refusal logged 1
+––– input –––
+for n in 1 2 3 4; do L=/var/log/manticore-$n/searchd.log; echo "node $n starts=$(grep -c 'watchdog: main process .* forked ok' $L) killed=$(grep -c 'killed dirtily' $L) dumps=$(grep -c 'CRASH DUMP' $L)"; done
+––– output –––
+node 1 starts=1 killed=0 dumps=0
+node 2 starts=1 killed=0 dumps=0
+node 3 starts=1 killed=0 dumps=0
+node 4 starts=1 killed=0 dumps=0

@@ -214,7 +214,7 @@ bool ClusterDesc_t::Parse ( const bson::Bson_c& tBson, const CSphString& sName, 
 		++iItem;
 	} );
 
-	m_iClusterEpoch = Int ( tBson.ChildByName ( "cluster_epoch" ) );
+	m_iFilesSeqNo = Int ( tBson.ChildByName ( "files_seqno" ) );
 	m_bSelfBootstrapOnStartup = Bool ( tBson.ChildByName ( "self_bootstrap_on_startup" ), false );
 	m_sPath = String ( tBson.ChildByName ( "path" ) );
 	m_sUser = String ( tBson.ChildByName ( "user" ) );
@@ -252,8 +252,8 @@ void ClusterDesc_t::Save ( JsonEscapedBuilder& tOut ) const
 		auto _1 = tOut.Array();
 		for_each ( m_hIndexes, [&tOut] ( const auto& tIndex ) { tOut.String ( tIndex.first ); } );
 	}
-	if ( m_iClusterEpoch > 0 )
-		tOut.NamedVal ( "cluster_epoch", m_iClusterEpoch );
+	if ( m_iFilesSeqNo > 0 )
+		tOut.NamedVal ( "files_seqno", m_iFilesSeqNo );
 	tOut.NamedValNonDefault ( "self_bootstrap_on_startup", m_bSelfBootstrapOnStartup, false );
 	tOut.NamedStringNonEmpty ( "path", m_sPath );
 	tOut.NamedStringNonEmpty ( "user", m_sUser );

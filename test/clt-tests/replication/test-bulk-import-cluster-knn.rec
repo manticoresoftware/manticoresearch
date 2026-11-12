@@ -1,0 +1,31 @@
+bulk_import into a cluster table with a KNN attribute: the loading node builds the KNN index of the chunk, the .spknn file is delivered with the chunk and a KNN search on another node finds the rows.
+––– block: ../base/replication/bulk-cluster-setup –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tk (title text, v int, emb float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')"; mysql -h0 -P1306 -e "ALTER CLUSTER v1 ADD tk"; echo $?
+––– output –––
+0
+––– input –––
+{ echo "SET bulk_import=tk;"; echo "BEGIN;"; s="INSERT INTO v1:tk (id,title,v,emb) VALUES "; for i in $(seq 1 500); do s="$s($i,'title $i',$i,($((i%7)),$((i%5)),$((i%3)),$((i%11)))),"; done; echo "${s%,};"; echo "COMMIT;"; echo "SET bulk_import=0;"; } | mysql -h0 -P1306; echo "rc $?"
+––– output –––
+rc 0
+––– input –––
+source /tmp/bc.sh; st tk
+––– output –––
+node 1: synced count=500 sum=125250 last_committed=3 files_seqno=3 repl=0
+node 2: synced count=500 sum=125250 last_committed=3 files_seqno=3 repl=0
+node 3: synced count=500 sum=125250 last_committed=3 files_seqno=3 repl=0
+––– input –––
+for n in 1 2 3; do r[$n]=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P${n}306 -e "SELECT id FROM tk WHERE knn(emb,5,(1,1,1,1))" | sort -n | xargs); echo "node $n spknn=$(ls /var/log/manticore-$n/tk | grep -c 'spknn$')"; done; [ -n "${r[1]}" ] && [ "${r[1]}" = "${r[2]}" ] && [ "${r[1]}" = "${r[3]}" ] && echo "same knn result on 3 nodes"
+––– output –––
+node 1 spknn=1
+node 2 spknn=1
+node 3 spknn=1
+same knn result on 3 nodes
+––– comment –––
+The .spknn file came with the chunk: every receiver wrote chunk.spknn into repl-<id>.recv/ (a receiver does not build KNN on load)
+––– input –––
+for n in 2 3; do grep -cE "repl-[0-9]+\.recv/chunk\.spknn" /var/log/manticore-$n/searchd.log; done
+––– output –––
+1
+1
+––– block: ../base/replication/node-starts –––

@@ -1,0 +1,28 @@
+Writes while a bulk_import into a cluster table is open on node 1 (DR06): a write through node 2 goes on, a write on node 1 is refused with 'table is locked' while the load holds its reservation; after the commit a row with an id of the load comes from the chunk on every node, a new id stays.
+––– input –––
+export BULK_PAUSE_1=15000; echo ok
+––– output –––
+ok
+––– block: ../base/replication/bulk-cluster-setup –––
+––– input –––
+source /tmp/bc.sh; load 1 t 1 1000 > /tmp/l1.out & waitpause 1 1; echo "paused $?"
+––– output –––
+paused 0
+––– input –––
+source /tmp/bc.sh; m 2 "INSERT INTO v1:t (id,title,v) VALUES (5,'from node 2',0),(100001,'new id',0)"; echo "node 2 rc $?"; m 1 "INSERT INTO v1:t (id,title,v) VALUES (100002,'node 1',0)"
+––– output –––
+node 2 rc 0
+ERROR 1064 (42000) at line 1: table 't' is locked
+––– input –––
+wait; cat /tmp/l1.out; source /tmp/bc.sh; st t
+––– output –––
+node 1: synced count=1001 sum=500500 last_committed=3 files_seqno=3 repl=0
+node 2: synced count=1001 sum=500500 last_committed=3 files_seqno=3 repl=0
+node 3: synced count=1001 sum=500500 last_committed=3 files_seqno=3 repl=0
+––– input –––
+source /tmp/bc.sh; for n in 1 2 3; do echo "node $n: $(m $n 'SELECT id,title FROM t WHERE id IN (5,100001)' | sort -n | tr '\t\n' ': ')"; done
+––– output –––
+node 1: 5:title 5 100001:new id 
+node 2: 5:title 5 100001:new id 
+node 3: 5:title 5 100001:new id 
+––– block: ../base/replication/node-starts –––

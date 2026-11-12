@@ -48,6 +48,10 @@ StringBuilder_c& operator<< ( StringBuilder_c& tOut, const FileReserveReply_t& t
 using ClusterFileReserve_c = ClusterCommand_T<E_CLUSTER::FILE_RESERVE, FileReserveRequest_t, FileReserveReply_t>;
 
 bool IsReplicationFileName ( const CSphString & sName );
+
+// file names, hash layout and hashes of the files to send, as FILE_RESERVE sends them
+void SendSyncSrcLayout ( ISphOutputBuffer & tOut, const SyncSrc_t & tSrc );
+void GetSyncSrcLayout ( InputBuffer_c & tIn, SyncSrc_t & tSrc );
 bool SendClusterFileReserve ( VecRefPtrs_t<AgentConn_t*>& dAgents );
 
 

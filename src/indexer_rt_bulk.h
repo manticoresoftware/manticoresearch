@@ -10,6 +10,8 @@ enum class EMYSQL_ERR : WORD;
 
 class ClientSession_c;
 class RtIndex_i;
+class CSphIndex;
+enum class DiskAttachRes_e;
 
 struct IndexerRtBulkFile_t
 {
@@ -18,6 +20,19 @@ struct IndexerRtBulkFile_t
 };
 
 CSphString GetIndexerRtBulkRoot ( const RtIndex_i & tRt );
+
+// A built chunk: load it from its files at sPath (the path without extension), check it against its target and attach
+// it. The check is the one place where a chunk is compared with the table. The attach runs under the write lock of the
+// table; it takes the chunk on success.
+std::unique_ptr<CSphIndex> LoadIndexerRtBulkChunk ( const CSphString & sPath, CSphString & sError );
+bool CanAttachIndexerRtBulkChunk ( const RtIndex_i & tRt, const CSphIndex & tChunk, CSphString & sError );
+DiskAttachRes_e AttachLoadedIndexerRtBulkChunk ( RtIndex_i & tRt, std::unique_ptr<CSphIndex> & pChunk, bool & bCantAttach, CSphString & sError );
+
+// directories of the chunks that a cluster delivers into the staging root of a table
+bool CreateIndexerRtBulkDir ( const CSphString & sRoot, const CSphString & sDir, CSphString & sError ); // fails when sDir exists
+bool RenameIndexerRtBulkDir ( const CSphString & sFrom, const CSphString & sTo, CSphString & sError );
+void RemoveIndexerRtBulkDir ( const CSphString & sDir ); // with its files; a failure is only logged
+
 bool ListIndexerRtBulkFiles ( const CSphString & sRoot, CSphVector<IndexerRtBulkFile_t> & dFiles, CSphString & sError );
 bool RemoveIndexerRtBulkRoot ( const CSphString & sTable, const CSphString & sRoot, CSphString & sError ); // cancels the shared load into sTable first
 bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTable, CSphString & sError, bool bShard=false ); // bShard: SQL takes a shard table

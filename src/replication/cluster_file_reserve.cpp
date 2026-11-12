@@ -81,6 +81,20 @@ void SendArray ( const VecTraits_T<CSphString>& dBuf, ISphOutputBuffer& tOut )
 		tOut.SendString ( sVal.cstr() );
 }
 
+void SendSyncSrcLayout ( ISphOutputBuffer & tOut, const SyncSrc_t & tSrc )
+{
+	SendArray ( tSrc.m_dBaseNames, tOut );
+	SendArray ( tSrc.m_dChunks, tOut );
+	SendArray ( tSrc.m_dHashes, tOut );
+}
+
+void GetSyncSrcLayout ( InputBuffer_c & tIn, SyncSrc_t & tSrc )
+{
+	GetArray ( tSrc.m_dBaseNames, tIn );
+	GetArray ( tSrc.m_dChunks, tIn );
+	GetArray ( tSrc.m_dHashes, tIn );
+}
+
 void operator<< ( ISphOutputBuffer& tOut, const FileReserveRequest_t& tReq )
 {
 	tOut << (const ClusterRequest_t&) tReq;
@@ -88,10 +102,7 @@ void operator<< ( ISphOutputBuffer& tOut, const FileReserveRequest_t& tReq )
 	tOut.SendString ( tReq.m_sIndexFileName.cstr() );
 
 	assert ( tReq.m_pChunks );
-	const SyncSrc_t* pSrc = tReq.m_pChunks;
-	SendArray ( pSrc->m_dBaseNames, tOut );
-	SendArray ( pSrc->m_dChunks, tOut );
-	SendArray ( pSrc->m_dHashes, tOut );
+	SendSyncSrcLayout ( tOut, *tReq.m_pChunks );
 
 	tOut << tReq.m_tProgressCtx;
 }
@@ -114,10 +125,7 @@ void operator>> ( InputBuffer_c& tIn, FileReserveRequest_t& tReq )
 	tReq.m_sIndexFileName = tIn.GetString();
 
 	assert ( tReq.m_pChunks );
-	SyncSrc_t* pSrc = tReq.m_pChunks;
-	GetArray ( pSrc->m_dBaseNames, tIn );
-	GetArray ( pSrc->m_dChunks, tIn );
-	GetArray ( pSrc->m_dHashes, tIn );
+	GetSyncSrcLayout ( tIn, *tReq.m_pChunks );
 
 	tIn >> tReq.m_tProgressCtx;
 }

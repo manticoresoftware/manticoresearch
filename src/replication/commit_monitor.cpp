@@ -116,6 +116,12 @@ bool CommitMonitor_c::CommitTOI()
 		sphLogDebugRpl ( "CommitTOI %s update user for '%s'; %s", ( bOk ? "finished" : "failed" ), tCmd.m_sCluster.cstr(), ( bOk ? "" : TlsMsg::szError() ) );
 		return bOk;
 	}
+	case ReplCmd_e::BULK_IMPORT_ATTACH:
+	{
+		bool bOk = AttachBulkChunkTOI ( tCmd );
+		sphLogDebugRpl ( "CommitTOI %s bulk_import attach for '%s'; %s", ( bOk ? "finished" : "failed" ), tCmd.m_sCluster.cstr(), ( bOk ? "" : TlsMsg::szError() ) );
+		return bOk;
+	}
 	default:
 		return TlsMsg::Err ( "unknown command '%d'", (int) tCmd.m_eCommand );
 	}

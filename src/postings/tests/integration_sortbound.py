@@ -134,7 +134,7 @@ def main():
         compare(f"SELECT id,ts,weight() FROM {table} WHERE MATCH('{expr}') "
                 f"ORDER BY ts desc,id asc LIMIT 7,20 OPTION threads=4")
 
-    # Legacy membership OR uses the same union filter; ranked legacy terms fall back.
+    # Legacy tables retain exhaustive execution for both membership and ranked roots.
     legacy = args.prefix + "_legacy"
     sql(f"CREATE TABLE {legacy}(body text, ts bigint)")
     for start in range(0, 4096, 512):
@@ -147,10 +147,9 @@ def main():
             for hint in ["", " /*+ NO_SECONDARYINDEX(ts) */"]:
                 compare(f"SELECT id,ts,weight() FROM {legacy} WHERE MATCH('error | failed') "
                         f"ORDER BY ts desc,id asc LIMIT 7,20 OPTION threads={threads},ranker={ranker}" + hint)
-                if ranker == "none":
-                    assert "SortBound" in checks[-1]["meta"].get("index", ""), checks[-1]
-                else:
-                    assert checks[-1]["meta"]["total_relation"] == "eq", checks[-1]
+                assert "SortBound" not in checks[-1]["meta"].get("index", ""), checks[-1]
+                assert checks[-1]["meta"]["total_relation"] == "eq", checks[-1]
+                assert checks[-1]["meta"]["total_found"] == checks[-1]["exact"]["total_found"], checks[-1]
 
     fallbacks = [
         f"SELECT id,ts FROM {table} WHERE {phrase} AND ts>10000 ORDER BY ts desc,id asc LIMIT 20 OPTION threads=1 /*+ SECONDARYINDEX(ts) */",

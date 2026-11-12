@@ -12580,7 +12580,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 	}
 
 	SortBound_c tSortBound;
-	bool bSortBound = CanUseSortBound ( tQuery, dSorters, tArgs, bRanklessCount ) && tSortBound.Setup ( tQuery, m_tSchema, *dSorters[0] );
+	bool bSortBound = m_tSettings.m_uPostingsFormat && CanUseSortBound ( tQuery, dSorters, tArgs, bRanklessCount ) && tSortBound.Setup ( tQuery, m_tSchema, *dSorters[0] );
 	const CSphColumnInfo * pSortAttr = bSortBound ? m_tSchema.GetAttr ( tSortBound.GetAttr().cstr() ) : nullptr;
 	bSortBound &= pSortAttr && !pSortAttr->IsColumnar() && !pSortAttr->m_tLocator.m_bDynamic && m_pDocinfoIndex;
 	if ( bSortBound )

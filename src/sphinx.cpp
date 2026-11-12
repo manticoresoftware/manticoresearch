@@ -2677,6 +2677,10 @@ bool CSphIndex_VLN::Update_WriteBlobRow ( UpdateContext_t & tCtx, RowID_t tRowID
 
 void CSphIndex_VLN::Update_MinMax ( const RowsToUpdate_t& dRows, const UpdateContext_t & tCtx )
 {
+	// Pure columnar chunks have no rowwise min/max index, even after adding a rowwise attribute.
+	if ( !m_iDocinfoIndex )
+		return;
+
 	int iRowStride = tCtx.m_tSchema.GetRowSize();
 
 	for ( const auto & tRow : dRows )

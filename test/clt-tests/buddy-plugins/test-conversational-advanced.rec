@@ -12,7 +12,7 @@ set -o pipefail
 ––– comment –––
 Install jq for JSON parsing
 ––– input –––
-apt-get install jq -y > /dev/null; echo $?
+timeout --verbose --kill-after=5s 90s apt-get install jq -y > /dev/null; echo $?
 ––– output –––
 debconf: delaying package configuration, since apt-utils is not installed
 0
@@ -24,7 +24,7 @@ mysql -h0 -P9306 -e "DROP TABLE IF EXISTS knowledge_base;"
 ––– comment –––
 Create a complex table with multiple text fields and auto-embeddings
 ––– input –––
-mysql -h0 -P9306 << EOF
+timeout --verbose --kill-after=5s 120s mysql -h0 -P9306 << EOF
 CREATE TABLE knowledge_base (
     id BIGINT,
     title TEXT,
@@ -44,7 +44,7 @@ EOF
 ––– comment –––
 Insert test documents with rich content
 ––– input –––
-mysql -h0 -P9306 << 'EOF'
+timeout --verbose --kill-after=5s 120s mysql -h0 -P9306 << 'EOF'
 INSERT INTO knowledge_base (id, title, summary, content, category, tags)
 VALUES
 (1, 'Getting Started with Manticore', 'Quick start guide', 'Install Manticore Search and configure your first index', 'Tutorial', 'installation,quickstart'),

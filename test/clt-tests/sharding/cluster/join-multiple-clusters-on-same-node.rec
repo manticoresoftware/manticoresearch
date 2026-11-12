@@ -20,16 +20,20 @@ mkdir /var/{lib,log}/manticore-{1,2,3}/{a,b,c}
 mysql -h0 -P1306 -e "CREATE CLUSTER a 'a' as path"
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "create cluster b 'b' as path" &
+mysql -h0 -P1306 -e "create cluster b 'b' as path"
 ––– output –––
 ––– input –––
-mysql -h0 -P2306 -e "join cluster a at '127.0.0.1:1312'" &
+timeout 30 bash -c 'until mysql -h0 -P1306 -e "SHOW STATUS LIKE '\''cluster_b_status'\''\G" 2>/dev/null | grep -q "Value: primary"; do sleep 0.25; done' && echo 'Cluster b ready'
+––– output –––
+Cluster b ready
+––– input –––
+mysql -h0 -P2306 -e "join cluster a at '127.0.0.1:1312'" > /tmp/join-cluster-a.log 2>&1 & JOIN_A_PID=$!
 ––– output –––
 ––– input –––
-mysql -h0 -P3306 -e "join cluster b at '127.0.0.1:1312'" &
+mysql -h0 -P3306 -e "join cluster b at '127.0.0.1:1312'" > /tmp/join-cluster-b.log 2>&1 & JOIN_B_PID=$!
 ––– output –––
 ––– input –––
-wait 1>/dev/null 2>&1; echo $?
+wait "$JOIN_A_PID"; a_rc=$?; wait "$JOIN_B_PID"; b_rc=$?; if [ "$a_rc" -eq 0 ] && [ "$b_rc" -eq 0 ]; then echo 0; else cat /tmp/join-cluster-{a,b}.log; echo 1; fi
 ––– output –––
 0
 ––– input –––

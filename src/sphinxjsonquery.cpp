@@ -2604,9 +2604,11 @@ static const CSphColumnInfo * GetJsonInternalAggrKey ( const char * szCol, const
 static const CSphColumnInfo * GetPlainAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, const CSphSchema & tRawSchema )
 {
 	const CSphColumnInfo * pKey = GetAggrAttr ( tAggr.m_sCol, tSchema, tRawSchema );
-	if ( !pKey || pKey->m_eAttrType!=SPH_ATTR_JSON_PTR )
+	if ( pKey && pKey->m_eAttrType!=SPH_ATTR_JSON_PTR )
 		return pKey;
 
+	// GROUP BY emulation of a single terms aggregation may not expose a
+	// dotted JSON path by name, but keeps its internal per-item group key.
 	const CSphColumnInfo * pJsonKey = GetJsonInternalAggrKey ( tAggr.m_sCol.cstr(), tSchema, tRawSchema );
 	return pJsonKey ? pJsonKey : pKey;
 }

@@ -3787,9 +3787,8 @@ static void PreCommitAcc ( RtAccum_t & tAcc, int iRowSize )
 	CleanupHitDuplicates ( tAcc.m_dAccum );
 }
 
-// KillMulti and the docid lookup intersect IDs in unsigned order.
-// A signed sort would move IDs >= 2^63 ahead of smaller IDs and skip kills.
-static void SortAndUniqDocids ( CSphVector<DocID_t> & dDocids )
+// Docids represented as int64_t, but actually used as unsigned. So, they should be sorted as unsigned.
+static void UniqAsUnsigned ( CSphVector<DocID_t> & dDocids )
 {
 	dDocids.Sort ( Lesser ( [] ( DocID_t a, DocID_t b ) { return (uint64_t)a < (uint64_t)b; } ) );
 	dDocids.Uniq ( false );
@@ -3845,7 +3844,7 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 	pAcc->CleanupPart();
 
 	// sort accum klist, too
-	SortAndUniqDocids ( pAcc->m_dAccumKlist );
+	UniqAsUnsigned ( pAcc->m_dAccumKlist );
 
 	// now on to the stuff that needs locking and recovery
 	CSphString sError;
@@ -5576,7 +5575,7 @@ RtActionResult_e RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUI
 	{
 		RTLOGV << "SaveDiskChunk: apply postponed kills";
 		tmSave -= sphMicroTimer ();
-		SortAndUniqDocids ( dKillOnSave.m_dDocids );
+		UniqAsUnsigned ( dKillOnSave.m_dDocids );
 		pNewChunk->KillMulti ( dKillOnSave.m_dDocids );
 		dKillOnSave.m_dDocids.Reset();
 		tmSave += sphMicroTimer ();
@@ -10654,7 +10653,7 @@ public:
 	{
 		CSphVector<DocID_t> dDocs;
 		m_tKilledWhileMerge.m_dDocids.SwapData ( dDocs );
-		SortAndUniqDocids ( dDocs );
+		UniqAsUnsigned ( dDocs );
 		return dDocs;
 	}
 

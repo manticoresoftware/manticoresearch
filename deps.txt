@@ -1,6 +1,6 @@
 backup 1.11.0+26090711-f5c09c1e-dev
 buddy 4.4.10+26111012-8bc7776c-dev
-executor 1.4.7+26110515-689fda74-dev
+executor 1.4.8+26111015-cce8dc9b
 tzdata 1.0.1 250714 7eebffa
 load 1.29.0+26101001-0d5796a7-dev
 galera 3.37

@@ -3,6 +3,9 @@ run-name: 📖 Check docs ${{ github.sha }}
 
 on:
   workflow_call:
+    secrets:
+      GH_ACCESS_TOKEN:
+        required: false
   pull_request:
     paths:
       - 'manual/**'
@@ -19,7 +22,7 @@ jobs:
       run:
         shell: bash
     container:
-      image: manticoresearch/docs_autodeploy_multi:latest
+      image: manticoresearch/docs_autodeploy_multi:latest@sha256:b632535fb7bdcebe4ad0bd7935d1352435332afa00ab2475c3443e76d94a7e36
       env:
         CACHEB: "../cache"
         DOCKER_HOST: tcp://docker:2375/
@@ -30,8 +33,9 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5.1.0
         with:
+          persist-credentials: false
           fetch-depth: 0
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
           token: ${{ secrets.GITHUB_TOKEN }}

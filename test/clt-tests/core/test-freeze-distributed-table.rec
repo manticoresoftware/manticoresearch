@@ -1,0 +1,24 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE rt_for_freeze (title text); CREATE TABLE dist_for_freeze type='distributed' local='rt_for_freeze'; INSERT INTO rt_for_freeze VALUES (1, 'hello');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "FREEZE dist_for_freeze, rt_for_freeze" >/dev/null && echo "mixed freeze: OK"
+––– output –––
+mixed freeze: OK
+––– input –––
+mysql -h0 -P9306 -e "SHOW LOCKS" | grep -q 'rt_for_freeze.*freeze' && echo "local table frozen: OK"
+––– output –––
+local table frozen: OK
+––– input –––
+mysql -h0 -P9306 -e "UNFREEZE dist_for_freeze, rt_for_freeze" >/dev/null && echo "mixed unfreeze: OK"
+––– output –––
+mixed unfreeze: OK
+––– input –––
+mysql -h0 -P9306 -e "FREEZE dist_for_freeze" >/dev/null && echo "distributed table skipped: OK"
+––– output –––
+distributed table skipped: OK
+––– input –––
+mysql -h0 -P9306 -e "FREEZE no_such_table" >/dev/null && echo "missing table skipped: OK"
+––– output –––
+missing table skipped: OK

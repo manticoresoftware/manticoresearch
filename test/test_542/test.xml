@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>Issue #5090: add first rowwise blob attribute to columnar table</name>
+
+<requires>
+	<force-rt/>
+	<columnar/>
+</requires>
+<skip_indexer/>
+<skip_db/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+	auto_optimize = 0
+}
+</config>
+
+<queries>
+<!-- A fully columnar disk chunk has an original row stride of zero. -->
+<sphinxql>CREATE TABLE t (id bigint, url string attribute, title text) engine='columnar'</sphinxql>
+<sphinxql>INSERT INTO t (id,url,title) VALUES (1,'a','x'),(2,'b','y')</sphinxql>
+<sphinxql>FLUSH RAMCHUNK t</sphinxql>
+<sphinxql>INSERT INTO t (id,url,title) VALUES (3,'c','z')</sphinxql>
+<sphinxql>FLUSH RAMCHUNK t</sphinxql>
+<sphinxql>INSERT INTO t (id,url,title) VALUES (4,'d','w')</sphinxql>
+<!-- The old code treated every data row as a min/max row and wrote invalid blob offsets. -->
+<sphinxql>ALTER TABLE t ADD COLUMN summary string engine='rowwise'</sphinxql>
+<sphinxql>SELECT id, url, summary FROM t ORDER BY id ASC</sphinxql>
+<sphinxql>SELECT id, summary FROM t WHERE url='a' LIMIT 1</sphinxql>
+<sphinxql>UPDATE t SET summary='disk' WHERE id=1</sphinxql>
+<sphinxql>SELECT id, summary FROM t WHERE id=1</sphinxql>
+<sphinxql>UPDATE t SET summary='ram' WHERE id=4</sphinxql>
+<sphinxql>SELECT id, summary FROM t WHERE id=4</sphinxql>
+
+<sphinxql system="restart-daemon-no-warnings"/>
+
+<sphinxql>SELECT id, summary FROM t ORDER BY id ASC</sphinxql>
+<sphinxql>ALTER TABLE t DROP COLUMN summary</sphinxql>
+<sphinxql>SELECT id, url FROM t ORDER BY id ASC</sphinxql>
+<sphinxql>ALTER TABLE t ADD COLUMN summary string engine='rowwise'</sphinxql>
+<sphinxql>SELECT id, summary FROM t ORDER BY id ASC</sphinxql>
+<sphinxql>DROP TABLE t</sphinxql>
+<!-- A mixed columnar/rowwise table has a nonzero original row stride. -->
+<sphinxql>CREATE TABLE mixed (id bigint, url string attribute, n int engine='rowwise', title text) engine='columnar'</sphinxql>
+<sphinxql>INSERT INTO mixed (id,url,n,title) VALUES (10,'x',7,'one'),(11,'y',8,'two')</sphinxql>
+<sphinxql>FLUSH RAMCHUNK mixed</sphinxql>
+<sphinxql>ALTER TABLE mixed ADD COLUMN summary string engine='rowwise'</sphinxql>
+<sphinxql>SELECT id, n, summary FROM mixed ORDER BY id ASC</sphinxql>
+<sphinxql>UPDATE mixed SET summary='ten' WHERE id=10</sphinxql>
+<sphinxql>SELECT id, n, summary FROM mixed ORDER BY id ASC</sphinxql>
+<sphinxql>DROP TABLE mixed</sphinxql>
+</queries>
+</test>

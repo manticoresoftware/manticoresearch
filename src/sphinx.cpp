@@ -1489,7 +1489,7 @@ private:
 	void						MaybeAddPostponedUpdate ( RowsToUpdateData_t& dRows, const UpdateContext_t& tCtx );
 	bool						DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool & bCritical, CSphString & sError, CSphString & sWarning );
 
-	bool						Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride ) const override;
+	bool						Alter_IsMinMax ( RowID_t tRowID ) const override;
 	bool						AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, const ISphSchema & tOldSchema, const ISphSchema & tNewSchema, CSphString & sError );
 	bool						DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHeader, CSphString & sError );
 	bool						AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
@@ -2677,6 +2677,10 @@ bool CSphIndex_VLN::Update_WriteBlobRow ( UpdateContext_t & tCtx, RowID_t tRowID
 
 void CSphIndex_VLN::Update_MinMax ( const RowsToUpdate_t& dRows, const UpdateContext_t & tCtx )
 {
+	// Pure columnar chunks have no rowwise min/max index, even after adding a rowwise attribute.
+	if ( !m_iDocinfoIndex )
+		return;
+
 	int iRowStride = tCtx.m_tSchema.GetRowSize();
 
 	for ( const auto & tRow : dRows )
@@ -3013,9 +3017,9 @@ struct CmpQueuedLookup_fn
 
 DocidRowidPair_t * CmpQueuedLookup_fn::m_pStorage = nullptr;
 
-bool CSphIndex_VLN::Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride ) const
+bool CSphIndex_VLN::Alter_IsMinMax ( RowID_t tRowID ) const
 {
-	return pDocinfo-m_tAttr.GetReadPtr() >= m_iDocinfo*iStride;
+	return tRowID >= m_iDocinfo;
 }
 
 

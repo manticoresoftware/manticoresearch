@@ -1986,6 +1986,10 @@ static bool PrepareClusterStartupMode ( ReplicationCluster_t & tCluster, RplBoot
 		return true;
 	}
 
+	// A bootstrap node starts alone, so no remote donor is available for version checks.
+	if ( eBs!=RplBootstrap_e::OFF )
+		return true;
+
 	CSphString sRemoteUser;
 	if ( !CheckRemotesVersions ( tCluster, sRemoteUser ) )
 	{

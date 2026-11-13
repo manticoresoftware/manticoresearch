@@ -1,0 +1,174 @@
+––– comment –––
+Regression for #5095: a full shutdown must allow bootstrap without contacting stopped peers.
+
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=bootstrap_restart
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– comment –––
+Wait for a primary, synced cluster of the expected size on every running node.
+––– input –––
+wait_cluster() {
+    local expected_size="$1"
+    shift
+    local deadline=$((SECONDS+180))
+    while [ "$SECONDS" -lt "$deadline" ]; do
+        local ready=1
+        local port status
+        for port in "$@"; do
+            status=$(mysql -N -s -h0 -P"$port" -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_%'" 2>/dev/null) || { ready=0; break; }
+            grep -Eq "^cluster_${CLUSTER_NAME}_status[[:space:]]+primary[[:space:]]*$" <<< "$status" || { ready=0; break; }
+            grep -Eq "^cluster_${CLUSTER_NAME}_size[[:space:]]+$expected_size[[:space:]]*$" <<< "$status" || { ready=0; break; }
+            grep -Eq "^cluster_${CLUSTER_NAME}_node_state[[:space:]]+synced[[:space:]]*$" <<< "$status" || { ready=0; break; }
+        done
+        if [ "$ready" -eq 1 ]; then
+            echo "Cluster synced with $expected_size node(s)"
+            return 0
+        fi
+        sleep 1
+    done
+    echo "Cluster did not become primary/synced with $expected_size node(s)" >&2
+    return 1
+}
+check_rows() {
+    local deadline=$((SECONDS+120))
+    local port count ready
+    while [ "$SECONDS" -lt "$deadline" ]; do
+        ready=1
+        for port in "$@"; do
+            count=$(mysql -N -s -h0 -P"$port" -e "SELECT COUNT(*) FROM bootstrap_restart_rt" 2>/dev/null) || { ready=0; break; }
+            [ "$count" = 1 ] || { ready=0; break; }
+        done
+        if [ "$ready" -eq 1 ]; then
+            echo "Data intact on $# node(s)"
+            return 0
+        fi
+        sleep 1
+    done
+    echo "Replicated row missing on one or more nodes" >&2
+    return 1
+}
+––– output –––
+––– input –––
+wait_cluster 3 1306 2306 3306
+––– output –––
+Cluster synced with 3 node(s)
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE bootstrap_restart_rt (id bigint, title text);" && mysql -h0 -P1306 -e "ALTER CLUSTER ${CLUSTER_NAME} ADD bootstrap_restart_rt;" && mysql -h0 -P1306 -e "INSERT INTO ${CLUSTER_NAME}:bootstrap_restart_rt VALUES (1, 'before shutdown');"
+––– output –––
+––– input –––
+check_rows 1306 2306 3306
+––– output –––
+Data intact on 3 node(s)
+––– comment –––
+Shut down all nodes cleanly, with node 1 stopped last.
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+state_file=$(find /var/log/manticore-1 -name grastate.dat -print -quit); [ -n "$state_file" ] && grep -Eq '^safe_to_bootstrap:[[:space:]]*1[[:space:]]*$' "$state_file" && echo "Last node is safe to bootstrap"
+––– output –––
+Last node is safe to bootstrap
+––– comment –––
+--new-cluster must bootstrap node 1 while nodes 2 and 3 are still offline.
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-new-cluster –––
+––– input –––
+wait_cluster 1 1306
+––– output –––
+Cluster synced with 1 node(s)
+––– input –––
+check_rows 1306
+––– output –––
+Data intact on 1 node(s)
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+wait_cluster 3 1306 2306 3306
+––– output –––
+Cluster synced with 3 node(s)
+––– input –––
+check_rows 1306 2306 3306
+––– output –––
+Data intact on 3 node(s)
+––– comment –––
+Repeat the full shutdown and deliberately clear safe_to_bootstrap to test --new-cluster-force.
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+state_file=$(find /var/log/manticore-1 -name grastate.dat -print -quit); [ -n "$state_file" ] && grep -Eq '^safe_to_bootstrap:[[:space:]]*1[[:space:]]*$' "$state_file" && sed -i 's/^safe_to_bootstrap:[[:space:]]*1[[:space:]]*$/safe_to_bootstrap: 0/' "$state_file" && grep -Eq '^safe_to_bootstrap:[[:space:]]*0[[:space:]]*$' "$state_file" && echo "Bootstrap guard cleared"
+––– output –––
+Bootstrap guard cleared
+––– input –––
+stdbuf -oL searchd --new-cluster-force -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null
+––– output –––
+––– input –––
+wait_cluster 1 1306
+––– output –––
+Cluster synced with 1 node(s)
+––– input –––
+check_rows 1306
+––– output –––
+Data intact on 1 node(s)
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+wait_cluster 3 1306 2306 3306
+––– output –––
+Cluster synced with 3 node(s)
+––– input –––
+check_rows 1306 2306 3306
+––– output –––
+Data intact on 3 node(s)
+––– input –––
+mysql -h0 -P1306 -e "DELETE CLUSTER ${CLUSTER_NAME};" && mysql -h0 -P1306 -e "DROP TABLE IF EXISTS bootstrap_restart_rt;" && mysql -h0 -P2306 -e "DROP TABLE IF EXISTS bootstrap_restart_rt;" && mysql -h0 -P3306 -e "DROP TABLE IF EXISTS bootstrap_restart_rt;"
+––– output –––

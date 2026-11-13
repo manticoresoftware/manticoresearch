@@ -1,0 +1,136 @@
+––– comment –––
+Regression for #5085: query cache must honor pseudo-shard rowid boundaries.
+Use a plain table and force pseudo-sharding so the test does not depend on load
+or a full query cache. A single-threaded query first caches the complete result;
+a four-threaded query must not replay that result in every pseudo-shard.
+
+––– input –––
+python3 - <<'PY'
+import socket
+import subprocess
+import tempfile
+import time
+from pathlib import Path
+
+
+def run(*args):
+    return subprocess.run(args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, timeout=30)
+
+
+with tempfile.TemporaryDirectory(prefix="issue5085-") as directory:
+    root = Path(directory)
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+
+    (root / "data.csv").write_text("".join(f"{i},needle common\n" for i in range(1, 132)))
+    config = root / "searchd.conf"
+    config.write_text(f"""
+source issue5085_source {{
+    type = csvpipe
+    csvpipe_command = cat {root}/data.csv
+    csvpipe_field = body
+}}
+table issue5085 {{
+    type = plain
+    source = issue5085_source
+    path = {root}/plain
+}}
+searchd {{
+    listen = 127.0.0.1:{port}:mysql
+    log = {root}/searchd.log
+    pid_file = {root}/searchd.pid
+    binlog_path =
+    buddy_path =
+    threads = 8
+    max_threads_per_query = 4
+    pseudo_sharding = 1
+}}
+""")
+
+    def sql(statement):
+        return subprocess.check_output(
+            ["mysql", "-h127.0.0.1", f"-P{port}", "-N", "-B", "-e", statement],
+            text=True, stderr=subprocess.PIPE, timeout=15
+        ).strip()
+
+    def rows(statement):
+        # Some test-kit mysql clients use ASCII tables even with -N -B.
+        # Accept both tab-separated output and MySQL's table format.
+        for line in sql(statement).splitlines():
+            line = line.strip()
+            if not line or line.startswith("+"):
+                continue
+            if line.startswith("|"):
+                yield [cell.strip() for cell in line.strip("|").split("|")]
+            else:
+                yield [cell.strip() for cell in line.split("\t")]
+
+    def status(name):
+        values = [cells[1] for cells in rows(f"SHOW STATUS LIKE '{name}'")
+                  if len(cells) == 2 and cells[0] == name]
+        assert len(values) == 1, (name, values)
+        return int(values[0])
+
+    def select(threads, limit="LIMIT 200"):
+        statement = (
+            f"SELECT id FROM issue5085 WHERE MATCH('needle common') "
+            f"ORDER BY id ASC {limit} OPTION threads={threads}; SHOW META;"
+        )
+        data = list(rows(statement))
+        ids = [int(cells[0]) for cells in data
+               if len(cells) == 1 and cells[0].isdigit()]
+        counts = [int(cells[1]) for cells in data
+                  if len(cells) == 2 and cells[0] == "total_found"]
+        assert len(counts) == 1, (statement, data)
+        return ids, counts[0]
+
+    run("indexer", "--quiet", "--config", str(config), "--all")
+    started = False
+    try:
+        run("searchd", "--config", str(config), "--force-pseudo-sharding")
+        started = True
+        for _ in range(100):
+            try:
+                sql("SELECT 1")
+                break
+            except subprocess.CalledProcessError:
+                time.sleep(0.1)
+        else:
+            raise RuntimeError("searchd did not start")
+
+        sql("SET GLOBAL qcache_max_bytes=16777216; "
+            "SET GLOBAL qcache_thresh_msec=0; "
+            "SET GLOBAL qcache_ttl_sec=180;")
+
+        # Cache the full result in a single thread.
+        expected = list(range(1, 132))
+        ids, found = select(1)
+        assert (ids, found) == (expected, 131), (ids, found)
+        assert status("qcache_cached_queries") >= 1, "cache was not populated"
+
+        # Each pseudo-shard must see only its own rowids from the same cache.
+        cache_hits = status("qcache_hits")
+        for _ in range(3):
+            ids, found = select(4)
+            assert (ids, found) == (expected, 131), (
+                f"duplicate or missing rows: {len(ids)} rows, "
+                f"{len(set(ids))} unique, total_found={found}"
+            )
+        assert status("qcache_hits") - cache_hits >= 2, (
+            "expected cache hits from multiple pseudo-shards"
+        )
+
+        # Cached results must also preserve pagination and the full hit count.
+        ids, found = select(4, "LIMIT 45,20")
+        assert (ids, found) == (list(range(46, 66)), 131), (ids, found)
+        print("ok")
+    finally:
+        if started:
+            subprocess.run(
+                ["searchd", "--config", str(config), "--stopwait"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30
+            )
+PY
+––– output –––
+ok

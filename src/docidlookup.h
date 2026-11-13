@@ -105,7 +105,8 @@ public:
 		DocID_t tCurDocID = pFound->m_tBaseDocID;
 
 		// 1st entry doesnt have docid
-		RowID_t tRowID = sphUnalignedRead ( *(const RowID_t*)pCur );
+		RowID_t tRowID;
+		memcpy ( &tRowID, pCur, sizeof(tRowID) );
 		pCur += sizeof(RowID_t);
 
 		if ( tCurDocID==tDocID )
@@ -115,7 +116,7 @@ public:
 		for ( int i = 1; i < iDocsInCheckpoint; ++i )
 		{
 			uint64_t tDeltaDocID = UnzipOffsetBE(pCur);
-			tRowID = sphUnalignedRead ( *(const RowID_t*)pCur );
+			memcpy ( &tRowID, pCur, sizeof(tRowID) );
 			pCur += sizeof(RowID_t);
 
 			tCurDocID += tDeltaDocID;
@@ -202,7 +203,7 @@ public:
 		if ( !m_iProcessedDocs )
 		{
 			tDocID = m_tCurDocID;
-			tRowID = sphUnalignedRead ( *(RowID_t*)const_cast<BYTE*>(m_pCur) );
+			memcpy ( &tRowID, m_pCur, sizeof(tRowID) );
 			m_pCur += sizeof(RowID_t);
 
 			++m_iProcessedDocs;
@@ -211,7 +212,7 @@ public:
 
 		uint64_t tDelta = UnzipOffsetBE ( m_pCur );
 
-		tRowID = sphUnalignedRead ( *(RowID_t*)const_cast<BYTE*>(m_pCur) );
+		memcpy ( &tRowID, m_pCur, sizeof(tRowID) );
 		m_pCur += sizeof(RowID_t);
 
 		m_tCurDocID += tDelta;

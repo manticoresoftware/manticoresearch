@@ -1128,7 +1128,9 @@ bool WriteDocidLookup ( const CSphString & sFilename, const VecTraits_T<DocidRow
 
 static uint64_t ReadUint64 ( const BYTE * pData )
 {
-	return sphUnalignedRead ( *(const uint64_t *)pData );
+	uint64_t uValue;
+	memcpy ( &uValue, pData, sizeof(uValue) );
+	return uValue;
 }
 
 

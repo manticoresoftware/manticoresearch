@@ -33,9 +33,9 @@ wait_cluster() {
         local port status
         for port in "$@"; do
             status=$(mysql -N -s -h0 -P"$port" -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_%'" 2>/dev/null) || { ready=0; break; }
-            grep -Eq '^cluster_${CLUSTER_NAME}_status[[:space:]]+primary[[:space:]]*$' <<< "$status" || { ready=0; break; }
+            grep -Eq "^cluster_${CLUSTER_NAME}_status[[:space:]]+primary[[:space:]]*$" <<< "$status" || { ready=0; break; }
             grep -Eq "^cluster_${CLUSTER_NAME}_size[[:space:]]+$expected_size[[:space:]]*$" <<< "$status" || { ready=0; break; }
-            grep -Eq '^cluster_${CLUSTER_NAME}_node_state[[:space:]]+synced[[:space:]]*$' <<< "$status" || { ready=0; break; }
+            grep -Eq "^cluster_${CLUSTER_NAME}_node_state[[:space:]]+synced[[:space:]]*$" <<< "$status" || { ready=0; break; }
         done
         if [ "$ready" -eq 1 ]; then
             echo "Cluster synced with $expected_size node(s)"

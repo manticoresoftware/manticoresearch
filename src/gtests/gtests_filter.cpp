@@ -694,8 +694,10 @@ TEST ( FilterCoverage, MixedInclusiveBlockBoundaries )
 TEST ( FilterCoverage, ExactSecondaryCount )
 {
 	CSphString sError;
+#if HAVE_DLOPEN
 	if ( !IsSecondaryLibLoaded() )
 		ASSERT_TRUE ( InitSecondary(sError) ) << sError.cstr();
+#endif
 
 	if ( !IsSecondaryLibLoaded() )
 		GTEST_SKIP() << "Secondary library unavailable";

@@ -5,6 +5,7 @@
 
 <requires>
 	<force-rt/>
+	<columnar/>
 </requires>
 
 <skip_indexer/>

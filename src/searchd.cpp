@@ -12665,6 +12665,11 @@ void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const SqlStmt_t& tStmt, CSphS
 	for ( const auto& sIndex : dIndexes )
 	{
 		auto pIndex = GetServed ( sIndex );
+		if ( !pIndex )
+		{
+			dNonlockedIndexes.Add ( sIndex );
+			continue;
+		}
 		if ( ServedDesc_t::IsMutable ( pIndex ) )
 		{
 			// here we get non-locked instance to avoid deadlock with update.

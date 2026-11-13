@@ -47,12 +47,22 @@ wait_cluster() {
     return 1
 }
 check_rows() {
-    local port count
-    for port in "$@"; do
-        count=$(mysql -N -s -h0 -P"$port" -e "SELECT COUNT(*) FROM bootstrap_restart_rt" 2>/dev/null) || return 1
-        [ "$count" = 1 ] || return 1
+    local deadline=$((SECONDS+120))
+    local port count ready
+    while [ "$SECONDS" -lt "$deadline" ]; do
+        ready=1
+        for port in "$@"; do
+            count=$(mysql -N -s -h0 -P"$port" -e "SELECT COUNT(*) FROM bootstrap_restart_rt" 2>/dev/null) || { ready=0; break; }
+            [ "$count" = 1 ] || { ready=0; break; }
+        done
+        if [ "$ready" -eq 1 ]; then
+            echo "Data intact on $# node(s)"
+            return 0
+        fi
+        sleep 1
     done
-    echo "Data intact on $# node(s)"
+    echo "Replicated row missing on one or more nodes" >&2
+    return 1
 }
 ––– output –––
 ––– input –––

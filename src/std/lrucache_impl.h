@@ -13,8 +13,9 @@
 #include "scopedlock.h"
 
 template <typename KEY, typename VALUE, typename HELPER>
-LRUCache_T<KEY,VALUE,HELPER>::LRUCache_T ( int64_t iCacheSize )
+LRUCache_T<KEY,VALUE,HELPER>::LRUCache_T ( int64_t iCacheSize, int64_t iMaxBlockSize )
 	: m_iCacheSize ( iCacheSize )
+	, m_uMaxBlockSize ( DWORD(iMaxBlockSize<0 ? iCacheSize/64 : iMaxBlockSize) )
 	, m_tHash ( 1024 )
 {}
 
@@ -60,8 +61,7 @@ bool LRUCache_T<KEY,VALUE,HELPER>::Add ( KEY tKey, const VALUE & tData )
 	DWORD uSpaceNeeded = uSize + sizeof(LinkedEntry_t);
 	if ( !HaveSpaceFor ( uSpaceNeeded ) )
 	{
-		DWORD MAX_BLOCK_SIZE = m_iCacheSize/64;
-		if ( uSpaceNeeded>MAX_BLOCK_SIZE )
+		if ( uSpaceNeeded>m_uMaxBlockSize )
 			return false;
 
 		SweepUnused ( uSpaceNeeded );

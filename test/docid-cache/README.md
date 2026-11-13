@@ -36,3 +36,19 @@ Performance reports should identify both binaries and the workload, distinguish
 lookup kernel throughput from SQL QPS, include negative/control cases, and
 account for the additional memory beside mapped lookup data. Runtime cache-line
 selection alone has not established a SQL-QPS gain on 64-byte Linux hardware.
+
+The PR also partitions the separate shared docstore block cache into at most
+16 LRU caches and uses the existing seeded XXH3 helper for block keys. Its entry
+budgets sum to `docstore_cache_size`; default 16 MiB gives 16 partitions, while
+budgets below 2 MiB keep one. Hash-table and allocator overhead are additional.
+Partition capacity and a single hot block can still limit reuse or concurrency.
+The reader registry keeps its original locked lookup; no reader TLS or global
+generation counter is included in this PR.
+
+`DocstoreBlockCacheTest` covers clear/index-key reuse, concurrent reads under
+eviction pressure, and large fields with tiny-cache fallback. The native DocID
+tests also cover distinct unsigned 32-bit batch output types, including the
+Windows `RowID_t`/`uint32_t` ABI difference. Block-cache performance comparisons
+must state the DocID budget and compare equal budgets in both binaries. A
+same-binary comparison of `docstore_cache_size=0` and `16m` answers a separate
+question from the benefit of changing the block-cache implementation.

@@ -21,7 +21,7 @@ template <typename KEY, typename VALUE, typename HELPER>
 class LRUCache_T
 {
 public:
-			LRUCache_T ( int64_t iCacheSize );
+			LRUCache_T ( int64_t iCacheSize, int64_t iMaxBlockSize = -1 );
 			~LRUCache_T();
 
 	bool	Find ( KEY tKey, VALUE & tData );
@@ -59,6 +59,7 @@ protected:
 	LinkedEntry_t *		m_pTail = nullptr;
 	int64_t				m_iCacheSize = 0;
 	int64_t				m_iMemUsed = 0;
+	DWORD			m_uMaxBlockSize = 0;
 	CSphMutex			m_tLock;
 	OpenHashTable_T<KEY, LinkedEntry_t *, HELPER, HashEntry_t> m_tHash;
 

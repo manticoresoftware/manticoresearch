@@ -693,6 +693,17 @@ This setting specifies the maximum size of document blocks from document storage
 
 When `stored_fields` is used, document blocks are read from disk and uncompressed. Since every block typically holds several documents, it may be reused when processing the next document. For this purpose, the block is held in a server-wide cache. The cache holds uncompressed blocks.
 
+The cache uses up to 16 independently locked LRU partitions to reduce contention
+between queries. The configured budget is shared across all partitions, not
+multiplied by the number of workers. Each partition receives at least about
+1 MiB; budgets below 2 MiB use one partition. Hash tables, locks and allocator
+metadata require additional memory beyond the cached-entry budget.
+
+Partitioning can reduce effective capacity when block keys are unevenly
+distributed, and each block must fit its own partition. Increasing this budget
+helps only when the workload reuses enough stored blocks to offset cache lookup
+and synchronization costs. This setting is independent of `docid_lookup_cache_size`.
+
 
 <!-- intro -->
 ##### Example:

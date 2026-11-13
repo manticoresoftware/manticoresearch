@@ -11,6 +11,7 @@
 #include "docstore.h"
 
 #include "std/lrucache.h"
+#include "std/hash.h"
 #include "fileio.h"
 #include "memio.h"
 #include "fileutils.h"
@@ -307,8 +308,7 @@ struct BlockUtil_t
 {
 	static DWORD GetHash ( const HashKey_t & tKey )
 	{
-		DWORD uCRC32 = sphCRC32 ( &tKey.m_iIndexId, sizeof(tKey.m_iIndexId) );
-		return sphCRC32 ( &tKey.m_tOffset, sizeof(tKey.m_tOffset), uCRC32 );
+		return DWORD ( HashWithSeed ( &tKey.m_tOffset, sizeof(tKey.m_tOffset), uint64_t(tKey.m_iIndexId) ) );
 	}
 	static bool Equal ( const HashKey_t & a, const HashKey_t & b ) { return a==b; }
 
@@ -317,21 +317,49 @@ struct BlockUtil_t
 };
 
 
-class BlockCache_c : public LRUCache_T<HashKey_t, BlockData_t, BlockUtil_t>
+class BlockCache_c
 {
-	using BASE = LRUCache_T<HashKey_t, BlockData_t, BlockUtil_t>;
-	using BASE::BASE;
+	using Shard_t = LRUCache_T<HashKey_t, BlockData_t, BlockUtil_t>;
 
 public:
-	void					ClearByIndexId ( int64_t iIndexId ) { BASE::Delete ( [iIndexId]( const HashKey_t & tKey ){ return tKey.m_iIndexId==iIndexId; } ); }
-	void					ClearAll() { BASE::Delete ( []( const HashKey_t & ){ return true; } ); }
+	explicit BlockCache_c ( int64_t iCacheSize )
+	{
+		while ( m_iShards<16 && iCacheSize/(m_iShards*2)>=1024*1024 )
+			m_iShards *= 2;
+		for ( int i=0; i<m_iShards; ++i )
+		{
+			const int64_t iBudget = iCacheSize/m_iShards + (i<iCacheSize%m_iShards);
+			// Sharding must not shrink the original maximum-block admission threshold.
+			m_dShards[i] = std::make_unique<Shard_t> ( iBudget, iCacheSize/64 );
+		}
+	}
 
-	static void				Init ( int64_t iCacheSize );
-	static void				Done()	{ SafeDelete(m_pBlockCache); }
-	static BlockCache_c *	Get()	{ return m_pBlockCache; }
+	bool Find ( HashKey_t tKey, BlockData_t & tData ) { return Shard(tKey).Find ( tKey, tData ); }
+	bool Add ( HashKey_t tKey, const BlockData_t & tData ) { return Shard(tKey).Add ( tKey, tData ); }
+	void Release ( HashKey_t tKey ) { Shard(tKey).Release(tKey); }
+
+	void ClearByIndexId ( int64_t iIndexId )
+	{
+		for ( int i=0; i<m_iShards; ++i )
+			m_dShards[i]->Delete ( [iIndexId]( const HashKey_t & tKey ){ return tKey.m_iIndexId==iIndexId; } );
+	}
+	void ClearAll()
+	{
+		for ( int i=0; i<m_iShards; ++i )
+			m_dShards[i]->Delete ( []( const HashKey_t & ){ return true; } );
+	}
+
+	static void Init ( int64_t iCacheSize );
+	static void Done() { SafeDelete(m_pBlockCache); }
+	static BlockCache_c * Get() { return m_pBlockCache; }
 
 private:
-	static BlockCache_c *	m_pBlockCache;
+	// Keep shard bits separate from the hash table's low bucket bits.
+	Shard_t & Shard ( HashKey_t tKey ) { return *m_dShards[(BlockUtil_t::GetHash(tKey)>>28) & (m_iShards-1)]; }
+
+	int m_iShards = 1;
+	std::unique_ptr<Shard_t> m_dShards[16];
+	static BlockCache_c * m_pBlockCache;
 };
 
 BlockCache_c * BlockCache_c::m_pBlockCache = nullptr;

@@ -2966,6 +2966,7 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 
 	// cJSON limits nesting to 1000 levels, so JSON handlers use a 1 MiB stack.
 	// Revisit this size if the parser or its nesting limit changes.
+	// Continue may run on another OS thread, so preserve the crash-query context.
 	auto fnProcess = Threads::WithCopiedCrashQuery ( [&] { tRes.m_bOk = pHandler->Process(); } );
 	Threads::Coro::Continue ( bJsonEndpoint ? 1024 * 1024 : -1, std::move ( fnProcess ) );
 	tRes.m_sError = pHandler->GetError();

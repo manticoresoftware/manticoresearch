@@ -223,6 +223,27 @@ TEST_F ( NativeDocidCache, BatchMatchesReferenceWithTilesPaddingAndUnsignedExtre
 	}
 }
 
+TEST_F ( NativeDocidCache, BatchAcceptsDistinctUnsigned32BitOutputType )
+{
+	auto pCache = DocidLookupCache_c::Create(65);
+	ASSERT_TRUE(pCache);
+	for ( uint32_t i=0; i<65; ++i ) ASSERT_TRUE ( pCache->Append ( i*2, UINT32_MAX-1-i ) );
+	ASSERT_TRUE ( pCache->Seal() );
+	// char32_t exercises a distinct unsigned 32-bit type on every platform;
+	// Windows DWORD is likewise distinct from uint32_t.
+	for ( size_t nQueries : { 0, 1, 15, 16, 17, 31, 32, 33, 65 } )
+	{
+		std::vector<uint64_t> dIDs(nQueries);
+		std::vector<char32_t> dRows(nQueries+2,42);
+		for ( size_t i=0; i<nQueries; ++i ) dIDs[i] = i;
+		pCache->FindBatch ( dIDs.data(), dRows.data()+1, nQueries );
+		EXPECT_EQ ( dRows.front(), char32_t(42) );
+		EXPECT_EQ ( dRows.back(), char32_t(42) );
+		for ( size_t i=0; i<nQueries; ++i )
+			EXPECT_EQ ( uint32_t(dRows[i+1]), i%2 ? UINT32_MAX : UINT32_MAX-1-uint32_t(i/2) );
+	}
+}
+
 TEST_F ( NativeDocidCache, BatchUnsealedAndConcurrentReadsDoNotChangeBudget )
 {
 	auto pCache = DocidLookupCache_c::Create(1025);

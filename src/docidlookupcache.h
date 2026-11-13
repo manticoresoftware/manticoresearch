@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <type_traits>
 
 // Immutable, bulk-built numeric lookup. Inspired by bbtree's contiguous keys
 // and wide nodes; this is a native C++ implementation for sorted disk chunks.
@@ -25,6 +26,22 @@ public:
 	static constexpr int BATCH_SIZE = 16;
 	static bool IsSparse ( size_t nValues, uint64_t nDocs ) noexcept { return nValues<=nDocs/64; }
 	void FindBatch ( const uint64_t * pDocIDs, uint32_t * pRows, size_t nQueries ) const noexcept;
+
+	// Windows RowID_t/DWORD and uint32_t have equal width but distinct types.
+	template <typename ROWID>
+	void FindBatch ( const uint64_t * pDocIDs, ROWID * pRows, size_t nQueries ) const noexcept
+	{
+		static_assert ( sizeof(ROWID)==sizeof(uint32_t) && std::is_integral<ROWID>::value && std::is_unsigned<ROWID>::value,
+			"Batch output must be an unsigned 32-bit integer" );
+		for ( size_t i=0; i<nQueries; )
+		{
+			uint32_t dRows[BATCH_SIZE];
+			const size_t nBatch = nQueries-i<BATCH_SIZE ? nQueries-i : BATCH_SIZE;
+			FindBatch ( pDocIDs+i, dRows, nBatch );
+			for ( size_t j=0; j<nBatch; ++j ) pRows[i+j] = dRows[j];
+			i += nBatch;
+		}
+	}
 
 	uint32_t Find ( uint64_t uDocID ) const noexcept
 	{

@@ -1195,9 +1195,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 		pQword->m_iDocs = 0;
 		pQword->m_iHits = 0;
 		pQword->SetDocReader ( m_pDocsReader );
-//		pQword->m_rdDoclist.SeekTo ( tDocsReader.GetPos(), READ_NO_SIZE_HINT );
 		pQword->SetHitReader ( m_pHitsReader );
-//		pQword->m_rdHitlist.SeekTo ( tHitsReader.GetPos(), READ_NO_SIZE_HINT );
 
 		// loop the doclist
 		int iDoclistDocs = 0;
@@ -1216,7 +1214,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 			{
 				SkiplistEntry_t & tBlock = dDoclistSkips.Add();
 				tBlock.m_tBaseRowIDPlus1 = pQword->m_tDoc.m_tRowID+1;
-				tBlock.m_iOffset = pQword->m_rdDoclist->GetPos();
+				tBlock.m_iOffset = pQword->GetDocReaderPos();
 				tBlock.m_iBaseHitlistPos = pQword->m_uHitPosition;
 			}
 
@@ -1235,9 +1233,9 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 			// check position in case of regular (not-inline) hit
 			if (!( pQword->m_iHitlistPos>>63 ))
 			{
-				if ( !bWordDict && pQword->m_iHitlistPos!=pQword->m_rdHitlist->GetPos() )
+				if ( !bWordDict && pQword->m_iHitlistPos!=pQword->GetHitReaderPos() )
 					m_tReporter.Fail ( "unexpected hitlist offset (wordid=" UINT64_FMT "(%s), rowid=%u, expected=" INT64_FMT ", actual=" INT64_FMT ")",
-						(uint64_t)uWordid, tEntry.m_szWord, pQword->m_tDoc.m_tRowID, (int64_t)pQword->m_iHitlistPos, (int64_t)pQword->m_rdHitlist->GetPos() );
+						(uint64_t)uWordid, tEntry.m_szWord, pQword->m_tDoc.m_tRowID, (int64_t)pQword->m_iHitlistPos, (int64_t)pQword->GetHitReaderPos() );
 			}
 
 			// aim
@@ -1300,7 +1298,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 				m_tReporter.Fail ( "field mask mismatch (wordid=" UINT64_FMT "(%s), rowid=%u)", (uint64_t)uWordid, tEntry.m_szWord, pQword->m_tDoc.m_tRowID );
 
 			// update my hitlist reader
-			m_pHitsReader->SeekTo ( pQword->m_rdHitlist->GetPos() );
+			m_pHitsReader->SeekTo ( pQword->GetHitReaderPos() );
 		}
 
 		// do checks
@@ -1361,7 +1359,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 		}
 
 		// move my reader instance forward too
-		m_pDocsReader->SeekTo ( pQword->m_rdDoclist->GetPos() );
+		m_pDocsReader->SeekTo ( pQword->GetDocReaderPos() );
 
 		// cleanup
 		SafeDelete ( pQword );

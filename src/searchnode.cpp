@@ -18,6 +18,9 @@
 #include "coroutine.h"
 #include "secondaryindex.h"
 #include "client_task_info.h"
+#include "std/bitmap/bitmap.h"
+#include "indexing_sources/source_stats.h"
+#include <algorithm>
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -262,7 +265,12 @@ protected:
 	{
 		SphOffset_t	m_tHitlistOffset;
 		RowID_t		m_tRowID;
+		DWORD		m_uHits;	///< hit count of the document, sizes the hitlist prefetch
 	};
+
+	int					FillDocsBatched ( StoredHit_t * & pStoredHit );
+	int					FillDocsWideFields ( StoredHit_t * & pStoredHit );
+	void				PrefetchMatchedHits ( const ExtDoc_t * pMatched, const StoredHit_t * pStoredHit ) const;
 
 	ISphQword *			m_pQword = nullptr;
 	FieldMask_t			m_dQueriedFields;	///< accepted fields mask
@@ -564,6 +572,7 @@ private:
 	FORCE_INLINE void	MergeHits3 ( const StoredMultiHit_t & tStoredHit );
 
 	void				InitHitMerge ( HitInfo_t & tHitInfo, int iNode, const StoredMultiHit_t & tStoredHit );
+	void				PrefetchMatchedHits ( const ExtDoc_t * pMatched, const StoredMultiHit_t * pStoredHit ) const;
 	void				DoHitMerge ( RowID_t tRowID, HitInfo_t & tLeft, HitInfo_t & tRight );
 	void				DoHitMerge ( RowID_t tRowID, HitInfo_t & tHit1, HitInfo_t & tHit2, HitInfo_t & tHit3 );
 	void				CopyHits ( RowID_t tRowID, HitInfo_t & tHitInfo, int iNode );
@@ -987,6 +996,689 @@ static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordS
 	pWord->m_iAtomPos = tWord.m_iAtomPos;
 	return pWord;
 }
+
+// Adapts any membership-window producer to sorted, unranked document chunks.
+// The source is exclusively owned and its window capability is not forwarded.
+class WindowDocsAdapter_c final : public WindowDocsAdapter_i
+{
+public:
+	explicit WindowDocsAdapter_c ( std::unique_ptr<QueryNode_i> pSource )
+		: m_pSource ( std::move(pSource) )
+		, m_pWindows ( m_pSource->GetCountWindows() )
+	{
+		assert ( m_pWindows && !m_pSource->GetDocsNode() );
+	}
+
+	const ExtDoc_t * GetDocsChunk() override
+	{
+		if ( !m_pWindows->CheckContinue() )
+			return nullptr;
+
+		int iDocs = 0;
+		while ( iDocs<MAX_BLOCK_DOCS-1 )
+		{
+			if ( !m_pWindow )
+			{
+				m_pWindow = m_pWindows->NextWindow();
+				if ( !m_pWindow )
+					break;
+
+				m_iWord = 0;
+				m_iRow = 0;
+			}
+
+			iDocs = m_pWindow->m_pRows ? ReadRows(iDocs) : ReadBitmap(iDocs);
+		}
+
+		m_dDocs[iDocs].m_tRowID = INVALID_ROWID;
+
+#if QDEBUG
+		PrintDocsChunk ( iDocs, GetAtomPos(), m_dDocs, "window-adapter", this );
+#endif
+		return iDocs ? m_dDocs : nullptr;
+	}
+
+	void Reset ( const ISphQwordSetup & tSetup ) override
+	{
+		m_pWindow = nullptr;
+		m_iWord = m_iRow = 0;
+		m_tBounds = m_tInitialBounds;
+		m_pSource->Reset(tSetup);
+	}
+
+	void HintRowID ( RowID_t tRow ) override
+	{
+		m_tBounds.m_tMinRowID = Max ( m_tBounds.m_tMinRowID, tRow );
+		// Retain any buffered rows at or above the hint, including row batches.
+		if ( m_pWindow && uint64_t(tRow)>=uint64_t(m_pWindow->m_tBase)+CountWindow_t::ROWS )
+			m_pWindow = nullptr;
+
+		m_pSource->HintRowID(tRow);
+	}
+
+	void SetRowidBoundaries ( const RowIdBoundaries_t & tBounds ) override
+	{
+		m_tInitialBounds = m_tBounds = tBounds;
+		HintRowID(tBounds.m_tMinRowID);
+		m_pSource->SetRowidBoundaries(tBounds);
+	}
+
+	std::unique_ptr<QueryNode_i> ReleaseSource() override
+	{
+		m_pWindow = nullptr;
+		m_pWindows = nullptr;
+		return std::move(m_pSource);
+	}
+
+	int		GetQwords ( ExtQwordsHash_t & hWords ) override { return m_pSource->GetQwords(hWords); }
+	void	SetQwordsIDF ( const ExtQwordsHash_t & hWords ) override { m_pSource->SetQwordsIDF(hWords); }
+	void	GetTerms ( const ExtQwordsHash_t & hWords, CSphVector<TermPos_t> & dTerms ) const override { m_pSource->GetTerms ( hWords, dTerms ); }
+	bool	GotHitless() override { return m_pSource->GotHitless(); }
+	int		GetDocsCount() const override { return m_pSource->GetDocsCount(); }
+	int		GetHitsCount() const override { return 0; }
+	uint64_t GetWordID() const override { return m_pSource->GetWordID(); }
+	void	SetAtomPos ( int iPos ) override { m_pSource->SetAtomPos(iPos); }
+	int		GetAtomPos() const override { return m_pSource->GetAtomPos(); }
+	NodeEstimate_t Estimate ( int64_t iTotalDocs ) const override { return m_pSource->Estimate(iTotalDocs); }
+	bool	TimeExceeded() const override { return m_pSource->TimeExceeded(); }
+	int64_t	GetMaxTimeout() const override { return m_pSource->GetMaxTimeout(); }
+
+	const ExtHit_t * GetHits ( const ExtDoc_t * ) override { assert ( false && "membership-only adapter" ); return nullptr; }
+	void	SetCollectHits() override { assert ( false && "membership-only adapter" ); }
+
+	void DebugDump ( int iLevel ) override
+	{
+		DebugIndent(iLevel);
+		printf ( "WindowDocsAdapter\n" );
+		m_pSource->DebugDump(iLevel+1);
+	}
+
+private:
+	int ReadRows ( int iDocs )
+	{
+		while ( m_iRow<m_pWindow->m_iRows && iDocs<MAX_BLOCK_DOCS-1 )
+		{
+			const RowID_t tRow = m_pWindow->m_pRows[m_iRow++];
+			if ( tRow>=m_tBounds.m_tMinRowID && tRow<=m_tBounds.m_tMaxRowID )
+				m_dDocs[iDocs++] = { tRow, 0, 0.0f };
+		}
+
+		if ( m_iRow==m_pWindow->m_iRows )
+			m_pWindow = nullptr;
+
+		return iDocs;
+	}
+
+	int ReadBitmap ( int iDocs )
+	{
+		while ( m_iWord<CountWindow_t::WORDS && iDocs<MAX_BLOCK_DOCS-1 )
+		{
+			DWORD uBits = m_pWindow->m_dBits[m_iWord];
+			const RowID_t tBase = m_pWindow->m_tBase+m_iWord*32;
+			while ( uBits && iDocs<MAX_BLOCK_DOCS-1 )
+			{
+				const int iBit = sphLog2 ( uBits & ( DWORD(0)-uBits ) )-1;
+				uBits &= uBits-1;
+				const RowID_t tRow = tBase+iBit;
+				if ( tRow>=m_tBounds.m_tMinRowID && tRow<=m_tBounds.m_tMaxRowID )
+					m_dDocs[iDocs++] = { tRow, 0, 0.0f };
+			}
+
+			m_pWindow->m_dBits[m_iWord] = uBits;
+			if ( !uBits )
+				++m_iWord;
+		}
+
+		if ( m_iWord==CountWindow_t::WORDS )
+			m_pWindow = nullptr;
+
+		return iDocs;
+	}
+
+	std::unique_ptr<QueryNode_i> m_pSource;
+	CountWindowIterator_i *	m_pWindows;
+	CountWindow_t *			m_pWindow = nullptr;
+	RowIdBoundaries_t		m_tBounds;
+	RowIdBoundaries_t		m_tInitialBounds;
+	int						m_iWord = 0;
+	int						m_iRow = 0;
+	ExtDoc_t				m_dDocs[MAX_BLOCK_DOCS];
+};
+
+
+std::unique_ptr<WindowDocsAdapter_i> CreateWindowDocsAdapter ( std::unique_ptr<QueryNode_i> pSource )
+{
+	return std::make_unique<WindowDocsAdapter_c> ( std::move(pSource) );
+}
+
+
+// Membership-only boolean windows over disk qwords. Document consumers use WindowDocsAdapter_c.
+template<bool IS_AND>
+class ExtWindowBool_T final : public WindowNode_i
+{
+	struct Term_t
+	{
+		std::unique_ptr<ISphQword>			m_pWord;
+		std::unique_ptr<PostingWindow_i>	m_pCursor;
+		RowID_t								m_tNext = INVALID_ROWID;
+	};
+
+public:
+	struct Leaf_t
+	{
+		const XQKeyword_t * m_pWord;
+		DWORD m_uFields;
+	};
+
+	ExtWindowBool_T ( const VecTraits_T<Leaf_t> & dLeaves, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds )
+		: m_dTerms ( dLeaves.GetLength() )
+		, m_pWarning ( tSetup.m_pWarning )
+		, m_pStats ( tSetup.m_pStats )
+		, m_iMaxTimer ( tSetup.m_iMaxTimer )
+	{
+		ARRAY_FOREACH ( i, m_dTerms )
+		{
+			auto & tTerm = m_dTerms[i];
+			tTerm.m_pWord.reset ( CreateQueryWord ( *dLeaves[i].m_pWord, tSetup ) );
+			if constexpr ( IS_AND )
+				if ( tTerm.m_pWord->m_iDocs && int64_t(tTerm.m_pWord->m_iDocs)*32<tSetup.m_pIndex->GetStats().m_iTotalDocuments )
+				{
+					// Reject at the first sparse clause, before allocating the other
+					// cursors/readers. The legacy factory will set up its own qwords.
+					m_bDense = false;
+					return;
+				}
+
+			tTerm.m_pCursor = CreateBufferedPostingWindow ( *tTerm.m_pWord, dLeaves[i].m_uFields, CursorContext() );
+		}
+
+		if constexpr ( IS_AND )
+			std::sort ( m_dTerms.Begin(), m_dTerms.Begin()+m_dTerms.GetLength(), [] ( const Term_t & a, const Term_t & b ) { return a.m_pWord->m_iDocs<b.m_pWord->m_iDocs; } );
+
+		if ( pBounds )
+			SetRowidBoundaries ( *pBounds );
+	}
+
+	bool IsDense() const { return m_bDense; }
+	const char * GetName() const override { return IS_AND ? "WindowAndCount" : "WindowOrCount"; }
+
+	CountWindow_t * NextWindow() override
+	{
+		if constexpr ( IS_AND )
+			return FillAndWindow();
+		else
+			return FillWindow();
+	}
+
+	bool				CheckContinue() override				{ return CheckInterrupted(); }
+	void				SetAtomPos ( int iPos ) override		{ m_iAtomPos = iPos; }
+	int					GetAtomPos() const override				{ return m_iAtomPos; }
+	bool				TimeExceeded() const override			{ return sph::TimeExceeded(m_iMaxTimer); }
+	int64_t				GetMaxTimeout() const override			{ return m_iMaxTimer; }
+	void				HintRowID ( RowID_t tRow ) override		{ m_tBounds.m_tMinRowID = Max ( m_tBounds.m_tMinRowID, tRow ); }
+
+	void SetRowidBoundaries ( const RowIdBoundaries_t & tBounds ) override
+	{
+		m_tInitialBounds = m_tBounds = tBounds;
+		HintRowID ( tBounds.m_tMinRowID );
+	}
+
+	void Reset ( const ISphQwordSetup & tSetup ) override
+	{
+		m_iMaxTimer = tSetup.m_iMaxTimer;
+		m_pWarning = tSetup.m_pWarning;
+		m_pStats = tSetup.m_pStats;
+		m_bStopped = false;
+		m_iSingleTerm = -1;
+		m_tWindow.m_pRows = nullptr;
+		m_tWindow.m_iRows = 0;
+		m_tBounds = m_tInitialBounds;
+
+		for ( auto & tTerm : m_dTerms )
+		{
+			tTerm.m_pWord->Reset();
+			const bool bHasDocs = tSetup.QwordSetup ( tTerm.m_pWord.get() );
+			tTerm.m_pCursor->Reset ( bHasDocs, CursorContext() );
+			tTerm.m_tNext = INVALID_ROWID;
+		}
+	}
+
+	int GetQwords ( ExtQwordsHash_t & hWords ) override
+	{
+		int iMax = -1;
+		for ( const auto & tTerm : m_dTerms )
+		{
+			const auto & tWord = *tTerm.m_pWord;
+			iMax = Max ( iMax, tWord.m_iAtomPos );
+			auto * pExisting = hWords ( tWord.m_sWord );
+			if ( pExisting )
+			{
+				pExisting->m_iQueryPos = Min ( pExisting->m_iQueryPos, tWord.m_iAtomPos );
+				continue;
+			}
+
+			ExtQword_t tInfo;
+			tInfo.m_sWord = tWord.m_sWord;
+			tInfo.m_sDictWord = tWord.m_sDictWord;
+			tInfo.m_iDocs = tWord.m_iDocs;
+			tInfo.m_iHits = tWord.m_iHits;
+			tInfo.m_iQueryPos = tWord.m_iAtomPos;
+			tInfo.m_fIDF = -1.0f;
+			tInfo.m_fBoost = tWord.m_fBoost;
+			tInfo.m_bExpanded = false;
+			tInfo.m_bExcluded = false;
+			hWords.Add ( tInfo, tWord.m_sWord );
+		}
+
+		return iMax;
+	}
+
+	void SetQwordsIDF ( const ExtQwordsHash_t & ) override {}
+	void GetTerms ( const ExtQwordsHash_t & hWords, CSphVector<TermPos_t> & dTerms ) const override
+	{
+		for ( const auto & tTerm : m_dTerms )
+		{
+			const auto & tWord = *tTerm.m_pWord;
+			dTerms.Add ( { (WORD)hWords[tWord.m_sWord].m_iQueryPos, (WORD)tWord.m_iAtomPos } );
+		}
+	}
+
+	bool GotHitless() override { return false; }
+	uint64_t GetWordID() const override { return 0; } // root-only, never used as a quorum child
+	void DebugDump ( int iLevel ) override
+	{
+		DebugIndent ( iLevel );
+		printf ( "%s (count only, %d terms)\n", GetName(), m_dTerms.GetLength() );
+	}
+
+	NodeEstimate_t Estimate ( int64_t iTotalDocs ) const override
+	{
+		if constexpr ( IS_AND )
+		{
+			if ( iTotalDocs<=0 )
+				return { 0.0f, 0, m_dTerms.GetLength() };
+
+			NodeEstimate_t tResult { 0.0f, 0, 0 };
+			for ( const auto & tTerm : m_dTerms )
+			{
+				NodeEstimate_t tRight { float(tTerm.m_pWord->m_iDocs)*COST_SCALE*55.0f, tTerm.m_pWord->m_iDocs, 1 };
+				if ( !tResult.m_iTerms )
+					tResult = tRight;
+				else
+				{
+					tResult.m_fCost = CalcFTIntersectCost ( tResult, tRight, iTotalDocs, MAX_BLOCK_DOCS, MAX_BLOCK_DOCS );
+					tResult.m_iDocs = iTotalDocs>0 ? Min ( Min ( tResult.m_iDocs, tRight.m_iDocs ), int64_t ( double(tResult.m_iDocs)*tRight.m_iDocs/iTotalDocs ) ) : 0;
+					++tResult.m_iTerms;
+				}
+			}
+
+			return tResult;
+		}
+
+		// Preserve the legacy OR estimate until a measured window cost model is available.
+		NodeEstimate_t tResult { 0.0f, 0, 0 };
+		for ( const auto & tTerm : m_dTerms )
+		{
+			const int64_t iDocs = tTerm.m_pWord->m_iDocs;
+			const int64_t iIntersection = iTotalDocs ? int64_t ( float(tResult.m_iDocs)/iTotalDocs*float(iDocs) ) : 0;
+			tResult.m_fCost += float(iDocs)*COST_SCALE*55.0f;
+			if ( tResult.m_iTerms )
+				tResult.m_fCost += float(tResult.m_iDocs+iDocs)*COST_SCALE*10.0f;
+			tResult.m_iDocs += iDocs-iIntersection;
+			++tResult.m_iTerms;
+		}
+		return tResult;
+	}
+
+private:
+	CSphFixedVector<Term_t> m_dTerms;
+	CountWindow_t			m_tWindow;
+	RowIdBoundaries_t		m_tBounds;
+	RowIdBoundaries_t		m_tInitialBounds;
+	CSphString *			m_pWarning = nullptr;
+	CSphQueryStats *		m_pStats = nullptr;
+	RowID_t					m_dSingleRows[128];
+	int						m_iSingleTerm = -1;
+	uint64_t				m_uSingleEnd = 0;
+	bool					m_bStopped = false;
+	bool					m_bDense = true;
+	int						m_iAtomPos = 0;
+	int64_t					m_iMaxTimer;
+	const int64_t &			m_iCheckTimePoint { Threads::Coro::GetNextTimePointUS() };
+
+	bool CheckInterrupted()
+	{
+		if ( m_bStopped )
+			return false;
+
+		const char * sWarning = nullptr;
+		if ( TimeExceeded() )
+			sWarning = "query time exceeded max_query_time";
+
+		else if ( sph::TimeExceeded ( m_iCheckTimePoint ) )
+		{
+			if ( g_bInterruptNow )
+				sWarning = "Server shutdown in progress";
+			else if ( session::GetKilled() )
+				sWarning = "query was killed";
+			else
+				Threads::Coro::RescheduleAndKeepCrashQuery();
+		}
+		if ( !sWarning )
+			return true;
+
+		if ( m_pWarning )
+			*m_pWarning = sWarning;
+
+		m_bStopped = true;
+		return false;
+	}
+
+	PostingWindowContext_t CursorContext()
+	{
+		return { this, [] ( void * pContext ) { return static_cast<ExtWindowBool_T *>(pContext)->CheckInterrupted(); }, m_pStats };
+	}
+
+	PostingWindow_t WindowRange() const
+	{
+		return { m_tWindow.m_tBase, Max ( m_tWindow.m_tBase, m_tBounds.m_tMinRowID ),
+			Min ( uint64_t(m_tWindow.m_tBase)+CountWindow_t::ROWS, uint64_t(m_tBounds.m_tMaxRowID)+1 ) };
+	}
+
+	CountWindow_t * FillSingleTerm()
+	{
+		const auto tRange = WindowRange();
+		if ( tRange.m_tMin>=tRange.m_uEnd ) // a hint skipped the remaining range
+		{
+			m_iSingleTerm = -1;
+			return nullptr;
+		}
+
+		auto & tTerm = m_dTerms[m_iSingleTerm];
+		const auto tResult = tTerm.m_pCursor->ReadRows ( tRange, m_dSingleRows, 128 );
+		tTerm.m_tNext = tResult.m_tNext;
+		m_bStopped |= tResult.m_bStopped;
+		m_tWindow.m_pRows = m_dSingleRows;
+		m_tWindow.m_iRows = tResult.m_iRows;
+		if ( tResult.m_tNext==INVALID_ROWID || uint64_t(tResult.m_tNext)>=m_uSingleEnd )
+			m_iSingleTerm = -1;
+
+		return !m_bStopped && m_tWindow.m_iRows ? &m_tWindow : nullptr;
+	}
+
+	// Only candidates surviving the materialized clauses are probed. A cursor
+	// that jumps ahead lets us discard all candidates before its next posting.
+	bool ProbeCandidates ( int iFirstTerm )
+	{
+		RowID_t tSkipTo = 0;
+		for ( int iWord=0; iWord<CountWindow_t::WORDS; ++iWord )
+		{
+			DWORD uBits = m_tWindow.m_dBits[iWord];
+			while ( uBits )
+			{
+				const DWORD uBit = uBits & (DWORD(0)-uBits);
+				uBits &= uBits-1;
+				const RowID_t tRow = m_tWindow.m_tBase+iWord*32+sphLog2(uBit)-1;
+				bool bMatch = tRow>=tSkipTo;
+				for ( int i=iFirstTerm; bMatch && i<m_dTerms.GetLength(); ++i )
+				{
+					const auto tResult = m_dTerms[i].m_pCursor->Probe(tRow);
+					m_bStopped |= tResult.m_tState.m_bStopped;
+					if ( m_bStopped )
+						return false;
+
+					bMatch = tResult.m_bMatch;
+					if ( !bMatch )
+						tSkipTo = tResult.m_tState.m_tNext;
+				}
+
+				if ( !bMatch )
+					m_tWindow.m_dBits[iWord] &= ~uBit;
+			}
+		}
+
+		return true;
+	}
+
+	bool AdvanceAndTerms ( RowID_t & tFirst )
+	{
+		for ( auto & tTerm : m_dTerms )
+		{
+			const auto tResult = tTerm.m_pCursor->AdvanceTo(tFirst);
+			m_bStopped |= tResult.m_bStopped;
+			if ( m_bStopped || tResult.m_tNext==INVALID_ROWID || tResult.m_tNext>m_tBounds.m_tMaxRowID )
+				return false;
+
+			tFirst = Max ( tFirst, tResult.m_tNext );
+		}
+
+		return true;
+	}
+
+	bool FillAndBitmap ( const PostingWindow_t & tRange )
+	{
+		m_tWindow.m_pRows = nullptr;
+		memset ( m_tWindow.m_dBits, 0, sizeof(m_tWindow.m_dBits) );
+		const auto tLead = m_dTerms[0].m_pCursor->FillOr ( tRange, m_tWindow.m_dBits );
+		m_bStopped |= tLead.m_bStopped;
+		if ( m_bStopped )
+			return false;
+
+		int iRows = tLead.m_iRows;
+		const int iThreshold = Max ( 1, int(tRange.m_uEnd-tRange.m_tMin)/32 );
+		int iTerm = 1;
+		for ( ; iTerm<m_dTerms.GetLength() && iRows>=iThreshold; ++iTerm )
+		{
+			const auto tResult = m_dTerms[iTerm].m_pCursor->FillAnd ( tRange, m_tWindow.m_dBits );
+			m_bStopped |= tResult.m_bStopped;
+			if ( m_bStopped )
+				return false;
+
+			iRows = tResult.m_iRows;
+		}
+
+		if ( iRows && iTerm<m_dTerms.GetLength() && !ProbeCandidates(iTerm) )
+			return false;
+
+		return iRows && bitmap::Count ( m_tWindow.m_dBits, CountWindow_t::WORDS );
+	}
+
+	CountWindow_t * FillAndWindow()
+	{
+		while ( CheckInterrupted() )
+		{
+			RowID_t tFirst = m_tBounds.m_tMinRowID;
+			if ( !AdvanceAndTerms(tFirst) )
+				return nullptr;
+
+			m_tWindow.m_tBase = tFirst & ~(RowID_t(CountWindow_t::ROWS)-1);
+			auto tRange = WindowRange();
+			tRange.m_tMin = tFirst;
+			const bool bAny = FillAndBitmap(tRange);
+			if ( m_bStopped )
+				return nullptr;
+
+			// Lead rows are consumed even when followers were only probed. Never
+			// revisit this window, including an empty intersection or the last rowid.
+			m_tBounds.m_tMinRowID = RowID_t ( Min ( tRange.m_uEnd, uint64_t(INVALID_ROWID) ) );
+			if ( bAny )
+				return &m_tWindow;
+		}
+
+		return nullptr;
+	}
+
+	RowID_t AdvanceOrTerms()
+	{
+		RowID_t tFirst = INVALID_ROWID;
+		for ( auto & tTerm : m_dTerms )
+		{
+			const auto tResult = tTerm.m_pCursor->AdvanceTo(m_tBounds.m_tMinRowID);
+			tTerm.m_tNext = tResult.m_tNext;
+			m_bStopped |= tResult.m_bStopped;
+			if ( m_bStopped )
+				return INVALID_ROWID;
+
+			tFirst = Min ( tFirst, tTerm.m_tNext );
+		}
+
+		return tFirst;
+	}
+
+	bool SelectSingleTerm ( uint64_t uEnd )
+	{
+		int iContributors = 0;
+		ARRAY_FOREACH ( i, m_dTerms )
+		{
+			const auto & tTerm = m_dTerms[i];
+			// Each cursor retains its first unread candidate. A clause
+			// outside this window cannot contribute before uEnd. Field masks may
+			// overestimate contributors, which only forgoes the shortcut.
+			if ( tTerm.m_tNext!=INVALID_ROWID && uint64_t(tTerm.m_tNext)<uEnd )
+			{
+				m_iSingleTerm = i;
+				if ( ++iContributors==2 )
+					break;
+			}
+		}
+
+		if ( iContributors==1 )
+		{
+			m_uSingleEnd = uEnd;
+			return true; // stream rows without clearing, setting or scanning a bitmap
+		}
+
+		m_iSingleTerm = -1;
+		return false;
+	}
+
+	bool FillOrBitmap ( const PostingWindow_t & tRange )
+	{
+		m_tWindow.m_pRows = nullptr;
+		m_tWindow.m_iRows = 0;
+		memset ( m_tWindow.m_dBits, 0, sizeof(m_tWindow.m_dBits) );
+		bool bAny = false;
+		for ( auto & tTerm : m_dTerms )
+		{
+			if ( tTerm.m_tNext==INVALID_ROWID || uint64_t(tTerm.m_tNext)>=tRange.m_uEnd )
+				continue;
+
+			const auto tResult = tTerm.m_pCursor->FillOr ( tRange, m_tWindow.m_dBits );
+			tTerm.m_tNext = tResult.m_tNext;
+			m_bStopped |= tResult.m_bStopped;
+			if ( m_bStopped )
+				return false;
+
+			bAny |= tResult.m_iRows!=0;
+		}
+
+		return bAny;
+	}
+
+	CountWindow_t * FillWindow()
+	{
+		while ( CheckInterrupted() )
+		{
+			if ( m_iSingleTerm>=0 )
+			{
+				if ( auto * pRows = FillSingleTerm() )
+					return pRows;
+
+				if ( m_bStopped )
+					return nullptr;
+			}
+
+			const RowID_t tFirst = AdvanceOrTerms();
+			if ( tFirst==INVALID_ROWID || tFirst>m_tBounds.m_tMaxRowID )
+				return nullptr;
+
+			m_tWindow.m_tBase = tFirst & ~(RowID_t(CountWindow_t::ROWS)-1);
+			const auto tRange = WindowRange();
+			if ( SelectSingleTerm(tRange.m_uEnd) )
+				continue;
+
+			const bool bAny = FillOrBitmap(tRange);
+			if ( m_bStopped )
+				return nullptr;
+
+			if ( bAny )
+				return &m_tWindow;
+		}
+
+		return nullptr;
+	}
+};
+
+using ExtWindowOr_c = ExtWindowBool_T<false>;
+using ExtWindowAnd_c = ExtWindowBool_T<true>;
+
+// Check the whole transformed tree before creating any readers. Field specs on
+// boolean parents have already been propagated by the parser; like Create(),
+// use each leaf's effective mask (a nested explicit spec can override it).
+template<bool IS_AND>
+static bool CollectWindowLeaves ( const XQNode_t * pNode, CSphVector<typename ExtWindowBool_T<IS_AND>::Leaf_t> & dLeaves, int iDepth=0 )
+{
+	if ( !pNode || iDepth>64 || pNode->m_bVirtuallyPlain || pNode->m_bNotWeighted || pNode->m_iAtomPos!=-1
+		|| pNode->m_dSpec.m_iFieldMaxPos || pNode->m_dSpec.m_bZoneSpan || !pNode->m_dSpec.m_dZones.IsEmpty() )
+		return false;
+
+	if ( !pNode->dChildren().IsEmpty() )
+	{
+		if ( pNode->GetOp()!=(IS_AND ? SPH_QUERY_AND : SPH_QUERY_OR) || !pNode->dWords().IsEmpty() )
+			return false;
+
+		for ( const auto * pChild : pNode->dChildren() )
+			if ( !CollectWindowLeaves<IS_AND> ( pChild, dLeaves, iDepth+1 ) )
+				return false;
+
+		return true;
+	}
+	if ( pNode->GetOp()!=(IS_AND ? SPH_QUERY_AND : SPH_QUERY_OR) && !(pNode->GetOp()==SPH_QUERY_AND && pNode->dWords().GetLength()==1) )
+		return false;
+
+	for ( const auto & tWord : pNode->dWords() )
+	{
+		if ( dLeaves.GetLength()==32 || tWord.m_bFieldStart || tWord.m_bFieldEnd || tWord.m_pPayload
+			|| tWord.m_bExpanded || tWord.m_bExcluded || tWord.m_bRegex || tWord.m_iBlendedGroup!=-1 || tWord.m_sWord.IsEmpty() )
+			return false;
+
+		dLeaves.Add ( { &tWord, pNode->m_dSpec.m_dFieldMask.GetMask32() } );
+	}
+
+	return !pNode->dWords().IsEmpty();
+}
+
+WindowNode_i * CreateWindowOrCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds )
+{
+	if ( !tSetup.m_pIndex || tSetup.m_pIndex->GetMatchSchema().GetFieldsCount()>32
+		|| tSetup.m_pIndex->GetSettings().m_eHitless!=SPH_HITLESS_NONE )
+		return nullptr;
+
+	CSphVector<ExtWindowOr_c::Leaf_t> dLeaves;
+	if ( !CollectWindowLeaves<false> ( pNode, dLeaves ) || dLeaves.GetLength()<2 )
+		return nullptr;
+
+	return new ExtWindowOr_c ( dLeaves, tSetup, pBounds );
+}
+
+
+WindowNode_i * CreateWindowAndCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds )
+{
+	if ( !tSetup.m_pIndex || tSetup.m_pIndex->GetMatchSchema().GetFieldsCount()>32
+		|| tSetup.m_pIndex->GetSettings().m_eHitless!=SPH_HITLESS_NONE )
+		return nullptr;
+
+	CSphVector<ExtWindowAnd_c::Leaf_t> dLeaves;
+	if ( !CollectWindowLeaves<true> ( pNode, dLeaves ) || dLeaves.GetLength()<2 )
+		return nullptr;
+
+	auto pNodeAnd = std::make_unique<ExtWindowAnd_c> ( dLeaves, tSetup, pBounds );
+	if ( !pNodeAnd->IsDense() )
+		return nullptr;
+
+	return pNodeAnd.release();
+}
+
 
 struct AtomPosQWord_fn
 {
@@ -2106,6 +2798,120 @@ void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::Reset ( const ISphQwordSetup & tSet
 	m_dStoredHits.Resize(0);
 }
 
+// chunk fill for terms whose fields all fit the low 32 bits: the qword decodes whole batches, no per-document calls
+template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
+int ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::FillDocsBatched ( StoredHit_t * & pStoredHit )
+{
+	const DWORD uQueriedFields = m_dQueriedFields.GetMask32();
+	QwordDoc_t dBatch[MAX_BLOCK_DOCS];
+	int iDoc = 0;
+	while ( iDoc<MAX_BLOCK_DOCS-1 )
+	{
+		const int iWant = MAX_BLOCK_DOCS-1-iDoc;
+		const int iGot = m_pQword->GetNextDocs ( dBatch, iWant );
+		bool bDone = iGot<iWant; // end of doclist
+		for ( int i=0; i<iGot; i++ )
+		{
+			const QwordDoc_t & tSrc = dBatch[i];
+			if constexpr ( ROWID_LIMITS )
+			{
+				if ( tSrc.m_tRowID<m_tBoundaries.m_tMinRowID )
+					continue;
+
+				if ( tSrc.m_tRowID>m_tBoundaries.m_tMaxRowID )
+				{
+					bDone = true;
+					break;
+				}
+			}
+
+			if (!( tSrc.m_uFields & uQueriedFields ))
+				continue;
+
+			ExtDoc_t & tDoc = m_dDocs[iDoc++];
+			tDoc.m_tRowID = tSrc.m_tRowID;
+			tDoc.m_uDocFields = tSrc.m_uFields & uQueriedFields; // OPTIMIZE: only needed for phrase node
+
+			if_const ( USE_BM25 )
+				tDoc.m_fTFIDF = float(tSrc.m_uMatchHits) / float(tSrc.m_uMatchHits+SPH_BM25_K1) * m_fIDF;
+
+			// store some hit info here, we can't reuse m_dDocs in CollectHits
+			// but only if the ranker uses hits
+			if ( m_bCollectHits )
+			{
+				pStoredHit->m_tHitlistOffset = tSrc.m_iHitlistPos;
+				pStoredHit->m_tRowID = tDoc.m_tRowID;
+				pStoredHit->m_uHits = tSrc.m_uMatchHits;
+				pStoredHit++;
+			}
+		}
+
+		if ( bDone )
+		{
+			m_pQword->m_iDocs = 0;
+			break;
+		}
+	}
+
+	return iDoc;
+}
+
+
+// chunk fill for terms that refer to fields 32+: each document needs CollectHitMask(), so the qword is read one document at a time
+template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
+int ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::FillDocsWideFields ( StoredHit_t * & pStoredHit )
+{
+	int iDoc = 0;
+	while ( iDoc<MAX_BLOCK_DOCS-1 )
+	{
+		const CSphMatch & tMatch = m_pQword->GetNextDoc();
+		if constexpr ( ROWID_LIMITS )
+		{
+			if ( tMatch.m_tRowID<m_tBoundaries.m_tMinRowID )
+				continue;
+
+			if ( tMatch.m_tRowID>m_tBoundaries.m_tMaxRowID )
+			{
+				m_pQword->m_iDocs = 0;
+				break;
+			}
+		}
+
+		if ( tMatch.m_tRowID==INVALID_ROWID )
+		{
+			m_pQword->m_iDocs = 0;
+			break;
+		}
+
+		m_pQword->CollectHitMask();
+		bool bHasSameFields = false;
+		for ( int i=0; i<FieldMask_t::SIZE && !bHasSameFields; i++ )
+			bHasSameFields = ( m_pQword->m_dQwordFields[i] & m_dQueriedFields[i] )!=0;
+		if ( !bHasSameFields )
+			continue;
+
+		ExtDoc_t & tDoc = m_dDocs[iDoc++];
+		tDoc.m_tRowID = tMatch.m_tRowID;
+		tDoc.m_uDocFields = m_pQword->m_dQwordFields.GetMask32() & m_dQueriedFields.GetMask32(); // OPTIMIZE: only needed for phrase node
+
+		if_const ( USE_BM25 )
+			tDoc.m_fTFIDF = float(m_pQword->m_uMatchHits) / float(m_pQword->m_uMatchHits+SPH_BM25_K1) * m_fIDF;
+
+		// store some hit info here, we can't reuse m_dDocs in CollectHits
+		// but only if the ranker uses hits
+		if ( m_bCollectHits )
+		{
+			pStoredHit->m_tHitlistOffset = m_pQword->m_iHitlistPos;
+			pStoredHit->m_tRowID = tDoc.m_tRowID;
+			pStoredHit->m_uHits = m_pQword->m_uMatchHits;
+			pStoredHit++;
+		}
+	}
+
+	return iDoc;
+}
+
+
 template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
 const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 {
@@ -2149,60 +2955,7 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 		pFirstHit = pStoredHit-iLength;	// hack to get to m_pData
 	}
 
-	int iDoc = 0;
-	while ( iDoc<MAX_BLOCK_DOCS-1 )
-	{
-		const CSphMatch & tMatch = m_pQword->GetNextDoc();
-		if constexpr ( ROWID_LIMITS )
-		{
-			if ( tMatch.m_tRowID<m_tBoundaries.m_tMinRowID )
-				continue;
-
-			if ( tMatch.m_tRowID>m_tBoundaries.m_tMaxRowID )
-			{
-				m_pQword->m_iDocs = 0;
-				break;
-			}
-		}
-
-		if ( tMatch.m_tRowID==INVALID_ROWID )
-		{
-			m_pQword->m_iDocs = 0;
-			break;
-		}
-
-		if ( !m_bHasWideFields )
-		{
-			// fields 0-31 can be quickly checked right here, right now
-			if (!( m_pQword->m_dQwordFields.GetMask32() & m_dQueriedFields.GetMask32() ))
-				continue;
-		} else
-		{
-			// fields 32+ need to be checked with CollectHitMask() and stuff
-			m_pQword->CollectHitMask();
-			bool bHasSameFields = false;
-			for ( int i=0; i<FieldMask_t::SIZE && !bHasSameFields; i++ )
-				bHasSameFields = ( m_pQword->m_dQwordFields[i] & m_dQueriedFields[i] )!=0;
-			if ( !bHasSameFields )
-				continue;
-		}
-
-		ExtDoc_t & tDoc = m_dDocs[iDoc++];
-		tDoc.m_tRowID = tMatch.m_tRowID;
-		tDoc.m_uDocFields = m_pQword->m_dQwordFields.GetMask32() & m_dQueriedFields.GetMask32(); // OPTIMIZE: only needed for phrase node
-
-		if_const ( USE_BM25 )
-			tDoc.m_fTFIDF = float(m_pQword->m_uMatchHits) / float(m_pQword->m_uMatchHits+SPH_BM25_K1) * m_fIDF;
-
-		// store some hit info here, we can't reuse m_dDocs in CollectHits
-		// but only if the ranker uses hits
-		if ( m_bCollectHits )
-		{
-			pStoredHit->m_tHitlistOffset = m_pQword->m_iHitlistPos;
-			pStoredHit->m_tRowID = tDoc.m_tRowID;
-			pStoredHit++;
-		}
-	}
+	int iDoc = m_bHasWideFields ? FillDocsWideFields ( pStoredHit ) : FillDocsBatched ( pStoredHit );
 
 	if ( m_bCollectHits )
 		m_dStoredHits.Resize ( pStoredHit-pFirstHit );
@@ -2216,6 +2969,33 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 	return ReturnDocsChunk ( iDoc, "term", m_pQword->m_sDictWord.cstr() );
 }
 
+// let the OS fetch the hitlists of the matched documents in one go before CollectHits walks them one by one;
+// pStoredHit is the first stored hit of the current chunk, the matched docs and the stored hits are both in rowid order
+template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
+void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::PrefetchMatchedHits ( const ExtDoc_t * pMatched, const StoredHit_t * pStoredHit ) const
+{
+	if ( !m_pQword->WantHitPrefetch() )
+		return;
+
+	SphOffset_t dOffsets[MAX_BLOCK_DOCS];
+	DWORD dHits[MAX_BLOCK_DOCS];
+	int iToPrefetch = 0;
+	for ( const ExtDoc_t * pDoc = pMatched; HasDocs(pDoc) && iToPrefetch<MAX_BLOCK_DOCS; pDoc++ )
+	{
+		while ( pStoredHit->m_tRowID < pDoc->m_tRowID )
+			pStoredHit++;
+
+		if ( pStoredHit->m_tRowID!=pDoc->m_tRowID )
+			continue;
+
+		dOffsets[iToPrefetch] = pStoredHit->m_tHitlistOffset;
+		dHits[iToPrefetch++] = pStoredHit->m_uHits;
+	}
+
+	m_pQword->PrefetchHits ( dOffsets, dHits, iToPrefetch );
+}
+
+
 template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
 void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::CollectHits ( const ExtDoc_t * pMatched )
 {
@@ -2224,6 +3004,8 @@ void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::CollectHits ( const ExtDoc_t * pMat
 
 	m_dStoredHits.Add().m_tRowID = INVALID_ROWID;
 	StoredHit_t * pStoredHit = m_dStoredHits.Begin();
+
+	PrefetchMatchedHits ( pMatched, pStoredHit );
 
 	for ( ; HasDocs(pMatched); pMatched++ )
 	{
@@ -3470,6 +4252,34 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MergeHitsN ( const Stored
 	}
 }
 
+// one hitlist prefetch request per term for the matched documents, before CollectHits walks them one by one;
+// hit counts are not stored here, so each document gets one page. pStoredHit is the first stored hit of the chunk
+template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::PrefetchMatchedHits ( const ExtDoc_t * pMatched, const StoredMultiHit_t * pStoredHit ) const
+{
+	ARRAY_FOREACH ( iNode, m_dNodes )
+	{
+		if ( !m_dNodes[iNode].m_pQword->WantHitPrefetch() )
+			continue;
+
+		SphOffset_t dOffsets[MAX_BLOCK_DOCS];
+		int iToPrefetch = 0;
+		const StoredMultiHit_t * pScan = pStoredHit;
+		for ( const ExtDoc_t * pDoc = pMatched; HasDocs(pDoc) && iToPrefetch<MAX_BLOCK_DOCS; pDoc++ )
+		{
+			while ( pScan->m_tRowID < pDoc->m_tRowID )
+				pScan++;
+
+			if ( pScan->m_tRowID!=pDoc->m_tRowID )
+				continue;
+
+			dOffsets[iToPrefetch++] = pScan->m_dHitlistOffsets[iNode];
+		}
+
+		m_dNodes[iNode].m_pQword->PrefetchHits ( dOffsets, nullptr, iToPrefetch );
+	}
+}
+
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
 void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CollectHits ( const ExtDoc_t * pMatched )
 {
@@ -3478,6 +4288,8 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CollectHits ( const ExtDo
 
 	m_dStoredHits.Add().m_tRowID = INVALID_ROWID;
 	StoredMultiHit_t * pStoredHit = m_dStoredHits.Begin();
+
+	PrefetchMatchedHits ( pMatched, pStoredHit );
 
 	for ( ; HasDocs(pMatched); pMatched++ )
 	{

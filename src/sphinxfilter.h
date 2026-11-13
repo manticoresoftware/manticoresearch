@@ -109,6 +109,9 @@ std::unique_ptr<ISphFilter> sphJoinFilters ( std::unique_ptr<ISphFilter>, std::u
 
 bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphString & sWarning );
 
+// Requires stable chunk attributes/SI for the lifetime of the query using the reduced filter list.
+bool FilterCoversIndex ( const CSphFilterSettings & tFilter, const CreateFilterContext_t & tCtx, const DWORD * pMin, const DWORD * pMax );
+
 void FormatFilterQL ( const CSphFilterSettings & tFilter, StringBuilder_c & tBuf, int iCompactIN );
 void FormatFiltersQL ( const VecTraits_T<CSphFilterSettings> & dFilters, const VecTraits_T<FilterTreeItem_t> & dFilterTree, StringBuilder_c & tBuf, int iCompactIN=5 );
 void FixupFilterSettings ( const CSphFilterSettings & tSettings, ESphAttr eAttrType, CommonFilterSettings_t & tFixedSettings );
@@ -182,8 +185,8 @@ inline bool EvalBlockRangeAny ( T tMin1, T tMax1, T tMin2, T tMax2 )
 	if_const ( OPEN_RIGHT )
 		return HAS_EQUAL_MIN ? ( tMax1>=tMin2 ) : ( tMax1>tMin2 );
 
-	auto bMinOk = HAS_EQUAL_MIN ? ( tMin1<=tMax2 ) : ( tMin1<tMax2 );
-	auto bMaxOk = HAS_EQUAL_MAX ? ( tMax1>=tMin2 ) : ( tMax1>tMin2 );
+	auto bMinOk = HAS_EQUAL_MAX ? ( tMin1<=tMax2 ) : ( tMin1<tMax2 );
+	auto bMaxOk = HAS_EQUAL_MIN ? ( tMax1>=tMin2 ) : ( tMax1>tMin2 );
 
 	return bMinOk && bMaxOk;
 }

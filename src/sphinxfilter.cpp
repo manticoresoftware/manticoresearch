@@ -1814,6 +1814,78 @@ void FixupFilterSettings ( const CSphFilterSettings & tSettings, ESphAttr eAttrT
 }
 
 
+bool FilterCoversIndex ( const CSphFilterSettings & tFilter, const CreateFilterContext_t & tCtx, const DWORD * pMin, const DWORD * pMax )
+{
+	if ( tFilter.m_eType!=SPH_FILTER_RANGE || tFilter.m_bExclude || tFilter.m_eMvaFunc!=SPH_MVAFUNC_NONE
+		|| tCtx.m_iTotalDocs<=0 || !tCtx.m_pIndexSchema || !tCtx.m_pMatchSchema )
+		return false;
+
+	const auto * pAttr = tCtx.m_pIndexSchema->GetAttr ( tFilter.m_sAttrName.cstr() );
+	const auto * pMatch = tCtx.m_pMatchSchema->GetAttr ( tFilter.m_sAttrName.cstr() );
+	if ( !pAttr || !pMatch || pAttr->m_eAttrType!=pMatch->m_eAttrType || pAttr->m_pExpr || pMatch->IsJoined() || pMatch->m_eAggrFunc!=SPH_AGGR_NONE )
+		return false;
+
+	switch ( pAttr->m_eAttrType )
+	{
+	case SPH_ATTR_INTEGER:
+	case SPH_ATTR_TIMESTAMP:
+	case SPH_ATTR_BOOL:
+	case SPH_ATTR_BIGINT:
+	case SPH_ATTR_TOKENCOUNT:
+		break;
+
+	default:
+		return false;
+	}
+
+	if ( pAttr->IsColumnar() )
+	{
+		if ( pMatch->m_pExpr )
+		{
+			if ( !pMatch->IsColumnarExpr() )
+				return false;
+
+			CSphString sColumn;
+			pMatch->m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sColumn );
+			if ( sColumn!=pAttr->m_sName )
+				return false;
+		} else if ( !pMatch->IsColumnar() )
+			return false;
+	} else if ( pMatch->m_pExpr || pMatch->IsColumnar() || pAttr->m_tLocator.m_bDynamic || !(pAttr->m_tLocator==pMatch->m_tLocator) )
+		return false;
+
+	CSphFilterSettings tFixed = tFilter;
+	FixupFilterSettings ( tFilter, pAttr->m_eAttrType, tFixed );
+	if ( !pAttr->IsColumnar() && pMin && pMax )
+	{
+		SphAttr_t tMin = sphGetRowAttr ( pMin, pAttr->m_tLocator );
+		SphAttr_t tMax = sphGetRowAttr ( pMax, pAttr->m_tLocator );
+		if ( tMin<=tMax && EvalRange ( tMin, tFixed ) && EvalRange ( tMax, tFixed ) )
+			return true;
+	}
+
+	common::Filter_t tColumnarFilter;
+	CSphString sWarning;
+	if ( !ToColumnarFilter ( tColumnarFilter, tFixed, tCtx.m_eCollation, *tCtx.m_pIndexSchema, sWarning ) )
+		return false;
+
+	if ( pAttr->IsColumnar() && tCtx.m_pColumnar && tCtx.m_pColumnar->IsFilterDegenerate(tColumnarFilter) )
+		return true;
+
+	// Only pay for an exact SI count when the histogram predicts full coverage.
+	// The estimate is a cost gate, never the proof. SI counts include killed rows.
+	const auto * pHistogram = tCtx.m_pHistograms ? tCtx.m_pHistograms->Get(tFilter.m_sAttrName) : nullptr;
+	HistogramRset_t tEstimate;
+	if ( !tCtx.m_pSI || !tCtx.m_pSI->IsEnabled(tFilter.m_sAttrName) || !pHistogram || pHistogram->IsOutdated()
+		|| !pHistogram->EstimateRsetSize ( tFixed, tEstimate ) || tEstimate.m_iTotal<tCtx.m_iTotalDocs )
+		return false;
+
+	uint32_t uCount = 0;
+	CSphString sError;
+	return tCtx.m_pSI->CalcCount ( uCount, tColumnarFilter, tCtx.m_iTotalDocs, sError ) && uCount==tCtx.m_iTotalDocs;
+}
+
+
 static bool CanAddGeodist ( const CSphColumnInfo & tAttr, const CreateFilterContext_t & tCtx )
 {
 	if ( !tCtx.m_pIndexSchema )

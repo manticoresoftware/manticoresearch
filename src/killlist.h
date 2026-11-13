@@ -68,6 +68,8 @@ public:
 
 	int64_t		GetLengthBytes() const override;
 	uint64_t	GetCoreSize () const override;
+	// Clear killed/out-of-range rows in a bitmap aligned to 32 rowids.
+	void		MaskAlive ( RowID_t tBase, DWORD * pBits, int iWords ) const;
 	bool		Flush ( bool bWaitComplete, CSphString & sError ) const;
 	bool		Prealloc ( DWORD uRows, const CSphString & sFilename, CSphString & sError );
 	void		Dealloc();

@@ -179,6 +179,12 @@ public:
 		return PRED::Hash ( pStr, iLen );
 	}
 
+	void SetBlobPool ( const BYTE * pBlobPool ) final
+	{
+		CSphGrouper::SetBlobPool ( pBlobPool );
+		m_pExpr->Command ( SPH_EXPR_SET_BLOB_POOL, (void*)pBlobPool );
+	}
+
 	CSphGrouper *	Clone() const final { return new GrouperStringExpr_T(*this); }
 	void			SetColumnar ( const columnar::Columnar_i * pColumnar ) final { m_pExpr->Command ( SPH_EXPR_SET_COLUMNAR, (void*)pColumnar ); }
 

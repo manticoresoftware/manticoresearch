@@ -367,6 +367,15 @@ public:
 		: Expr_WithLocator_T ( tLocator, sAttr )
 	{}
 
+	bool GetBlobAttrLocator ( CSphAttrLocator & tLocator ) const final
+	{
+		if ( !m_tLocator.IsBlobAttr() || m_tLocator.m_bDynamic )
+			return false;
+
+		tLocator = m_tLocator;
+		return true;
+	}
+
 	void Command ( ESphExprCommand eCmd, void * pArg ) final
 	{
 		Expr_WithLocator_T::Command ( eCmd, pArg );

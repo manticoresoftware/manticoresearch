@@ -686,8 +686,12 @@ CSphGrouper * CreateGrouperStringExpr ( ISphExpr * pExpr, ESphCollation eCollati
 }
 
 
-CSphGrouper * CreateGrouperMulti ( const CSphVector<CSphColumnInfo> & dAttrs, VecRefPtrs_t<ISphExpr *> dJsonKeys, ESphCollation eCollation )
+CSphGrouper * CreateGrouperMulti ( CSphVector<CSphColumnInfo> dAttrs, VecRefPtrs_t<ISphExpr *> dJsonKeys, ESphCollation eCollation )
 {
+	for ( auto & tAttr : dAttrs )
+		if ( tAttr.IsColumnarExpr() )
+			tAttr.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &tAttr.m_sName );
+
 	bool bHaveColumnar = dAttrs.any_of ( []( auto & tAttr ){ return tAttr.IsColumnar() || tAttr.IsColumnarExpr(); } );
 	bool bAllColumnar = dAttrs.all_of ( []( auto & tAttr ){ return tAttr.IsColumnar() || tAttr.IsColumnarExpr(); } );
 

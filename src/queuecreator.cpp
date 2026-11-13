@@ -678,7 +678,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 			m_bJoinedGroupSort |= IsJoinAttr(sGroupBy);
 		}
 
-		m_tGroupSorterSettings.m_pGrouper = CreateGrouperMulti ( dAttrs, std::move(dJsonKeys), m_tQuery.m_eCollation );
+		m_tGroupSorterSettings.m_pGrouper = CreateGrouperMulti ( std::move(dAttrs), std::move(dJsonKeys), m_tQuery.m_eCollation );
 		return true;
 	}
 
@@ -1691,7 +1691,7 @@ void QueueCreator_c::ReplaceJsonGroupbyWithStrings ( CSphString & sJsonGroupBy )
 					dJsonKeys.Add(nullptr);
 			}
 
-			m_tGroupSorterSettings.m_pGrouper = CreateGrouperMulti ( dAttrs, std::move(dJsonKeys), m_tQuery.m_eCollation );
+			m_tGroupSorterSettings.m_pGrouper = CreateGrouperMulti ( std::move(dAttrs), std::move(dJsonKeys), m_tQuery.m_eCollation );
 		}
 	}
 }

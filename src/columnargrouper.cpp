@@ -316,12 +316,19 @@ SphGroupKey_t GrouperColumnarMulti<HASH>::FetchStringHash ( int iAttr, const CSp
 {
 	auto & pIterator = m_dIterators[iAttr];
 	if ( m_dHaveStringHashes[iAttr] )
-		return sphFNV64 ( pIterator->Get ( tMatch.m_tRowID ), tPrevKey );
+	{
+		auto uHash = pIterator->Get ( tMatch.m_tRowID );
+		return uHash ? sphFNV64 ( uHash, tPrevKey ) : tPrevKey;
+	}
 
 	const BYTE * pStr = nullptr;
 	int iLen = pIterator->Get ( tMatch.m_tRowID, pStr );
 	if ( !iLen )
 		return tPrevKey;
+
+	// Match the disk chunk path, which combines a precomputed string hash.
+	if ( m_eCollation==SPH_COLLATION_DEFAULT )
+		return sphFNV64 ( HASH::Hash ( pStr, iLen ), tPrevKey );
 
 	return HASH::Hash ( pStr, iLen, tPrevKey );
 }

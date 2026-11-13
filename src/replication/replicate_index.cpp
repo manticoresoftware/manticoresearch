@@ -172,6 +172,10 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 	tRequest.m_sIndexFileName = GetBaseName ( sIndexPath );
 	tProgress.SetDonor4Joiner ( tSigSrc.m_dIndexFiles.GetLength(), tRequest.m_tProgressCtx );
 
+	// on shutdown a request to the agents never completes
+	if ( sphInterrupted() )
+		return TlsMsg::Err ( "daemon shutdown" );
+
 	auto dNodes = ClusterFileReserve_c::MakeAgents ( dDesc, sUser, iSstQueryTimeoutMs, tRequest );
 	assert ( dDesc.GetLength() == dNodes.GetLength() );
 	auto bOk = SendClusterFileReserve ( dNodes );

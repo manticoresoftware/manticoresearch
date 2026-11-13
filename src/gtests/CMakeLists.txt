@@ -8,6 +8,7 @@ endif ()
 
 set ( GTESTS_SRC
 		gtests_docidcache.cpp
+		gtests_docstore_blockcache.cpp
 		gtests_docidplanner.cpp
 		gtests_docidlookup.cpp
 		gtests_rtstuff.cpp

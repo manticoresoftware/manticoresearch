@@ -42,12 +42,25 @@ protected:
 		KEY				m_tKey;
 	};
 
+	// Packed generic entries can return misaligned key/value references.
+	struct HashEntry_t
+	{
+		KEY m_Key;
+		LinkedEntry_t * m_Value = nullptr;
+
+		template <typename STATE> FORCE_INLINE bool IsUsed ( const STATE & ) const { return m_bUsed; }
+		template <typename STATE> FORCE_INLINE void SetUsed ( const STATE &, bool bUsed ) { m_bUsed = bUsed; }
+
+	private:
+		bool m_bUsed = false;
+	};
+
 	LinkedEntry_t *		m_pHead = nullptr;
 	LinkedEntry_t *		m_pTail = nullptr;
 	int64_t				m_iCacheSize = 0;
 	int64_t				m_iMemUsed = 0;
 	CSphMutex			m_tLock;
-	OpenHashTable_T<KEY, LinkedEntry_t *, HELPER> m_tHash;
+	OpenHashTable_T<KEY, LinkedEntry_t *, HELPER, HashEntry_t> m_tHash;
 
 	void	Delete ( LinkedEntry_t * pEntry );
 

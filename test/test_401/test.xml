@@ -4,6 +4,8 @@
 <name>query cache work</name>
 
 <requires>
+	<!-- Checks query-cache hits; competitive block-format pruning bypasses the cache. -->
+	<legacy_format/>
 	<non-rt/>
 	<no_pseudo_sharding/>
 </requires>

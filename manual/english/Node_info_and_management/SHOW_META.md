@@ -21,7 +21,7 @@ The included items are:
 * `keyword[N]`: The n-th keyword used in the search query. Note that the keyword can be presented as a wildcard, e.g., `abc*`.
 * `docs[N]`: The total number of documents (or records) containing the n-th keyword from the search query. If the keyword is presented as a wildcard, this value represents the sum of documents for all expanded sub-keywords, potentially exceeding the actual number of matched documents.
 * `hits[N]`: The total number of occurrences (or hits) of the n-th keyword across all documents.
-* `index`: Information about the utilized index (e.g., secondary index).
+* `index`: Information about the utilized index (e.g., secondary index). `SortBoundSI` and `SortBoundMinMax` identify competitive candidate pruning using a secondary index or rowwise min/max blocks, respectively. Different disk chunks can choose different sources; a chunk uses only one. When this pruning skips candidates, `total_relation` is `gte`.
 
 <!--
 data for the following examples:
@@ -1226,10 +1226,12 @@ The same `index` variable also reports when a `SELECT COUNT(*)` with a `MATCH()`
 * `fulltext:FastCount` - a single plain term over all indexed fields was counted from the dictionary, without reading the posting list. This requires a chunk without deleted rows and no attribute filters.
 * `fulltext:RanklessCount` - the full-text tree was walked and the matching documents were counted directly, without ranking or building matches. Attribute filters are applied during the walk. Queries that need the ranker, such as those with zones or a `WEIGHT()` filter, still take the regular path.
 
+* `fulltext:WindowTermCount` - a single dense plain term in a block-format disk chunk was counted through membership windows, applying field restrictions, deleted-row checks and attribute filters without decoding TFs or hit references. Eligible dictionary-only counts still use `FastCount`.
 * `fulltext:WindowOrCount` - the disk OR-count executor counted matching rows by windows, using bitmap unions or direct row batches for single-clause ranges, and applying deleted-row checks and attribute filters. It is enabled by default; the internal `MANTICORE_WINDOW_OR=0` benchmark setting disables it.
 * `fulltext:WindowAndCount` - the disk AND-count executor intersected plain-term clauses using bitmaps while candidates were dense, then probed remaining clauses when candidates became sparse. Sparse leads and unsupported trees retain `RanklessCount`. Secondary-index wrappers also report `RanklessCount`.
+* `fulltext:WindowQuorumCount` - the disk quorum-count executor counts distinct matching clauses per row in bitmap windows. Repeated terms, positional restrictions and unsupported trees retain `RanklessCount`.
 
-The percentage shows the share of disk chunks and RAM segments that used the path. Chunks with deleted rows cannot use dictionary `FastCount`; they use `RanklessCount` or, for eligible disk boolean counts, `WindowOrCount` or `WindowAndCount`.
+The percentage shows the share of disk chunks and RAM segments that used the path. Chunks with deleted rows cannot use dictionary `FastCount`; they use `RanklessCount` or, for eligible disk window counts, `WindowTermCount`, `WindowOrCount`, `WindowAndCount` or `WindowQuorumCount`.
 
 ## SHOW META for PQ tables
 

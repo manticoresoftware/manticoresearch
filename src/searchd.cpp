@@ -12149,7 +12149,18 @@ static bool PrepareReconfigure ( const char * szIndex, CSphReconfigureSettings &
 		return false;
 	}
 
-	return PrepareReconfigure ( szIndex, hCfg["index"][szIndex], tSettings, pWarnings, sError );
+	auto & hIndex = hCfg["index"][szIndex];
+	if ( !hIndex("postings_format") )
+	{
+		auto pServed = GetServed(szIndex);
+		if ( pServed )
+		{
+			RIdx_c pIndex { pServed };
+			hIndex.AddEntry ( "postings_format", pIndex->GetSettings().m_uPostingsFormat ? "block" : "legacy" );
+		}
+	}
+
+	return PrepareReconfigure ( szIndex, hIndex, tSettings, pWarnings, sError );
 }
 
 // ALTER RTINDEX/TABLE <idx> RECONFIGURE
@@ -14795,8 +14806,16 @@ bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSettings,
 	// pick config settings
 	// they should be overriden later by Preload() if needed
 	{
+		CSphConfigSection hSettings = hIndex;
+		if ( !bPercolate && !hSettings("postings_format") && hSettings("path") )
+		{
+			CSphString sMeta = SphSprintf ( "%s.meta", hSettings.GetStr("path").cstr() );
+			if ( sphIsReadable(sMeta) )
+				hSettings.AddEntry ( "postings_format", "legacy" ); // Preload restores the saved format, including block.
+		}
+
 		CSphString sWarning;
-		if ( !tSettings.Setup ( hIndex, szIndexName, sWarning, sError ) )
+		if ( !tSettings.Setup ( hSettings, szIndexName, sWarning, sError ) )
 		{
 			sphWarning ( "table '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
 			return false;

@@ -3,6 +3,8 @@
 <name>RT on *nix: watchdog and replaying binlog</name>
 
 <requires>
+	<!-- Exercises CRC dictionaries, which block postings do not support. -->
+	<legacy_format/>
 <watchdog/>
 <non-rt/>
 </requires>

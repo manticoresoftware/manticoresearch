@@ -153,9 +153,13 @@ struct RankerSettings_t
 	bool	m_bRowidLimits = false;
 	bool	m_bSkipQCache = false;
 	bool	m_bCollectHits = true;
+
+	bool	m_bOrWindows = false;
+	bool	m_bAndWindows = false;
+	bool	m_bQuorumWindows = false;
+	bool	m_bTermWindows = false;
+
 	RowIdBoundaries_t m_tBoundaries;
-	bool m_bOrWindows = false;
-	bool m_bAndWindows = false;
 };
 
 /// ranker interface
@@ -176,6 +180,15 @@ public:
 	void						FinalizeCache ( const ISphSchema & tSorterSchema ) override;
 	// skip caching when SI iterators used as qcache will see the full-text without SI filters as SI modify filters
 	void						DisableCaching() { SafeReleaseAndZero ( m_pQcacheEntry ); }
+
+	bool						SetCandidateFilter ( PostingCandidateFilter_i * pFilter ) override
+	{
+		if ( !m_pRoot || !m_pRoot->SetCandidateFilter(pFilter) )
+			return false;
+
+		DisableCaching();
+		return true;
+	}
 
 	NodeEstimate_t				Estimate ( int64_t iTotalDocs ) const override;
 
@@ -293,7 +306,7 @@ protected:
 
 public:
 	ExtRanker_WeightSum_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings )
-		: ExtRanker_T<USE_BM25> ( tXQ, tSetup, { tSettings.m_bRowidLimits, tSettings.m_bSkipQCache, false, tSettings.m_tBoundaries } )
+		: ExtRanker_T<USE_BM25> ( tXQ, tSetup, { tSettings.m_bRowidLimits, tSettings.m_bSkipQCache, false, false, false, false, false, tSettings.m_tBoundaries } )
 	{}
 
 	int		GetMatches () override;
@@ -314,7 +327,7 @@ class ExtRanker_None_c : public ExtRanker_T<false>
 
 public:
 	ExtRanker_None_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings )
-		: ExtRanker_T<false> ( tXQ, tSetup, { tSettings.m_bRowidLimits, tSettings.m_bSkipQCache, false, tSettings.m_tBoundaries, tSettings.m_bOrWindows, tSettings.m_bAndWindows } )
+		: ExtRanker_T<false> ( tXQ, tSetup, { tSettings.m_bRowidLimits, tSettings.m_bSkipQCache, false, tSettings.m_bOrWindows, tSettings.m_bAndWindows, tSettings.m_bQuorumWindows, tSettings.m_bTermWindows, tSettings.m_tBoundaries } )
 	{}
 
 	int		GetMatches () override;
@@ -697,10 +710,14 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup,
 	tSetup.m_pZoneChecker = this;
 	assert ( !m_pRoot );
 	const auto * pBounds = tSettings.m_bRowidLimits ? &tSettings.m_tBoundaries : nullptr;
-	if ( tSettings.m_bOrWindows )
+	if ( tSettings.m_bTermWindows )
+		m_pRoot.reset ( CreateWindowTermCountNode ( tXQ.m_pRoot, tSetup, pBounds ) );
+	if ( !m_pRoot && tSettings.m_bOrWindows )
 		m_pRoot.reset ( CreateWindowOrCountNode ( tXQ.m_pRoot, tSetup, pBounds ) );
 	if ( !m_pRoot && tSettings.m_bAndWindows )
 		m_pRoot.reset ( CreateWindowAndCountNode ( tXQ.m_pRoot, tSetup, pBounds ) );
+	if ( !m_pRoot && tSettings.m_bQuorumWindows )
+		m_pRoot.reset ( CreateWindowQuorumCountNode ( tXQ.m_pRoot, tSetup, pBounds ) );
 	if ( !m_pRoot )
 		m_pRoot.reset ( ExtNode_i::Create ( tXQ.m_pRoot, tSetup, bUseBM25, pBounds ) );
 	m_pDocsRoot = m_pRoot ? m_pRoot->GetDocsNode() : nullptr;
@@ -745,14 +762,14 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup,
 
 		tDot.m_sWord.SetSprintf ( "%c%s", MAGIC_CODE_ZONE, m_dZones[i].cstr() );
 		auto& pStartTerm = m_dZoneStartTerm.Add();
-		pStartTerm.reset ( ExtNode_i::Create ( tDot, tSetup, pZonesDict, false, tSettings.m_bRowidLimits ) );
+		pStartTerm.reset ( ExtNode_i::Create ( tDot, tSetup, pZonesDict, false ) );
 		assert ( pStartTerm );
 		pStartTerm->SetCollectHits();
 		m_dZoneStart[i] = nullptr;
 
 		tDot.m_sWord.SetSprintf ( "%c/%s", MAGIC_CODE_ZONE, m_dZones[i].cstr() );
 		auto& pEndTerm = m_dZoneEndTerm.Add();
-		pEndTerm.reset ( ExtNode_i::Create ( tDot, tSetup, pZonesDict, false, tSettings.m_bRowidLimits ) );
+		pEndTerm.reset ( ExtNode_i::Create ( tDot, tSetup, pZonesDict, false ) );
 		assert ( pEndTerm );
 		pEndTerm->SetCollectHits();
 		m_dZoneEnd[i] = nullptr;
@@ -4803,6 +4820,8 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 	const bool bWindows = bDiskQwords && tQuerySettings.m_eRanker==SPH_RANK_NONE && tXQ.m_dZones.IsEmpty() && !tXQ.m_bNeedSZlist;
 	tRankerSettings.m_bOrWindows = bWindows && bWindowOr;
 	tRankerSettings.m_bAndWindows = bWindows;
+	tRankerSettings.m_bQuorumWindows = bWindows;
+	tRankerSettings.m_bTermWindows = bWindows;
 
 	// can we serve this from cache?
 	QcacheEntryRefPtr_t pCached;

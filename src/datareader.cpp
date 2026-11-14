@@ -168,6 +168,7 @@ uint64_t ThinMMapReader_c::UnzipOffset()
 	return UnzipValueBE<uint64_t> ( [this]() mutable { return GetByte(); } );
 }
 
+
 //////////////////////////////////////////////////////////////////////////
 
 class DirectFileReader_c final : public FileBlockReader_c, protected FileReader_c
@@ -185,6 +186,7 @@ public:
 	DWORD		UnzipInt() final		{ return FileReader_c::UnzipInt(); }
 	uint64_t	UnzipOffset() final		{ return FileReader_c::UnzipOffset(); }
 	void		Reset() final			{ FileReader_c::Reset(); }
+	const char * GetError() const final { return GetErrorFlag() ? GetErrorMessage().cstr() : nullptr; }
 
 protected:
 	explicit DirectFileReader_c ( BYTE * pBuf, int iSize, const char * szFileName )
@@ -194,6 +196,7 @@ protected:
 
 	~DirectFileReader_c() final {}
 };
+
 
 //////////////////////////////////////////////////////////////////////////
 

@@ -89,6 +89,10 @@ public:
 };
 
 class ExtNode_i;
+class FSMphrase_c;
+
+// Consume candidate hit bookmarks to match document-only phrases; positions cannot be requested afterwards.
+using PhraseMatcher_fn = int (*) ( ExtNode_i * pNode, const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch );
 
 // Lifecycle and metadata shared by document and window producers.
 class QueryNode_i
@@ -97,6 +101,8 @@ public:
 	virtual						~QueryNode_i() = default;
 
 	// Capabilities describe this node, never an unfiltered descendant.
+	// Attach a borrowed candidate prefilter before iteration starts.
+	virtual bool				SetCandidateFilter ( PostingCandidateFilter_i * ) { return false; }
 	virtual ExtNode_i *			GetDocsNode() { return nullptr; }
 	virtual CountWindowIterator_i * GetCountWindows() { return nullptr; }
 	virtual void				Reset ( const ISphQwordSetup & tSetup ) = 0;
@@ -124,15 +130,16 @@ class ExtNode_i : public QueryNode_i
 {
 public:
 	static ExtNode_i *			Create ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25, const RowIdBoundaries_t * pBoundaries );
-	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25, bool bRowidLimits );
-	static ExtNode_i *			Create ( ISphQword * pQword, const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25, bool bRowidLimits );
-	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const ISphQwordSetup & tSetup, DictRefPtr_c pZonesDict, bool bUseBM25, bool bRowidLimits );
+	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25 );
+	static ExtNode_i *			Create ( ISphQword * pQword, const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25 );
+	static ExtNode_i *			Create ( const XQKeyword_t & tWord, const ISphQwordSetup & tSetup, DictRefPtr_c pZonesDict, bool bUseBM25 );
 
 	ExtNode_i *					GetDocsNode() final { return this; }
 
 	virtual const ExtDoc_t *	GetDocsChunk() = 0;
 	virtual const ExtHit_t *	GetHits ( const ExtDoc_t * pDocs ) = 0;
 	virtual void				SetCollectHits() {}
+	virtual PhraseMatcher_fn		GetPhraseMatcher() { return nullptr; }
 };
 
 // Count/membership-only producer; no document or hit iteration interface.
@@ -151,8 +158,10 @@ public:
 };
 
 // Caller must guarantee disk qwords and a membership-only consumer (ranker=none).
+WindowNode_i * CreateWindowTermCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds );
 WindowNode_i * CreateWindowOrCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds );
 WindowNode_i * CreateWindowAndCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds );
+WindowNode_i * CreateWindowQuorumCountNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBounds );
 
 // Takes exclusive ownership of a window-only source; exposes no window capability.
 std::unique_ptr<WindowDocsAdapter_i> CreateWindowDocsAdapter ( std::unique_ptr<QueryNode_i> pSource );

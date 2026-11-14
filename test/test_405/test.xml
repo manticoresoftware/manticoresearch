@@ -3,6 +3,8 @@
 
 <name>alter table settings</name>
 <requires>
+	<!-- Checks settings/SHOW CREATE output for the legacy default. -->
+	<legacy_format/>
 	<force-rt/>
 	<lemmatizer_base/>
 </requires>

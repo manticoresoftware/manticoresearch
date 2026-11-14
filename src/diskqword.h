@@ -13,22 +13,12 @@
 #pragma once
 
 #include "indexformat.h"
+#include "postings/blockqword.h"
 #include "sphinxint.h"
 #include "skip_cache.h"
 
 // on-disk query word: the term reader over doclists and hitlists of a plain index or an RT disk chunk,
 // its setup helper, and the reader policies (buffered file access vs raw pointers into the memory map)
-
-/// prefetch gate: a residency probe and readahead request are issued only when the counter is zero or a power
-/// of two, and a cache miss resets it. A cold query therefore prefetches every term while a warm one stops
-/// probing after a few terms
-struct PrefetchGate_t
-{
-	DWORD	m_uCounter = 0;
-
-	bool	ShouldProbe()	{ DWORD u = m_uCounter++; return ( u & ( u-1 ) )==0; }
-	void	OnMiss()		{ m_uCounter = 0; }
-};
 
 /// doclists up to this size are prefetched whole, longer ones only at the start; kernel readahead takes over
 /// once sequential reads begin
@@ -163,39 +153,12 @@ public:
 		ResetDecoderState();
 	}
 
-	bool WantHitPrefetch() final
-	{
-		return m_pHitFactory && m_pHitFactory->IsMapped() && m_tHitGate.ShouldProbe();
-	}
-
-	void PrefetchHits ( const SphOffset_t * pOffsets, const DWORD * pHits, int iCount ) final
-	{
-		if ( !m_pHitFactory || iCount<=0 )
-			return;
-
-		// exactly the hitlists about to be seeked to: inlined single hits live in the doclist and need nothing;
-		// a document's range is sized from its hit count (a couple of bytes per hit), bounded, or one page when unknown
-		CSphFixedVector<FileRange_t> dRanges ( iCount );
-		int iRanges = 0;
-		for ( int i = 0; i < iCount; i++ )
-		{
-			if ( pOffsets[i]>>63 )
-				continue; // inline hit: no hitlist bytes to prefetch.
-
-			SphOffset_t iLen = pHits ? Min ( Max ( (SphOffset_t)pHits[i]*2 + 16, (SphOffset_t)256 ), (SphOffset_t)PREFETCH_DOCLIST_HEAD_BYTES ) : (SphOffset_t)4096;
-			dRanges[iRanges++] = { pOffsets[i], iLen };
-		}
-
-		if ( iRanges && m_pHitFactory->Prefetch ( dRanges.Begin(), iRanges ) )
-			m_tHitGate.OnMiss();
-	}
-
 	void		SeekDocReader ( SphOffset_t iPos, int iHint ) final	{ m_tDocs.SeekTo ( iPos, iHint ); }
 	void		SeekHitReader ( SphOffset_t iPos, int iHint ) final	{ m_tHits.SeekTo ( iPos, iHint ); }
 	SphOffset_t	GetDocReaderPos() const final						{ return m_tDocs.GetPos(); }
 	SphOffset_t	GetHitReaderPos() const final						{ return m_tHits.GetPos(); }
 
-	void GetHitlistEntry ()
+	FORCE_INLINE void GetHitlistEntry ()
 	{
 		assert ( !m_bHitlistOver );
 		DWORD iDelta = m_tHits.UnzipInt();
@@ -405,7 +368,6 @@ private:
 	int m_iSkipListBlock = -1;
 	READER m_tDocs;
 	READER m_tHits;
-	PrefetchGate_t m_tHitGate;	// one per term: hitlist prefetch requests per CollectHits call follow the same schedule as doclists
 
 	void AttachReaders()
 	{
@@ -521,17 +483,23 @@ private:
 
 /////////////////////////////////////////////////////////////////////////////
 
-#define WITH_QWORD(INDEX, NO_SEEK, NAME, ACTION)										\
-do if ( (( const CSphIndex_VLN *)INDEX)->m_tSettings.m_eHitFormat==SPH_HIT_FORMAT_INLINE )	\
-		{ using NAME = DiskIndexQword_c < true, NO_SEEK, BlockReader_t >; ACTION; }		\
-	else																				\
-		{ using NAME = DiskIndexQword_c < false, NO_SEEK, BlockReader_t >; ACTION; }	\
-while(0)
+#define WITH_QWORD(INDEX, NO_SEEK, NAME, ACTION) \
+do { \
+	if constexpr ( !NO_SEEK ) \
+	{ \
+		if ( (( const CSphIndex_VLN *)INDEX)->m_tSettings.m_uPostingsFormat ) \
+		{ using NAME = BlockIndexQword_c; ACTION; break; } \
+	} \
+	if ( (( const CSphIndex_VLN *)INDEX)->m_tSettings.m_eHitFormat==SPH_HIT_FORMAT_INLINE ) \
+		{ using NAME = DiskIndexQword_c < true, NO_SEEK, BlockReader_t >; ACTION; } \
+	else \
+		{ using NAME = DiskIndexQword_c < false, NO_SEEK, BlockReader_t >; ACTION; } \
+} while(0)
 
-template < bool INLINE_HITS, typename READER >
-class DiskPayloadQword_c : public DiskIndexQword_c<INLINE_HITS, false, READER>
+template < bool INLINE_HITS, typename READER, typename QWORD = DiskIndexQword_c<INLINE_HITS, false, READER> >
+class DiskPayloadQword_c : public QWORD
 {
-	typedef DiskIndexQword_c<INLINE_HITS, false, READER> BASE;
+	typedef QWORD BASE;
 
 public:
 	DiskPayloadQword_c ( const DiskSubstringPayload_t * pPayload, bool bExcluded, DataReaderFactory_c * pDoclist, DataReaderFactory_c * pHitlist, int64_t iIndexId )

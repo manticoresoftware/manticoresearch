@@ -15,6 +15,7 @@
 
 #include "sphinxquery/sphinxquery.h"
 #include "sphinxint.h"
+#include "postingwindow.h"
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -113,6 +114,10 @@ public:
 	virtual int					GetNextDocs ( QwordDoc_t * pDocs, int iMax );
 	virtual void				SeekHitlist ( SphOffset_t uOff ) = 0;
 	virtual Hitpos_t			GetNextHit () = 0;
+	// Select payload columns before reading; hit consumers also require term frequencies.
+	virtual void				SetPayloadRequirements ( bool bTF, bool bHits ) {}
+	virtual std::unique_ptr<PostingWindow_i> CreatePostingWindow ( DWORD uFields, const PostingWindowContext_t & tContext );
+	virtual std::unique_ptr<PostingBlock_i> CreatePostingBlock ( DWORD uFields, const PostingWindowContext_t & tContext ) { return nullptr; }
 	virtual bool				WantHitPrefetch() { return false; }
 	virtual void				PrefetchHits ( const SphOffset_t * pOffsets, const DWORD * pHits, int iCount ) {}
 	virtual void				CollectHitMask ();
@@ -134,13 +139,14 @@ public:
 	const CSphIndex *		m_pIndex		{nullptr};
 	int						m_iDynamicRowitems {0};
 	int64_t					m_iMaxTimer		{0};
+	CSphString *			m_pError		{nullptr};
 	CSphString *			m_pWarning		{nullptr};
 	CSphQueryContext *		m_pCtx			{nullptr};
 	CSphQueryNodeCache *	m_pNodeCache	{nullptr};
 	mutable ISphZoneCheck *	m_pZoneChecker	{nullptr};
 	CSphQueryStats *		m_pStats		{nullptr};
 	mutable bool			m_bSetQposMask	{false};
-	DictRefPtr_c			m_pDict;
+	DictRefPtr_c		m_pDict;
 	mutable KeywordBuf_t	m_tKeywordBuf;
 	bool					m_bHasWideFields { false };
 
@@ -174,6 +180,7 @@ public:
 	virtual bool				UsedCountWindows() const { return false; }
 	virtual const char *		GetCountWindowName() const { return nullptr; }
 	virtual bool				IsCache() const { return false; }
+	virtual bool				SetCandidateFilter ( PostingCandidateFilter_i * ) { return false; }
 	virtual void				FinalizeCache ( const ISphSchema & ) {}
 
 	virtual NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const = 0;
@@ -187,20 +194,20 @@ class QwordScan_c : public ISphQword
 public:
 	QwordScan_c ( int iRowsCount, int iAtomPos, int iFieldsCount );
 
-	const CSphMatch & GetNextDoc() final;
+	const CSphMatch &	GetNextDoc() final;
 
-	void SeekHitlist ( SphOffset_t uOff ) override {}
-	Hitpos_t GetNextHit () override { return EMPTY_HIT; }
-	void Reset () final;
+	void				SeekHitlist ( SphOffset_t uOff ) override	{}
+	Hitpos_t			GetNextHit () override						{ return EMPTY_HIT; }
+	void				Reset () final;
 
 protected:
-	RowID_t m_iRowsCount = INVALID_ROWID;
-	bool m_bDone = false;
-	CSphMatch m_tDoc;
-	int m_iFieldsCount;
+	RowID_t		m_iRowsCount = INVALID_ROWID;
+	bool		m_bDone = false;
+	CSphMatch	m_tDoc;
+	int			m_iFieldsCount;
 
-	virtual bool IsAliveRow (  RowID_t ) const { return true; }
-	void SetFieldMask();
+	virtual bool	IsAliveRow ( RowID_t ) const	{ return true; }
+	void			SetFieldMask();
 };
 
 

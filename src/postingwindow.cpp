@@ -11,6 +11,7 @@
 #include "postingwindow.h"
 #include "sphinxsearch.h"
 #include "std/bitmap/bitmap.h"
+#include <algorithm>
 
 namespace
 {
@@ -193,7 +194,351 @@ private:
 };
 }
 
+
+std::unique_ptr<PostingWindow_i> ISphQword::CreatePostingWindow ( DWORD uFields, const PostingWindowContext_t & tContext )
+{
+	return CreateBufferedPostingWindow ( *this, uFields, tContext );
+}
+
+
 std::unique_ptr<PostingWindow_i> CreateBufferedPostingWindow ( ISphQword & tWord, DWORD uFields, const PostingWindowContext_t & tContext )
 {
+	tWord.SetPayloadRequirements ( false, false );
 	return std::make_unique<BufferedPostingWindow_c> ( tWord, uFields, tContext );
+}
+
+
+PostingWindowResult_t PostingWindow_i::FillAndNot ( const PostingWindow_t & tWindow, DWORD * pBits )
+{
+	DWORD dExcluded[PostingWindow_t::WORDS] {};
+	auto tResult = FillOr ( tWindow, dExcluded );
+
+	unsigned iWords = unsigned((tWindow.m_uEnd-tWindow.m_tBase+31)/32);
+	bitmap::AndNot ( pBits, pBits, dExcluded, iWords );
+	for ( unsigned i=0; i<iWords; ++i )
+	{
+		uint64_t uFirst = uint64_t(tWindow.m_tBase)+i*32;
+		uint64_t uBegin = std::max ( uint64_t(tWindow.m_tMin), uFirst );
+		uint64_t uEnd = std::min ( std::min ( tWindow.m_uEnd, uint64_t(INVALID_ROWID) ), uFirst+32 );
+		if ( tResult.m_bStopped || uBegin>=uEnd )
+			pBits[i] = 0;
+		else
+			pBits[i] &= (UINT32_MAX>>(32-unsigned(uEnd-uFirst))) & (UINT32_MAX<<unsigned(uBegin-uFirst));
+	}
+
+	tResult.m_iRows = int(bitmap::Count ( pBits, iWords ));
+	return tResult;
+}
+
+/////////////////////////////////////////////////////////////////////
+
+PostingBlockTerm_c::PostingBlockTerm_c ( std::unique_ptr<PostingBlock_i> pCursor, PostingCandidateFilter_i & tFilter, const PostingWindowContext_t & tContext )
+	: m_pCursor ( std::move(pCursor) )
+	, m_tFilter ( tFilter )
+	, m_tContext(tContext)
+{}
+
+
+bool PostingBlockTerm_c::FillRows ( RowID_t tMin, uint64_t uEnd )
+{
+	PostingLeaf_t tLeaf;
+	if ( !m_pCursor->Prepare ( tMin, tLeaf ) )
+		return false;
+
+	RowID_t tFirst = std::max ( tMin, tLeaf.m_tFirst );
+	uint64_t uWindowEnd = (uint64_t(tFirst)/PostingWindow_t::ROWS+1)*PostingWindow_t::ROWS;
+	uint64_t uLimit = std::min ( { uEnd, tLeaf.m_uEnd, uWindowEnd } );
+	if ( tFirst>=uLimit )
+		return false;
+
+	PostingWindow_t tWindow { tFirst, tFirst, uLimit };
+	m_iRead = 0;
+	m_iCount = m_pCursor->ReadRows ( tWindow, m_dRows.data() );
+
+	m_tNext = RowID_t(uLimit);
+	return true;
+}
+
+
+PostingCandidateRows_t PostingBlockTerm_c::ReadRows ( RowID_t tMin, uint64_t uEnd, int iCapacity )
+{
+	assert ( iCapacity>0 );
+	uEnd = std::min ( uEnd, uint64_t(INVALID_ROWID) );
+	while ( true )
+	{
+		if ( m_tContext.m_fnContinue && !m_tContext.m_fnContinue(m_tContext.m_pContext) )
+			return {};
+
+		RowID_t tFirst = m_iRead<m_iCount ? m_dRows[m_iRead] : m_tNext;
+		tFirst = m_tFilter.AdvanceTo ( std::max ( tFirst, tMin ) );
+		if ( tFirst>=uEnd )
+			return {};
+
+		m_iRead = int(std::lower_bound ( m_dRows.begin()+m_iRead, m_dRows.begin()+m_iCount, tFirst )-m_dRows.begin());
+		if ( m_iRead==m_iCount )
+		{
+			if ( !FillRows ( std::max ( tFirst, m_tNext ), uEnd ) )
+				return {};
+
+			if ( !m_iCount )
+				continue;
+		}
+
+		int iCount = std::min ( iCapacity, m_iCount-m_iRead );
+		while ( iCount && m_dRows[m_iRead+iCount-1]>=uEnd )
+			--iCount;
+
+		if ( !iCount )
+			return {};
+
+		RowID_t * pRows = m_dRows.data()+m_iRead;
+		m_iRead += iCount;
+		iCount = m_tFilter.SelectRows ( pRows, iCount );
+		if ( iCount )
+			return { pRows, iCount };
+	}
+}
+
+
+PostingBlockAnd_c::PostingBlockAnd_c ( const PostingWindowContext_t & tContext ) : m_tContext(tContext) {}
+
+
+void PostingBlockAnd_c::Add ( std::unique_ptr<PostingBlock_i> pCursor )
+{
+	m_dCursors.push_back(std::move(pCursor));
+}
+
+
+void PostingBlockAnd_c::AddExcluded ( std::unique_ptr<PostingWindow_i> pCursor )
+{
+	m_dExcluded.push_back(std::move(pCursor));
+}
+
+
+bool PostingBlockAnd_c::SubtractRows()
+{
+	for ( auto & pCursor : m_dExcluded )
+	{
+		int iOut = 0;
+		for ( int i=0; i<m_iCount; ++i )
+		{
+			auto tResult = pCursor->Probe(m_dRows[i]);
+			if ( tResult.m_tState.m_bStopped )
+				return false;
+
+			if ( !tResult.m_bMatch )
+				m_dRows[iOut++] = m_dRows[i];
+		}
+
+		m_iCount = iOut;
+	}
+
+	return true;
+}
+
+
+void PostingBlockAnd_c::ExtractRows ( RowID_t tBase, const DWORD * pBits, int iWords )
+{
+	m_iCount = 0;
+	for ( int i=0; i<iWords; ++i )
+	{
+		DWORD uBits = pBits[i];
+		while ( uBits )
+		{
+			m_dRows[m_iCount++] = tBase+i*32+sphLog2(uBits & (DWORD(0)-uBits))-1;
+			uBits &= uBits-1;
+		}
+	}
+}
+
+
+bool PostingBlockAnd_c::FillCandidates ( uint64_t uEnd )
+{
+	while ( m_tNext<uEnd )
+	{
+		if ( m_tContext.m_fnContinue && !m_tContext.m_fnContinue(m_tContext.m_pContext) )
+			return false;
+
+		RowID_t tFirst = m_pFilter ? m_pFilter->AdvanceTo(m_tNext) : m_tNext;
+		if ( tFirst>=uEnd )
+			return false;
+
+		uint64_t uLimit = uEnd;
+		bool bDecoded = false;
+		for ( auto & pCursor : m_dCursors )
+		{
+			PostingLeaf_t tLeaf;
+			if ( !pCursor->Prepare ( tFirst, tLeaf ) )
+				return false;
+
+			if ( pCursor==m_dCursors.front() )
+				bDecoded = tLeaf.m_bDecoded;
+
+			tFirst = std::max ( tFirst, tLeaf.m_tFirst );
+			uLimit = std::min ( uLimit, tLeaf.m_uEnd );
+		}
+
+		m_tNext = tFirst;
+		if ( tFirst>=uLimit )
+			continue;
+
+		uLimit = std::min ( uLimit, uint64_t(tFirst)+PostingWindow_t::ROWS );
+
+		PostingWindow_t tWindow { tFirst, tFirst, uLimit };
+		if ( (bDecoded || m_dCursors.size()==1) && m_dExcluded.empty() )
+		{
+			m_iCount = m_dCursors.front()->ReadRows ( tWindow, m_dRows.data() );
+			for ( size_t i=1; i<m_dCursors.size() && m_iCount; ++i )
+				m_iCount = m_dCursors[i]->FilterRows ( m_dRows.data(), m_iCount );
+		} else if ( !IntersectBitmap(tWindow) )
+			return false;
+
+		m_tNext = RowID_t(uLimit);
+		m_iRead = 0;
+		if ( m_iCount )
+			return true;
+	}
+
+	return false;
+}
+
+
+bool PostingBlockAnd_c::IntersectBitmap ( const PostingWindow_t & tWindow )
+{
+	int iWords = int((tWindow.m_uEnd-tWindow.m_tBase+31)/32);
+	DWORD dBits[PostingWindow_t::WORDS];
+	std::fill_n ( dBits, iWords, UINT32_MAX );
+
+	int iCount = int(tWindow.m_uEnd-tWindow.m_tBase);
+	int iThreshold = std::max ( 1, iCount/32 );
+	size_t iTerm = 0;
+	for ( ; iTerm<m_dCursors.size() && iCount>=iThreshold; ++iTerm )
+		iCount = m_dCursors[iTerm]->Intersect ( tWindow, dBits );
+
+	m_iCount = 0;
+	if ( iCount>=iThreshold && iTerm==m_dCursors.size() )
+	{
+		for ( auto & pCursor : m_dExcluded )
+		{
+			auto tResult = pCursor->FillAndNot ( tWindow, dBits );
+			if ( tResult.m_bStopped )
+				return false;
+
+			iCount = tResult.m_iRows;
+			if ( !iCount )
+				break;
+		}
+
+		if ( iCount )
+			ExtractRows ( tWindow.m_tBase, dBits, iWords );
+	} else if ( iCount )
+	{
+		ExtractRows ( tWindow.m_tBase, dBits, iWords );
+		for ( ; iTerm<m_dCursors.size() && m_iCount; ++iTerm )
+			m_iCount = m_dCursors[iTerm]->FilterRows ( m_dRows.data(), m_iCount );
+
+		if ( !SubtractRows() )
+			return false;
+	}
+
+	return true;
+}
+
+
+PostingCandidateRows_t PostingBlockAnd_c::ReadRows ( RowID_t tMin, uint64_t uEnd, int iCapacity )
+{
+	assert ( iCapacity>0 && !m_dCursors.empty() );
+	uEnd = std::min ( uEnd, uint64_t(INVALID_ROWID) );
+	m_tNext = std::max ( m_tNext, tMin );
+	m_iRead = int(std::lower_bound ( m_dRows.begin()+m_iRead, m_dRows.begin()+m_iCount, tMin )-m_dRows.begin());
+	while ( !m_bDone )
+	{
+		if ( m_iRead==m_iCount )
+			m_bDone = !FillCandidates(uEnd);
+
+		if ( m_bDone || m_iRead==m_iCount || m_dRows[m_iRead]>=uEnd )
+			return {};
+
+		int iCount = std::min ( iCapacity, m_iCount-m_iRead );
+		while ( iCount && m_dRows[m_iRead+iCount-1]>=uEnd )
+			--iCount;
+
+		RowID_t * pRows = m_dRows.data()+m_iRead;
+		m_iRead += iCount;
+		if ( m_pFilter )
+			iCount = m_pFilter->SelectRows ( pRows, iCount );
+
+		if ( iCount )
+			return { pRows, iCount };
+	}
+
+	return {};
+}
+
+
+PostingQuorum_c::PostingQuorum_c ( int iThreshold ) : m_iThreshold(iThreshold)
+{
+	assert ( iThreshold>=1 && iThreshold<=32 );
+	Reset();
+}
+
+
+void PostingQuorum_c::Reset()
+{
+	m_iTerms = 0;
+	for ( int i=0; i<(m_iThreshold==2 ? 2 : 6); ++i )
+		std::fill_n ( m_dCounts[i], PostingWindow_t::WORDS, 0 );
+}
+
+
+void PostingQuorum_c::Add ( const DWORD * pBits )
+{
+	assert ( m_iTerms<32 );
+	++m_iTerms;
+	for ( int i=0; i<PostingWindow_t::WORDS; ++i )
+	{
+		DWORD uCarry = pBits[i];
+		if ( m_iThreshold==2 )
+		{
+			// Saturating two-clause count: seen once, and seen at least twice.
+			m_dCounts[1][i] |= m_dCounts[0][i] & uCarry;
+			m_dCounts[0][i] |= uCarry;
+		} else
+			for ( int j=0; uCarry; ++j )
+			{
+				DWORD uNext = m_dCounts[j][i] & uCarry;
+				m_dCounts[j][i] ^= uCarry;
+				uCarry = uNext;
+			}
+	}
+}
+
+
+bool PostingQuorum_c::Finish ( DWORD * pBits ) const
+{
+	DWORD uAny = 0;
+	for ( int i=0; i<PostingWindow_t::WORDS; ++i )
+	{
+		DWORD uMatch = m_dCounts[1][i];
+		if ( m_iThreshold!=2 )
+		{
+			DWORD uEqual = UINT32_MAX;
+			uMatch = 0;
+			for ( int j=5; j>=0; --j )
+				if ( m_iThreshold & (1<<j) )
+					uEqual &= m_dCounts[j][i];
+				else
+				{
+					uMatch |= uEqual & m_dCounts[j][i];
+					uEqual &= ~m_dCounts[j][i];
+				}
+
+			uMatch |= uEqual;
+		}
+
+		pBits[i] = uMatch;
+		uAny |= uMatch;
+	}
+
+	return uAny!=0;
 }

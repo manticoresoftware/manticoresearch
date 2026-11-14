@@ -611,6 +611,7 @@ void CSphDictKeywords::PutCheckpoint ( const CSphWordlistCheckpoint& tCheckpoint
 	m_wrDict.PutOffset ( tCheckpoint.m_iWordlistOffset );
 }
 
+
 bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphString& sError )
 {
 	if ( IsSorted() )
@@ -736,7 +737,7 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 		m_wrDict.ZipOffset ( tWord.m_uOff );
 		m_wrDict.ZipInt ( tWord.m_iDocs );
 		m_wrDict.ZipInt ( tWord.m_iHits );
-		if ( tWord.m_uHint )
+		if ( (tWord.m_iDocs & HITLESS_DOC_MASK)>=DOCLIST_HINT_THRESH )
 			m_wrDict.PutByte ( tWord.m_uHint );
 		if ( ( tWord.m_iDocs & HITLESS_DOC_MASK ) > m_iSkiplistBlockSize )
 			m_wrDict.ZipOffset ( tWord.m_iSkiplistPos );
@@ -770,6 +771,7 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 	}
 	return SortedDictEnd ( pHeader, sError );
 }
+
 
 bool CSphDictKeywords::SortedDictEnd ( DictHeader_t * pHeader, CSphString& sError )
 {
@@ -917,6 +919,7 @@ void CSphDictKeywords::DictFlush()
 	ResetDictChunks();
 }
 
+
 void CSphDictKeywords::DictEntry ( const DictEntry_t& tEntry )
 {
 	assert ( tEntry.m_iDocs );
@@ -967,7 +970,7 @@ void CSphDictKeywords::DictEntry ( const DictEntry_t& tEntry )
 	m_wrDict.ZipInt ( tEntry.m_iDocs );
 	m_wrDict.ZipInt ( tEntry.m_iHits );
 	auto uHint = sphDoclistHintPack ( tEntry.m_iDocs & HITLESS_DOC_MASK, tEntry.m_iDoclistLength );
-	if ( uHint )
+	if ( (tEntry.m_iDocs & HITLESS_DOC_MASK)>=DOCLIST_HINT_THRESH )
 		m_wrDict.PutByte ( uHint );
 	if ( ( tEntry.m_iDocs & HITLESS_DOC_MASK ) > m_iSkiplistBlockSize )
 		m_wrDict.ZipOffset ( tEntry.m_iSkiplistOffset );
@@ -980,6 +983,7 @@ void CSphDictKeywords::DictEntry ( const DictEntry_t& tEntry )
 			m_pFinalizer->m_pInfixer->AddWord ( (const BYTE*)tEntry.m_szKeyword, iLen, (int)iCheckpoint, HasMorphology() );
 	}
 }
+
 
 // non-sorted case - we push all entries into huge temporary file, and then finalize it in DictEnd()
 void CSphDictKeywords::DictEntryNonSorted ( const DictEntry_t& tEntry )

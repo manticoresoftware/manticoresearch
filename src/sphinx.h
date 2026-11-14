@@ -1273,7 +1273,7 @@ struct UpdateContext_t
 bool CheckStoredFields ( const CSphSchema & tSchema, const CSphIndexSettings & tSettings, CSphString & sError );
 
 class DiskIndexQwordTraits_c;
-DiskIndexQwordTraits_c * sphCreateDiskIndexQword ( bool bInlineHits );
+DiskIndexQwordTraits_c * sphCreateDiskIndexQword ( bool bInlineHits, bool bBlockPostings = false );
 
 /// returns ranker name as string
 const char * sphGetRankerName ( ESphRankMode eRanker );
@@ -1339,6 +1339,7 @@ public:
 	virtual void				Setup ( const CSphIndexSettings & tSettings );
 	const CSphIndexSettings &	GetSettings () const { return m_tSettings; }
 	virtual bool				IsRT() const { return false; }
+	virtual bool				ConvertPostings ( const CSphString & sOutput, CSphString & sError ) { sError = "convert one offline plain table/disk chunk at a time"; return false; }
 	virtual bool				IsPQ() const { return false; }
 	void						SetBinlog ( bool bBinlog ) { m_bBinlog = bBinlog; }
 	virtual int64_t *			GetFieldLens() const { return nullptr; }

@@ -278,6 +278,7 @@ jobs:
             build/test/rt_*/report*
             build/test/rtidx_*/report*
             build/test/col_*/report*
+            build/test/block_*/report*
 
       - name: Publish test results
         if: always() && github.repository_owner == 'manticoresoftware'

@@ -11,6 +11,7 @@
 //
 
 #include "indexsettings.h"
+#include "postings/stream.h"
 
 #include "sphinxstd.h"
 #include "sphinxint.h"
@@ -34,6 +35,7 @@
 
 static CreateFilenameBuilder_fn g_fnCreateFilenameBuilder = nullptr;
 static AttrEngine_e	g_eAttrEngine = AttrEngine_e::ROWWISE;
+static const char * g_szPostingsFormat = "legacy";
 
 void SetIndexFilenameBuilder ( CreateFilenameBuilder_fn pBuilder )
 {
@@ -1169,6 +1171,16 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 	m_iOvershortStep = Min ( Max ( hIndex.GetInt ( "overshort_step", 1 ), 0 ), 1 );
 	m_iStopwordStep = Min ( Max ( hIndex.GetInt ( "stopword_step", 1 ), 0 ), 1 );
 	m_iEmbeddedLimit = hIndex.GetSize ( "embedded_limit", 16384 );
+	const CSphString sType = hIndex.GetStr ( "type", "plain" );
+	const char * szDefaultPostings = ( sType=="plain" || sType=="rt" ) ? GetDefaultPostingsFormat() : "legacy";
+	const CSphString sPostings = hIndex.GetStr ( "postings_format", szDefaultPostings );
+	if ( sPostings!="legacy" && sPostings!="block" )
+	{
+		sError = "postings_format must be legacy or block";
+		return false;
+	}
+
+	m_uPostingsFormat = sPostings=="block" ? postings::COMPONENT_VERSION : 0;
 	m_bIndexFieldLens = hIndex.GetInt ( "index_field_lengths" )!=0;
 	m_sIndexTokenFilter = hIndex.GetStr ( "index_token_filter" );
 	m_tBlobUpdateSpace = hIndex.GetSize64 ( "attr_update_reserve", DEFAULT_ATTR_UPDATE_RESERVE );
@@ -1243,7 +1255,13 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 		sError.SetSprintf ( "table '%s': unknown dict=%s; only 'keywords', 'keywords_32k' or 'crc' values allowed", szIndexName, sIndexType.cstr() );
 		return false;
 	}
+
 	bool bWordDict = ( eDictFormat!=DictFormat_e::CRC );
+	if ( m_uPostingsFormat && !bWordDict )
+	{
+		sError = "postings_format=block requires dict=keywords or dict=keywords_32k; rebuild CRC tables from source";
+		return false;
+	}
 
 	if ( hIndex("type") && hIndex["type"]=="rt" && ( m_iMinInfixLen>0 || RawMinPrefixLen()>0 ) && !bWordDict )
 	{
@@ -1283,6 +1301,9 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 		else
 			sWarning.SetSprintf ( "unknown hit_format=%s, defaulting to inline", hIndex["hit_format"].cstr() );
 	}
+
+	if ( m_uPostingsFormat )
+		m_eHitFormat = SPH_HIT_FORMAT_PLAIN;
 
 	// hit-less indices
 	if ( hIndex("hitless_words") )
@@ -1387,6 +1408,7 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 	tOut.Add ( "html_index_attrs",		m_sHtmlIndexAttrs,		!m_sHtmlIndexAttrs.IsEmpty() );
 	tOut.Add ( "html_remove_elements",	m_sHtmlRemoveElements,	!m_sHtmlRemoveElements.IsEmpty() );
 	tOut.Add ( "index_zones",			m_sZones,				!m_sZones.IsEmpty() );
+	tOut.Add ( "postings_format", m_uPostingsFormat ? "block" : "legacy", m_uPostingsFormat!=0 || strcmp ( GetDefaultPostingsFormat(), "legacy" )!=0 );
 	tOut.Add ( "index_field_lengths",	1,						m_bIndexFieldLens );
 	tOut.Add ( "index_sp",				1,						m_bIndexSP );
 	tOut.Add ( "phrase_boundary_step",	m_iBoundaryStep,		m_iBoundaryStep!=0 );
@@ -1433,6 +1455,7 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 
 	DocstoreSettings_t::Format ( tOut, pFilenameBuilder );
 }
+
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -3659,6 +3682,7 @@ void LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings )
 	tSettings.m_bIndexExactWords = Bool ( tNode.ChildByName ( "index_exact_words" ) );
 	tSettings.m_eHitless = (ESphHitless)Int ( tNode.ChildByName ( "hitless" ), SPH_HITLESS_NONE );
 	tSettings.m_eHitFormat = (ESphHitFormat)Int ( tNode.ChildByName ( "hit_format" ), SPH_HIT_FORMAT_PLAIN );
+	tSettings.m_uPostingsFormat = (DWORD)Int ( tNode.ChildByName ( "postings_format" ) );
 	tSettings.m_bIndexSP = Bool ( tNode.ChildByName ( "index_sp" ) );
 	tSettings.m_sZones = String ( tNode.ChildByName ( "zones" ) );
 	tSettings.m_iBoundaryStep = (int)Int ( tNode.ChildByName ( "boundary_step" ) );
@@ -3786,6 +3810,7 @@ void operator << ( JsonEscapedBuilder & tOut, const CSphIndexSettings & tSetting
 	tOut.NamedValNonDefault ( "index_exact_words", tSettings.m_bIndexExactWords, false );
 	tOut.NamedValNonDefault ( "hitless", tSettings.m_eHitless, SPH_HITLESS_NONE );
 	tOut.NamedValNonDefault ( "hit_format", tSettings.m_eHitFormat, SPH_HIT_FORMAT_PLAIN );
+	tOut.NamedValNonDefault ( "postings_format", tSettings.m_uPostingsFormat );
 	tOut.NamedValNonDefault ( "index_sp", tSettings.m_bIndexSP, false );
 	tOut.NamedStringNonEmpty ( "zones", tSettings.m_sZones );
 	tOut.NamedValNonDefault ( "boundary_step", tSettings.m_iBoundaryStep );
@@ -3844,6 +3869,22 @@ AttrEngine_e CombineEngines ( AttrEngine_e eIndexEngine, AttrEngine_e eAttrEngin
 		eEngine = eAttrEngine;
 
 	return eEngine;
+}
+
+
+bool SetDefaultPostingsFormat ( const CSphString & sFormat )
+{
+	if ( sFormat!="legacy" && sFormat!="block" )
+		return false;
+
+	g_szPostingsFormat = sFormat=="block" ? "block" : "legacy";
+	return true;
+}
+
+
+const char * GetDefaultPostingsFormat()
+{
+	return g_szPostingsFormat;
 }
 
 

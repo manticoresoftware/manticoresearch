@@ -4,6 +4,8 @@
 <name>keywords_32k medium long tokens</name>
 
 <requires>
+	<!-- Checks settings/SHOW CREATE output for the legacy default. -->
+	<legacy_format/>
 <http/>
 </requires>
 

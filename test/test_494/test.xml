@@ -3,7 +3,9 @@
 
 <name>plain table direct query defaults from config</name>
 
-<requires><non-rt-indexer/></requires>
+<requires>
+	<!-- Checks settings/SHOW CREATE output for the legacy default. -->
+	<legacy_format/><non-rt-indexer/></requires>
 
 <config>
 indexer

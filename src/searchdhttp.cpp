@@ -2944,7 +2944,31 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 		return tRes;
 
 	pHandler->SetErrorFormat ( bNeedHttpResponse );
-	tRes.m_bOk = pHandler->Process();
+	const bool bJsonEndpoint = [&] {
+		switch ( tRes.m_eEndpoint )
+		{
+		case EHTTP_ENDPOINT::JSON_SEARCH:
+		case EHTTP_ENDPOINT::JSON_INDEX:
+		case EHTTP_ENDPOINT::JSON_CREATE:
+		case EHTTP_ENDPOINT::JSON_INSERT:
+		case EHTTP_ENDPOINT::JSON_REPLACE:
+		case EHTTP_ENDPOINT::JSON_UPDATE:
+		case EHTTP_ENDPOINT::JSON_DELETE:
+		case EHTTP_ENDPOINT::JSON_BULK:
+		case EHTTP_ENDPOINT::PQ:
+		case EHTTP_ENDPOINT::ES_BULK:
+		case EHTTP_ENDPOINT::TOTAL:
+			return true;
+		default:
+			return false;
+		}
+	} ();
+
+	// cJSON limits nesting to 1000 levels, so JSON handlers use a 1 MiB stack.
+	// Revisit this size if the parser or its nesting limit changes.
+	// Continue may run on another OS thread, so preserve the crash-query context.
+	auto fnProcess = Threads::WithCopiedCrashQuery ( [&] { tRes.m_bOk = pHandler->Process(); } );
+	Threads::Coro::Continue ( bJsonEndpoint ? 1024 * 1024 : -1, std::move ( fnProcess ) );
 	tRes.m_sError = pHandler->GetError();
 	tRes.m_eReplyHttpCode = pHandler->GetStatusCode();
 	// error with status code 403 Forbidden should not route into buddy

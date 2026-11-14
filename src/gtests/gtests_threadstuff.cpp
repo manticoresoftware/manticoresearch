@@ -15,6 +15,8 @@
 #include "task_dispatcher.h"
 
 #include <atomic>
+#include <future>
+#include "sphinxint.h"
 
 void SetStderrLogger ();
 
@@ -807,4 +809,95 @@ TEST ( CoroTimedWait, NotificationsRaceTimeouts )
 	EXPECT_GT ( iSignalled.load(), 0 ); // both outcomes must occur, otherwise nothing raced
 	EXPECT_GT ( iTimedOut.load(), 0 );
 	EXPECT_TRUE ( tQueue.Empty() );
+}
+
+TEST ( ThreadPool, CrashQueryIsThreadLocalAcrossContinuation )
+{
+	// Run the parent on one dedicated OS thread and its continuation on another.
+	// This avoids relying on a thread-pool race to reproduce lost TLS context.
+	class HandoffScheduler_c final : public Threads::Scheduler_i
+	{
+		Threads::Worker_i & m_tParent;
+		Threads::Worker_i & m_tContinuation;
+
+	public:
+		HandoffScheduler_c ( Threads::Worker_i & tParent, Threads::Worker_i & tContinuation )
+			: m_tParent ( tParent ), m_tContinuation ( tContinuation ) {}
+
+		void ScheduleOp ( Threads::details::SchedulerOperation_t * pOp, bool bVip ) noexcept final
+		{
+			m_tParent.ScheduleOp ( pOp, bVip );
+		}
+
+		void ScheduleContinuationOp ( Threads::details::SchedulerOperation_t * pOp ) noexcept final
+		{
+			m_tContinuation.ScheduleContinuationOp ( pOp );
+		}
+
+		Threads::Keeper_t KeepWorking () noexcept final { return m_tParent.KeepWorking(); }
+	};
+
+	auto pParent = Threads::MakeThreadPool ( 1, "crash-query-parent" );
+	auto pContinuation = Threads::MakeThreadPool ( 1, "crash-query-continuation" );
+	HandoffScheduler_c tScheduler { *pParent, *pContinuation };
+
+	static const char szQuery[] = "crash-query-handoff-test";
+	struct Result_t
+	{
+		int m_iParentThread = 0;
+		int m_iContinuationThread = 0;
+		bool m_bQueryPreserved = false;
+	};
+
+	auto fnRun = [&] ( bool bCopyCrashQuery )
+	{
+		// The continuation thread deliberately starts with unrelated query data.
+		std::promise<void> tPoisoned;
+		auto tPoisonedFuture = tPoisoned.get_future();
+		pContinuation->Schedule ( [&] {
+			auto & tCrash = GlobalCrashQueryGetRef();
+			tCrash.m_eType = QUERY_SQL;
+			tCrash.m_dQuery = {};
+			tPoisoned.set_value();
+		}, false );
+		tPoisonedFuture.get();
+
+		std::promise<Result_t> tDone;
+		auto tDoneFuture = tDone.get_future();
+		Threads::Coro::Go ( [&] {
+			Result_t tResult;
+			tResult.m_iParentThread = GetOsThreadId();
+
+			auto & tCrash = GlobalCrashQueryGetRef();
+			tCrash.m_eType = QUERY_JSON;
+			tCrash.m_dQuery = { (const BYTE *)szQuery, sizeof(szQuery)-1 };
+
+			Threads::Handler fnCheck = [&] {
+				auto & tCurrent = GlobalCrashQueryGetRef();
+				tResult.m_iContinuationThread = GetOsThreadId();
+				tResult.m_bQueryPreserved = tCurrent.m_eType==QUERY_JSON
+					&& tCurrent.m_dQuery.first==(const BYTE *)szQuery
+					&& tCurrent.m_dQuery.second==sizeof(szQuery)-1;
+			};
+			if ( bCopyCrashQuery )
+				fnCheck = Threads::WithCopiedCrashQuery ( std::move ( fnCheck ) );
+
+			Threads::Coro::Continue ( std::move ( fnCheck ), 1024 * 1024 );
+			tDone.set_value ( tResult );
+		}, &tScheduler );
+		return tDoneFuture.get();
+	};
+
+	// Negative control: without propagation, the other thread sees its own TLS.
+	const auto tWithoutCopy = fnRun ( false );
+	EXPECT_NE ( tWithoutCopy.m_iParentThread, tWithoutCopy.m_iContinuationThread );
+	EXPECT_FALSE ( tWithoutCopy.m_bQueryPreserved );
+
+	// WithCopiedCrashQuery copies the active query into the continuation's TLS.
+	const auto tWithCopy = fnRun ( true );
+	EXPECT_NE ( tWithCopy.m_iParentThread, tWithCopy.m_iContinuationThread );
+	EXPECT_TRUE ( tWithCopy.m_bQueryPreserved );
+
+	pParent->StopAll();
+	pContinuation->StopAll();
 }

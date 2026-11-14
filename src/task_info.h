@@ -122,22 +122,6 @@ void DestroyTaskInfo ( void * pSrc )
 	ReleaseTaskInfo ( pParent );
 }
 
-// A copyable owner for task info carried by std::function to a scheduled coroutine.
-class TaskInfoRef_c
-{
-	TaskInfo_t * m_pInfo = nullptr;
-
-public:
-	explicit TaskInfoRef_c ( TaskInfo_t * pInfo = nullptr ) : m_pInfo ( pInfo ) { RetainTaskInfo ( m_pInfo ); }
-	TaskInfoRef_c ( const TaskInfoRef_c & rhs ) : TaskInfoRef_c ( rhs.m_pInfo ) {}
-	TaskInfoRef_c ( TaskInfoRef_c && rhs ) noexcept : m_pInfo ( std::exchange ( rhs.m_pInfo, nullptr ) ) {}
-	TaskInfoRef_c & operator= ( const TaskInfoRef_c & ) = delete;
-	TaskInfoRef_c & operator= ( TaskInfoRef_c && ) = delete;
-	~TaskInfoRef_c () { ReleaseTaskInfo ( m_pInfo ); }
-
-	TaskInfo_t * Get () const { return m_pInfo; }
-};
-
 struct RefCount_t {
 	static void Inc ( BYTE eType );
 	static void Dec ( BYTE eType );

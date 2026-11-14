@@ -37,6 +37,7 @@ concurrency:
 # as these PRs only update dependency versions and don't require full builds/tests
 jobs:
   meta:
+    if: ${{ github.event_name != 'pull_request' || github.head_ref != 'ci/repro-4678-10x' }}
     name: Meta
     runs-on: ubuntu-22.04
     outputs:
@@ -1208,7 +1209,7 @@ jobs:
       - build_aarch64
       - clt
       - meta
-    if: always()
+    if: ${{ always() && (github.event_name != 'pull_request' || github.head_ref != 'ci/repro-4678-10x') }}
     runs-on: ubuntu-22.04
     steps:
       - name: Fail if any required job failed

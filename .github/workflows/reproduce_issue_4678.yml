@@ -1,0 +1,218 @@
+name: 'CLT #4678: 10-run reproduction'
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build_searchd:
+    name: Build patched Linux searchd
+    uses: ./.github/workflows/build_template.yml
+    secrets: inherit
+    with:
+      artifact_name: clt-4678-patched-searchd
+      cache_key: build_linux_release_tests_x86_64
+      artifact_list: "build/src/searchd"
+      cmake_command: |
+        export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
+        export MCL_LOCAL_RUNTIME=OFF
+        ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
+        ./build/src/gtests/gmanticoretest --gtest_filter=ThreadPool.TaskInfoParentLifetime
+
+  patched_image:
+    name: Install patched searchd in known-failing test image
+    needs: [build_searchd]
+    runs-on: ubuntu-22.04
+    outputs:
+      image: ${{ steps.publish.outputs.image }}
+    steps:
+      - name: Download patched searchd
+        uses: actions/download-artifact@v7
+        with:
+          name: clt-4678-patched-searchd
+      - name: Unpack build artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -xf artifact.tar
+          test -x build/src/searchd
+          file build/src/searchd
+      - name: Publish patched test image
+        id: publish
+        shell: bash
+        env:
+          GHCR_USER: ${{ vars.GHCR_USER || github.actor }}
+          GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD || github.token }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REF_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          base='ghcr.io/manticoresoftware/manticoresearch:test-kit-ci-ef2bec58593d167ca67ee38107a10ee7c5c3da5e'
+          image="ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-4678-fixed-${REF_SHA}"
+          docker pull "$base"
+          cp build/src/searchd searchd
+          cat > Dockerfile <<EOF
+          FROM $base
+          COPY --chmod=755 searchd /usr/bin/searchd
+          EOF
+          docker build --pull=false -t "$image" .
+          docker run --rm --entrypoint /usr/bin/searchd "$image" --version
+          echo "$GHCR_PASSWORD" | docker login -u "$GHCR_USER" --password-stdin ghcr.io
+          docker push "$image"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+  reproduce:
+    needs: [patched_image]
+    # This is a temporary experiment, limited to its own PR branch.
+    if: ${{ github.head_ref == 'ci/repro-4678-10x' }}
+    name: 'Reproduce #4678 (run ${{ matrix.attempt }}/10)'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        attempt: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    steps:
+      - name: Prepare diagnostics directory
+        run: mkdir -p "${{ runner.temp }}/clt-4678-diagnostics" && chmod 777 "${{ runner.temp }}/clt-4678-diagnostics"
+
+      - name: Run the regression test
+        id: clt
+        uses: manticoresoftware/clt@main
+        continue-on-error: true
+        with:
+          # Same test-kit environment, but with searchd built from this PR.
+          image: ${{ needs.patched_image.outputs.image }}
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          # Repeat the exact CLT test ten times in each of ten independent jobs.
+          tests: '["test/clt-tests/bugs/4678-show-threads-queryinfo-uaf","test/clt-tests/bugs/4678-show-threads-queryinfo-uaf","test/clt-tests/bugs/4678-show-threads-queryinfo-uaf","test/clt-tests/bugs/4678-show-threads-queryinfo-uaf","test/clt-tests/bugs/4678-show-threads-queryinfo-uaf","test/clt-tests/bugs/4678-show-threads-queryinfo-uaf","test/clt-tests/bugs/4678-show-threads-queryinfo-uaf","test/clt-tests/bugs/4678-show-threads-queryinfo-uaf","test/clt-tests/bugs/4678-show-threads-queryinfo-uaf","test/clt-tests/bugs/4678-show-threads-queryinfo-uaf"]'
+          comment_mode: none
+          timeout: 5
+          run_args: "-v ${{ runner.temp }}/clt-4678-diagnostics:/tmp/clt-4678-diagnostics"
+
+      - name: Record this run's outcome
+        if: ${{ always() }}
+        shell: bash
+        env:
+          RESULT_FILE: ${{ steps.clt.outputs.test-results }}
+          CLT_OUTCOME: ${{ steps.clt.outcome }}
+          ATTEMPT: ${{ matrix.attempt }}
+        run: |
+          set -euo pipefail
+          passed=0
+          failed=0
+          if [[ -n "$RESULT_FILE" && -f "$RESULT_FILE" ]]; then
+            passed="$(jq -s --arg test 'test/clt-tests/bugs/4678-show-threads-queryinfo-uaf.rec' \
+              '[.[] | select(.test == $test and .status == "passed")] | length' "$RESULT_FILE")"
+            failed="$(jq -s --arg test 'test/clt-tests/bugs/4678-show-threads-queryinfo-uaf.rec' \
+              '[.[] | select(.test == $test and .status == "failed")] | length' "$RESULT_FILE")"
+          fi
+          other="$((10 - passed - failed))"
+          jq -cn --argjson attempt "$ATTEMPT" --argjson passed "$passed" \
+            --argjson failed "$failed" --argjson other "$other" \
+            --arg action_outcome "$CLT_OUTCOME" \
+            '{attempt: $attempt, passed: $passed, failed: $failed, other: $other, action_outcome: $action_outcome}' > "run-$ATTEMPT.json"
+          cat "run-$ATTEMPT.json"
+
+      - name: Make crash log readable for artifact upload
+        if: ${{ always() }}
+        run: sudo chmod -R a+rX "${{ runner.temp }}/clt-4678-diagnostics" || true
+
+      - name: Upload complete searchd.log on failure
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: clt-4678-searchd-${{ matrix.attempt }}
+          path: ${{ runner.temp }}/clt-4678-diagnostics/searchd.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload result
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: clt-4678-run-${{ matrix.attempt }}
+          path: run-${{ matrix.attempt }}.json
+          if-no-files-found: error
+          retention-days: 7
+
+  summary:
+    name: 'Result: failures out of 10'
+    needs: [reproduce]
+    if: ${{ always() && github.head_ref == 'ci/repro-4678-10x' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download run results
+        uses: actions/download-artifact@v7
+        with:
+          pattern: clt-4678-run-*
+          path: results
+          merge-multiple: true
+
+      - name: Summarize all attempts
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(results/run-*.json)
+          count="${#files[@]}"
+          if (( count == 0 )); then
+            echo "No results were uploaded." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          passed="$(jq -s '[.[].passed] | add // 0' "${files[@]}")"
+          failed="$(jq -s '[.[].failed] | add // 0' "${files[@]}")"
+          other="$(jq -s '[.[].other] | add // 0' "${files[@]}")"
+          {
+            echo '## Issue #4678 — 100-run post-fix stress test'
+            echo
+            echo "**Passed: ${passed} / 100; failed: ${failed} / 100; incomplete/other: ${other} / 100.**"
+            echo
+            echo '| Job | Passed | Failed | Other | CLT step outcome |'
+            echo '| ---: | ---: | ---: | ---: | --- |'
+            jq -sr 'sort_by(.attempt)[] | "| \(.attempt) | \(.passed) | \(.failed) | \(.other) | \(.action_outcome) |"' "${files[@]}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          (( count == 10 && passed == 100 && other == 0 && failed == 0 ))
+
+  symbolize:
+    name: 'Locate GatherPublicTaskInfo +0x50 in searchd'
+    needs: [patched_image]
+    if: ${{ github.head_ref == 'ci/repro-4678-10x' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Disassemble the patched binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='${{ needs.patched_image.outputs.image }}'
+          docker pull "$image"
+          container="$(docker create --entrypoint /bin/true "$image")"
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          docker cp "$container:/usr/bin/searchd" ./searchd
+          file ./searchd
+          symbol='_Z20GatherPublicTaskInfoR18PublicThreadDesc_tRKSt6atomicIPvE'
+          nm -D -C ./searchd | grep 'GatherPublicTaskInfo' || true
+          objdump -d --disassemble="$symbol" ./searchd > gather-disassembly.txt
+          {
+            echo '## GatherPublicTaskInfo disassembly'
+            echo
+            echo 'SIGSEGV offset from crash: +0x50'
+            echo
+            echo '~~~asm'
+            sed -n '1,180p' gather-disassembly.txt
+            echo '~~~'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload disassembly
+        uses: actions/upload-artifact@v6
+        with:
+          name: clt-4678-gatherpublictaskinfo-fixed-assembly
+          path: gather-disassembly.txt
+          if-no-files-found: error
+          retention-days: 14

@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include "threadutils.h"
+#include "task_info.h"
 #include "coroutine.h"
 #include "task_dispatcher.h"
 
@@ -66,6 +67,42 @@ TEST ( ThreadPool, Counter100c )
 {
 	for (auto i=0; i<100; ++i)
 		Counter100c();
+}
+
+// A coroutine may start after the scope that created it has exited. The queued
+// handler must retain its entire task-info ancestry, including the grandparent.
+TEST ( ThreadPool, TaskInfoParentLifetime )
+{
+	Threads::CallCoroutine ( [] {
+		using namespace Threads;
+		Handler fnDelayed;
+		auto * pOriginal = static_cast<TaskInfo_t *> ( MyThd().m_pTaskInfo.load ( std::memory_order_acquire ) );
+		TaskInfo_t * pOuter = nullptr;
+		TaskInfo_t * pInner = nullptr;
+		{
+			ScopedMiniInfo_t tOuter ( new MiniTaskInfo_t );
+			pOuter = tOuter.operator->();
+			{
+				ScopedMiniInfo_t tInner ( new MiniTaskInfo_t );
+				pInner = tInner.operator->();
+				fnDelayed = myinfo::StickParent ( [&] {
+					EXPECT_EQ ( myinfo::HazardTaskInfo(), pInner );
+					EXPECT_EQ ( pInner->m_pPrev.load ( std::memory_order_relaxed ), pOuter );
+					PublicThreadDesc_t tDesc;
+					GatherPublicTaskInfo ( tDesc, MyThd().m_pTaskInfo );
+				} );
+			}
+		}
+
+		ASSERT_TRUE ( fnDelayed );
+		EXPECT_EQ ( pInner->m_iOwners.load ( std::memory_order_acquire ), 1 );
+		EXPECT_EQ ( pOuter->m_iOwners.load ( std::memory_order_acquire ), 1 );
+		fnDelayed();
+		// StickParent normally runs under CoroGuard, which restores this root.
+		// This direct unit test must do that before dropping the last owner.
+		MyThd().m_pTaskInfo.store ( pOriginal, std::memory_order_release );
+		fnDelayed = {};
+	} );
 }
 
 const char* SH()

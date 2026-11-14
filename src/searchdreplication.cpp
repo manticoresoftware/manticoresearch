@@ -607,7 +607,9 @@ bool ReplicationCluster_t::DonateSST ( CSphString sJoiner, const Wsrep::GlobalTi
 		tGtid.m_iSeqNo = Wsrep::WRONG_SEQNO;
 	}
 
-	m_pProvider->SstSent ( tGtid, bOk );
+	// on shutdown a failed SST is not reported: Galera aborts the joiner on such a report; the donor just leaves the group
+	if ( bOk || !sphInterrupted() )
+		m_pProvider->SstSent ( tGtid, bOk );
 
 	sphLogDebugRpl ( "donate cluster %s to %s, gtid %s, bypass %d, done %d", m_sName.cstr(), sJoiner.cstr(), Wsrep::Gtid2Str ( tGtid ).cstr(), (int)bBypass, (int)bOk );
 	return bOk;
@@ -3049,6 +3051,9 @@ bool SendClusterIndexes ( ReplicationCluster_t * pCluster, const CSphString & sN
 	tSyncedRequest.m_iClusterEpoch = pCluster->m_iClusterEpoch;
 	tSyncedRequest.m_bSendFilesSuccess = bSentOk;
 	tSyncedRequest.m_sMsg = TlsMsg::MoveToString();
+	// on shutdown a request to the agents never completes
+	if ( sphInterrupted() )
+		return TlsMsg::Err ( "daemon shutdown" );
 	bool bSyncOk = SendClusterSynced ( dDesc, tSyncedRequest, pCluster->m_sUser );
 	return bSentOk && bSyncOk;
 }

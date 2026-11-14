@@ -142,6 +142,8 @@ Empty set (0.00 sec)
 <!-- example any_json -->
 `ANY(cond FOR var IN json.array)` 应用于 JSON 数组，并返回如果数组中的任何元素满足条件则为 1，否则为 0。`cond` 是一个通用表达式，也可以使用 `var` 表示当前数组元素的值。
 
+注意：当 JSON 属性具有[二级索引](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#json_secondary_indexes)时，如果 `ANY()` 的 `cond` 将 `var` 与常量进行比较，则可通过二级索引处理该过滤条件。二级索引无法区分数组和单个值，因此也会返回键值为单个值且满足 `cond` 的文档；而不使用二级索引时，`ANY()` 对这些文档返回 0。如果该键在某些文档中存储单个值，在另一些文档中存储数组，请使用 `IN()`（无论是否使用二级索引，它都会将单个值视为仅含一个元素的数组），或使用 `/*+ NO_SecondaryIndex(json['key']) */` 提示。
+
 <!-- request ANY() with json -->
 ```sql
 select *, ANY(x>5 AND x<10 FOR x IN j.ar) from tbl

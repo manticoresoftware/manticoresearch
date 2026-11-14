@@ -9,8 +9,24 @@
 //
 
 #include "killlist.h"
-
 #include "sphinxint.h"
+#include "std/bitmap/bitmap.h"
+
+void DeadRowMap_Disk_c::MaskAlive ( RowID_t tBase, DWORD * pBits, int iWords ) const
+{
+	assert ( !(tBase&31) && iWords>=0 );
+	const uint64_t uRows = tBase<m_uRows ? uint64_t(m_uRows)-tBase : 0;
+	const int iLiveWords = int ( Min ( uint64_t(iWords), (uRows+31)/32 ) );
+	if ( m_bHaveDead && iLiveWords )
+		bitmap::AndNot ( pBits, pBits, m_tData.GetReadPtr()+(tBase>>5), iLiveWords );
+
+	if ( iLiveWords && uRows<uint64_t(iLiveWords)*32 )
+		pBits[iLiveWords-1] &= (DWORD(1)<<(uRows&31))-1;
+
+	for ( int i=iLiveWords; i<iWords; ++i )
+		pBits[i] = 0;
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 

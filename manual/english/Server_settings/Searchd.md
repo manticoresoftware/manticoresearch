@@ -16,13 +16,13 @@ The `access_blob_attrs` directive allows you to define the default value of [acc
 
 ### access_doclists
 
-This setting sets instance-wide defaults for [access_doclists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). It is optional, with a default value of `file`.
+This setting sets instance-wide defaults for [access_doclists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). It is optional, with a default value of `mmap`.
 
 The `access_doclists` directive allows you to define the default value of [access_doclists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) for all tables managed by this searchd instance. Per-table directives have higher priority and will override this instance-wide default, providing more fine-grained control.
 
 ### access_hitlists
 
-This setting sets instance-wide defaults for [access_hitlists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). It is optional, with a default value of `file`.
+This setting sets instance-wide defaults for [access_hitlists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files). It is optional, with a default value of `mmap`.
 
 The `access_hitlists` directive allows you to define the default value of [access_hitlists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) for all tables managed by this searchd instance. Per-table directives have higher priority and will override this instance-wide default, providing more fine-grained control.
 

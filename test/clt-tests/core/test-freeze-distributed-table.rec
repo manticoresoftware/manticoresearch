@@ -1,0 +1,42 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE rt_for_freeze (title text); CREATE TABLE dist_for_freeze type='distributed' local='rt_for_freeze'; INSERT INTO rt_for_freeze VALUES (1, 'hello');"
+––– output –––
+––– input –––
+mysql --no-defaults -h0 -P9306 -BN -e "FREEZE dist_for_freeze, rt_for_freeze; SHOW WARNINGS" >/tmp/freeze-distributed-result
+grep -q '/rt_for_freeze.meta' /tmp/freeze-distributed-result && echo "local files: OK"
+grep '^warning' /tmp/freeze-distributed-result
+––– output –––
+local files: OK
+warning	1000	Some tables are not suitable for freezing: dist_for_freeze
+––– input –––
+mysql --no-defaults -h0 -P9306 -BN -e "SHOW LOCKS; SHOW TABLE rt_for_freeze STATUS LIKE 'locked'"
+––– output –––
+rt	rt_for_freeze	freeze	Count: 1
+locked	1
+––– input –––
+mysql --no-defaults -h0 -P9306 -BN -e "UNFREEZE dist_for_freeze, rt_for_freeze; SHOW LOCKS; SHOW TABLE rt_for_freeze STATUS LIKE 'locked'"
+––– output –––
+locked	0
+––– input –––
+mysql --no-defaults -h0 -P9306 -BN -e "FREEZE dist_for_freeze; SHOW WARNINGS; SHOW TABLE rt_for_freeze STATUS LIKE 'locked'"
+––– output –––
+warning	1000	Some tables are not suitable for freezing: dist_for_freeze
+locked	0
+––– input –––
+mysql --no-defaults -h0 -P9306 -BN -e "FREEZE no_such_table; SHOW WARNINGS"
+––– output –––
+warning	1000	Some tables are not suitable for freezing: no_such_table
+––– input –––
+mysql --no-defaults -h0 -P9306 -BN -e "FREEZE rt_for_freeze, no_such_table, dist_for_freeze; SHOW WARNINGS" >/tmp/freeze-distributed-result
+grep -q '/rt_for_freeze.meta' /tmp/freeze-distributed-result && echo "local files: OK"
+grep '^warning' /tmp/freeze-distributed-result
+––– output –––
+local files: OK
+warning	1000	Some tables are not suitable for freezing: no_such_table, dist_for_freeze
+––– input –––
+mysql --no-defaults -h0 -P9306 -BN -e "SHOW TABLE rt_for_freeze STATUS LIKE 'locked'; UNFREEZE rt_for_freeze, no_such_table, dist_for_freeze; SHOW LOCKS; SHOW TABLE rt_for_freeze STATUS LIKE 'locked'; SELECT id, title FROM dist_for_freeze"
+––– output –––
+locked	1
+locked	0
+1	hello

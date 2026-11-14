@@ -111,31 +111,36 @@ def check(binary, budget, expect_cache):
             assert db.used() == 0
             # Repeated sparse batches trigger bounded construction. The first
             # query only records demand; readers keep falling back until sealed.
-            warm_clause = ",".join(str(i * 154 + 2) for i in range(129))
+            candidates = [i * 154 + 2 for i in range(129)]
+            warm_clause = ",".join(map(str, candidates))
             dense_clause = ",".join(str(i * 2 + 2) for i in range(512))
             for _ in range(3):
                 assert db.sql(f"SELECT count(*) AS n FROM docs WHERE id IN ({warm_clause}) /*+ NO_DocidIndex(id) */")["data"] == [{"n": 129}]
                 assert db.sql(f"SELECT count(*) AS n FROM docs WHERE id IN ({dense_clause})")["data"] == [{"n": 512}]
             assert db.used() == 0
+            # MCL can precompute COUNT(*) without planning a lookup. Return IDs
+            # so admission and plan checks exercise the native batch path too.
+            expected = [{"id": i} for i in candidates]
             for _ in range(6):
-                assert db.sql(f"SELECT count(*) AS n FROM docs WHERE id IN ({warm_clause})")["data"] == [{"n": 129}]
+                assert db.sql(f"SELECT id FROM docs WHERE id IN ({warm_clause}) ORDER BY id ASC LIMIT 129")["data"] == expected
             used = db.used()
             assert (used > 0) == expect_cache, (budget, used)
             assert used <= limit
-            # Automatic planning must see cache admission, including when a
-            # budget refuses the chunk. Explicit hints remain authoritative.
-            candidates = [i * 154 + 2 for i in range(129)]
+            # MCL may provide a cheaper secondary index; explicit lookup hints
+            # must remain authoritative with admitted and refused caches alike.
             clause = ",".join(map(str, candidates + [3, candidates[15]]))
             for suffix in ("", " /*+ DocidIndex(id) */", " /*+ NO_DocidIndex(id) */"):
                 result, meta = db.sql_all(
-                    f"SELECT count(*) AS n FROM docs WHERE id IN ({clause}){suffix}; SHOW META"
+                    f"SELECT id FROM docs WHERE id IN ({clause}) ORDER BY id ASC LIMIT 129{suffix}; SHOW META"
                 )
-                assert result["data"] == [{"n": 129}], result
+                assert result["data"] == expected, result
                 plan = [row["Value"] for row in meta["data"] if row["Variable_name"] == "index"]
                 if "NO_DocidIndex" in suffix:
                     assert not any("DocidIndex" in value for value in plan), plan
-                elif expect_cache or suffix:
+                elif suffix:
                     assert any("DocidIndex" in value for value in plan), plan
+                elif expect_cache:
+                    assert any("DocidIndex" in value or "SecondaryIndex" in value for value in plan), plan
             for predicate in (f"MATCH('document') AND id IN ({clause})",
                               f"id IN ({clause}) OR value=987654"):
                 assert db.sql(f"SELECT count(*) AS n FROM docs WHERE {predicate}")["data"] == [{"n": 129}]

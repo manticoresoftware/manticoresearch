@@ -41,6 +41,10 @@ loopback servers/temporary data. It checks default, zero, refused and admitted c
 budgets, automatic/explicit plans, sparse batches and tails, missing/repeated/
 dead IDs, lazy allocation, UPDATE, REPLACE, ALTER, restart and DROP/reclamation. It requires
 Python 3.8+ and is invoked explicitly, independently of UberTest/CLT.
+Batch warmup and plan checks return IDs: with MCL installed, a filtered
+`COUNT(*)` can use a precomputed secondary-index count without planning a lookup.
+Automatic plans may prefer MCL's secondary index; explicit DocID lookup hints
+must still be honored with both admitted and refused native cache budgets.
 
 Performance reports should identify both binaries and the workload, distinguish
 lookup kernel throughput from SQL QPS, include negative/control cases, and

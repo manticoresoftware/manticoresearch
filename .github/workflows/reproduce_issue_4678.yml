@@ -22,6 +22,7 @@ jobs:
         export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
         export MCL_LOCAL_RUNTIME=OFF
         ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
+        ./build/src/gtests/gmanticoretest --gtest_filter=ThreadPool.TaskInfoParentLifetime
 
   patched_image:
     name: Install patched searchd in known-failing test image
@@ -89,7 +90,8 @@ jobs:
           image: ${{ needs.patched_image.outputs.image }}
           repository: ${{ github.repository }}
           ref: ${{ github.event.pull_request.head.sha }}
-          tests: '["test/clt-tests/bugs/4678-show-threads-queryinfo-uaf"]'
+          # Repeat the exact CLT test ten times in each of ten independent jobs.
+          tests: '["test/clt-tests/bugs/4678-show-threads-queryinfo-uaf","test/clt-tests/bugs/4678-show-threads-queryinfo-uaf","test/clt-tests/bugs/4678-show-threads-queryinfo-uaf","test/clt-tests/bugs/4678-show-threads-queryinfo-uaf","test/clt-tests/bugs/4678-show-threads-queryinfo-uaf","test/clt-tests/bugs/4678-show-threads-queryinfo-uaf","test/clt-tests/bugs/4678-show-threads-queryinfo-uaf","test/clt-tests/bugs/4678-show-threads-queryinfo-uaf","test/clt-tests/bugs/4678-show-threads-queryinfo-uaf","test/clt-tests/bugs/4678-show-threads-queryinfo-uaf"]'
           comment_mode: none
           timeout: 5
           run_args: "-v ${{ runner.temp }}/clt-4678-diagnostics:/tmp/clt-4678-diagnostics"
@@ -103,15 +105,19 @@ jobs:
           ATTEMPT: ${{ matrix.attempt }}
         run: |
           set -euo pipefail
-          status=missing
+          passed=0
+          failed=0
           if [[ -n "$RESULT_FILE" && -f "$RESULT_FILE" ]]; then
-            status="$(jq -r --arg test 'test/clt-tests/bugs/4678-show-threads-queryinfo-uaf.rec' \
-              'select(.test == $test) | .status // empty' "$RESULT_FILE" | tail -n 1)" || true
+            passed="$(jq -s --arg test 'test/clt-tests/bugs/4678-show-threads-queryinfo-uaf.rec' \
+              '[.[] | select(.test == $test and .status == "passed")] | length' "$RESULT_FILE")"
+            failed="$(jq -s --arg test 'test/clt-tests/bugs/4678-show-threads-queryinfo-uaf.rec' \
+              '[.[] | select(.test == $test and .status == "failed")] | length' "$RESULT_FILE")"
           fi
-          [[ -n "$status" ]] || status=missing
-          jq -cn --argjson attempt "$ATTEMPT" --arg status "$status" \
+          other="$((10 - passed - failed))"
+          jq -cn --argjson attempt "$ATTEMPT" --argjson passed "$passed" \
+            --argjson failed "$failed" --argjson other "$other" \
             --arg action_outcome "$CLT_OUTCOME" \
-            '{attempt: $attempt, status: $status, action_outcome: $action_outcome}' > "run-$ATTEMPT.json"
+            '{attempt: $attempt, passed: $passed, failed: $failed, other: $other, action_outcome: $action_outcome}' > "run-$ATTEMPT.json"
           cat "run-$ATTEMPT.json"
 
       - name: Make crash log readable for artifact upload
@@ -160,19 +166,19 @@ jobs:
             echo "No results were uploaded." >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          passed="$(jq -s '[.[] | select(.status == "passed")] | length' "${files[@]}")"
-          failed="$(jq -s '[.[] | select(.status == "failed")] | length' "${files[@]}")"
-          other="$(jq -s '[.[] | select(.status != "passed" and .status != "failed")] | length' "${files[@]}")"
+          passed="$(jq -s '[.[].passed] | add // 0' "${files[@]}")"
+          failed="$(jq -s '[.[].failed] | add // 0' "${files[@]}")"
+          other="$(jq -s '[.[].other] | add // 0' "${files[@]}")"
           {
-            echo '## Issue #4678 — 10-run reproduction'
+            echo '## Issue #4678 — 100-run post-fix stress test'
             echo
-            echo "**Passed: ${passed} / 10; failed: ${failed} / 10; incomplete/other: ${other} / 10.**"
+            echo "**Passed: ${passed} / 100; failed: ${failed} / 100; incomplete/other: ${other} / 100.**"
             echo
-            echo '| Run | Test status | CLT step outcome |'
-            echo '| ---: | --- | --- |'
-            jq -sr 'sort_by(.attempt)[] | "| \(.attempt) | \(.status) | \(.action_outcome) |"' "${files[@]}"
+            echo '| Job | Passed | Failed | Other | CLT step outcome |'
+            echo '| ---: | ---: | ---: | ---: | --- |'
+            jq -sr 'sort_by(.attempt)[] | "| \(.attempt) | \(.passed) | \(.failed) | \(.other) | \(.action_outcome) |"' "${files[@]}"
           } >> "$GITHUB_STEP_SUMMARY"
-          (( count == 10 && other == 0 && failed == 0 ))
+          (( count == 10 && passed == 100 && other == 0 && failed == 0 ))
 
   symbolize:
     name: 'Locate GatherPublicTaskInfo +0x50 in searchd'

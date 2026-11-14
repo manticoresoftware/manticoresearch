@@ -13,6 +13,8 @@
 
 #include "secondaryindex.h"
 #include "uuid_docid.h"
+#include "docidlookupcache.h"
+#include <atomic>
 
 class CSphWriter;
 
@@ -80,10 +82,16 @@ private:
 class LookupReader_c
 {
 public:
-			LookupReader_c() = default;
+			LookupReader_c();
 			LookupReader_c ( const BYTE * pData, DWORD uIndexVersion );
+			~LookupReader_c();
 
 	std::pair<SphOffset_t,DWORD> SetData ( const BYTE * pData, DWORD uIndexVersion );
+	bool BuildCache ( DWORD uIndexVersion ); // before publishing the owning chunk
+	void PrepareCache ( size_t nValues, DWORD uIndexVersion ) const;
+	bool HasCache() const { return m_pCache.load(std::memory_order_acquire)!=nullptr; }
+	size_t GetCacheBytes() const { return m_nCacheBytes.load(std::memory_order_relaxed); }
+	void FindBatch ( const uint64_t * pDocIDs, RowID_t * pRows, size_t nQueries ) const;
 
 	inline RowID_t Find ( DocID_t tDocID ) const
 	{
@@ -98,7 +106,8 @@ public:
 		DocID_t tCurDocID = pFound->m_tBaseDocID;
 
 		// 1st entry doesnt have docid
-		RowID_t tRowID = sphUnalignedRead ( *(const RowID_t*)pCur );
+		RowID_t tRowID;
+		memcpy ( &tRowID, pCur, sizeof(tRowID) );
 		pCur += sizeof(RowID_t);
 
 		if ( tCurDocID==tDocID )
@@ -108,7 +117,7 @@ public:
 		for ( int i = 1; i < iDocsInCheckpoint; ++i )
 		{
 			uint64_t tDeltaDocID = UnzipOffsetBE(pCur);
-			tRowID = sphUnalignedRead ( *(const RowID_t*)pCur );
+			memcpy ( &tRowID, pCur, sizeof(tRowID) );
 			pCur += sizeof(RowID_t);
 
 			tCurDocID += tDeltaDocID;
@@ -163,6 +172,15 @@ protected:
 		int iLeftover = m_nDocs % m_nDocsPerCheckpoint;
 		return iLeftover ? iLeftover : m_nDocsPerCheckpoint;
 	}
+
+private:
+	struct CacheBuild_t;
+	enum class CacheState_e : uint8_t { COLD, SEEN, BUILDING, READY, DISABLED };
+	void BuildCacheStep ( DWORD uIndexVersion, DWORD nMaxDocs ) const;
+	mutable std::unique_ptr<CacheBuild_t> m_pCacheBuild;
+	mutable std::atomic<const DocidLookupCache_c *> m_pCache {nullptr};
+	mutable std::atomic<size_t> m_nCacheBytes {0};
+	mutable std::atomic<CacheState_e> m_eCacheState {CacheState_e::COLD};
 };
 
 
@@ -194,7 +212,7 @@ public:
 		if ( !m_iProcessedDocs )
 		{
 			tDocID = m_tCurDocID;
-			tRowID = sphUnalignedRead ( *(RowID_t*)const_cast<BYTE*>(m_pCur) );
+			memcpy ( &tRowID, m_pCur, sizeof(tRowID) );
 			m_pCur += sizeof(RowID_t);
 
 			++m_iProcessedDocs;
@@ -203,7 +221,7 @@ public:
 
 		uint64_t tDelta = UnzipOffsetBE ( m_pCur );
 
-		tRowID = sphUnalignedRead ( *(RowID_t*)const_cast<BYTE*>(m_pCur) );
+		memcpy ( &tRowID, m_pCur, sizeof(tRowID) );
 		m_pCur += sizeof(RowID_t);
 
 		m_tCurDocID += tDelta;
@@ -265,7 +283,8 @@ private:
 };
 
 
-RowIteratorsWithEstimates_t CreateLookupIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, const BYTE * pDocidLookup, DWORD uIndexVersion, uint32_t uTotalDocs );
+// Optional point reader belongs to the same chunk and outlives its iterators.
+RowIteratorsWithEstimates_t CreateLookupIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, const BYTE * pDocidLookup, DWORD uIndexVersion, uint32_t uTotalDocs, const LookupReader_c * pPointReader = nullptr );
 bool	WriteDocidLookup ( const CSphString & sFilename, const VecTraits_T<DocidRowidPair_t> & dLookup, CSphString & sError );
 bool	WriteDocidLookup ( const CSphString & sFilename, const VecTraits_T<DocidRowidPair_t> & dLookup, const VecTraits_T<UuidDocidLookupPair_t> & dUuidLookup, CSphString & sError );
 

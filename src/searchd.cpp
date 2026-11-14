@@ -44,6 +44,7 @@
 #include "joinsorter.h"
 #include "schematransform.h"
 #include "skip_cache.h"
+#include "docidlookupcache.h"
 #include "jieba.h"
 #include "sphinxexcerpt.h"
 #include "sphinxquery/xqparser.h"
@@ -2944,6 +2945,11 @@ void BuildStatus ( VectorLike & dStatus )
 	dStatus.MatchTupletf ( "qcache_cached_queries", "%d", s.m_iCachedQueries );
 	dStatus.MatchTupletf ( "qcache_used_bytes", "%l", s.m_iUsedBytes );
 	dStatus.MatchTupletf ( "qcache_hits", "%l", s.m_iHits );
+	dStatus.MatchTupletf ( "docid_lookup_cache_used_bytes", "%l", (int64_t)DocidLookupCache_c::GetUsed() );
+	const auto tDocstoreCache = GetDocstoreCacheStats();
+	dStatus.MatchTupletf ( "docstore_cache_used_bytes", "%l", tDocstoreCache.m_iUsedBytes );
+	dStatus.MatchTupletf ( "docstore_cache_mapped_bytes", "%l", tDocstoreCache.m_iMappedBytes );
+	dStatus.MatchTupletf ( "docstore_cache_spare_bytes", "%l", tDocstoreCache.m_iSpareBytes );
 
 	// clusters
 	ReplicateClustersStatus ( dStatus );
@@ -16006,7 +16012,12 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 	if ( hSearchd("shutdown_timeout") )
 		g_iShutdownTimeoutUs = hSearchd.GetUsTime64S ( "shutdown_timeout", 60000000);
 
-	g_iDocstoreCache = hSearchd.GetSize64 ( "docstore_cache_size", 16777216 );
+	int64_t iDocidCache = hSearchd.GetSize64 ( "docid_lookup_cache_size", 67108864 );
+	if ( iDocidCache<0 || (uint64_t)iDocidCache>SIZE_MAX )
+		sphDie ( "docid_lookup_cache_size is out of range" );
+	DocidLookupCache_c::SetBudget((size_t)iDocidCache);
+
+	g_iDocstoreCache = hSearchd.GetInt ( "docstore_cache", 1 ) ? hSearchd.GetSize64 ( "docstore_cache_size", 16777216 ) : 0;
 	g_iSkipCache = hSearchd.GetSize64 ( "skiplist_cache_size", 67108864 );
 
 	if ( hSearchd.Exists ( "max_open_files" ) )

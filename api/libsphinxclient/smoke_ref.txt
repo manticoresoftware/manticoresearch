@@ -353,6 +353,10 @@ qcache_ttl_sec: 60
 qcache_cached_queries: 0
 qcache_used_bytes: 0
 qcache_hits: 0
+docid_lookup_cache_used_bytes: 0
+docstore_cache_used_bytes: 0
+docstore_cache_mapped_bytes: 0
+docstore_cache_spare_bytes: 0
 
 
 ***************************

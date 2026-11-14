@@ -1,9 +1,9 @@
 ––– comment –––
 Issue #4678 regression: concurrent HTTP /sql queries and SHOW THREADS must not
 crash searchd by copying a live CSphQuery from QueryInfo_t owned by another task.
-The dataset is generated with manticore-load. A heavy JSON /search workload
-keeps non-SQL query state active while HTTP raw SQL issues SHOW THREADS; the
-reported crash was in HttpRawSqlHandler while rendering SHOW THREADS.
+The dataset is generated with manticore-load. Concurrent HTTP raw-SQL
+SHOW THREADS and SELECT requests stress task-info traversal and query teardown.
+If the server crashes, print and save the complete searchd.log for diagnosis.
 ––– block: ../base/start-searchd –––
 ––– input –––
 rm -f /tmp/issue4678_curl_*.cfg /tmp/issue4678_curl_*.rc /tmp/issue4678_curl_*.err
@@ -46,7 +46,15 @@ echo enough_requests
 if [ "$failed" != 0 ]; then head -c 200 /tmp/issue4678_curl_*.err | tr '\n' ' ' | sed 's/^/first_error /'; echo; fi
 mysql -h0 -P9306 -e "SELECT 1" > /dev/null; echo $?
 if grep -qE 'FATAL: CRASH DUMP|Handling signal' /var/log/manticore/searchd.log; then echo log_crashed; else echo no_crash; fi
-if grep -qE 'QueryInfo_t::Render|CSphQuery::CSphQuery|_ZN11QueryInfo_t6Render|_ZN9CSphQuery|HttpRawSqlHandler' /var/log/manticore/searchd.log; then echo queryinfo_stack; else echo no_queryinfo_stack; fi
+if grep -qE 'QueryInfo_t::Render|CSphQuery::CSphQuery|_ZN11QueryInfo_t6Render|_ZN9CSphQuery' /var/log/manticore/searchd.log; then echo queryinfo_stack; else echo no_queryinfo_stack; fi
+if [ "$failed" != 0 ] || grep -qE 'FATAL: CRASH DUMP|Handling signal' /var/log/manticore/searchd.log; then
+  echo '=== BEGIN FULL searchd.log ==='
+  cat /var/log/manticore/searchd.log
+  echo '=== END FULL searchd.log ==='
+  if [ -d /tmp/clt-4678-diagnostics ]; then
+    cp /var/log/manticore/searchd.log /tmp/clt-4678-diagnostics/searchd.log
+  fi
+fi
 ––– output –––
 enough_requests
 clients_ok

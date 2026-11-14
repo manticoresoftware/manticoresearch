@@ -20,6 +20,9 @@ jobs:
       matrix:
         attempt: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
+      - name: Prepare diagnostics directory
+        run: mkdir -p "${{ runner.temp }}/clt-4678-diagnostics" && chmod 777 "${{ runner.temp }}/clt-4678-diagnostics"
+
       - name: Run the regression test
         id: clt
         uses: manticoresoftware/clt@main
@@ -32,6 +35,7 @@ jobs:
           tests: '["test/clt-tests/bugs/4678-show-threads-queryinfo-uaf"]'
           comment_mode: none
           timeout: 5
+          run_args: "-v ${{ runner.temp }}/clt-4678-diagnostics:/tmp/clt-4678-diagnostics"
 
       - name: Record this run's outcome
         if: ${{ always() }}
@@ -52,6 +56,15 @@ jobs:
             --arg action_outcome "$CLT_OUTCOME" \
             '{attempt: $attempt, status: $status, action_outcome: $action_outcome}' > "run-$ATTEMPT.json"
           cat "run-$ATTEMPT.json"
+
+      - name: Upload complete searchd.log on failure
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: clt-4678-searchd-${{ matrix.attempt }}
+          path: ${{ runner.temp }}/clt-4678-diagnostics/searchd.log
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload result
         if: ${{ always() }}

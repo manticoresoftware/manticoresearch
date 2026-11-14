@@ -53,7 +53,9 @@ must state the DocID budget and compare equal budgets in both binaries. A
 same-binary comparison of `docstore_cache_size=0` and `16m` answers a separate
 question from the benefit of changing the block-cache implementation.
 
-The opt-in `docstore_cache_adaptive=1` mode retains the configured
+`docstore_cache=1` enables the adaptive implementation and is the default;
+`docstore_cache=0` disables block caching regardless of the configured budget.
+`docstore_cache_size=0` also disables it. The cache retains the configured
 `docstore_cache_size` hard entry limit and reclaims cold, unreferenced blocks
 after a stable smaller hot set is observed. Both modes already allocate only
 on demand; the adaptive change adds reclamation rather than preallocation or
@@ -61,23 +63,28 @@ automatic growth beyond the configured ceiling. Lookup epochs are per shard,
 updated under the existing lock, and require no TLS or global atomic counter.
 Idle shards do not advance epochs and no low-hit-rate bypass is implemented.
 
-The public stored-field tests run in both manual and adaptive modes.
+The public stored-field tests retain fixed-policy and adaptive controls.
 `AdaptiveLru` tests additionally check demand growth, hard limits, hot-set
-changes, unchanged manual retention, pinned references and concurrent reads
+changes, unchanged fixed-policy retention, pinned references and concurrent reads
 under admission/reclamation pressure. The `docstore_cache_used_bytes` status
 metric reports charged cached entry bytes, separately from process RSS. Compare
-manual/adaptive at the same ceiling before attributing an effect to the new
+fixed/adaptive at the same ceiling before attributing an effect to the new
 policy; raising 16 MiB to 512 MiB is a separate capacity comparison.
 The adaptive follow-up uses per-shard virtual-memory pools for decoded payloads,
 with direct decompression. Small blocks use 256-byte size classes packed into
 64 KiB regions; large blocks use page-rounded dedicated mappings. Empty regions
 are unmapped, with at most one 64 KiB empty spare per shard. Partially occupied
 regions can retain unused slots, separately from charged entry bytes. This
-bypasses process heap retention. Manual mode and oversized/mapping-failure fallbacks still use
-the heap. Metadata and temporary/input/output buffers also remain on the heap.
+bypasses process heap retention. The fixed-policy test control and oversized/mapping-failure
+fallbacks still use the heap. Metadata and temporary/input/output buffers also remain on the heap.
 The mapped/spare status metrics account for pool mappings, including in-flight
 blocks; the entry ceiling does not bound total mappings or process RSS.
 Pool tests cover reuse, excess unmapping, rounding, no-spare mode and concurrent
 allocation/release. Stored-field tests also cover uncompressed small/large
 fields and clear/recreate in both modes. Measure process RSS and footprint
 alongside entry counters before claiming physical memory savings.
+
+`python3 test/docid-cache/test_blockcache_config.py build/src/searchd` checks
+adaptive behavior with the default or explicit enable setting, explicit disable
+at both normal and large budgets, zero-sized budgets, and stored-field
+replacement/cache cleanup. The fixed-policy control is not a server setting.

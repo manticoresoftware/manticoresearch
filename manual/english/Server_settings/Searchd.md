@@ -691,6 +691,9 @@ behavior.
 <!-- example conf docstore_cache_size -->
 This setting specifies the maximum size of document blocks from document storage that are held in memory. It is optional, with a default value of 16m (16 megabytes).
 
+The cache is enabled by default through `docstore_cache = 1` and always uses
+adaptive admission and reclamation. Setting this size to `0` also disables it.
+
 When `stored_fields` is used, document blocks are read from disk and uncompressed. Since every block typically holds several documents, it may be reused when processing the next document. For this purpose, the block is held in a server-wide cache. The cache holds uncompressed blocks.
 
 The cache uses up to 16 independently locked LRU partitions to reduce contention
@@ -715,13 +718,16 @@ docstore_cache_size = 8m
 ```
 <!-- end -->
 
-### docstore_cache_adaptive
+### docstore_cache
 
-Enable second-touch admission and adaptive cold-block reclamation with `1`; the default is `0`. The
-`docstore_cache_size` setting remains the hard limit for cached decoded blocks
+Enable the adaptive stored-field block cache with `1` (the default), or disable
+it with `0`. When enabled, the cache always uses second-touch admission,
+adaptive cold-block reclamation and mapped payload storage; there is no separate
+fixed-policy configuration. A zero `docstore_cache_size` also disables the cache.
+The `docstore_cache_size` setting remains the hard limit for cached decoded blocks
 and LRU entries. Small mapped payloads are charged in 256-byte size classes;
 larger dedicated mappings are charged at their page-rounded size.
-Memory is already allocated on demand in either mode: a
+Memory is allocated on demand: a
 512 MiB limit does not reserve 512 MiB at startup. Hash tables and allocator
 metadata, reader buffers and in-flight decompression remain additional memory.
 Adaptive mode also uses a fixed 256 KiB fingerprint history, allocated only when
@@ -732,7 +738,7 @@ was already observed in its history slot. The first visit uses a temporary
 heap buffer. A second visit can occur within the same query or session.
 The bounded history uses atomic fingerprint replacement; collisions can change
 admission decisions but cannot return another block, since the shared cache
-still compares complete keys. Manual mode admits every eligible miss. This
+still compares complete keys. This
 policy reduces insertion and eviction work for sparse accesses; it does not
 guarantee that caching improves every workload.
 
@@ -747,8 +753,7 @@ therefore retain at most 1 MiB of completely empty spare regions. Unused slots
 in partially occupied regions also consume mapped address space, in addition
 to the cached-entry limit. Mapping
 failure or a payload too large for its partition falls back to the process
-heap. Manual mode continues to use the process heap. Metadata, temporary input
-buffers and output values still use the process heap in either mode.
+heap. Metadata, temporary input buffers and output values still use the process heap.
 
 Adaptive mode keeps the partition count and block-to-partition mapping fixed.
 Each partition observes windows of 4096 block lookups under its existing lock.
@@ -781,7 +786,7 @@ above it.
 
 ```ini
 docstore_cache_size = 512m
-docstore_cache_adaptive = 1
+docstore_cache = 1
 ```
 
 ### engine

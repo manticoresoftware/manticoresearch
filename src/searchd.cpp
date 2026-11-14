@@ -149,7 +149,6 @@ int						g_iMaxFilterValues	= 4096;
 int						g_iMaxBatchQueries	= 32;
 
 static int64_t			g_iDocstoreCache = 0;
-static bool				g_bDocstoreCacheAdaptive = false;
 static int64_t			g_iSkipCache = 0;
 
 static auto &	g_iDistThreads		= getDistThreads();
@@ -16013,8 +16012,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 		sphDie ( "docid_lookup_cache_size is out of range" );
 	DocidLookupCache_c::SetBudget((size_t)iDocidCache);
 
-	g_iDocstoreCache = hSearchd.GetSize64 ( "docstore_cache_size", 16777216 );
-	g_bDocstoreCacheAdaptive = hSearchd.GetInt ( "docstore_cache_adaptive", 0 )!=0;
+	g_iDocstoreCache = hSearchd.GetInt ( "docstore_cache", 1 ) ? hSearchd.GetSize64 ( "docstore_cache_size", 16777216 ) : 0;
 	g_iSkipCache = hSearchd.GetSize64 ( "skiplist_cache_size", 67108864 );
 
 	if ( hSearchd.Exists ( "max_open_files" ) )
@@ -17210,7 +17208,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		sphLockUn ( g_iPidFD );
 
 	SetUidShort ( GetMacAddress(), g_sPidFile, bTestMode );
-	InitDocstore ( g_iDocstoreCache, g_bDocstoreCacheAdaptive );
+	InitDocstore ( g_iDocstoreCache );
 	InitSkipCache ( g_iSkipCache );
 	InitParserOption();
 

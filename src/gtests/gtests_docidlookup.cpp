@@ -504,6 +504,8 @@ TEST_F ( UuidDocidLookupTest, NativeCacheConcurrentBuildAndBatchReaders )
 				}
 			} );
 		for ( auto & tThread : dThreads ) tThread.join();
+		// Skipped build attempts need not advance progress; finish remaining steps serially.
+		for ( int i=0; i<5 && !tReader.HasCache(); ++i ) tReader.PrepareCache ( 256, UUID_INDEX_VERSION );
 		EXPECT_TRUE ( tReader.HasCache() );
 		EXPECT_EQ ( tReader.GetCacheBytes(), DocidLookupCache_c::GetUsed() );
 	}

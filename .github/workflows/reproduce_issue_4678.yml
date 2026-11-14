@@ -57,6 +57,10 @@ jobs:
             '{attempt: $attempt, status: $status, action_outcome: $action_outcome}' > "run-$ATTEMPT.json"
           cat "run-$ATTEMPT.json"
 
+      - name: Make crash log readable for artifact upload
+        if: ${{ always() }}
+        run: sudo chmod -R a+rX "${{ runner.temp }}/clt-4678-diagnostics" || true
+
       - name: Upload complete searchd.log on failure
         if: ${{ always() }}
         uses: actions/upload-artifact@v6
@@ -112,3 +116,39 @@ jobs:
             jq -sr 'sort_by(.attempt)[] | "| \(.attempt) | \(.status) | \(.action_outcome) |"' "${files[@]}"
           } >> "$GITHUB_STEP_SUMMARY"
           (( count == 10 && other == 0 && failed == 0 ))
+
+  symbolize:
+    name: 'Locate GatherPublicTaskInfo +0x50 in searchd'
+    if: ${{ github.head_ref == 'ci/repro-4678-10x' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Disassemble the exact binary from the failing CI image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='ghcr.io/manticoresoftware/manticoresearch:test-kit-ci-ef2bec58593d167ca67ee38107a10ee7c5c3da5e'
+          docker pull "$image"
+          container="$(docker create --entrypoint /bin/true "$image")"
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          docker cp "$container:/usr/bin/searchd" ./searchd
+          file ./searchd
+          symbol='_Z20GatherPublicTaskInfoR18PublicThreadDesc_tRKSt6atomicIPvE'
+          nm -D -C ./searchd | grep 'GatherPublicTaskInfo' || true
+          objdump -d --disassemble="$symbol" ./searchd > gather-disassembly.txt
+          {
+            echo '## GatherPublicTaskInfo disassembly'
+            echo
+            echo 'SIGSEGV offset from crash: +0x50'
+            echo
+            echo '~~~asm'
+            sed -n '1,180p' gather-disassembly.txt
+            echo '~~~'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload disassembly
+        uses: actions/upload-artifact@v6
+        with:
+          name: clt-4678-gatherpublictaskinfo-assembly
+          path: gather-disassembly.txt
+          if-no-files-found: error
+          retention-days: 14

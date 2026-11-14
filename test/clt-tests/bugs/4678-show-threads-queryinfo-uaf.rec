@@ -4,6 +4,7 @@ crash searchd by copying a live CSphQuery from QueryInfo_t owned by another task
 The dataset is generated with manticore-load. Concurrent HTTP raw-SQL
 SHOW THREADS and SELECT requests stress task-info traversal and query teardown.
 If the server crashes, print and save the complete searchd.log for diagnosis.
+Temporarily triple the stress load (9000 iterations per batch) to capture a rare race.
 ––– block: ../base/start-searchd –––
 ––– input –––
 rm -f /tmp/issue4678_curl_*.cfg /tmp/issue4678_curl_*.rc /tmp/issue4678_curl_*.err
@@ -23,7 +24,7 @@ add_http_query() {
 }
 for batch in $(seq 1 3); do
   cfg="/tmp/issue4678_curl_${batch}.cfg"
-  for n in $(seq 1 3000); do
+  for n in $(seq 1 9000); do
     add_http_query "$cfg" 'query=SHOW+THREADS+OPTION+format%3Dsphinxql'
     add_http_query "$cfg" 'query=SHOW+THREADS'
     add_http_query "$cfg" 'query=SELECT+id%2C+weight%28%29+FROM+issue4678+WHERE+MATCH%28%27alpha+beta+gamma%27%29+ORDER+BY+weight%28%29+DESC+LIMIT+20+OPTION+max_matches%3D1000'

@@ -17,12 +17,11 @@ jobs:
     with:
       artifact_name: clt-4678-patched-searchd
       cache_key: build_linux_release_tests_x86_64
-      artifact_list: "build/src/searchd"
+      artifact_list: "build/src/searchd build/src/gtests/gmanticoretest"
       cmake_command: |
         export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
         export MCL_LOCAL_RUNTIME=OFF
         ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
-        ./build/src/gtests/gmanticoretest --gtest_filter=ThreadPool.TaskInfoParentLifetime
 
   patched_image:
     name: Install patched searchd in known-failing test image
@@ -41,6 +40,7 @@ jobs:
           set -euo pipefail
           tar -xf artifact.tar
           test -x build/src/searchd
+          test -x build/src/gtests/gmanticoretest
           file build/src/searchd
       - name: Publish patched test image
         id: publish
@@ -56,12 +56,15 @@ jobs:
           image="ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-4678-fixed-${REF_SHA}"
           docker pull "$base"
           cp build/src/searchd searchd
+          cp build/src/gtests/gmanticoretest gmanticoretest
           cat > Dockerfile <<EOF
           FROM $base
           COPY --chmod=755 searchd /usr/bin/searchd
+          COPY --chmod=755 gmanticoretest /tmp/gmanticoretest
           EOF
           docker build --pull=false -t "$image" .
           docker run --rm --entrypoint /usr/bin/searchd "$image" --version
+          docker run --rm --entrypoint /tmp/gmanticoretest "$image" --gtest_filter=ThreadPool.TaskInfoParentLifetime
           echo "$GHCR_PASSWORD" | docker login -u "$GHCR_USER" --password-stdin ghcr.io
           docker push "$image"
           echo "image=$image" >> "$GITHUB_OUTPUT"

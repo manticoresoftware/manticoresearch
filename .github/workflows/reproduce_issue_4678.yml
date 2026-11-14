@@ -54,10 +54,13 @@ jobs:
           base='ghcr.io/manticoresoftware/manticoresearch:test-kit-ci-ef2bec58593d167ca67ee38107a10ee7c5c3da5e'
           image="ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-4678-fixed-${REF_SHA}"
           docker pull "$base"
-          container="$(docker create --entrypoint /bin/true "$base")"
-          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
-          docker cp build/src/searchd "$container:/usr/bin/searchd"
-          docker commit "$container" "$image"
+          cp build/src/searchd searchd
+          cat > Dockerfile <<EOF
+          FROM $base
+          COPY --chmod=755 searchd /usr/bin/searchd
+          EOF
+          docker build --pull=false -t "$image" .
+          docker run --rm --entrypoint /usr/bin/searchd "$image" --version
           echo "$GHCR_PASSWORD" | docker login -u "$GHCR_USER" --password-stdin ghcr.io
           docker push "$image"
           echo "image=$image" >> "$GITHUB_OUTPUT"

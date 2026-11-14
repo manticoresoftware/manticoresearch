@@ -2576,6 +2576,8 @@ RowsToUpdateData_t CSphIndex_VLN::Update_CollectRowPtrs ( const UpdateContext_t 
 	// Keep the same sorted order and first occurrence for repeated update IDs.
 	// The existing signed-sorted update merge needs a separate negative-ID audit;
 	// leave that input on its existing path in this experiment.
+	if ( dDocids[dSorted[0]]>=0 )
+		m_tLookupReader.PrepareCache ( dSorted.GetLength(), m_uVersion );
 	if ( m_tLookupReader.HasCache() && DocidLookupCache_c::IsSparse ( dSorted.GetLength(), uint64_t(m_iDocinfo) ) && dDocids[dSorted[0]]>=0 )
 	{
 		dRowsToUpdate.Reserve(dSorted.GetLength());
@@ -2610,7 +2612,9 @@ RowsToUpdateData_t CSphIndex_VLN::Update_CollectRowPtrs ( const UpdateContext_t 
 			DocID_t tDocID = dDocids[iUpdate];
 			if ( i && tDocID==dDocids[dSorted[i-1]] )
 				continue;
-			RowID_t tRowID = m_tLookupReader.Find(tDocID);
+			uint64_t uDocID = (uint64_t)tDocID;
+			RowID_t tRowID;
+			m_tLookupReader.FindBatch ( &uDocID, &tRowID, 1 );
 			if ( tRowID!=INVALID_ROWID && !m_tDeadRowMap.IsSet(tRowID) )
 				dRowsToUpdate.Add ( { tRowID, iUpdate } );
 		}
@@ -9097,6 +9101,18 @@ static bool RecreateFallbackFilters ( const CSphVector<CSphFilterSettings> & dFi
 
 bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker, bool bPlanForKNNIterator ) const
 {
+	// Observe demand before costing: an unbuilt cache may otherwise lose to a scan forever.
+	if ( tQuery.m_dFilterTree.IsEmpty() )
+		for ( const auto & tFilter : dFilters )
+			if ( tFilter.m_eType==SPH_FILTER_VALUES && !tFilter.m_bExclude && tFilter.m_sAttrName==sphGetDocidName() )
+			{
+				bool bDisabled = tQuery.m_dIndexHints.any_of ( []( const IndexHint_t & tHint ) {
+					return tHint.m_eType==SecondaryIndexType_e::LOOKUP && !tHint.m_bForce && tHint.m_sIndex==sphGetDocidName();
+				} );
+				if ( !bDisabled )
+					m_tLookupReader.PrepareCache ( tFilter.GetNumValues(), m_uVersion );
+				break;
+			}
 	StrVec_t dWarnings;
 	float fBestCost = FLT_MAX;
 
@@ -10481,7 +10497,6 @@ bool CSphIndex_VLN::PreallocDocidLookup()
 	if ( bUuidLinked )
 		m_tUuidLookupReader.SetData ( m_tDocidLookup.GetReadPtr(), tUuidEntriesOffset, nDocs );
 
-	m_tLookupReader.BuildCache(m_uVersion);
 	return true;
 }
 

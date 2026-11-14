@@ -14,6 +14,7 @@
 #include "secondaryindex.h"
 #include "uuid_docid.h"
 #include "docidlookupcache.h"
+#include <atomic>
 
 class CSphWriter;
 
@@ -81,19 +82,19 @@ private:
 class LookupReader_c
 {
 public:
-			LookupReader_c() = default;
+			LookupReader_c();
 			LookupReader_c ( const BYTE * pData, DWORD uIndexVersion );
+			~LookupReader_c();
 
 	std::pair<SphOffset_t,DWORD> SetData ( const BYTE * pData, DWORD uIndexVersion );
 	bool BuildCache ( DWORD uIndexVersion ); // before publishing the owning chunk
-	bool HasCache() const { return bool(m_pCache); }
-	size_t GetCacheBytes() const { return m_pCache ? m_pCache->GetLengthBytes() : 0; }
+	void PrepareCache ( size_t nValues, DWORD uIndexVersion ) const;
+	bool HasCache() const { return m_pCache.load(std::memory_order_acquire)!=nullptr; }
+	size_t GetCacheBytes() const { return m_nCacheBytes.load(std::memory_order_relaxed); }
 	void FindBatch ( const uint64_t * pDocIDs, RowID_t * pRows, size_t nQueries ) const;
 
 	inline RowID_t Find ( DocID_t tDocID ) const
 	{
-		if ( m_pCache )
-			return m_pCache->Find((uint64_t)tDocID);
 		if ( !m_pCheckpoints || (uint64_t)tDocID<(uint64_t)m_pCheckpoints->m_tBaseDocID || (uint64_t)tDocID>(uint64_t)m_tMaxDocID )
 			return INVALID_ROWID;
 
@@ -130,7 +131,6 @@ public:
 	}
 
 protected:
-	DocidLookupCache_c::Ptr_t m_pCache;
 	DWORD							m_nDocs {0};
 	DWORD							m_nDocsPerCheckpoint {0};
 	int								m_nCheckpoints {0};
@@ -172,6 +172,15 @@ protected:
 		int iLeftover = m_nDocs % m_nDocsPerCheckpoint;
 		return iLeftover ? iLeftover : m_nDocsPerCheckpoint;
 	}
+
+private:
+	struct CacheBuild_t;
+	enum class CacheState_e : uint8_t { COLD, SEEN, BUILDING, READY, DISABLED };
+	void BuildCacheStep ( DWORD uIndexVersion, DWORD nMaxDocs ) const;
+	mutable std::unique_ptr<CacheBuild_t> m_pCacheBuild;
+	mutable std::atomic<const DocidLookupCache_c *> m_pCache {nullptr};
+	mutable std::atomic<size_t> m_nCacheBytes {0};
+	mutable std::atomic<CacheState_e> m_eCacheState {CacheState_e::COLD};
 };
 
 

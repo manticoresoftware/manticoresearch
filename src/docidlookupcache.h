@@ -18,6 +18,7 @@ public:
 
 	static size_t GetAlignment() noexcept;
 	static void SetBudget ( size_t nBytes ) noexcept;
+	static bool IsEnabled() noexcept;
 	static size_t GetUsed() noexcept;
 	static Ptr_t Create ( uint32_t nDocs ) noexcept;
 	bool Append ( uint64_t uDocID, uint32_t uRowID ) noexcept;

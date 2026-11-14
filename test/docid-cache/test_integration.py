@@ -26,6 +26,7 @@ class Server:
         (root / "data").mkdir(exist_ok=True)
         self.config = root / "manticore.conf"
         threads_config = f"threads = {threads}\n" if threads is not None else ""
+        cache_config = f"docid_lookup_cache_size = {budget}\n" if budget is not None else ""
         self.config.write_text(
             "searchd {\n"
             f"listen = 127.0.0.1:{self.port}:http\n"
@@ -33,7 +34,7 @@ class Server:
             f"log = {root / 'searchd.log'}\n"
             f"pid_file = {root / 'searchd.pid'}\n"
             "buddy_path =\n"
-            f"docid_lookup_cache_size = {budget}\n"
+            f"{cache_config}"
             f"{threads_config}"
             "}\n"
         )
@@ -92,6 +93,7 @@ class Server:
 
 
 def check(binary, budget, expect_cache):
+    limit = 64 * 1024 * 1024 if budget is None else budget
     with tempfile.TemporaryDirectory(prefix="manticore-native-docid-") as temp:
         root = Path(temp)
         server = Server(binary, root, budget)
@@ -102,9 +104,24 @@ def check(binary, budget, expect_cache):
                 rows = ",".join(f"({i * 2 + 2},0,'document')" for i in range(start, start + 1000))
                 db.sql("INSERT INTO docs (id,value,title) VALUES " + rows)
             db.sql("FLUSH RAMCHUNK docs")
+            assert db.used() == 0  # load and ordinary queries do not build mappings
+            for _ in range(3):
+                assert db.sql("SELECT id FROM docs WHERE id=2")["data"] == [{"id": 2}]
+                assert db.sql("SELECT count(*) AS n FROM docs")["data"] == [{"n": 10000}]
+            assert db.used() == 0
+            # Repeated sparse batches trigger bounded construction. The first
+            # query only records demand; readers keep falling back until sealed.
+            warm_clause = ",".join(str(i * 154 + 2) for i in range(129))
+            dense_clause = ",".join(str(i * 2 + 2) for i in range(512))
+            for _ in range(3):
+                assert db.sql(f"SELECT count(*) AS n FROM docs WHERE id IN ({warm_clause}) /*+ NO_DocidIndex(id) */")["data"] == [{"n": 129}]
+                assert db.sql(f"SELECT count(*) AS n FROM docs WHERE id IN ({dense_clause})")["data"] == [{"n": 512}]
+            assert db.used() == 0
+            for _ in range(6):
+                assert db.sql(f"SELECT count(*) AS n FROM docs WHERE id IN ({warm_clause})")["data"] == [{"n": 129}]
             used = db.used()
             assert (used > 0) == expect_cache, (budget, used)
-            assert used <= budget
+            assert used <= limit
             # Automatic planning must see cache admission, including when a
             # budget refuses the chunk. Explicit hints remain authoritative.
             candidates = [i * 154 + 2 for i in range(129)]
@@ -153,11 +170,7 @@ def check(binary, budget, expect_cache):
             db.sql("UPDATE docs SET added=9 WHERE id=100")
             assert db.sql("SELECT added FROM docs WHERE id=100")["data"] == [{"added": 9}]
         with server.running() as db:
-            # A small chunk created by REPLACE may fit even when the original
-            # large chunk did not. Admission is per chunk under one budget.
-            assert db.used() <= budget
-            if expect_cache:
-                assert db.used() > 0
+            assert db.used() == 0  # restart is lazy too
             assert db.sql("SELECT value FROM docs WHERE id=2")["data"] == [{"value": 23}]
             assert not db.sql("SELECT id FROM docs WHERE id IN (4,6)")["data"]
             assert db.sql("SELECT count(*) AS n FROM docs")["data"] == [{"n": 9998}]
@@ -173,5 +186,5 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("searchd", type=lambda value: str(Path(value).resolve()))
     args = parser.parse_args()
-    for limit, enabled in [(0, False), (1024, False), (16 * 1024 * 1024, True)]:
+    for limit, enabled in [(None, True), (0, False), (1024, False), (16 * 1024 * 1024, True)]:
         check(args.searchd, limit, enabled)

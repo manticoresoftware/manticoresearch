@@ -54,6 +54,11 @@ void DocidLookupCache_c::SetBudget ( size_t nBytes ) noexcept
 	g_nLimit.store ( nBytes, std::memory_order_relaxed );
 }
 
+bool DocidLookupCache_c::IsEnabled() noexcept
+{
+	return g_nLimit.load(std::memory_order_relaxed)!=0;
+}
+
 size_t DocidLookupCache_c::GetUsed() noexcept
 {
 	return g_nUsed.load(std::memory_order_relaxed);

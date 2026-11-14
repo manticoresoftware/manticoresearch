@@ -18,6 +18,7 @@
 #include "threadutils.h"
 
 #include <cstring>
+#include <thread>
 
 namespace
 {
@@ -432,4 +433,121 @@ TEST_F ( UuidDocidLookupTest, NativeBatchMatchesCompressedAndHandlesRemap )
 	tCached.SetData ( nullptr, UUID_INDEX_VERSION );
 	tCached.FindBatch ( dQueries, dRows, 65 );
 	for ( RowID_t uRow : dRows ) EXPECT_EQ ( uRow, INVALID_ROWID );
+}
+
+TEST_F ( UuidDocidLookupTest, NativeCacheIsDemandBuiltInBoundedSteps )
+{
+	CacheBudgetGuard_t tBudget ( 2*1024*1024 );
+	CSphVector<DocidRowidPair_t> dPairs;
+	for ( RowID_t i=0; i<65536; ++i ) dPairs.Add ( { (DocID_t)(i*2), i } );
+	CSphString sError;
+	ASSERT_TRUE ( WriteDocidLookup ( m_sFile, dPairs, sError ) );
+	CSphMappedBuffer<BYTE> tData;
+	Map(tData);
+	LookupReader_c tReader ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	EXPECT_EQ ( tReader.GetCacheBytes(), 0U );
+	for ( int i=0; i<10; ++i )
+	{
+		EXPECT_EQ ( tReader.Find(42), 21U );
+		tReader.PrepareCache ( 1, UUID_INDEX_VERSION );
+		tReader.PrepareCache ( 4096, UUID_INDEX_VERSION ); // dense lists stay on merge
+	}
+	EXPECT_EQ ( DocidLookupCache_c::GetUsed(), 0U );
+	tReader.PrepareCache ( 256, UUID_INDEX_VERSION ); // observe reuse before allocating
+	EXPECT_EQ ( DocidLookupCache_c::GetUsed(), 0U );
+	tReader.PrepareCache ( 256, UUID_INDEX_VERSION );
+	EXPECT_GT ( tReader.GetCacheBytes(), 0U );
+	EXPECT_FALSE ( tReader.HasCache() ); // at most 16K rows decoded in one call
+	uint64_t dIDs[] = { 42, 43, 131070, UINT64_MAX };
+	RowID_t dRows[4];
+	tReader.FindBatch ( dIDs, dRows, 4 );
+	EXPECT_EQ ( dRows[0], 21U );
+	EXPECT_EQ ( dRows[1], INVALID_ROWID );
+	for ( int i=0; i<8; ++i ) tReader.PrepareCache ( 256, UUID_INDEX_VERSION );
+	ASSERT_TRUE ( tReader.HasCache() );
+	tReader.FindBatch ( dIDs, dRows, 4 );
+	EXPECT_EQ ( dRows[2], 65535U );
+	EXPECT_EQ ( dRows[3], INVALID_ROWID );
+	tReader.SetData ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	EXPECT_FALSE ( tReader.HasCache() );
+	EXPECT_EQ ( DocidLookupCache_c::GetUsed(), 0U );
+	tReader.PrepareCache ( 256, UUID_INDEX_VERSION );
+	tReader.PrepareCache ( 256, UUID_INDEX_VERSION );
+	EXPECT_GT ( DocidLookupCache_c::GetUsed(), 0U );
+	tReader.SetData ( nullptr, UUID_INDEX_VERSION ); // reclaim an unfinished build too
+	EXPECT_EQ ( DocidLookupCache_c::GetUsed(), 0U );
+}
+
+TEST_F ( UuidDocidLookupTest, NativeCacheConcurrentBuildAndBatchReaders )
+{
+	CacheBudgetGuard_t tBudget ( 2*1024*1024 );
+	CSphVector<DocidRowidPair_t> dPairs;
+	for ( RowID_t i=0; i<65536; ++i ) dPairs.Add ( { (DocID_t)(i*2), i } );
+	CSphString sError;
+	ASSERT_TRUE ( WriteDocidLookup ( m_sFile, dPairs, sError ) );
+	CSphMappedBuffer<BYTE> tData;
+	Map(tData);
+	{
+		LookupReader_c tReader ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+		std::thread dThreads[8];
+		for ( auto & tThread : dThreads )
+			tThread = std::thread ( [&tReader]() {
+				for ( int i=0; i<100; ++i )
+				{
+					tReader.PrepareCache ( 256, UUID_INDEX_VERSION );
+					uint64_t dIDs[16];
+					RowID_t dRows[16];
+					for ( int j=0; j<16; ++j ) dIDs[j] = (i*16+j)*3;
+					tReader.FindBatch ( dIDs, dRows, 16 );
+					for ( int j=0; j<16; ++j ) EXPECT_EQ ( dRows[j], dIDs[j]%2 ? INVALID_ROWID : RowID_t(dIDs[j]/2) );
+					EXPECT_LE ( tReader.GetCacheBytes(), 2U*1024*1024 );
+				}
+			} );
+		for ( auto & tThread : dThreads ) tThread.join();
+		EXPECT_TRUE ( tReader.HasCache() );
+		EXPECT_EQ ( tReader.GetCacheBytes(), DocidLookupCache_c::GetUsed() );
+	}
+	EXPECT_EQ ( DocidLookupCache_c::GetUsed(), 0U );
+}
+
+TEST_F ( UuidDocidLookupTest, NativeCacheLazyRefusalAndDuplicateFallback )
+{
+	CacheBudgetGuard_t tBudget(1024);
+	CSphVector<DocidRowidPair_t> dPairs;
+	for ( RowID_t i=0; i<32768; ++i ) dPairs.Add ( { (DocID_t)(i<20000 ? i : i-1), i } );
+	CSphString sError;
+	ASSERT_TRUE ( WriteDocidLookup ( m_sFile, dPairs, sError ) );
+	CSphMappedBuffer<BYTE> tData;
+	Map(tData);
+	LookupReader_c tReader ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	for ( int i=0; i<10; ++i ) tReader.PrepareCache ( 256, UUID_INDEX_VERSION );
+	EXPECT_FALSE ( tReader.HasCache() );
+	EXPECT_EQ ( DocidLookupCache_c::GetUsed(), 0U );
+	DocidLookupCache_c::SetBudget ( 2*1024*1024 );
+	tReader.SetData ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+	tReader.PrepareCache ( 256, UUID_INDEX_VERSION );
+	tReader.PrepareCache ( 256, UUID_INDEX_VERSION );
+	EXPECT_GT ( DocidLookupCache_c::GetUsed(), 0U );
+	for ( int i=0; i<10; ++i ) tReader.PrepareCache ( 256, UUID_INDEX_VERSION );
+	EXPECT_FALSE ( tReader.HasCache() );
+	EXPECT_EQ ( DocidLookupCache_c::GetUsed(), 0U );
+	CSphVector<DocID_t> dValues;
+	dValues.Add(19999);
+	int64_t nProcessed;
+	auto dRows = CollectLookupRows ( tData.GetReadPtr(), UUID_INDEX_VERSION, 32768, dValues, &tReader, nProcessed );
+	ASSERT_EQ ( dRows.GetLength(), 2 );
+	EXPECT_EQ ( dRows[0], 19999U );
+	EXPECT_EQ ( dRows[1], 20000U );
+	::testing::FLAGS_gtest_death_test_style = "threadsafe";
+	EXPECT_EXIT (
+		{
+			tReader.SetData ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+			tReader.PrepareCache ( 256, UUID_INDEX_VERSION );
+			tReader.PrepareCache ( 256, UUID_INDEX_VERSION );
+			if ( !DocidLookupCache_c::GetUsed() ) std::exit(1);
+			sphInterruptNow();
+			tReader.PrepareCache ( 256, UUID_INDEX_VERSION );
+			std::exit ( !tReader.HasCache() && !DocidLookupCache_c::GetUsed() ? 0 : 1 );
+		},
+		::testing::ExitedWithCode(0), "" );
 }

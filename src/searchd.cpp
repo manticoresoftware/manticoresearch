@@ -16007,7 +16007,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 	if ( hSearchd("shutdown_timeout") )
 		g_iShutdownTimeoutUs = hSearchd.GetUsTime64S ( "shutdown_timeout", 60000000);
 
-	int64_t iDocidCache = hSearchd.GetSize64 ( "docid_lookup_cache_size", 0 );
+	int64_t iDocidCache = hSearchd.GetSize64 ( "docid_lookup_cache_size", 67108864 );
 	if ( iDocidCache<0 || (uint64_t)iDocidCache>SIZE_MAX )
 		sphDie ( "docid_lookup_cache_size is out of range" );
 	DocidLookupCache_c::SetBudget((size_t)iDocidCache);

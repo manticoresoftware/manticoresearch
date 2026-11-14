@@ -297,7 +297,9 @@ bool RowidIterator_LookupValues_T<ROWID_LIMITS,BITMAP>::Fill()
 		}
 		while ( m_tFilterReader.ReadDocID(tDocID) )
 		{
-			RowID_t tRowID = m_pPointReader->Find(tDocID);
+			uint64_t uDocID = (uint64_t)tDocID;
+			RowID_t tRowID;
+			m_pPointReader->FindBatch ( &uDocID, &tRowID, 1 );
 			++m_iProcessed;
 			if ( tRowID!=INVALID_ROWID && ( !ROWID_LIMITS || ( tRowID>=m_tBoundaries.m_tMinRowID && tRowID<=m_tBoundaries.m_tMaxRowID ) ) )
 				BASE::Add(tRowID);
@@ -1181,6 +1183,18 @@ DocID_t UuidLookupReader_c::Find ( const UuidDocidKey_t & tKey ) const
 }
 
 
+struct LookupReader_c::CacheBuild_t
+{
+	DocidLookupCache_c::Ptr_t m_pCache;
+	LookupReaderIterator_c m_tReader;
+	DWORD m_nRead {0};
+	CacheBuild_t ( const BYTE * pData, DWORD uVersion, DWORD nDocs )
+		: m_pCache ( DocidLookupCache_c::Create(nDocs) ), m_tReader ( pData, uVersion ) {}
+};
+
+LookupReader_c::LookupReader_c() = default;
+LookupReader_c::~LookupReader_c() = default;
+
 LookupReader_c::LookupReader_c ( const BYTE * pData, DWORD uIndexVersion )
 {
 	SetData ( pData, uIndexVersion );
@@ -1189,7 +1203,11 @@ LookupReader_c::LookupReader_c ( const BYTE * pData, DWORD uIndexVersion )
 
 std::pair<SphOffset_t,DWORD> LookupReader_c::SetData ( const BYTE * pData, DWORD uIndexVersion )
 {
-	m_pCache.reset();
+	// Remapping and destruction require the owning chunk's readers to be quiescent.
+	m_pCache.store ( nullptr, std::memory_order_relaxed );
+	m_pCacheBuild.reset();
+	m_nCacheBytes.store ( 0, std::memory_order_relaxed );
+	m_eCacheState.store ( CacheState_e::COLD, std::memory_order_relaxed );
 	m_pData = pData;
 	m_pCheckpoints = nullptr;
 	m_nDocs = m_nDocsPerCheckpoint = m_nCheckpoints = 0;
@@ -1234,34 +1252,66 @@ void LookupReaderIterator_c::SetData ( const BYTE * pData, DWORD uIndexVersion )
 
 bool LookupReader_c::BuildCache ( DWORD uIndexVersion )
 {
-	if ( m_pCache )
+	if ( HasCache() )
 		return true;
-	if ( !m_pData || !m_nDocs )
+	if ( !m_pData || !m_nDocs || !DocidLookupCache_c::IsEnabled() )
 		return false;
-	auto pCache = DocidLookupCache_c::Create(m_nDocs);
-	if ( !pCache )
-		return false;
-	LookupReaderIterator_c tReader ( m_pData, uIndexVersion );
+	m_eCacheState.store ( CacheState_e::SEEN, std::memory_order_relaxed );
+	BuildCacheStep ( uIndexVersion, m_nDocs );
+	return HasCache();
+}
+
+void LookupReader_c::PrepareCache ( size_t nValues, DWORD uIndexVersion ) const
+{
+	if ( nValues<DocidLookupCache_c::BATCH_SIZE || !DocidLookupCache_c::IsSparse ( nValues, m_nDocs ) || !DocidLookupCache_c::IsEnabled() )
+		return;
+	auto eState = m_eCacheState.load(std::memory_order_relaxed);
+	if ( eState==CacheState_e::COLD )
+	{
+		m_eCacheState.compare_exchange_strong ( eState, CacheState_e::SEEN, std::memory_order_relaxed );
+		return;
+	}
+	if ( eState==CacheState_e::SEEN )
+		BuildCacheStep ( uIndexVersion, 16384 );
+}
+
+void LookupReader_c::BuildCacheStep ( DWORD uIndexVersion, DWORD nMaxDocs ) const
+{
+	auto eExpected = CacheState_e::SEEN;
+	if ( !m_eCacheState.compare_exchange_strong ( eExpected, CacheState_e::BUILDING, std::memory_order_acquire ) )
+		return; // another query builds; readers use the compressed lookup without waiting
+	if ( !m_pCacheBuild )
+		m_pCacheBuild.reset ( new (std::nothrow) CacheBuild_t ( m_pData, uIndexVersion, m_nDocs ) );
+	auto Fail = [this]() {
+		m_pCacheBuild.reset();
+		m_nCacheBytes.store ( 0, std::memory_order_relaxed );
+		m_eCacheState.store ( CacheState_e::DISABLED, std::memory_order_release );
+	};
+	if ( !m_pCacheBuild || !m_pCacheBuild->m_pCache || sphInterrupted() )
+		return Fail();
+	auto & tBuild = *m_pCacheBuild;
+	m_nCacheBytes.store ( tBuild.m_pCache->GetLengthBytes(), std::memory_order_relaxed );
 	DocID_t tDocID;
 	RowID_t tRowID;
-	DWORD nRead = 0;
-	while ( tReader.Read ( tDocID, tRowID ) )
+	for ( DWORD i=0; i<nMaxDocs && tBuild.m_nRead<m_nDocs; ++i )
 	{
-		if ( !pCache->Append ( (uint64_t)tDocID, tRowID ) )
-			return false;
-		if ( !(++nRead & 1023) && sphInterrupted() )
-			return false;
+		if ( !tBuild.m_tReader.Read ( tDocID, tRowID ) || !tBuild.m_pCache->Append ( (uint64_t)tDocID, tRowID ) )
+			return Fail();
+		if ( !(++tBuild.m_nRead & 1023) && sphInterrupted() )
+			return Fail();
 	}
-	if ( !pCache->Seal() )
-		return false;
-	m_pCache = std::move(pCache);
-	return true;
+	if ( tBuild.m_nRead<m_nDocs )
+		return m_eCacheState.store ( CacheState_e::SEEN, std::memory_order_release );
+	if ( !tBuild.m_pCache->Seal() )
+		return Fail();
+	m_pCache.store ( tBuild.m_pCache.get(), std::memory_order_release );
+	m_eCacheState.store ( CacheState_e::READY, std::memory_order_release );
 }
 
 void LookupReader_c::FindBatch ( const uint64_t * pDocIDs, RowID_t * pRows, size_t nQueries ) const
 {
-	if ( m_pCache )
-		m_pCache->FindBatch ( pDocIDs, pRows, nQueries );
+	if ( const auto * pCache = m_pCache.load(std::memory_order_acquire) )
+		pCache->FindBatch ( pDocIDs, pRows, nQueries );
 	else
 		for ( size_t i=0; i<nQueries; ++i )
 			pRows[i] = Find((DocID_t)pDocIDs[i]);

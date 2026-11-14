@@ -647,18 +647,27 @@ diskchunk_flush_write_timeout = 60s
 
 ### docid_lookup_cache_size
 
-Experimental C++ cache for numeric disk document ID lookups. Optional; default
-`0` (disabled). This is a process-wide allocation budget, in bytes:
+Native C++ cache for numeric disk document ID lookups. Enabled by default with
+a `64m` ceiling. This is a process-wide allocation budget, in bytes; set `0`
+to disable it:
 
 ```ini
 docid_lookup_cache_size = 256m
 ```
 
-Disk chunks attempt to build a complete immutable cache before publication.
+Loading a disk chunk does not allocate a cache. Repeated sparse ID batches
+(at least 16 IDs and at most 1/64 of the chunk's rows) trigger construction,
+decoding at most 16,384 entries per query. Other queries do not wait for the
+builder. Only a complete, unique-ID mapping is published for batch lookup.
+Single-ID lookups use the compressed reader and do not trigger construction.
 Allocation refusal, budget exhaustion, duplicate IDs or cancellation retains
 the compressed reader. Cache allocations, alignment padding and handles count
 against the budget; allocator metadata and process RSS do not. The cache adds
 memory beside existing mapped data and does not change the disk format.
+Admission is for a whole chunk (about 11.6 MiB per million rows), so actual
+allocation can be lower than the ceiling. A refused build is not retried until
+the chunk is remapped. Unfinished builds also count against the ceiling and are
+released on remap/destruction; there is no hot-entry eviction or idle shrinking.
 
 Cache allocation alignment is detected once from the OS (64, 128 or 256 bytes),
 with a 64-byte fallback. The handle padding and alignment slack count against

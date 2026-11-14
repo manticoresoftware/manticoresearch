@@ -1,12 +1,21 @@
 # DocID lookup cache validation
 
-The optional native C++ cache stores sorted numeric document IDs and row IDs
-beside the existing compressed lookup. Set `docid_lookup_cache_size = 16m` in
-`searchd` to opt in; the default budget is zero. The whole allocation, including
+The native C++ cache stores sorted numeric document IDs and row IDs
+beside the existing compressed lookup. `docid_lookup_cache_size` is a server-wide
+memory ceiling, defaulting to `64m`; `0` disables caching. The whole allocation, including
 alignment padding and the handle, is charged to one process-wide budget.
 Rejected or incomplete caches retain the existing compressed reader. Disk format
 and UUID lookup remain unchanged. Chunk destruction/remapping reclaims storage;
 there is no eviction or automatic admission retry.
+
+Disk-chunk load, single-ID lookups and full-count queries allocate no native
+cache. The first sparse batch (at least 16 IDs, at most 1/64 of chunk rows)
+records demand. Subsequent batches decode at most 16,384 entries each; one
+builder proceeds while other readers fall back without waiting. An acquire/release
+pointer publishes the immutable mapping only after uniqueness is established.
+Scalar lookups keep the compressed path, with no cache-pointer check. In-progress
+allocations count against the ceiling and are reclaimed on remap/destruction.
+Admission covers a whole chunk; actual use need not equal the configured ceiling.
 
 Directory nodes contain eight child maxima on 64-byte cache lines and sixteen
 on 128/256-byte lines. The OS cache-line query has a 64-byte fallback. Sparse
@@ -27,9 +36,9 @@ python3 test/docid-cache/test_integration.py build/src/searchd
 ```
 
 The Python integration check uses only the standard library and isolated
-loopback servers/temporary data. It checks zero, refused and admitted cache
+loopback servers/temporary data. It checks default, zero, refused and admitted cache
 budgets, automatic/explicit plans, sparse batches and tails, missing/repeated/
-dead IDs, UPDATE, REPLACE, ALTER, restart and DROP/reclamation. It requires
+dead IDs, lazy allocation, UPDATE, REPLACE, ALTER, restart and DROP/reclamation. It requires
 Python 3.8+ and is invoked explicitly, independently of UberTest/CLT.
 
 Performance reports should identify both binaries and the workload, distinguish

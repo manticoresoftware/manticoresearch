@@ -1,0 +1,101 @@
+name: 'CLT #4678: 10-run reproduction'
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    # This is a temporary experiment, limited to its own PR branch.
+    if: ${{ github.head_ref == 'ci/repro-4678-10x' }}
+    name: 'Reproduce #4678 (run ${{ matrix.attempt }}/10)'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        attempt: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    steps:
+      - name: Run the regression test
+        id: clt
+        uses: manticoresoftware/clt@main
+        continue-on-error: true
+        with:
+          # Same image as the failing CI run, to measure reproducibility.
+          image: ghcr.io/manticoresoftware/manticoresearch:test-kit-ci-ef2bec58593d167ca67ee38107a10ee7c5c3da5e
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          tests: '["test/clt-tests/bugs/4678-show-threads-queryinfo-uaf"]'
+          comment_mode: none
+          timeout: 5
+
+      - name: Record this run's outcome
+        if: ${{ always() }}
+        shell: bash
+        env:
+          RESULT_FILE: ${{ steps.clt.outputs.test-results }}
+          CLT_OUTCOME: ${{ steps.clt.outcome }}
+          ATTEMPT: ${{ matrix.attempt }}
+        run: |
+          set -euo pipefail
+          status=missing
+          if [[ -n "$RESULT_FILE" && -f "$RESULT_FILE" ]]; then
+            status="$(jq -r --arg test 'test/clt-tests/bugs/4678-show-threads-queryinfo-uaf.rec' \
+              'select(.test == $test) | .status // empty' "$RESULT_FILE" | tail -n 1)" || true
+          fi
+          [[ -n "$status" ]] || status=missing
+          jq -cn --argjson attempt "$ATTEMPT" --arg status "$status" \
+            --arg action_outcome "$CLT_OUTCOME" \
+            '{attempt: $attempt, status: $status, action_outcome: $action_outcome}' > "run-$ATTEMPT.json"
+          cat "run-$ATTEMPT.json"
+
+      - name: Upload result
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: clt-4678-run-${{ matrix.attempt }}
+          path: run-${{ matrix.attempt }}.json
+          if-no-files-found: error
+          retention-days: 7
+
+  summary:
+    name: 'Result: failures out of 10'
+    needs: [reproduce]
+    if: ${{ always() && github.head_ref == 'ci/repro-4678-10x' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download run results
+        uses: actions/download-artifact@v7
+        with:
+          pattern: clt-4678-run-*
+          path: results
+          merge-multiple: true
+
+      - name: Summarize all attempts
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(results/run-*.json)
+          count="${#files[@]}"
+          if (( count == 0 )); then
+            echo "No results were uploaded." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          passed="$(jq -s '[.[] | select(.status == "passed")] | length' "${files[@]}")"
+          failed="$(jq -s '[.[] | select(.status == "failed")] | length' "${files[@]}")"
+          other="$(jq -s '[.[] | select(.status != "passed" and .status != "failed")] | length' "${files[@]}")"
+          {
+            echo '## Issue #4678 — 10-run reproduction'
+            echo
+            echo "**Passed: ${passed} / 10; failed: ${failed} / 10; incomplete/other: ${other} / 10.**"
+            echo
+            echo '| Run | Test status | CLT step outcome |'
+            echo '| ---: | --- | --- |'
+            jq -sr 'sort_by(.attempt)[] | "| \(.attempt) | \(.status) | \(.action_outcome) |"' "${files[@]}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          (( count == 10 && other == 0 && failed == 0 ))

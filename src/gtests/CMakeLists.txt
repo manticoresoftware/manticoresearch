@@ -7,8 +7,10 @@ if (NOT TARGET GTest::gmock_main)
 endif ()
 
 set ( GTESTS_SRC
+		gtests_bitmap.cpp
 		gtests_docidlookup.cpp
 		gtests_rtstuff.cpp
+		gtests_windowcount.cpp
 		gtests_text.cpp
 		gtests_functions.cpp
 		gtests_globalstate.cpp

@@ -347,6 +347,12 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 ## 高亮选项
 
+#### knn_chunk
+
+在 SQL 中设置 `knn_chunk=1`，或在 JSON 中设置 `"knn_chunk": true`，可将高亮范围限制为源文本中向量与 [KNN 查询](../Searching/KNN.md#Chunking-strategies)匹配的分块。此选项需要显式启用，不影响常规高亮行为。此选项要求查询仅包含一个针对 `float_vector_array` 列的 KNN 子句，且该列必须由 Manticore 从恰好一个全文 `FROM` 字段自动分块生成；同时，必须通过带引号的存储字段列表显式指定该字段（例如 `HIGHLIGHT({knn_chunk=1},'body')` 或 `"highlight":{"knn_chunk":true,"fields":["body"]}`）。使用 SQL 表达式形式（如 `HIGHLIGHT({knn_chunk=1},body)`）、请求空字段列表或所有字段、指定多个字段、包含多个 KNN 子句，或使用字符串属性作为嵌入来源，都会返回错误。分块边界以准备好用于索引的字段文本为准（即经过字段过滤器和表的 HTML 剥离器处理后的文本），因此此选项仅在使用默认的 `html_strip_mode=index` 且未设置 `passage_boundary` 时有效。`knn_chunk` 是 `HIGHLIGHT()` 的选项，`SNIPPET()` 不接受此选项。
+
+分块中与全文查询字面匹配的内容使用常规高亮标签。仅进行语义匹配的 KNN 查询会返回分块本身，不添加标签，因此也可以使用此选项直接获取匹配的文本片段。如果查询不包含 KNN 子句，或表中没有该行的分块来源信息（例如向量由手动提供、使用了 `truncate`/`mean` 分块策略，或该行在此功能推出前已写入），高亮处理将回退到常规的整字段行为。
+
 <!-- example highlighting options -->
 
 有若干可选高亮选项可用于微调片段生成，这些选项在 SQL、HTTP 和 PHP 客户端中通用。

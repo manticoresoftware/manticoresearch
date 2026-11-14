@@ -410,7 +410,7 @@ jobs:
       artifact_name: debug_test_results
       results_name: "Linux debug test results"
       suite_name: plain
-      CTEST_PARAMS: "EXCLUDE_LABEL;(COLUMNAR|SECONDARY|RT_INDEXER)"
+      CTEST_PARAMS: "EXCLUDE_LABEL;(COLUMNAR|SECONDARY|RT_INDEXER|BLOCK)"
       timeout: 20
       MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
 
@@ -447,6 +447,24 @@ jobs:
       results_name: "Linux debug MCL test results"
       suite_name: mcl
       CTEST_REGEX: "^(col|secondary)_"
+      timeout: 20
+      MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
+
+  test_linux_debug_block:
+    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_linux_debug.result == 'success' && (needs.mcl_runtime_linux_debug_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_linux_debug.result == 'success')
+    name: Linux debug mode tests (block)
+    needs: [build_linux_debug, mcl_runtime_linux_debug_cached, mcl_runtime_linux_debug, meta]
+    permissions:
+      checks: write
+      contents: read
+    uses: ./.github/workflows/test_template.yml
+    secrets: inherit
+    with:
+      build_artifact_name: debug_build
+      artifact_name: debug_test_results_block
+      results_name: "Linux debug block test results"
+      suite_name: block
+      CTEST_REGEX: "^block_"
       timeout: 20
       MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_debug_x86_64
 
@@ -857,6 +875,25 @@ jobs:
       MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_release_x86_64
 
 
+  test_linux_release_block:
+    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_linux_release_tests.result == 'success' && (needs.mcl_runtime_linux_release_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_linux_release.result == 'success')
+    name: Linux release mode tests (block)
+    needs: [build_linux_release_tests, mcl_runtime_linux_release_cached, mcl_runtime_linux_release, meta]
+    permissions:
+      checks: write
+      contents: read
+    uses: ./.github/workflows/test_template.yml
+    secrets: inherit
+    with:
+      build_artifact_name: release_test_build
+      artifact_name: release_test_results_block
+      results_name: "Linux release block test results"
+      suite_name: block
+      CTEST_REGEX: "^block_"
+      timeout: 15
+      MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_linux_release_x86_64
+
+
   # When only CLT changed and a cached image exists, build jobs are skipped. A job that needs
   # build_linux_release would then be skipped too (GitHub skips dependents of skipped jobs),
   # so we use a separate reuse-only job that only needs meta. That way CLT always runs when
@@ -1181,6 +1218,24 @@ jobs:
       CTEST_REGEX: "^(col|secondary)_"
       MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_windows_debug_x64
 
+  test_windows_block:
+    if: always() && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true && needs.build_windows.result == 'success' && (needs.mcl_runtime_windows_debug_cached.outputs.cache_hit == 'true' || needs.mcl_runtime_windows_debug.result == 'success')
+    name: Windows tests (block)
+    needs: [build_windows, mcl_runtime_windows_debug_cached, mcl_runtime_windows_debug, win_bundle, meta]
+    permissions:
+      checks: write
+      contents: read
+    uses: ./.github/workflows/win_test_template.yml
+    secrets: inherit
+    with:
+      CTEST_START: 1
+      CTEST_END: 999999
+      artifact_name: windows_test_results_block
+      results_name: "Windows block test results"
+      suite_name: block
+      CTEST_REGEX: "^block_"
+      MCL_RUNTIME_ARTIFACT_NAME: mcl_runtime_windows_debug_x64
+
   final_status:
     name: Final status
     needs:
@@ -1190,6 +1245,7 @@ jobs:
       - test_linux_debug
       - test_linux_debug_rt_indexer
       - test_linux_debug_mcl
+      - test_linux_debug_block
       - build_linux_release
       - build_linux_release_tests
       - mcl_runtime_linux_release_cached
@@ -1197,12 +1253,14 @@ jobs:
       - test_linux_release_plain
       - test_linux_release_rt
       - test_linux_release_mcl
+      - test_linux_release_block
       - mcl_runtime_windows_debug_cached
       - mcl_runtime_windows_debug
       - build_windows
       - test_windows_plain
       - test_windows_rt
       - test_windows_mcl
+      - test_windows_block
       - test_kit_light_docker_build
       - build_freebsd
       - build_aarch64
@@ -1222,6 +1280,7 @@ jobs:
             "test_linux_debug:${{ needs.test_linux_debug.result }}:${{ needs.test_linux_debug.outputs.test_outcome }}"
             "test_linux_debug_rt_indexer:${{ needs.test_linux_debug_rt_indexer.result }}:${{ needs.test_linux_debug_rt_indexer.outputs.test_outcome }}"
             "test_linux_debug_mcl:${{ needs.test_linux_debug_mcl.result }}:${{ needs.test_linux_debug_mcl.outputs.test_outcome }}"
+            "test_linux_debug_block:${{ needs.test_linux_debug_block.result }}:${{ needs.test_linux_debug_block.outputs.test_outcome }}"
             "build_linux_release:${{ needs.build_linux_release.result }}"
             "build_linux_release_tests:${{ needs.build_linux_release_tests.result }}"
             "mcl_runtime_linux_release_cached:${{ needs.mcl_runtime_linux_release_cached.result }}"
@@ -1229,12 +1288,14 @@ jobs:
             "test_linux_release_plain:${{ needs.test_linux_release_plain.result }}:${{ needs.test_linux_release_plain.outputs.test_outcome }}"
             "test_linux_release_rt:${{ needs.test_linux_release_rt.result }}:${{ needs.test_linux_release_rt.outputs.test_outcome }}"
             "test_linux_release_mcl:${{ needs.test_linux_release_mcl.result }}:${{ needs.test_linux_release_mcl.outputs.test_outcome }}"
+            "test_linux_release_block:${{ needs.test_linux_release_block.result }}:${{ needs.test_linux_release_block.outputs.test_outcome }}"
             "mcl_runtime_windows_debug_cached:${{ needs.mcl_runtime_windows_debug_cached.result }}"
             "mcl_runtime_windows_debug:${{ needs.mcl_runtime_windows_debug.result }}"
             "build_windows:${{ needs.build_windows.result }}"
             "test_windows_plain:${{ needs.test_windows_plain.result }}:${{ needs.test_windows_plain.outputs.test_outcome }}"
             "test_windows_rt:${{ needs.test_windows_rt.result }}:${{ needs.test_windows_rt.outputs.test_outcome }}"
             "test_windows_mcl:${{ needs.test_windows_mcl.result }}:${{ needs.test_windows_mcl.outputs.test_outcome }}"
+            "test_windows_block:${{ needs.test_windows_block.result }}:${{ needs.test_windows_block.outputs.test_outcome }}"
             "test_kit_light_docker_build:${{ needs.test_kit_light_docker_build.result }}"
             "build_freebsd:${{ needs.build_freebsd.result }}"
             "build_aarch64:${{ needs.build_aarch64.result }}"

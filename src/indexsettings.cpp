@@ -35,6 +35,7 @@
 
 static CreateFilenameBuilder_fn g_fnCreateFilenameBuilder = nullptr;
 static AttrEngine_e	g_eAttrEngine = AttrEngine_e::ROWWISE;
+static const char * g_szPostingsFormat = "legacy";
 
 void SetIndexFilenameBuilder ( CreateFilenameBuilder_fn pBuilder )
 {
@@ -1170,7 +1171,9 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 	m_iOvershortStep = Min ( Max ( hIndex.GetInt ( "overshort_step", 1 ), 0 ), 1 );
 	m_iStopwordStep = Min ( Max ( hIndex.GetInt ( "stopword_step", 1 ), 0 ), 1 );
 	m_iEmbeddedLimit = hIndex.GetSize ( "embedded_limit", 16384 );
-	const CSphString sPostings = hIndex.GetStr ( "postings_format", "legacy" );
+	const CSphString sType = hIndex.GetStr ( "type", "plain" );
+	const char * szDefaultPostings = ( sType=="plain" || sType=="rt" ) ? GetDefaultPostingsFormat() : "legacy";
+	const CSphString sPostings = hIndex.GetStr ( "postings_format", szDefaultPostings );
 	if ( sPostings!="legacy" && sPostings!="block" )
 	{
 		sError = "postings_format must be legacy or block";
@@ -1405,7 +1408,7 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 	tOut.Add ( "html_index_attrs",		m_sHtmlIndexAttrs,		!m_sHtmlIndexAttrs.IsEmpty() );
 	tOut.Add ( "html_remove_elements",	m_sHtmlRemoveElements,	!m_sHtmlRemoveElements.IsEmpty() );
 	tOut.Add ( "index_zones",			m_sZones,				!m_sZones.IsEmpty() );
-	tOut.Add ( "postings_format", m_uPostingsFormat ? "block" : "legacy", m_uPostingsFormat!=0 );
+	tOut.Add ( "postings_format", m_uPostingsFormat ? "block" : "legacy", m_uPostingsFormat!=0 || strcmp ( GetDefaultPostingsFormat(), "legacy" )!=0 );
 	tOut.Add ( "index_field_lengths",	1,						m_bIndexFieldLens );
 	tOut.Add ( "index_sp",				1,						m_bIndexSP );
 	tOut.Add ( "phrase_boundary_step",	m_iBoundaryStep,		m_iBoundaryStep!=0 );
@@ -3866,6 +3869,22 @@ AttrEngine_e CombineEngines ( AttrEngine_e eIndexEngine, AttrEngine_e eAttrEngin
 		eEngine = eAttrEngine;
 
 	return eEngine;
+}
+
+
+bool SetDefaultPostingsFormat ( const CSphString & sFormat )
+{
+	if ( sFormat!="legacy" && sFormat!="block" )
+		return false;
+
+	g_szPostingsFormat = sFormat=="block" ? "block" : "legacy";
+	return true;
+}
+
+
+const char * GetDefaultPostingsFormat()
+{
+	return g_szPostingsFormat;
 }
 
 

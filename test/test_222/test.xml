@@ -2,6 +2,8 @@
 <test>
 
 <requires>
+	<!-- Exercises CRC dictionaries, which block postings do not support. -->
+	<legacy_format/>
 <lemmatizer_base/>
 <non-rt-indexer/>
 </requires>

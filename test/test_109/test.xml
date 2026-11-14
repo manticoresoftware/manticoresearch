@@ -4,6 +4,8 @@
 <name>RT: kill-list and segments merge</name>
 
 <requires>
+	<!-- Exercises CRC dictionaries, which block postings do not support. -->
+	<legacy_format/>
 <non-rt/>
 </requires>
 

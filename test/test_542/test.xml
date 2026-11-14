@@ -4,6 +4,8 @@
 <name>single-term count(*) fast path</name>
 
 <requires>
+	<!-- Checks legacy executor names and chunk percentages in SHOW META. -->
+	<legacy_format/>
 	<force-rt/>
 	<columnar/>
 </requires>

@@ -4,6 +4,8 @@
 <name>removing last ft field from an index</name>
 
 <requires>
+	<!-- Alters full-text fields on existing disk chunks; block postings require a rebuild. -->
+	<legacy_format/>
 	<force-rt/>
 </requires>
 

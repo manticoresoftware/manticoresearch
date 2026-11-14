@@ -606,6 +606,9 @@ void operator<< ( JsonEscapedBuilder& tOut, const CSphIndexSettings& tIndexSetti
 void		SaveTokenizerSettings ( JsonEscapedBuilder& tOut, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit );
 void		SaveDictionarySettings ( JsonEscapedBuilder& tOut, const DictRefPtr_c& pDict, bool bForceWordDict, int iEmbeddedLimit );
 
+bool		SetDefaultPostingsFormat ( const CSphString & sFormat );
+const char * GetDefaultPostingsFormat();
+
 void		SetDefaultAttrEngine ( AttrEngine_e eEngine );
 AttrEngine_e GetDefaultAttrEngine();
 

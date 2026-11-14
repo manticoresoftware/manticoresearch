@@ -219,6 +219,9 @@ function resdir ($testdir)
 		elseif ( IsRt() )
 			$prefix = "rt_";
 	}
+	if ( IsBlock() )
+		$prefix = "block_".$prefix;
+
 	return scriptdir ( $prefix.$testid );
 }
 

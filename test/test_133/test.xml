@@ -4,6 +4,8 @@
 <name>SENTENCE, PARAGRAPH, and ZONE operators</name>
 
 <requires>
+	<!-- Exercises CRC dictionaries, which block postings do not support. -->
+	<legacy_format/>
 	<non-rt/>
 </requires>
 

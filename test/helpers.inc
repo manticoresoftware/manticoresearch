@@ -9,6 +9,7 @@ ini_set ( "error_reporting", $error_reporting );
 ini_set ('memory_limit', '256M');
 
 require_once ( $g_locals['api'] );
+require_once ( 'helpers_block.inc' );
 
 function MyMicrotime ()
 {
@@ -3987,6 +3988,12 @@ class SphinxConfig
 		$config = fread ( $fp, filesize ( $filename ) );
 		fclose ( $fp );
 
+		if ( IsBlock() )
+		{
+			$config = BlockPostingsConfig ( $config );
+			file_put_contents ( $filename, $config );
+		}
+
 		// for rt case - extract the schema from the config
 		// and make the new config, making the index as rt instead
 		if ( IsRt() )
@@ -4840,6 +4847,12 @@ function CheckConfig ( $config, $path )
 	if ( $config->Requires("non-rt") && IsRt() )
 	{
 		printf ( "SKIPPING %s, %s - explicitly non-RT test skipped in RT mode\n", $path, $config->Name () );
+		return false;
+	}
+
+	if ( $config->Requires("legacy_format") && IsBlock() )
+	{
+		printf ( "SKIPPING %s, %s - requires legacy postings format\n", $path, $config->Name () );
 		return false;
 	}
 

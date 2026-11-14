@@ -1197,6 +1197,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "buddy_path",				0, nullptr },
 	{ "telemetry",				0, nullptr },
 	{ "auto_schema",			0, nullptr },
+	{ "postings_format",			0, nullptr },
 	{ "engine",					0, nullptr },
 	{ "join_cache_size",		0, nullptr },
 	{ "replication_connect_timeout",	0, NULL },
@@ -3421,6 +3422,13 @@ void sphCheckDuplicatePaths ( const CSphConfig & hConf )
 
 void sphConfigureCommon ( const CSphConfig & hConf, FixPathAbsolute_fn && fnPathFix )
 {
+	CSphString sPostings = "legacy";
+	if ( hConf("searchd") && hConf["searchd"]("searchd") )
+		sPostings = hConf["searchd"]["searchd"].GetStr ( "postings_format", "legacy" );
+
+	if ( !SetDefaultPostingsFormat(sPostings) )
+		sphDie ( "searchd.postings_format must be legacy or block" );
+
 	if ( !hConf("common") || !hConf["common"]("common") )
 	{
 		sphPluginInit ( nullptr );

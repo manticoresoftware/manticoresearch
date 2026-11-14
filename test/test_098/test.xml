@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>specials vs charset_table vs match_mode</name>
+
+<requires>
+	<!-- Exercises CRC dictionaries, which block postings do not support. -->
+	<legacy_format/>
+</requires>
 <config>
 indexer
 {

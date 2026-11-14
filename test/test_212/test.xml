@@ -3,6 +3,8 @@
 	<name>alter ft</name>
 
 	<requires>
+	<!-- Alters full-text fields on existing disk chunks; block postings require a rebuild. -->
+	<legacy_format/>
 		<force-rt/>
 	</requires>
 	<skip_indexer/>

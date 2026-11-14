@@ -149,6 +149,7 @@ int						g_iMaxFilterValues	= 4096;
 int						g_iMaxBatchQueries	= 32;
 
 static int64_t			g_iDocstoreCache = 0;
+static bool				g_bDocstoreCacheAdaptive = false;
 static int64_t			g_iSkipCache = 0;
 
 static auto &	g_iDistThreads		= getDistThreads();
@@ -2946,6 +2947,10 @@ void BuildStatus ( VectorLike & dStatus )
 	dStatus.MatchTupletf ( "qcache_used_bytes", "%l", s.m_iUsedBytes );
 	dStatus.MatchTupletf ( "qcache_hits", "%l", s.m_iHits );
 	dStatus.MatchTupletf ( "docid_lookup_cache_used_bytes", "%l", (int64_t)DocidLookupCache_c::GetUsed() );
+	const auto tDocstoreCache = GetDocstoreCacheStats();
+	dStatus.MatchTupletf ( "docstore_cache_used_bytes", "%l", tDocstoreCache.m_iUsedBytes );
+	dStatus.MatchTupletf ( "docstore_cache_mapped_bytes", "%l", tDocstoreCache.m_iMappedBytes );
+	dStatus.MatchTupletf ( "docstore_cache_spare_bytes", "%l", tDocstoreCache.m_iSpareBytes );
 
 	// clusters
 	ReplicateClustersStatus ( dStatus );
@@ -16009,6 +16014,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bNeedPIDFile, bool bTestM
 	DocidLookupCache_c::SetBudget((size_t)iDocidCache);
 
 	g_iDocstoreCache = hSearchd.GetSize64 ( "docstore_cache_size", 16777216 );
+	g_bDocstoreCacheAdaptive = hSearchd.GetInt ( "docstore_cache_adaptive", 0 )!=0;
 	g_iSkipCache = hSearchd.GetSize64 ( "skiplist_cache_size", 67108864 );
 
 	if ( hSearchd.Exists ( "max_open_files" ) )
@@ -17204,7 +17210,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		sphLockUn ( g_iPidFD );
 
 	SetUidShort ( GetMacAddress(), g_sPidFile, bTestMode );
-	InitDocstore ( g_iDocstoreCache );
+	InitDocstore ( g_iDocstoreCache, g_bDocstoreCacheAdaptive );
 	InitSkipCache ( g_iSkipCache );
 	InitParserOption();
 

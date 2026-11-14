@@ -9,6 +9,8 @@
 //
 
 #include "docstore.h"
+#include "docstore_blockpool.h"
+#include "docstore_admission.h"
 
 #include "std/lrucache.h"
 #include "std/hash.h"
@@ -292,6 +294,7 @@ struct BlockData_t
 	DWORD	m_uNumDocs = 0;
 	BYTE *	m_pData = nullptr;
 	DWORD	m_uSize = 0;
+	DocstoreBlockPool_c * m_pPool = nullptr;
 };
 
 
@@ -312,44 +315,87 @@ struct BlockUtil_t
 	}
 	static bool Equal ( const HashKey_t & a, const HashKey_t & b ) { return a==b; }
 
-	static DWORD GetSize ( const BlockData_t & tValue )	{ return tValue.m_uSize; }
-	static void Reset ( BlockData_t & tValue )			{ SafeDeleteArray ( tValue.m_pData ); }
+	static DWORD GetSize ( const BlockData_t & tValue ) { return tValue.m_pPool ? DWORD(DocstoreBlockPool_c::AllocationSize(tValue.m_uSize)) : tValue.m_uSize; }
+	static void Reset ( BlockData_t & tValue )
+	{
+		if ( tValue.m_pPool ) tValue.m_pPool->Free ( tValue.m_pData, tValue.m_uSize );
+		else SafeDeleteArray ( tValue.m_pData );
+		tValue.m_pData = nullptr;
+	}
 };
 
 
 class BlockCache_c
 {
-	using Shard_t = LRUCache_T<HashKey_t, BlockData_t, BlockUtil_t>;
+	using Cache_t = LRUCache_T<HashKey_t, BlockData_t, BlockUtil_t>;
+	struct Shard_t
+	{
+		// Destroy cached entries before the pool that owns their mappings.
+		std::unique_ptr<DocstoreBlockPool_c> m_pPool;
+		Cache_t m_tCache;
+		int64_t m_iBudget;
+		Shard_t ( int64_t iBudget, int64_t iMaxBlock, int64_t iFloor )
+			: m_pPool ( iFloor ? std::make_unique<DocstoreBlockPool_c>() : nullptr )
+			, m_tCache ( iBudget, iMaxBlock, iFloor ), m_iBudget(iBudget) {}
+	};
 
 public:
-	explicit BlockCache_c ( int64_t iCacheSize )
+	explicit BlockCache_c ( int64_t iCacheSize, bool bAdaptive )
 	{
+		if ( bAdaptive ) m_pAdmission = std::make_unique<DocstoreAdmission_c>();
 		while ( m_iShards<16 && iCacheSize/(m_iShards*2)>=1024*1024 )
 			m_iShards *= 2;
 		for ( int i=0; i<m_iShards; ++i )
 		{
 			const int64_t iBudget = iCacheSize/m_iShards + (i<iCacheSize%m_iShards);
 			// Sharding must not shrink the original maximum-block admission threshold.
-			m_dShards[i] = std::make_unique<Shard_t> ( iBudget, iCacheSize/64 );
+			const int64_t iFloor = bAdaptive ? Min ( iBudget, int64_t(16*1024*1024)/m_iShards ) : 0;
+			m_dShards[i] = std::make_unique<Shard_t> ( iBudget, iCacheSize/64, iFloor );
 		}
 	}
 
-	bool Find ( HashKey_t tKey, BlockData_t & tData ) { return Shard(tKey).Find ( tKey, tData ); }
-	bool Add ( HashKey_t tKey, const BlockData_t & tData ) { return Shard(tKey).Add ( tKey, tData ); }
-	void Release ( HashKey_t tKey ) { Shard(tKey).Release(tKey); }
+	using Ref_t = Cache_t::Ref_t;
+	bool Find ( HashKey_t tKey, BlockData_t & tData, Ref_t & pRef ) { return Shard(tKey).m_tCache.Find ( tKey, tData, &pRef ); }
+	bool Add ( HashKey_t tKey, const BlockData_t & tData, Ref_t & pRef ) { return Shard(tKey).m_tCache.Add ( tKey, tData, &pRef ); }
+	bool Admit ( HashKey_t tKey ) { return !m_pAdmission || m_pAdmission->Admit ( BlockUtil_t::GetHash(tKey) ); }
+	static void Release ( Ref_t pRef ) { Cache_t::ReleaseRef(pRef); }
+	void Allocate ( HashKey_t tKey, BlockData_t & tData )
+	{
+		if ( !AllocateMapped ( tKey, tData ) ) tData.m_pData = new BYTE[tData.m_uSize];
+	}
+	bool AllocateMapped ( HashKey_t tKey, BlockData_t & tData )
+	{
+		auto & tShard = Shard(tKey);
+		if ( tShard.m_pPool && DocstoreBlockPool_c::AllocationSize(tData.m_uSize)<=uint64_t(tShard.m_iBudget) )
+		{
+			tData.m_pData = tShard.m_pPool->Allocate(tData.m_uSize);
+			if ( tData.m_pData ) tData.m_pPool = tShard.m_pPool.get();
+		}
+		return tData.m_pData!=nullptr;
+	}
+	DocstoreCacheStats_t GetStats()
+	{
+		DocstoreCacheStats_t tStats;
+		for ( int i=0; i<m_iShards; ++i )
+		{
+			tStats.m_iUsedBytes += m_dShards[i]->m_tCache.GetUsedBytes();
+			if ( m_dShards[i]->m_pPool ) m_dShards[i]->m_pPool->GetStats ( tStats.m_iMappedBytes, tStats.m_iSpareBytes );
+		}
+		return tStats;
+	}
 
 	void ClearByIndexId ( int64_t iIndexId )
 	{
 		for ( int i=0; i<m_iShards; ++i )
-			m_dShards[i]->Delete ( [iIndexId]( const HashKey_t & tKey ){ return tKey.m_iIndexId==iIndexId; } );
+			m_dShards[i]->m_tCache.Delete ( [iIndexId]( const HashKey_t & tKey ){ return tKey.m_iIndexId==iIndexId; } );
 	}
 	void ClearAll()
 	{
 		for ( int i=0; i<m_iShards; ++i )
-			m_dShards[i]->Delete ( []( const HashKey_t & ){ return true; } );
+			m_dShards[i]->m_tCache.Delete ( []( const HashKey_t & ){ return true; } );
 	}
 
-	static void Init ( int64_t iCacheSize );
+	static void Init ( int64_t iCacheSize, bool bAdaptive );
 	static void Done() { SafeDelete(m_pBlockCache); }
 	static BlockCache_c * Get() { return m_pBlockCache; }
 
@@ -358,17 +404,18 @@ private:
 	Shard_t & Shard ( HashKey_t tKey ) { return *m_dShards[(BlockUtil_t::GetHash(tKey)>>28) & (m_iShards-1)]; }
 
 	int m_iShards = 1;
+	std::unique_ptr<DocstoreAdmission_c> m_pAdmission;
 	std::unique_ptr<Shard_t> m_dShards[16];
 	static BlockCache_c * m_pBlockCache;
 };
 
 BlockCache_c * BlockCache_c::m_pBlockCache = nullptr;
 
-void BlockCache_c::Init ( int64_t iCacheSize )
+void BlockCache_c::Init ( int64_t iCacheSize, bool bAdaptive )
 {
 	assert ( !m_pBlockCache );
 	if ( iCacheSize > 0 )
-		m_pBlockCache = new BlockCache_c(iCacheSize);
+		m_pBlockCache = new BlockCache_c ( iCacheSize, bAdaptive );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -587,8 +634,8 @@ private:
 	void						ReadFromFile ( BYTE * pData, int iLength, SphOffset_t tOffset, int64_t iSessionId ) const;
 	DocstoreDoc_t				ReadDocFromSmallBlock ( const Block_t & tBlock, RowID_t tRowID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const;
 	DocstoreDoc_t				ReadDocFromBigBlock ( const Block_t & tBlock, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const;
-	BlockData_t					UncompressSmallBlock ( const Block_t & tBlock, int64_t iSessionId ) const;
-	BlockData_t					UncompressBigBlockField ( SphOffset_t tOffset, const FieldInfo_t & tInfo, int64_t iSessionId ) const;
+	BlockData_t					UncompressSmallBlock ( const Block_t & tBlock, int64_t iSessionId, BlockCache_c * pCache ) const;
+	BlockData_t					UncompressBigBlockField ( SphOffset_t tOffset, const FieldInfo_t & tInfo, int64_t iSessionId, BlockCache_c * pCache ) const;
 
 	bool						ProcessSmallBlockDoc ( RowID_t tCurDocRowID, RowID_t tRowID, const VecTraits_T<int> * pFieldIds, const CSphFixedVector<int> & dFieldInRset, bool bPack, MemoryReader2_c & tReader, CSphBitvec & tEmptyFields, DocstoreDoc_t & tResult ) const;
 	void						ProcessBigBlockField ( int iField, const FieldInfo_t & tInfo, int iFieldInRset, bool bPack, int64_t iSessionId, SphOffset_t & tOffset, DocstoreDoc_t & tResult ) const;
@@ -724,22 +771,38 @@ DocstoreDoc_t Docstore_c::GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFie
 }
 
 
-struct ScopedBlock_t
+// Own either a shared-cache reference or a temporary decoded block.
+class ScopedBlock_c
 {
-	int64_t		m_iIndexId = INT64_MAX;
-	SphOffset_t	m_tOffset = 0;
-
-	~ScopedBlock_t()
+public:
+	template<typename LOADER>
+	ScopedBlock_c ( HashKey_t tKey, LOADER && fnLoad )
 	{
-		if ( m_iIndexId==INT64_MAX )
+		auto * pCache = BlockCache_c::Get();
+		if ( pCache && pCache->Find ( tKey, m_tData, m_pRef ) )
 			return;
 
-		BlockCache_c * pBlockCache = BlockCache_c::Get();
-		assert ( pBlockCache );
-		pBlockCache->Release ( { m_iIndexId, m_tOffset } );
+		const bool bAdmit = pCache && pCache->Admit(tKey);
+		m_tData = fnLoad ( bAdmit ? pCache : nullptr );
+		auto tCleanup = AtScopeExit ( [&] { BlockUtil_t::Reset(m_tData); } );
+		if ( bAdmit ) pCache->Add ( tKey, m_tData, m_pRef );
+		tCleanup.Release();
 	}
-};
 
+	ScopedBlock_c ( const ScopedBlock_c & ) = delete;
+	ScopedBlock_c & operator = ( const ScopedBlock_c & ) = delete;
+	~ScopedBlock_c()
+	{
+		if ( m_pRef ) BlockCache_c::Release(m_pRef);
+		else BlockUtil_t::Reset(m_tData);
+	}
+
+	const BlockData_t & Get() const { return m_tData; }
+
+private:
+	BlockData_t m_tData;
+	BlockCache_c::Ref_t m_pRef = nullptr;
+};
 
 void Docstore_c::ReadFromFile ( BYTE * pData, int iLength, SphOffset_t tOffset, int64_t iSessionId ) const
 {
@@ -758,7 +821,7 @@ void Docstore_c::ReadFromFile ( BYTE * pData, int iLength, SphOffset_t tOffset, 
 }
 
 
-BlockData_t Docstore_c::UncompressSmallBlock ( const Block_t & tBlock, int64_t iSessionId ) const
+BlockData_t Docstore_c::UncompressSmallBlock ( const Block_t & tBlock, int64_t iSessionId, BlockCache_c * pCache ) const
 {
 	BlockData_t tResult;
 	CSphFixedVector<BYTE> dBlock ( tBlock.m_uSize );
@@ -776,17 +839,15 @@ BlockData_t Docstore_c::UncompressSmallBlock ( const Block_t & tBlock, int64_t i
 
 	const BYTE * pBody = dBlock.Begin() + tBlockReader.GetPos();
 
-	CSphFixedVector<BYTE> dDecompressed(0);
+	if ( pCache ) pCache->Allocate ( { m_iIndexId, tBlock.m_tOffset }, tResult );
+	else tResult.m_pData = new BYTE[tResult.m_uSize];
 	if ( bCompressed )
 	{
-		dDecompressed.Reset ( tResult.m_uSize );
-		Verify ( m_pCompressor->Decompress ( VecTraits_T<const BYTE> (pBody, uCompressedLength), dDecompressed) );
-		tResult.m_pData = dDecompressed.LeakData();
+		VecTraits_T<BYTE> dDecoded ( tResult.m_pData, tResult.m_uSize );
+		Verify ( m_pCompressor->Decompress ( VecTraits_T<const BYTE> (pBody, uCompressedLength), dDecoded ) );
 	}
 	else
 	{
-		// we can't just pass tResult.m_pData because it doesn't point to the start of the allocated block
-		tResult.m_pData = new BYTE[tResult.m_uSize];
 		memcpy ( tResult.m_pData, pBody, tResult.m_uSize );
 	}
 
@@ -835,25 +896,10 @@ bool Docstore_c::ProcessSmallBlockDoc ( RowID_t tCurDocRowID, RowID_t tRowID, co
 
 DocstoreDoc_t Docstore_c::ReadDocFromSmallBlock ( const Block_t & tBlock, RowID_t tRowID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const
 {
-	BlockCache_c * pBlockCache = BlockCache_c::Get();
-
-	BlockData_t tBlockData;
-	bool bFromCache = pBlockCache && pBlockCache->Find ( { m_iIndexId, tBlock.m_tOffset }, tBlockData );
-	if ( !bFromCache )
-	{
-		tBlockData = UncompressSmallBlock ( tBlock, iSessionId );
-		bFromCache = pBlockCache && pBlockCache->Add ( { m_iIndexId, tBlock.m_tOffset }, tBlockData );
-	}
-
-	ScopedBlock_t tScopedBlock;
-	CSphFixedVector<BYTE> tDataPtr {0};	// scoped array ptr
-	if ( bFromCache )
-	{
-		tScopedBlock.m_iIndexId = m_iIndexId;
-		tScopedBlock.m_tOffset = tBlock.m_tOffset;
-	}
-	else
-		tDataPtr.Set ( tBlockData.m_pData, 0 );
+	ScopedBlock_c tScopedBlock ( { m_iIndexId, tBlock.m_tOffset }, [&] ( BlockCache_c * pCache ) {
+		return UncompressSmallBlock ( tBlock, iSessionId, pCache );
+	} );
+	const auto & tBlockData = tScopedBlock.Get();
 
 	CSphFixedVector<int> dFieldInRset (	m_tFields.GetNumFields() );
 	CreateFieldRemap ( dFieldInRset, pFieldIds );
@@ -875,7 +921,7 @@ DocstoreDoc_t Docstore_c::ReadDocFromSmallBlock ( const Block_t & tBlock, RowID_
 }
 
 
-BlockData_t Docstore_c::UncompressBigBlockField ( SphOffset_t tOffset, const FieldInfo_t & tInfo, int64_t iSessionId ) const
+BlockData_t Docstore_c::UncompressBigBlockField ( SphOffset_t tOffset, const FieldInfo_t & tInfo, int64_t iSessionId, BlockCache_c * pCache ) const
 {
 	BlockData_t tResult;
 	bool bCompressed = !!( tInfo.m_uFlags & FIELD_FLAG_COMPRESSED );
@@ -886,15 +932,19 @@ BlockData_t Docstore_c::UncompressBigBlockField ( SphOffset_t tOffset, const Fie
 
 	tResult.m_uSize = tInfo.m_uUncompressedLen;
 
-	CSphFixedVector<BYTE> dDecompressed(0);
-	if ( bCompressed )
+	// Uncompressed fields can reuse their input buffer without an extra copy.
+	if ( !bCompressed )
 	{
-		dDecompressed.Reset ( tResult.m_uSize );
-		Verify ( m_pCompressor->Decompress ( dField, dDecompressed ) );
-		tResult.m_pData = dDecompressed.LeakData();
+		if ( pCache && pCache->AllocateMapped ( { m_iIndexId, tOffset }, tResult ) )
+			memcpy ( tResult.m_pData, dField.Begin(), tResult.m_uSize );
+		else
+			tResult.m_pData = dField.LeakData();
+		return tResult;
 	}
-	else
-		tResult.m_pData = dField.LeakData();
+	if ( pCache ) pCache->Allocate ( { m_iIndexId, tOffset }, tResult );
+	else tResult.m_pData = new BYTE[tResult.m_uSize];
+	VecTraits_T<BYTE> dDecoded ( tResult.m_pData, tResult.m_uSize );
+	Verify ( m_pCompressor->Decompress ( dField, dDecoded ) );
 
 	return tResult;
 }
@@ -913,25 +963,10 @@ void Docstore_c::ProcessBigBlockField ( int iField, const FieldInfo_t & tInfo, i
 		return;
 	}
 
-	BlockCache_c * pBlockCache = BlockCache_c::Get();
-
-	BlockData_t tBlockData;
-	bool bFromCache = pBlockCache && pBlockCache->Find ( { m_iIndexId, tOffset }, tBlockData );
-	if ( !bFromCache )
-	{
-		tBlockData = UncompressBigBlockField ( tOffset, tInfo, iSessionId );
-		bFromCache = pBlockCache && pBlockCache->Add ( { m_iIndexId, tOffset }, tBlockData );
-	}
-
-	ScopedBlock_t tScopedBlock;
-	CSphFixedVector<BYTE> tDataPtr {0};	// scoped array ptr
-	if ( bFromCache )
-	{
-		tScopedBlock.m_iIndexId = m_iIndexId;
-		tScopedBlock.m_tOffset = tOffset;
-	}
-	else
-		tDataPtr.Set ( tBlockData.m_pData, 0 );
+	ScopedBlock_c tScopedBlock ( { m_iIndexId, tOffset }, [&] ( BlockCache_c * pCache ) {
+		return UncompressBigBlockField ( tOffset, tInfo, iSessionId, pCache );
+	} );
+	const auto & tBlockData = tScopedBlock.Get();
 
 	PackData ( tResult.m_dFields[iFieldInRset], tBlockData.m_pData, tBlockData.m_uSize, m_tFields.GetField(iField).m_eType==DOCSTORE_TEXT, bPack );
 
@@ -2013,10 +2048,21 @@ std::unique_ptr<DocstoreFields_i> CreateDocstoreFields()
 }
 
 
-void InitDocstore ( int64_t iCacheSize )
+void InitDocstore ( int64_t iCacheSize, bool bAdaptive )
 {
-	BlockCache_c::Init(iCacheSize);
+	BlockCache_c::Init ( iCacheSize, bAdaptive );
 	DocstoreReaders_c::Init();
+}
+
+int64_t GetDocstoreCacheUsedBytes()
+{
+	return GetDocstoreCacheStats().m_iUsedBytes;
+}
+
+DocstoreCacheStats_t GetDocstoreCacheStats()
+{
+	auto * pCache = BlockCache_c::Get();
+	return pCache ? pCache->GetStats() : DocstoreCacheStats_t{};
 }
 
 

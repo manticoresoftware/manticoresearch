@@ -715,6 +715,75 @@ docstore_cache_size = 8m
 ```
 <!-- end -->
 
+### docstore_cache_adaptive
+
+Enable second-touch admission and adaptive cold-block reclamation with `1`; the default is `0`. The
+`docstore_cache_size` setting remains the hard limit for cached decoded blocks
+and LRU entries. Small mapped payloads are charged in 256-byte size classes;
+larger dedicated mappings are charged at their page-rounded size.
+Memory is already allocated on demand in either mode: a
+512 MiB limit does not reserve 512 MiB at startup. Hash tables and allocator
+metadata, reader buffers and in-flight decompression remain additional memory.
+Adaptive mode also uses a fixed 256 KiB fingerprint history, allocated only when
+the block cache is enabled.
+
+On a cache miss, adaptive mode admits a decoded block only if its fingerprint
+was already observed in its history slot. The first visit uses a temporary
+heap buffer. A second visit can occur within the same query or session.
+The bounded history uses atomic fingerprint replacement; collisions can change
+admission decisions but cannot return another block, since the shared cache
+still compares complete keys. Manual mode admits every eligible miss. This
+policy reduces insertion and eviction work for sparse accesses; it does not
+guarantee that caching improves every workload.
+
+Adaptive mode allocates decoded payloads through a per-partition virtual-memory
+pool. POSIX uses anonymous mappings; Windows uses `VirtualAlloc`. Blocks up to
+31 KiB are packed into 64 KiB regions, avoiding a full memory-page rounding
+charge for each small block. Larger payloads use dedicated mappings. Compressed
+data is decoded directly into the allocated storage. A region is released when
+its final live block is freed; each pool keeps at most one empty 64 KiB region
+for reuse. Dedicated mappings are released immediately. Sixteen partitions
+therefore retain at most 1 MiB of completely empty spare regions. Unused slots
+in partially occupied regions also consume mapped address space, in addition
+to the cached-entry limit. Mapping
+failure or a payload too large for its partition falls back to the process
+heap. Manual mode continues to use the process heap. Metadata, temporary input
+buffers and output values still use the process heap in either mode.
+
+Adaptive mode keeps the partition count and block-to-partition mapping fixed.
+Each partition observes windows of 4096 block lookups under its existing lock.
+After four windows with at least 98% hits and touched bytes below one quarter
+of retained bytes, it gradually frees cold, unreferenced entries. It retains
+headroom of twice the touched bytes, with a target floor totaling up to 16 MiB
+across partitions. This floor is not a minimum allocation. Each reclamation
+step examines at most 32 entries per 64 lookups. Recently touched and referenced
+blocks survive reclamation; normal admission can grow again up to the limit.
+
+Reclamation is driven by lookups, not a wall-clock timer. Idle partitions do
+not advance their windows. Low hit rates do not trigger this cold-block trim,
+and adaptive mode does not bypass cache lookup costs or exceed an undersized
+configured limit. Choose the limit for the active decoded working set and
+available memory. It is independent of DocID caching and requires no reader TLS.
+
+`SHOW STATUS LIKE 'docstore_cache_used_bytes'` reports retained payload
+allocation and LRU entry bytes, summed from separately locked snapshots. It
+excludes hash tables, allocator metadata, reader buffers and in-flight blocks;
+it is not process RSS or an atomic cross-partition snapshot.
+`docstore_cache_mapped_bytes` reports mapped address-space bytes, including
+partially occupied regions, in-flight payloads and empty spare regions.
+`docstore_cache_spare_bytes` reports only completely empty retained regions,
+not free slots inside occupied regions. These metrics do not include
+heap-fallback payloads and do not measure resident physical pages.
+Released mappings bypass heap retention, but other process allocations can
+still prevent a net RSS decrease. The target floor is a policy target, not a guaranteed
+final occupancy; the activity threshold and pinned blocks can stop reclamation
+above it.
+
+```ini
+docstore_cache_size = 512m
+docstore_cache_adaptive = 1
+```
+
 ### engine
 
 <!-- example conf engine -->

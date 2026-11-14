@@ -657,9 +657,11 @@ docid_lookup_cache_size = 256m
 
 Loading a disk chunk does not allocate a cache. Repeated sparse ID batches
 (at least 16 IDs and at most 1/64 of the chunk's rows) trigger construction,
-decoding at most 16,384 entries per query. Other queries do not wait for the
+decoding at most 16,384 entries per chunk in each eligible build call. A query
+visiting several chunks can advance several builds. Other queries do not wait for the
 builder. Only a complete, unique-ID mapping is published for batch lookup.
-Single-ID lookups use the compressed reader and do not trigger construction.
+Point-only workloads do not trigger construction. Scalar lookups keep the
+compressed reader.
 Allocation refusal, budget exhaustion, duplicate IDs or cancellation retains
 the compressed reader. Cache allocations, alignment padding and handles count
 against the budget; allocator metadata and process RSS do not. The cache adds

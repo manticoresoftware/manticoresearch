@@ -7,9 +7,63 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
+  build_searchd:
+    name: Build patched Linux searchd
+    uses: ./.github/workflows/build_template.yml
+    secrets: inherit
+    with:
+      artifact_name: clt-4678-patched-searchd
+      cache_key: build_linux_release_tests_x86_64
+      artifact_list: "build/src/searchd"
+      cmake_command: |
+        export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
+        export MCL_LOCAL_RUNTIME=OFF
+        ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
+
+  patched_image:
+    name: Install patched searchd in known-failing test image
+    needs: [build_searchd]
+    runs-on: ubuntu-22.04
+    outputs:
+      image: ${{ steps.publish.outputs.image }}
+    steps:
+      - name: Download patched searchd
+        uses: actions/download-artifact@v7
+        with:
+          name: clt-4678-patched-searchd
+      - name: Unpack build artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -xf artifact.tar
+          test -x build/src/searchd
+          file build/src/searchd
+      - name: Publish patched test image
+        id: publish
+        shell: bash
+        env:
+          GHCR_USER: ${{ vars.GHCR_USER || github.actor }}
+          GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD || github.token }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REF_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          base='ghcr.io/manticoresoftware/manticoresearch:test-kit-ci-ef2bec58593d167ca67ee38107a10ee7c5c3da5e'
+          image="ghcr.io/${REPO_OWNER}/manticoresearch:test-kit-4678-fixed-${REF_SHA}"
+          docker pull "$base"
+          container="$(docker create --entrypoint /bin/true "$base")"
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          docker cp build/src/searchd "$container:/usr/bin/searchd"
+          docker commit "$container" "$image"
+          echo "$GHCR_PASSWORD" | docker login -u "$GHCR_USER" --password-stdin ghcr.io
+          docker push "$image"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
   reproduce:
+    needs: [patched_image]
     # This is a temporary experiment, limited to its own PR branch.
     if: ${{ github.head_ref == 'ci/repro-4678-10x' }}
     name: 'Reproduce #4678 (run ${{ matrix.attempt }}/10)'
@@ -28,8 +82,8 @@ jobs:
         uses: manticoresoftware/clt@main
         continue-on-error: true
         with:
-          # Same image as the failing CI run, to measure reproducibility.
-          image: ghcr.io/manticoresoftware/manticoresearch:test-kit-ci-ef2bec58593d167ca67ee38107a10ee7c5c3da5e
+          # Same test-kit environment, but with searchd built from this PR.
+          image: ${{ needs.patched_image.outputs.image }}
           repository: ${{ github.repository }}
           ref: ${{ github.event.pull_request.head.sha }}
           tests: '["test/clt-tests/bugs/4678-show-threads-queryinfo-uaf"]'
@@ -119,14 +173,15 @@ jobs:
 
   symbolize:
     name: 'Locate GatherPublicTaskInfo +0x50 in searchd'
+    needs: [patched_image]
     if: ${{ github.head_ref == 'ci/repro-4678-10x' }}
     runs-on: ubuntu-22.04
     steps:
-      - name: Disassemble the exact binary from the failing CI image
+      - name: Disassemble the patched binary
         shell: bash
         run: |
           set -euo pipefail
-          image='ghcr.io/manticoresoftware/manticoresearch:test-kit-ci-ef2bec58593d167ca67ee38107a10ee7c5c3da5e'
+          image='${{ needs.patched_image.outputs.image }}'
           docker pull "$image"
           container="$(docker create --entrypoint /bin/true "$image")"
           trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
@@ -148,7 +203,7 @@ jobs:
       - name: Upload disassembly
         uses: actions/upload-artifact@v6
         with:
-          name: clt-4678-gatherpublictaskinfo-assembly
+          name: clt-4678-gatherpublictaskinfo-fixed-assembly
           path: gather-disassembly.txt
           if-no-files-found: error
           retention-days: 14

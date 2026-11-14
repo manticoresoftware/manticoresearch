@@ -219,7 +219,7 @@ class Worker_c final: public details::SchedulerOperation_t
 		auto& tMyThd = MyThd();
 		m_pPreviousWorker = std::exchange ( tMyThd.m_pWorker, this );
 		m_pPrevTlsMsg = tMyThd.m_pTlsMsg.exchange ( &m_sTlsMsg, std::memory_order_relaxed );
-		m_pCurrentTaskInfo = tMyThd.m_pTaskInfo.exchange ( m_pCurrentTaskInfo, std::memory_order_relaxed );
+		m_pCurrentTaskInfo = tMyThd.m_pTaskInfo.exchange ( m_pCurrentTaskInfo, std::memory_order_acq_rel );
 		m_tmCpuTimeBase -= sphThreadCpuTimer();
 		++m_iNumOfRestarts;
 		CheckEngageTimer( TimePoint_e::fromresume );
@@ -231,7 +231,7 @@ class Worker_c final: public details::SchedulerOperation_t
 			m_tInternalTimer.UnEngage();
 		m_tmCpuTimeBase += sphThreadCpuTimer();
 		auto& tMyThd = MyThd();
-		m_pCurrentTaskInfo = tMyThd.m_pTaskInfo.exchange ( m_pCurrentTaskInfo, std::memory_order_relaxed );
+		m_pCurrentTaskInfo = tMyThd.m_pTaskInfo.exchange ( m_pCurrentTaskInfo, std::memory_order_acq_rel );
 		tMyThd.m_pTlsMsg.store ( m_pPrevTlsMsg, std::memory_order_relaxed );
 		std::exchange ( tMyThd.m_pWorker, m_pPreviousWorker );
 	}

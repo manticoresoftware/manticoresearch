@@ -1263,7 +1263,7 @@ bool LookupReader_c::BuildCache ( DWORD uIndexVersion )
 
 void LookupReader_c::PrepareCache ( size_t nValues, DWORD uIndexVersion ) const
 {
-	if ( nValues<DocidLookupCache_c::BATCH_SIZE || !DocidLookupCache_c::IsSparse ( nValues, m_nDocs ) || !DocidLookupCache_c::IsEnabled() )
+	if ( !nValues || !DocidLookupCache_c::IsSparse ( nValues, m_nDocs ) || !DocidLookupCache_c::IsEnabled() )
 		return;
 	auto eState = m_eCacheState.load(std::memory_order_relaxed);
 	if ( eState==CacheState_e::COLD )

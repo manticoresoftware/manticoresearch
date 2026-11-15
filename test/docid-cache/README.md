@@ -8,13 +8,14 @@ Rejected or incomplete caches retain the existing compressed reader. Disk format
 and UUID lookup remain unchanged. Chunk destruction/remapping reclaims storage;
 there is no eviction or automatic admission retry.
 
-Disk-chunk load, single-ID lookups and full-count queries allocate no native
-cache. The first sparse batch (at least 16 IDs, at most 1/64 of chunk rows)
-records demand. Each subsequent eligible build call decodes at most 16,384 entries
+Disk-chunk load and queries without numeric ID filters allocate no native
+cache. The first nonempty sparse ID filter (at most 1/64 of chunk rows)
+records demand, including a single-ID filter. Each subsequent eligible build call decodes at most 16,384 entries
 per chunk; a query visiting several chunks can advance several builds. One builder
 proceeds per chunk while other readers fall back without waiting. An acquire/release
 pointer publishes the immutable mapping only after uniqueness is established.
-Scalar `Find()` keeps the compressed path, with no cache-pointer check. In-progress
+Repeated SQL point queries can therefore build and use the mapping without batch
+warmup. Scalar `Find()` keeps the compressed path, with no cache-pointer check. In-progress
 allocations count against the ceiling and are reclaimed on remap/destruction.
 Admission covers a whole chunk; actual use need not equal the configured ceiling.
 

@@ -449,7 +449,7 @@ TEST_F ( UuidDocidLookupTest, NativeCacheIsDemandBuiltInBoundedSteps )
 	for ( int i=0; i<10; ++i )
 	{
 		EXPECT_EQ ( tReader.Find(42), 21U );
-		tReader.PrepareCache ( 1, UUID_INDEX_VERSION );
+		tReader.PrepareCache ( 0, UUID_INDEX_VERSION );
 		tReader.PrepareCache ( 4096, UUID_INDEX_VERSION ); // dense lists stay on merge
 	}
 	EXPECT_EQ ( DocidLookupCache_c::GetUsed(), 0U );
@@ -478,6 +478,36 @@ TEST_F ( UuidDocidLookupTest, NativeCacheIsDemandBuiltInBoundedSteps )
 	EXPECT_EQ ( DocidLookupCache_c::GetUsed(), 0U );
 }
 
+TEST_F ( UuidDocidLookupTest, NativeCachePointDemandBuildsWithoutBatchWarmup )
+{
+	CacheBudgetGuard_t tBudget ( 2*1024*1024 );
+	CSphVector<DocidRowidPair_t> dPairs;
+	for ( RowID_t i=0; i<65536; ++i ) dPairs.Add ( { (DocID_t)(i*2), i } );
+	CSphString sError;
+	ASSERT_TRUE ( WriteDocidLookup ( m_sFile, dPairs, sError ) );
+	CSphMappedBuffer<BYTE> tData;
+	Map(tData);
+	for ( size_t nValues : { 1U, 15U } )
+	{
+		LookupReader_c tReader ( tData.GetReadPtr(), UUID_INDEX_VERSION );
+		tReader.PrepareCache ( nValues, UUID_INDEX_VERSION );
+		EXPECT_EQ ( DocidLookupCache_c::GetUsed(), 0U ); // first use only records demand
+		tReader.PrepareCache ( nValues, UUID_INDEX_VERSION );
+		ASSERT_GT ( tReader.GetCacheBytes(), 0U );
+		EXPECT_FALSE ( tReader.HasCache() ); // construction remains bounded to 16K rows
+		for ( int i=0; i<3; ++i ) tReader.PrepareCache ( nValues, UUID_INDEX_VERSION );
+		ASSERT_TRUE ( tReader.HasCache() );
+		uint64_t dIDs[] = { 42, 43, 131070, UINT64_MAX };
+		RowID_t dRows[4];
+		for ( int i=0; i<4; ++i ) tReader.FindBatch ( &dIDs[i], &dRows[i], 1 );
+		EXPECT_EQ ( dRows[0], 21U );
+		EXPECT_EQ ( dRows[1], INVALID_ROWID );
+		EXPECT_EQ ( dRows[2], 65535U );
+		EXPECT_EQ ( dRows[3], INVALID_ROWID );
+	}
+	EXPECT_EQ ( DocidLookupCache_c::GetUsed(), 0U );
+}
+
 TEST_F ( UuidDocidLookupTest, NativeCacheConcurrentBuildAndBatchReaders )
 {
 	CacheBudgetGuard_t tBudget ( 2*1024*1024 );
@@ -494,7 +524,7 @@ TEST_F ( UuidDocidLookupTest, NativeCacheConcurrentBuildAndBatchReaders )
 			tThread = std::thread ( [&tReader]() {
 				for ( int i=0; i<100; ++i )
 				{
-					tReader.PrepareCache ( 256, UUID_INDEX_VERSION );
+					tReader.PrepareCache ( i%2 ? 1 : 256, UUID_INDEX_VERSION );
 					uint64_t dIDs[16];
 					RowID_t dRows[16];
 					for ( int j=0; j<16; ++j ) dIDs[j] = (i*16+j)*3;

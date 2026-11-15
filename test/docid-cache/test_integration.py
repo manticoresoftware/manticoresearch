@@ -104,13 +104,11 @@ def check(binary, budget, expect_cache):
                 rows = ",".join(f"({i * 2 + 2},0,'document')" for i in range(start, start + 1000))
                 db.sql("INSERT INTO docs (id,value,title) VALUES " + rows)
             db.sql("FLUSH RAMCHUNK docs")
-            assert db.used() == 0  # load and ordinary queries do not build mappings
+            assert db.used() == 0  # load and no-ID queries do not build mappings
             for _ in range(3):
-                assert db.sql("SELECT id FROM docs WHERE id=2")["data"] == [{"id": 2}]
                 assert db.sql("SELECT count(*) AS n FROM docs")["data"] == [{"n": 10000}]
             assert db.used() == 0
-            # Repeated sparse batches trigger bounded construction. The first
-            # query only records demand; readers keep falling back until sealed.
+            # Dense lists and explicitly disabled lookups do not record demand.
             candidates = [i * 154 + 2 for i in range(129)]
             warm_clause = ",".join(map(str, candidates))
             dense_clause = ",".join(str(i * 2 + 2) for i in range(512))
@@ -118,6 +116,15 @@ def check(binary, budget, expect_cache):
                 assert db.sql(f"SELECT count(*) AS n FROM docs WHERE id IN ({warm_clause}) /*+ NO_DocidIndex(id) */")["data"] == [{"n": 129}]
                 assert db.sql(f"SELECT count(*) AS n FROM docs WHERE id IN ({dense_clause})")["data"] == [{"n": 512}]
             assert db.used() == 0
+            # Point-only demand must admit a mapping without a batch warmup.
+            assert db.sql("SELECT id FROM docs WHERE id=2")["data"] == [{"id": 2}]
+            assert db.used() == 0  # first eligible request only records demand
+            for _ in range(6):
+                assert db.sql("SELECT id FROM docs WHERE id=2")["data"] == [{"id": 2}]
+                assert not db.sql("SELECT id FROM docs WHERE id=3")["data"]
+            used = db.used()
+            assert (used > 0) == expect_cache, (budget, used)
+            assert used <= limit
             # MCL can precompute COUNT(*) without planning a lookup. Return IDs
             # so admission and plan checks exercise the native batch path too.
             expected = [{"id": i} for i in candidates]

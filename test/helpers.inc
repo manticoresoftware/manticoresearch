@@ -1077,6 +1077,23 @@ function CompareColumns ( $a, $b )
 }
 
 
+// Compare SHOW CREATE TABLE independently of the physical postings format.
+function CreateTableRsetFixup ( &$row )
+{
+	if ( !is_array($row) || !isset ( $row["Table"], $row["Create Table"] ) )
+		return;
+
+	if ( !preg_match ( '/^CREATE TABLE\b/i', $row["Create Table"] ) )
+		return;
+
+	// Preserve quoted identifiers and option values containing postings_format text.
+	$pattern = <<<'REGEX'
+~(?:'(?:[^'\\]|\\.|'')*'|"(?:[^"\\]|\\.|"")*"|`(?:[^`]|``)*`)(*SKIP)(*F)|[ \t]+postings_format[ \t]*=[ \t]*'(?:legacy|block)'~i
+REGEX;
+	$row["Create Table"] = preg_replace ( $pattern, '', $row["Create Table"] );
+}
+
+
 function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls, $has_knn=false, $vector_roundoff=0 )
 {
 	if ( isset ( $set["rows"] ) )
@@ -1118,6 +1135,8 @@ function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls, $has_knn=false, $ve
 			{
 				foreach ( $row["data"] as &$entry )
 				{
+					CreateTableRsetFixup ( $entry );
+
 					if ( is_array($entry) && isset ( $entry["Properties"] ) && $columnar )
 						$entry["Properties"] = RemoveColumnarProperty ( $entry["Properties"] );
 				}
@@ -1139,6 +1158,8 @@ function SqlRsetFixup ( &$set, $columnar )
 
 	foreach	( $set["rows"] as &$row )
 	{
+		CreateTableRsetFixup ( $row );
+
 		if ( count($row)!=3 )
 			continue;
 

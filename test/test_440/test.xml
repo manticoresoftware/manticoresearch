@@ -4,6 +4,8 @@
 <name>columnar attributes vs ALTER</name>
 
 <requires>
+<!-- Full-text field ALTER is not supported for block postings. -->
+<legacy_format/>
 <columnar/>
 <non-rt-indexer/>
 </requires>

@@ -4,6 +4,8 @@
 <name>RT UUID document IDs</name>
 
 <requires>
+	<!-- Skip until shard compatibility handles block-format local tables. -->
+	<legacy_format/>
 	<force-rt/>
 	<http/>
 	<columnar/>

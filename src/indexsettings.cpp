@@ -3708,6 +3708,9 @@ void LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings )
 
 void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion )
 {
+	// Binary headers imply legacy postings; clear any format retained from the previously loaded table.
+	tSettings.m_uPostingsFormat = 0;
+
 	tSettings.SetMinPrefixLen ( tReader.GetDword() );
 	tSettings.m_iMinInfixLen = tReader.GetDword ();
 	tSettings.m_iMaxSubstringLen = tReader.GetDword();

@@ -49,18 +49,29 @@ dump_cluster_diagnostics() {
         fi
     done
 }
+cluster_ready() {
+    local port="$1" expected_size="$2" output values
+    output=$(timeout 5 mysql -h0 -P"$port" -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_%'\G" 2>/dev/null) || return 1
+    values=$(awk -v prefix="cluster_${CLUSTER_NAME}_" '
+        $1 == "Counter:" { key = $2 }
+        $1 == "Value:" {
+            if (key == prefix "status") status = $2
+            if (key == prefix "size") size = $2
+            if (key == prefix "node_state") state = $2
+        }
+        END { print status, size, state }
+    ' <<< "$output")
+    [ "$values" = "primary $expected_size synced" ]
+}
 wait_cluster() {
     local expected_size="$1"
     shift
     local deadline=$((SECONDS+120))
-    local ready port status
+    local ready port
     while [ "$SECONDS" -lt "$deadline" ]; do
         ready=1
         for port in "$@"; do
-            status=$(timeout 5 mysql -N -B -h0 -P"$port" -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_%'" 2>/dev/null) || { ready=0; break; }
-            grep -Eq "^cluster_${CLUSTER_NAME}_status[[:space:]]+primary[[:space:]]*$" <<< "$status" || { ready=0; break; }
-            grep -Eq "^cluster_${CLUSTER_NAME}_size[[:space:]]+$expected_size[[:space:]]*$" <<< "$status" || { ready=0; break; }
-            grep -Eq "^cluster_${CLUSTER_NAME}_node_state[[:space:]]+synced[[:space:]]*$" <<< "$status" || { ready=0; break; }
+            cluster_ready "$port" "$expected_size" || { ready=0; break; }
         done
         if [ "$ready" -eq 1 ]; then
             echo "Cluster synced with $expected_size node(s)"
@@ -74,12 +85,12 @@ wait_cluster() {
 }
 check_rows() {
     local deadline=$((SECONDS+60))
-    local port count ready
+    local port output ready
     while [ "$SECONDS" -lt "$deadline" ]; do
         ready=1
         for port in "$@"; do
-            count=$(timeout 5 mysql -N -B -h0 -P"$port" -e "SELECT COUNT(*) FROM bootstrap_restart_rt" 2>/dev/null) || { ready=0; break; }
-            [ "$count" = 1 ] || { ready=0; break; }
+            output=$(timeout 5 mysql -h0 -P"$port" -e "SELECT COUNT(*) AS cnt FROM bootstrap_restart_rt\G" 2>/dev/null) || { ready=0; break; }
+            grep -Eq '^[[:space:]]*cnt:[[:space:]]*1[[:space:]]*$' <<< "$output" || { ready=0; break; }
         done
         if [ "$ready" -eq 1 ]; then
             echo "Data intact on $# node(s)"

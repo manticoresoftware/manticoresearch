@@ -450,7 +450,7 @@ TEST_F ( UuidDocidLookupTest, NativeCacheIsDemandBuiltInBoundedSteps )
 	{
 		EXPECT_EQ ( tReader.Find(42), 21U );
 		tReader.PrepareCache ( 0, UUID_INDEX_VERSION );
-		tReader.PrepareCache ( 4096, UUID_INDEX_VERSION ); // dense lists stay on merge
+		tReader.PrepareCache ( 1025, UUID_INDEX_VERSION ); // one above the sparse limit stays on merge
 	}
 	EXPECT_EQ ( DocidLookupCache_c::GetUsed(), 0U );
 	tReader.PrepareCache ( 256, UUID_INDEX_VERSION ); // observe reuse before allocating
@@ -487,7 +487,7 @@ TEST_F ( UuidDocidLookupTest, NativeCachePointDemandBuildsWithoutBatchWarmup )
 	ASSERT_TRUE ( WriteDocidLookup ( m_sFile, dPairs, sError ) );
 	CSphMappedBuffer<BYTE> tData;
 	Map(tData);
-	for ( size_t nValues : { 1U, 15U } )
+	for ( size_t nValues : { 1U, 2U, 8U, 15U, 16U, 17U, 1024U } )
 	{
 		LookupReader_c tReader ( tData.GetReadPtr(), UUID_INDEX_VERSION );
 		tReader.PrepareCache ( nValues, UUID_INDEX_VERSION );
@@ -552,10 +552,13 @@ TEST_F ( UuidDocidLookupTest, NativeCacheLazyRefusalAndDuplicateFallback )
 	CSphMappedBuffer<BYTE> tData;
 	Map(tData);
 	LookupReader_c tReader ( tData.GetReadPtr(), UUID_INDEX_VERSION );
-	for ( int i=0; i<10; ++i ) tReader.PrepareCache ( 256, UUID_INDEX_VERSION );
+	for ( int i=0; i<10; ++i ) tReader.PrepareCache ( 1, UUID_INDEX_VERSION );
 	EXPECT_FALSE ( tReader.HasCache() );
 	EXPECT_EQ ( DocidLookupCache_c::GetUsed(), 0U );
 	DocidLookupCache_c::SetBudget ( 2*1024*1024 );
+	for ( int i=0; i<10; ++i ) tReader.PrepareCache ( 1, UUID_INDEX_VERSION );
+	EXPECT_FALSE ( tReader.HasCache() ); // refused chunks do not retry on every point query
+	EXPECT_EQ ( DocidLookupCache_c::GetUsed(), 0U );
 	tReader.SetData ( tData.GetReadPtr(), UUID_INDEX_VERSION );
 	tReader.PrepareCache ( 256, UUID_INDEX_VERSION );
 	tReader.PrepareCache ( 256, UUID_INDEX_VERSION );

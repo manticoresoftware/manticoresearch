@@ -105,21 +105,22 @@ struct TaskInfo_t
 
 	std::atomic<void *> m_pPrev { nullptr }; // parent, kept alive until this node is reclaimed
 	BYTE m_eType;
-	std::atomic<int> m_iOwners { 1 }; // scope + scheduled tasks + child task-info nodes
+	std::atomic<int> m_iOwners { 1 };
 	hazard::Deleter_fn m_fnDelete = nullptr;
-};
+	RefCountedRefPtr_T<TaskInfo_t> m_pParent; // keep the entire ancestry alive
 
-// Only the last owner retires a node. Hazard guards still protect concurrent SHOW THREADS readers.
-void RetainTaskInfo ( TaskInfo_t * pInfo );
-void ReleaseTaskInfo ( TaskInfo_t * pInfo );
+	void AddRef() noexcept { m_iOwners.fetch_add ( 1, std::memory_order_relaxed ); }
+	void Release() noexcept
+	{
+		if ( m_iOwners.fetch_sub ( 1, std::memory_order_acq_rel )==1 )
+			hazard::Retire ( static_cast<void *> ( this ), m_fnDelete );
+	}
+};
 
 template<typename TASKINFO>
 void DestroyTaskInfo ( void * pSrc )
 {
-	auto * pInfo = static_cast<TASKINFO *> ( pSrc );
-	auto * pParent = static_cast<TaskInfo_t *> ( pInfo->m_pPrev.load ( std::memory_order_relaxed ) );
-	delete pInfo;
-	ReleaseTaskInfo ( pParent );
+	delete static_cast<TASKINFO *> ( pSrc );
 }
 
 struct RefCount_t {
@@ -143,7 +144,7 @@ template<typename TASKINFO, typename REFCOUNT=RefCount_t>
 class ScopedInfo_T
 {
 protected:
-	TASKINFO * m_pInfo;
+	RefCountedRefPtr_T<TASKINFO> m_pInfo;
 
 public:
 	explicit ScopedInfo_T ( TASKINFO* pInfo )
@@ -151,15 +152,15 @@ public:
 	{
 		pInfo->m_fnDelete = &DestroyTaskInfo<TASKINFO>;
 		auto * pParent = static_cast<TaskInfo_t *> ( Threads::MyThd().m_pTaskInfo.load ( std::memory_order_relaxed ) );
-		RetainTaskInfo ( pParent );
-		// Fully initialize the link before publishing the new root to SHOW THREADS.
+		SafeAddRef ( pParent );
+		pInfo->m_pParent = pParent; // takes ownership of the retained reference
 		pInfo->m_pPrev.store ( pParent, std::memory_order_relaxed );
 		Threads::MyThd().m_pTaskInfo.store ( pInfo, std::memory_order_release );
 		REFCOUNT::Inc ( TASKINFO::Task() );
 	}
 
-	explicit operator TASKINFO*() const noexcept { return m_pInfo; };
-	TASKINFO* operator->() const noexcept { return m_pInfo; }
+	explicit operator TASKINFO*() const noexcept { return m_pInfo.Ptr(); };
+	TASKINFO* operator->() const noexcept { return m_pInfo.Ptr(); }
 
 	ScopedInfo_T ( ScopedInfo_T&& rhs ) = delete;
 	ScopedInfo_T& operator= ( ScopedInfo_T&& rhs) = delete;
@@ -168,7 +169,6 @@ public:
 	{
 		Threads::MyThd ().m_pTaskInfo.store ( m_pInfo->m_pPrev.load ( std::memory_order_relaxed ), std::memory_order_release );
 		REFCOUNT::Dec ( TASKINFO::Task() );
-		ReleaseTaskInfo ( m_pInfo );
 	}
 };
 

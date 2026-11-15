@@ -26,35 +26,6 @@ BYTE RegisterRenderer ( RenderFnPtr pFunc ) noexcept
 	return uRender;
 }
 
-void RetainTaskInfo ( TaskInfo_t * pInfo )
-{
-	if ( pInfo )
-		pInfo->m_iOwners.fetch_add ( 1, std::memory_order_relaxed );
-}
-
-void ReleaseTaskInfo ( TaskInfo_t * pInfo )
-{
-	if ( pInfo && pInfo->m_iOwners.fetch_sub ( 1, std::memory_order_acq_rel )==1 )
-		hazard::Retire ( static_cast<void *> ( pInfo ), pInfo->m_fnDelete );
-}
-
-namespace {
-// A copyable owner for task info carried by std::function to a scheduled coroutine.
-class TaskInfoRef_c
-{
-	TaskInfo_t * m_pInfo = nullptr;
-
-public:
-	explicit TaskInfoRef_c ( TaskInfo_t * pInfo = nullptr ) : m_pInfo ( pInfo ) { RetainTaskInfo ( m_pInfo ); }
-	TaskInfoRef_c ( const TaskInfoRef_c & rhs ) : TaskInfoRef_c ( rhs.m_pInfo ) {}
-	TaskInfoRef_c ( TaskInfoRef_c && rhs ) noexcept : m_pInfo ( std::exchange ( rhs.m_pInfo, nullptr ) ) {}
-	~TaskInfoRef_c () { ReleaseTaskInfo ( m_pInfo ); }
-
-	TaskInfo_t * Get () const { return m_pInfo; }
-};
-
-} // namespace
-
 void RefCount_t::Inc ( BYTE eType )
 {
 	if ( eType >= uFreeInfoSlot )
@@ -172,9 +143,10 @@ TaskInfo_t* myinfo::GetHazardTypedNode ( BYTE eType )
 // bind current taskinfo content to handler
 Threads::Handler myinfo::StickParent ( Threads::Handler fnHandler )
 {
-	TaskInfoRef_c pParent ( myinfo::HazardTaskInfo() );
-	return [pParent = std::move ( pParent ), fnHandler = std::move ( fnHandler )] {
-		Threads::MyThd().m_pTaskInfo.store ( pParent.Get(), std::memory_order_release );
+	auto * pParent = myinfo::HazardTaskInfo();
+	SafeAddRef ( pParent );
+	return [pParent = RefCountedRefPtr_T<TaskInfo_t> ( pParent ), fnHandler = std::move ( fnHandler )] {
+		Threads::MyThd().m_pTaskInfo.store ( pParent.Ptr(), std::memory_order_release );
 		fnHandler();
 	};
 }
@@ -182,9 +154,10 @@ Threads::Handler myinfo::StickParent ( Threads::Handler fnHandler )
 // bind current taskinfo and add new scoped mini info for coro handler
 Threads::Handler myinfo::OwnMini ( Threads::Handler fnHandler )
 {
-	TaskInfoRef_c pParent ( myinfo::HazardTaskInfo() );
-	return [pParent = std::move ( pParent ), fnHandler = std::move ( fnHandler )] {
-		Threads::MyThd().m_pTaskInfo.store ( pParent.Get(), std::memory_order_release );
+	auto * pParent = myinfo::HazardTaskInfo();
+	SafeAddRef ( pParent );
+	return [pParent = RefCountedRefPtr_T<TaskInfo_t> ( pParent ), fnHandler = std::move ( fnHandler )] {
+		Threads::MyThd().m_pTaskInfo.store ( pParent.Ptr(), std::memory_order_release );
 		ScopedMiniInfo_t _ ( new MiniTaskInfo_t );
 		fnHandler();
 	};

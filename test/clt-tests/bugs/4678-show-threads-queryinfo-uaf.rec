@@ -51,9 +51,6 @@ if [ "$failed" != 0 ] || grep -qE 'FATAL: CRASH DUMP|Handling signal' /var/log/m
   echo '=== BEGIN FULL searchd.log ==='
   cat /var/log/manticore/searchd.log
   echo '=== END FULL searchd.log ==='
-  if [ -d /tmp/clt-4678-diagnostics ]; then
-    cp /var/log/manticore/searchd.log /tmp/clt-4678-diagnostics/searchd.log
-  fi
 fi
 ––– output –––
 enough_requests

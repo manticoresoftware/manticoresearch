@@ -134,7 +134,9 @@ public:
 	explicit ScopedInfo_T ( TASKINFO* pInfo )
 		: m_pInfo ( pInfo )
 	{
-		pInfo->m_pPrev = Threads::MyThd().m_pTaskInfo.exchange ( pInfo, std::memory_order_acq_rel );
+		auto& tRoot = Threads::MyThd().m_pTaskInfo;
+		pInfo->m_pPrev = tRoot.load ( std::memory_order_relaxed );
+		tRoot.store ( pInfo, std::memory_order_release );
 		REFCOUNT::Inc ( TASKINFO::Task() );
 	}
 

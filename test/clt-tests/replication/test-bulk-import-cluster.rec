@@ -1,0 +1,222 @@
+bulk_import into RT tables of cluster v1, one table per case: a cluster of one node, then nodes 2 and 3 join by SST and get the attached chunk; SQL, HTTP, KNN, a failed delivery and a node away at the commit. The helpers in /tmp/bc.sh write rows with the cluster prefix.
+––– input –––
+cat > /tmp/bc.sh <<'EOF'
+m() { mysql --skip-table --batch --raw --skip-column-names -h0 -P${1}306 -e "$2" 2>&1; }
+v() { m $1 "SHOW STATUS LIKE 'cluster_v1_$2'" | awk '{print $2}'; }
+rows() { local i=$2 e=$(( $2 + $3 - 1 )) k j s; while [ $i -le $e ]; do k=$(( i + 499 )); [ $k -gt $e ] && k=$e; s="INSERT INTO v1:$1 (id,title,v) VALUES "; for j in $(seq $i $k); do s="$s($j,'title $j',$j),"; done; echo "${s%,};"; i=$(( k + 1 )); done; }
+load() { { echo "SET bulk_import=$2;"; echo "BEGIN;"; rows $2 $3 $4; echo "COMMIT;"; echo "SET bulk_import=0;"; } | mysql -h0 -P${1}306 2>&1; }
+seqno() { grep -o '"files_seqno":[0-9-]*' /var/log/manticore-$1/manticore.json | cut -d: -f2; }
+repl() { find /var/log/manticore-$1 -maxdepth 3 -name 'repl-*' -printf '%f\n' | sed -nE 's/^repl-([0-9]+)(\..*)?$/\1/p' | sort -u | wc -l; }
+st() { for n in 1 2 3; do echo "node $n: $(v $n node_state) count=$(m $n "SELECT COUNT(*) FROM $1" | tail -1) sum=$(m $n "SELECT SUM(v) FROM $1" | tail -1) last_committed=$(v $n last_committed) files_seqno=$(seqno $n) repl=$(repl $n)"; done; }
+add() { mysql -h0 -P1306 -e "CREATE TABLE $1 (title text, v int)"; mysql -h0 -P1306 -e "ALTER CLUSTER v1 ADD $1"; echo "add $1 $?"; }
+waitsynced() { for k in $(seq 240); do [ "$(v $1 node_state)" = synced ] && [ "$(v $1 last_committed)" = "$(v $2 last_committed)" ] && return 0; sleep 0.5; done; return 1; }
+EOF
+echo ok
+––– output –––
+ok
+––– comment –––
+A cluster of one node: nothing to deliver, the attach command runs on this node only
+––– input –––
+export INSTANCE=1; mkdir -p /var/{run,lib,log}/manticore-1; stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; timeout 30 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-1/searchd.log) && echo started
+––– output –––
+started
+––– input –––
+mysql -h0 -P1306 -e "CREATE CLUSTER v1"; mysql -h0 -P1306 -e "CREATE TABLE t (title text, v int)"; mysql -h0 -P1306 -e "ALTER CLUSTER v1 ADD t"; echo $?
+––– output –––
+0
+––– input –––
+source /tmp/bc.sh; printf "SET bulk_import=t;\nBEGIN;\nINSERT INTO v1:t (id,title,v) VALUES (1,'a',1),(2,'b',2),(3,'c',3);\nCOMMIT;\n" | mysql -h0 -P1306; echo "rc $?"; echo "count=$(m 1 'SELECT COUNT(*) FROM t') last_committed=$(v 1 last_committed) files_seqno=$(seqno 1) repl=$(repl 1)"; grep -cE "bulk_import chunk [0-9]+ of table 't': delivered to 1 nodes" /var/log/manticore-1/searchd.log
+––– output –––
+rc 0
+count=3 last_committed=2 files_seqno=2 repl=0
+1
+––– comment –––
+Nodes 2 and 3 join by SST and get the table with the attached chunk and its files seqno
+––– input –––
+for i in 2 3; do export INSTANCE=$i; mkdir -p /var/{run,lib,log}/manticore-$i; stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; done; for i in 2 3; do timeout 30 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-$i/searchd.log) && echo "node $i started"; done
+––– output –––
+node 2 started
+node 3 started
+––– input –––
+for n in 2 3; do mysql -h0 -P${n}306 -e "JOIN CLUSTER v1 AT '127.0.0.1:1312'"; done; source /tmp/bc.sh; st t
+––– output –––
+node 1: synced count=3 sum=6 last_committed=2 files_seqno=2 repl=0
+node 2: synced count=3 sum=6 last_committed=2 files_seqno=2 repl=0
+node 3: synced count=3 sum=6 last_committed=2 files_seqno=2 repl=0
+––– comment –––
+SQL: the loading node delivers the chunk and one BULK_IMPORT_ATTACH command attaches it on every node; the cluster files seqno becomes the seqno of that command everywhere and no staging is left
+––– input –––
+source /tmp/bc.sh; load 1 t 1 3000; echo "rc $?"; st t
+––– output –––
+rc 0
+node 1: synced count=3000 sum=4501500 last_committed=3 files_seqno=3 repl=0
+node 2: synced count=3000 sum=4501500 last_committed=3 files_seqno=3 repl=0
+node 3: synced count=3000 sum=4501500 last_committed=3 files_seqno=3 repl=0
+––– input –––
+source /tmp/bc.sh; for n in 1 2 3; do echo "node $n: $(m $n 'SELECT id,title FROM t WHERE id IN (1,1500,3000)' | sort -n | tr '\t\n' ': ') files=$(m $n "SELECT file FROM t.@files OPTION format='bulk_import'" | wc -l)"; done
+––– output –––
+node 1: 1:title 1 1500:title 1500 3000:title 3000  files=0
+node 2: 1:title 1 1500:title 1500 3000:title 3000  files=0
+node 3: 1:title 1 1500:title 1500 3000:title 3000  files=0
+––– comment –––
+A second load on node 3 into the non-empty table replaces the overlapping ids 2001-3000
+––– input –––
+source /tmp/bc.sh; load 3 t 2001 2000; echo "rc $?"; st t
+––– output –––
+rc 0
+node 1: synced count=4000 sum=8002000 last_committed=4 files_seqno=4 repl=0
+node 2: synced count=4000 sum=8002000 last_committed=4 files_seqno=4 repl=0
+node 3: synced count=4000 sum=8002000 last_committed=4 files_seqno=4 repl=0
+––– comment –––
+Ordinary writes go on after the loads
+––– input –––
+source /tmp/bc.sh; m 2 "INSERT INTO v1:t (id,title,v) VALUES (5000,'plain',0)"; st t
+––– output –––
+node 1: synced count=4001 sum=8002000 last_committed=5 files_seqno=4 repl=0
+node 2: synced count=4001 sum=8002000 last_committed=5 files_seqno=4 repl=0
+node 3: synced count=4001 sum=8002000 last_committed=5 files_seqno=4 repl=0
+––– comment –––
+Rows without the cluster prefix are refused with the text of an ordinary INSERT (E21); a table out of the cluster refuses rows with a prefix
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO t (id,title,v) VALUES (9001,'plain',0)"; printf "SET bulk_import=t;\nINSERT INTO t (id,title,v) VALUES (9001,'bulk',0);\nCOMMIT;\n" | mysql -h0 -P1306; mysql -h0 -P1306 -e "CREATE TABLE l (title text, v int)"; printf "SET bulk_import=l;\nINSERT INTO v1:l (id,title,v) VALUES (1,'bulk',0);\nCOMMIT;\n" | mysql -h0 -P1306; source /tmp/bc.sh; echo "t count=$(m 1 'SELECT COUNT(*) FROM t') l count=$(m 1 'SELECT COUNT(*) FROM l')"
+––– output –––
+ERROR 1064 (42000) at line 1: table 't' is a part of cluster 'v1', use 'v1:t'
+ERROR 1064 (42000) at line 2: table 't' is a part of cluster 'v1', use 'v1:t'
+ERROR 1064 (42000) at line 2: table 'l' is not in any cluster, use just 'l'
+t count=4001 l count=0
+––– comment –––
+Evidence from the loading node 1 and a receiver: the chunk was prepared on two nodes and attached by the command
+––– input –––
+chk() { grep -qE -- "$3" /var/log/manticore-$1/searchd.log && echo "yes: $2" || echo "no: $2"; }; chk 1 'prepared on 2 nodes' "bulk_import chunk [0-9]+ of table 't': prepared on 2 nodes"; chk 1 'attached by the command' "attach command finished in .* result 1"; chk 2 'receiver attached' "bulk_import chunk [0-9]+ of table 't': attached in .* files seqno 3$"
+––– output –––
+yes: prepared on 2 nodes
+yes: attached by the command
+yes: receiver attached
+––– comment –––
+HTTP: private on node 1 and Shared with shared=2 on node 2; every chunk goes through its own attach command, the rows are the same on every node
+––– input –––
+source /tmp/bc.sh; add th; gen() { for ((i=$1; i<=$2; i++)); do printf '{"insert":{"cluster":"v1","table":"th","id":%d,"doc":{"title":"title %d","v":%d}}}\n' "$i" "$i" "$i"; done; }; gen 1 1000 > /tmp/p.ndjson; gen 1001 3000 > /tmp/a.ndjson; gen 3001 5000 > /tmp/b.ndjson; printf '\n' > /tmp/commit.ndjson; post() { curl -sS -X POST "http://127.0.0.1:$1/bulk?bulk_import=th$2" -H 'Content-Type: application/x-ndjson' --data-binary @"$3" -w ' HTTP %{http_code}\n'; }; echo ok
+––– output –––
+add th 0
+ok
+––– input –––
+post 1308 '' /tmp/p.ndjson; source /tmp/bc.sh; st th
+––– output –––
+{"items":[{"bulk":{"table":"th","_id":0,"created":1000,"deleted":0,"updated":0,"result":"created","status":201}}],"current_line":1001,"skipped_lines":0,"errors":false,"error":""} HTTP 200
+node 1: synced count=1000 sum=500500 last_committed=7 files_seqno=7 repl=0
+node 2: synced count=1000 sum=500500 last_committed=7 files_seqno=7 repl=0
+node 3: synced count=1000 sum=500500 last_committed=7 files_seqno=7 repl=0
+––– input –––
+post 2308 '&shared=2' /tmp/a.ndjson > /tmp/a.reply & post 2308 '&shared=2' /tmp/b.ndjson > /tmp/b.reply & wait; cat /tmp/a.reply /tmp/b.reply
+––– output –––
+{"items":[],"current_line":2000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":2000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+––– input –––
+post 2308 '&shared' /tmp/commit.ndjson
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+––– input –––
+source /tmp/bc.sh; st th; grep -c "attach command finished in .* result 1" /var/log/manticore-2/searchd.log
+––– output –––
+node 1: synced count=5000 sum=12502500 last_committed=9 files_seqno=9 repl=0
+node 2: synced count=5000 sum=12502500 last_committed=9 files_seqno=9 repl=0
+node 3: synced count=5000 sum=12502500 last_committed=9 files_seqno=9 repl=0
+2
+––– comment –––
+Rows without "cluster" are refused with the text of an ordinary /bulk insert (E21): the ordinary insert, a private bulk_import and a Shared one; nothing changes
+––– input –––
+printf '{"insert":{"table":"th","id":9001,"doc":{"title":"x","v":0}}}\n' > /tmp/n.ndjson; post 1308 '' /tmp/n.ndjson | sed 's/^/import: /'; curl -sS -X POST "http://127.0.0.1:1308/bulk" -H 'Content-Type: application/x-ndjson' --data-binary @/tmp/n.ndjson -w ' HTTP %{http_code}\n' | sed 's/^/plain: /'; post 2308 '&shared' /tmp/n.ndjson | sed 's/^/shared: /'; post 2308 '&shared' /tmp/commit.ndjson | sed 's/^/shared commit: /'; source /tmp/bc.sh; for n in 1 2 3; do echo "node $n count=$(m $n 'SELECT COUNT(*) FROM th')"; done
+––– output –––
+import: {"items":[{"insert":{"error":{"type":"table 'th' is a part of cluster 'v1', use 'v1:th'","table":"th"},"status":409}}],"current_line":1,"skipped_lines":1,"errors":true,"error":"table 'th' is a part of cluster 'v1', use 'v1:th'"} HTTP 500
+plain: {"items":[{"insert":{"error":{"type":"table 'th' is a part of cluster 'v1', use 'v1:th'","table":"th"},"status":409}}],"current_line":1,"skipped_lines":1,"errors":true,"error":"table 'th' is a part of cluster 'v1', use 'v1:th'"} HTTP 500
+shared: {"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"table 'th' is a part of cluster 'v1', use 'v1:th'","error_code":"shared_failed","shared_state":"failed"} HTTP 400
+shared commit: {"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"table 'th' is a part of cluster 'v1', use 'v1:th'","error_code":"shared_failed","shared_state":"failed"} HTTP 500
+node 1 count=5000
+node 2 count=5000
+node 3 count=5000
+––– comment –––
+A bare document has no place for the cluster and takes the cluster of the table (E25): private on node 1 and Shared on node 2, the rows on all nodes
+––– input –––
+for ((i=6001; i<=6050; i++)); do printf '{"id":%d,"title":"bare %d","v":%d}\n' $i $i $i; done > /tmp/bp.ndjson; for ((i=6051; i<=6100; i++)); do printf '{"id":%d,"title":"bare %d","v":%d}\n' $i $i $i; done > /tmp/bs.ndjson; post 1308 '' /tmp/bp.ndjson | sed 's/^/private: /'; post 2308 '&shared' /tmp/bs.ndjson | sed 's/^/shared: /'; post 2308 '&shared' /tmp/commit.ndjson | sed 's/^/shared commit: /'; source /tmp/bc.sh; st th
+––– output –––
+private: {"items":[{"bulk":{"table":"th","_id":0,"created":50,"deleted":0,"updated":0,"result":"created","status":201}}],"current_line":51,"skipped_lines":0,"errors":false,"error":""} HTTP 200
+shared: {"items":[],"current_line":50,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+shared commit: {"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+node 1: synced count=5100 sum=13107550 last_committed=11 files_seqno=11 repl=0
+node 2: synced count=5100 sum=13107550 last_committed=11 files_seqno=11 repl=0
+node 3: synced count=5100 sum=13107550 last_committed=11 files_seqno=11 repl=0
+––– comment –––
+KNN: the loading node builds the KNN index of the chunk, the .spknn file is delivered with the chunk and a KNN search on another node finds the rows
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tk (title text, v int, emb float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')"; mysql -h0 -P1306 -e "ALTER CLUSTER v1 ADD tk"; echo $?
+––– output –––
+0
+––– input –––
+{ echo "SET bulk_import=tk;"; echo "BEGIN;"; s="INSERT INTO v1:tk (id,title,v,emb) VALUES "; for i in $(seq 1 500); do s="$s($i,'title $i',$i,($((i%7)),$((i%5)),$((i%3)),$((i%11)))),"; done; echo "${s%,};"; echo "COMMIT;"; echo "SET bulk_import=0;"; } | mysql -h0 -P1306; echo "rc $?"; source /tmp/bc.sh; st tk
+––– output –––
+rc 0
+node 1: synced count=500 sum=125250 last_committed=13 files_seqno=13 repl=0
+node 2: synced count=500 sum=125250 last_committed=13 files_seqno=13 repl=0
+node 3: synced count=500 sum=125250 last_committed=13 files_seqno=13 repl=0
+––– input –––
+for n in 1 2 3; do r[$n]=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P${n}306 -e "SELECT id FROM tk WHERE knn(emb,5,(1,1,1,1))" | sort -n | xargs); echo "node $n spknn=$(ls /var/log/manticore-$n/tk | grep -c 'spknn$')"; done; [ -n "${r[1]}" ] && [ "${r[1]}" = "${r[2]}" ] && [ "${r[1]}" = "${r[3]}" ] && echo "same knn result on 3 nodes"
+––– output –––
+node 1 spknn=1
+node 2 spknn=1
+node 3 spknn=1
+same knn result on 3 nodes
+––– comment –––
+The .spknn file came with the chunk: every receiver wrote repl-<id>.spknn.new (a receiver does not build KNN on load)
+––– input –––
+for n in 2 3; do grep -cE "repl-[0-9]+\.spknn\.new" /var/log/manticore-$n/searchd.log; done
+––– output –––
+1
+1
+––– comment –––
+A failed delivery: node 2 can not receive the chunk (its staging root is a regular file), the reserve fails there, the commit fails, the other nodes drop the chunk by its abort, no node attaches anything and the files seqno does not change; the next load after the fix works
+––– input –––
+source /tmp/bc.sh; add td; R=/var/log/manticore-2/td/td.indexer-rt-bulk; rm -rf $R; touch $R; load 1 td 1 1000
+––– output –––
+add td 0
+ERROR 1064 (42000) at line 5: '127.0.0.1:2312': remote error: [127.0.0.1] failed to create bulk staging root '/var/log/manticore-2/td/td.indexer-rt-bulk': File exists
+––– input –––
+source /tmp/bc.sh; st td
+––– output –––
+node 1: synced count=0 sum= last_committed=14 files_seqno=14 repl=0
+node 2: synced count=0 sum= last_committed=14 files_seqno=14 repl=0
+node 3: synced count=0 sum= last_committed=14 files_seqno=14 repl=0
+––– input –––
+rm -f /var/log/manticore-2/td/td.indexer-rt-bulk; source /tmp/bc.sh; load 1 td 1 1000; echo "rc $?"; st td; grep -cE "bulk_import chunk [0-9]+ of table 'td': abort" /var/log/manticore-3/searchd.log
+––– output –––
+rc 0
+node 1: synced count=1000 sum=500500 last_committed=15 files_seqno=15 repl=0
+node 2: synced count=1000 sum=500500 last_committed=15 files_seqno=15 repl=0
+node 3: synced count=1000 sum=500500 last_committed=15 files_seqno=15 repl=0
+1
+––– comment –––
+A node away at the commit: the chunk goes to the nodes in the view only; the node comes back, refuses IST on the files seqno and rejoins by SST without a restart (P1), then has the rows. Node 3 is paused last, so the cases above keep three nodes
+––– input –––
+source /tmp/bc.sh; add ta
+––– output –––
+add ta 0
+––– block: ../base/replication/rejoin-pause-node3 –––
+––– input –––
+source /tmp/bc.sh; L3=$(wc -l < /var/log/manticore-3/searchd.log); load 1 ta 1 1000; echo "rc $?"; for n in 1 2; do echo "node $n count=$(m $n 'SELECT COUNT(*) FROM ta') files_seqno=$(seqno $n)"; done
+––– output –––
+rc 0
+node 1 count=1000 files_seqno=17
+node 2 count=1000 files_seqno=17
+––– input –––
+kill -CONT $P3; source /tmp/bc.sh; waitsynced 3 1; echo "synced $?"; kill -0 $P3 && echo alive; st ta
+––– output –––
+synced 0
+alive
+node 1: synced count=1000 sum=500500 last_committed=17 files_seqno=17 repl=0
+node 2: synced count=1000 sum=500500 last_committed=17 files_seqno=17 repl=0
+node 3: synced count=1000 sum=500500 last_committed=17 files_seqno=17 repl=0
+––– input –––
+A=$(tail -n +$((L3+1)) /var/log/manticore-3/searchd.log); chk() { echo "$A" | grep -q -- "$2" && echo "yes: $1" || echo "no: $1"; }; chk 'IST refused on files seqno' "files seqno 16 differs from donor files seqno 17 on IST"; chk 'rejoin attempt 1' "rejoin by SST, attempt 1 of 2"
+––– output –––
+yes: IST refused on files seqno
+yes: rejoin attempt 1
+––– block: ../base/replication/node-starts –––

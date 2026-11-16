@@ -20,6 +20,7 @@
 #include "searchd_shard_bulk.h"
 #include "searchd_shard.h"
 #include "searchdreplication.h"
+#include "replication/cluster_bulk_chunk.h"
 
 #include <boost/version.hpp>
 #if BOOST_VERSION >= 108800
@@ -161,7 +162,7 @@ static bool ListStagingDir ( const CSphString & sDir, CSphVector<IndexerRtBulkFi
 }
 
 
-static bool PrepareStagingRoot ( const CSphString & sRoot, CSphString & sError )
+bool PrepareStagingRoot ( const CSphString & sRoot, CSphString & sError )
 {
 	boost::system::error_code tError;
 	if ( fs::create_directory ( sRoot.cstr(), tError ) || !tError )
@@ -275,45 +276,6 @@ bool ListIndexerRtBulkFiles ( const CSphString & sRoot, CSphVector<IndexerRtBulk
 }
 
 
-// A directory of one replicated chunk in a staging root; the root is created on demand, the directory must be new.
-bool CreateIndexerRtBulkDir ( const CSphString & sRoot, const CSphString & sDir, CSphString & sError )
-{
-	if ( !PrepareStagingRoot ( sRoot, sError ) )
-		return false;
-
-	boost::system::error_code tError;
-	if ( fs::create_directory ( sDir.cstr(), tError ) )
-		return true;
-
-	if ( !tError )
-		sError.SetSprintf ( "bulk staging directory '%s' already exists", sDir.cstr() );
-	else
-		sError.SetSprintf ( "failed to create bulk staging directory '%s': %s", sDir.cstr(), tError.message().c_str() );
-	return false;
-}
-
-
-bool RenameIndexerRtBulkDir ( const CSphString & sFrom, const CSphString & sTo, CSphString & sError )
-{
-	boost::system::error_code tError;
-	fs::rename ( sFrom.cstr(), sTo.cstr(), tError );
-	if ( !tError )
-		return true;
-
-	sError.SetSprintf ( "failed to rename bulk staging directory '%s' to '%s': %s", sFrom.cstr(), sTo.cstr(), tError.message().c_str() );
-	return false;
-}
-
-
-void RemoveIndexerRtBulkDir ( const CSphString & sDir )
-{
-	boost::system::error_code tError;
-	fs::remove_all ( sDir.cstr(), tError );
-	if ( tError )
-		sphWarning ( "failed to remove bulk staging directory '%s': %s", sDir.cstr(), tError.message().c_str() );
-}
-
-
 static void DropSharedBulkImport ( const CSphString & sTable );
 
 // For PURGE and DROP: cancel the shared load into sTable, if any, so that its children stop writing, then remove the
@@ -321,6 +283,7 @@ static void DropSharedBulkImport ( const CSphString & sTable );
 bool RemoveIndexerRtBulkRoot ( const CSphString & sTable, const CSphString & sRoot, CSphString & sError )
 {
 	DropSharedBulkImport ( sTable );
+	ForgetBulkChunkSessions ( sTable );
 	sError = "";
 	boost::system::error_code tError;
 	fs::remove_all ( sRoot.cstr(), tError );
@@ -983,8 +946,7 @@ struct IndexerRtBulkTarget_t
 };
 
 
-// bClusterAllowed: a target of a load into a shard table stays out of clusters
-static bool CheckIndexerRtBulkTarget ( const CSphString & sTable, bool bClusterAllowed, IndexerRtBulkTarget_t & tTarget, CSphString & sError )
+static bool CheckIndexerRtBulkTarget ( const CSphString & sTable, IndexerRtBulkTarget_t & tTarget, CSphString & sError )
 {
 	tTarget.m_pServed = GetServed ( sTable );
 	if ( !tTarget.m_pServed )
@@ -996,12 +958,6 @@ static bool CheckIndexerRtBulkTarget ( const CSphString & sTable, bool bClusterA
 	if ( tTarget.m_pServed->m_eType!=IndexType_e::RT )
 	{
 		sError.SetSprintf ( "bulk_import requires an RT table; table '%s' has type %s", sTable.cstr(), szIndexType ( tTarget.m_pServed->m_eType ) );
-		return false;
-	}
-
-	if ( !bClusterAllowed && ServedDesc_t::IsCluster ( tTarget.m_pServed ) )
-	{
-		sError.SetSprintf ( "bulk_import does not support cluster table '%s'", sTable.cstr() );
 		return false;
 	}
 
@@ -1065,10 +1021,10 @@ static bool RecheckTarget ( ClientSession_c & tSession, CSphString & sError, con
 
 
 // Take the write reservation of the target and make sure the table did not change meanwhile.
-static bool ReserveIndexerRtBulkTarget ( const CSphString & sTable, bool bClusterAllowed, ServedIndexWriteReservation_c & tReservation, IndexerRtBulkTarget_t & tCurrent, CSphString & sError )
+static bool ReserveIndexerRtBulkTarget ( const CSphString & sTable, ServedIndexWriteReservation_c & tReservation, IndexerRtBulkTarget_t & tCurrent, CSphString & sError )
 {
 	IndexerRtBulkTarget_t tTarget;
-	if ( !CheckIndexerRtBulkTarget ( sTable, bClusterAllowed, tTarget, sError ) )
+	if ( !CheckIndexerRtBulkTarget ( sTable, tTarget, sError ) )
 		return false;
 
 	if ( !CheckIndexerRtBulkExecutable ( sError ) )
@@ -1081,7 +1037,7 @@ static bool ReserveIndexerRtBulkTarget ( const CSphString & sTable, bool bCluste
 		return false;
 	}
 
-	if ( !CheckIndexerRtBulkTarget ( sTable, bClusterAllowed, tCurrent, sError ) )
+	if ( !CheckIndexerRtBulkTarget ( sTable, tCurrent, sError ) )
 		return false;
 	if ( !tNew.Matches ( tCurrent.m_pServed ) || tCurrent.m_iIndexId!=tTarget.m_iIndexId || tCurrent.m_iAlterGeneration!=tTarget.m_iAlterGeneration )
 	{
@@ -1120,7 +1076,6 @@ bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTab
 		return false;
 	}
 
-	// SQL is one more client of the Shared load of a shard table, which starts with its first document
 	if ( bShard && AsShard ( GetDistr ( sTable ).Ptr() ) )
 	{
 		tState.m_sTable = sTable;
@@ -1130,7 +1085,7 @@ bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTab
 
 	IndexerRtBulkTarget_t tCurrent;
 	ServedIndexWriteReservation_c tReservation;
-	if ( !ReserveIndexerRtBulkTarget ( sTable, true, tReservation, tCurrent, sError ) )
+	if ( !ReserveIndexerRtBulkTarget ( sTable, tReservation, tCurrent, sError ) )
 		return false;
 
 	tState.m_sTable = sTable;
@@ -1324,7 +1279,6 @@ static bool ValidateIndexerRtBulkInputValues ( const CSphSchema & tSchema, const
 }
 
 
-// The id column comes first.
 static void BuildIndexerRtBulkColumns ( const CSphSchema & tSchema, const IndexerRtBulkInputMap_t & tMap, const CSphVector<int> & dCsvAttrOrder, CSphVector<IndexerRtBulkColumn_t> & dColumns )
 {
 	dColumns.Add ( { tMap.m_iId, SPH_ATTR_BIGINT, true } );
@@ -1413,7 +1367,7 @@ bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, E
 		return false;
 	}
 
-	if ( tState.m_bShard ) // one INSERT is one data request of the load, as an HTTP request is
+	if ( tState.m_bShard )
 	{
 		ShardBulkRequest_c tRequest ( tState.m_sTable, CSphString(), false );
 		tRequest.Begin();
@@ -1436,7 +1390,6 @@ bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, E
 		return false;
 	}
 
-	// the cluster prefix of the rows as an ordinary write into the table checks it; a bare document takes the cluster of the table (E25)
 	if ( !tStmt.m_bBulkImportDoc && !ValidateClusterStatement ( tStmt.m_sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ) ) )
 	{
 		TlsMsg::MoveError ( sError );
@@ -1474,7 +1427,7 @@ bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, E
 bool FinalizeIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError )
 {
 	auto & tState = tSession.m_tIndexerRtBulk;
-	if ( tState.m_bShard ) // the commit of the load, as an HTTP commit request
+	if ( tState.m_bShard )
 		return ShardBulkRequest_c ( tState.m_sTable, CSphString(), false ).Commit ( sError )==SharedBulkResult_e::PUBLISHED;
 
 	if ( !tState.HasPendingData() )
@@ -1651,7 +1604,7 @@ void SharedBulkPool_c::Leave()
 SharedBulkResult_e SharedBulkPool_c::Start ( CSphString & sError )
 {
 	IndexerRtBulkTarget_t tTarget;
-	if ( !ReserveIndexerRtBulkTarget ( m_sTable, !m_iLoadId, m_tReservation, tTarget, sError ) )
+	if ( !ReserveIndexerRtBulkTarget ( m_sTable, m_tReservation, tTarget, sError ) )
 		return SharedBulkResult_e::PRECONDITION;
 
 	m_iIndexId = tTarget.m_iIndexId;
@@ -1971,7 +1924,6 @@ static int ParseSharedBulkChunks ( const CSphString & sTable, const CSphString &
 }
 
 
-// A pool of a bulk_import into a shard table takes data and its commit only from that load.
 static SharedBulkResult_e RefuseShardBulkTargetPool ( const CSphString & sTable, CSphString & sError )
 {
 	sError.SetSprintf ( "table '%s' is a target of a shared bulk_import into a shard table; load and commit it through the shard table", sTable.cstr() );
@@ -1987,9 +1939,9 @@ struct SharedBulkRequest_c::Impl_t
 	SharedBulkPoolRefPtr_c m_pPool;	// the pool this request is admitted to
 	StringBuilder_c m_sCsv;			// unwritten tail, less than a batch
 	int64_t m_iRows = 0;
-	std::optional<CSphString> m_sCluster; // the cluster of the table, read once per request
+	std::optional<CSphString> m_sCluster;
 
-	IndexerRtBulkLayout_t m_tLayout; // insert layout of the current pool
+	IndexerRtBulkLayout_t m_tLayout;
 
 	void Leave()
 	{
@@ -2120,7 +2072,6 @@ SharedBulkResult_e SharedBulkRequest_c::Stage ( const SqlStmt_t & tStmt, CSphStr
 			return eStarted;
 	}
 
-	// the cluster prefix of the row as an ordinary write into the table checks it; a bare document takes the cluster of the table (E25)
 	if ( !tImpl.m_sCluster )
 	{
 		auto pServed = GetServed ( tImpl.m_sTable );
@@ -2185,7 +2136,7 @@ bool PurgeSharedBulkImport ( const CSphString & sTable, bool bClearSessions, CSp
 		return true;
 	if ( !bClearSessions )
 	{
-		if ( pPool->m_iLoadId ) // its commit goes through the shard table
+		if ( pPool->m_iLoadId )
 			sError.SetSprintf ( "table '%s' is a target of an open shared bulk_import into a shard table; commit that load or use OPTION clear_sessions=1 to cancel it", sTable.cstr() );
 		else
 			sError.SetSprintf ( "shared bulk_import into table '%s' is open or failed; commit it or use OPTION clear_sessions=1 to cancel it", sTable.cstr() );
@@ -2210,9 +2161,6 @@ static void DropSharedBulkImport ( const CSphString & sTable )
 	ReplaceSharedBulkPool ( sTable, pPool, nullptr );
 }
 
-
-//////////////////////////////////////////////////////////////////////////
-// Targets of Shared bulk_import into a shard table
 
 static SharedBulkPoolRefPtr_c GetShardBulkTargetPool ( const CSphString & sTable, int64_t iLoadId, CSphString & sError )
 {

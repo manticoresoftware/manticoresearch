@@ -19,7 +19,6 @@
 
 class SearchFailuresLog_c;
 
-// One HTTP request of a shared bulk_import into a shard table, as SharedBulkRequest_c is for an RT table.
 class ShardBulkRequest_c : public ISphNoncopyable
 {
 public:
@@ -28,7 +27,7 @@ public:
 
 	void Begin();
 	SharedBulkResult_e StageLine ( Str_t tLine, CSphString & sError );
-	SharedBulkResult_e Stage ( const SqlStmt_t & tStmt, CSphString & sError ); // the INSERT of a line or of SQL
+	SharedBulkResult_e Stage ( const SqlStmt_t & tStmt, CSphString & sError );
 	SharedBulkResult_e Commit ( CSphString & sError );
 	SharedBulkResult_e End ( CSphString & sError );
 
@@ -42,8 +41,11 @@ private:
 bool PurgeShardBulkLoad ( const CSphString & sTable, bool bClearSessions, CSphString & sError );
 void PurgeRemoteBulkImport ( const DistributedIndex_t & tDistr, const CSphString & sTable, bool bClearSessions, SearchFailuresLog_c & dFailures );
 
-void DropShardBulkImport ( const CSphString & sTable ); // DROP TABLE of a shard table cancels its load
+void DropShardBulkImport ( const CSphString & sTable );
+
+// The load into the shard table that this node runs, from its first document until its commit ends; a failed load,
+// whose targets are cancelled, is not active.
+bool HasActiveShardBulkLoad ( const CSphString & sTable );
 void ShutdownShardBulkImport(); // fails the loads; remote targets get no cancel, PURGE cleans them up
 
-// SEARCHD_COMMAND_SHARD_BULK: the start, data, commit and cancel of a remote target
 void HandleCommandShardBulk ( GenericOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq );

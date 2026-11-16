@@ -11,7 +11,6 @@ enum class EMYSQL_ERR : WORD;
 class ClientSession_c;
 class RtIndex_i;
 class CSphIndex;
-enum class DiskAttachRes_e;
 
 struct IndexerRtBulkFile_t
 {
@@ -21,25 +20,17 @@ struct IndexerRtBulkFile_t
 
 CSphString GetIndexerRtBulkRoot ( const RtIndex_i & tRt );
 
-// A built chunk: load it from its files at sPath (the path without extension), check it against its target and attach
-// it. The check is the one place where a chunk is compared with the table. The attach runs under the write lock of the
-// table; it takes the chunk on success.
 std::unique_ptr<CSphIndex> LoadIndexerRtBulkChunk ( const CSphString & sPath, CSphString & sError );
-bool CanAttachIndexerRtBulkChunk ( const RtIndex_i & tRt, const CSphIndex & tChunk, CSphString & sError );
-DiskAttachRes_e AttachLoadedIndexerRtBulkChunk ( RtIndex_i & tRt, std::unique_ptr<CSphIndex> & pChunk, bool & bCantAttach, CSphString & sError );
 
-// directories of the chunks that a cluster delivers into the staging root of a table
-bool CreateIndexerRtBulkDir ( const CSphString & sRoot, const CSphString & sDir, CSphString & sError ); // fails when sDir exists
-bool RenameIndexerRtBulkDir ( const CSphString & sFrom, const CSphString & sTo, CSphString & sError );
-void RemoveIndexerRtBulkDir ( const CSphString & sDir ); // with its files; a failure is only logged
+bool PrepareStagingRoot ( const CSphString & sRoot, CSphString & sError );
 
 bool ListIndexerRtBulkFiles ( const CSphString & sRoot, CSphVector<IndexerRtBulkFile_t> & dFiles, CSphString & sError );
 bool RemoveIndexerRtBulkRoot ( const CSphString & sTable, const CSphString & sRoot, CSphString & sError ); // cancels the shared load into sTable first
-bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTable, CSphString & sError, bool bShard=false ); // bShard: SQL takes a shard table
+bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTable, CSphString & sError, bool bShard=false );
 bool StageIndexerRtBulk ( ClientSession_c & tSession, const SqlStmt_t & tStmt, EMYSQL_ERR & eError, CSphString & sError );
 bool FinalizeIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError );
 void AbortIndexerRtBulkBatch ( ClientSession_c & tSession );
-bool RollbackIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError ); // ROLLBACK in the mode
+bool RollbackIndexerRtBulk ( ClientSession_c & tSession, CSphString & sError );
 void CleanupIndexerRtBulk ( ClientSession_c & tSession );
 
 // CSV of INSERT statements for the generated indexer config; a bulk_import into a shard table builds it with the
@@ -62,7 +53,7 @@ struct IndexerRtBulkInputMap_t
 };
 
 void GetIndexerRtBulkCsvAttrOrder ( const CSphSchema & tSchema, CSphVector<int> & dCsvAttrOrder );
-bool CheckIndexerRtBulkCancelled ( CSphString & sError ); // a shutdown or a KILL of the request
+bool CheckIndexerRtBulkCancelled ( CSphString & sError );
 
 // The insert layout of a request: where the columns of its statements go in the CSV of a table. Prepare() checks the
 // values of a statement with the columns of the previous one, as an ordinary INSERT checks them; other columns
@@ -121,7 +112,7 @@ private:
 
 bool PurgeSharedBulkImport ( const CSphString & sTable, bool bClearSessions, CSphString & sError );
 void ShutdownSharedBulkImport();
-int GetSharedBulkBatchBytes(); // a request hands its CSV to the pool in batches of about this size
+int GetSharedBulkBatchBytes();
 int GetSharedBulkWaitMs(); // a wait for the pool wakes up this often only to notice KILL
 
 // A physical target of a Shared bulk_import into a shard table: a shared pool of the table with one child that

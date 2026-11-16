@@ -23,10 +23,9 @@ struct ClusterSyncedRequest_t : ClusterRequest_t
 	StrVec_t m_dIndexes;		// index list received
 	bool m_bSendFilesSuccess = true;
 	CSphString m_sMsg;
-	bool m_bIst = false;		// donor bypasses SST, the joiner catches up by IST
+	bool m_bIst = false;
 };
 
-// the joiner either accepts the state transfer or refuses it; a refusal is a valid reply, not a transport error
 struct ClusterSyncedReply_t
 {
 	bool m_bAccepted = true;

@@ -529,13 +529,15 @@ bool ReceiveClusterFileSend ( GenericOutputBuffer_c & tOut, InputBuffer_c & tBuf
 	ClusterFileSend_c::ParseRequest ( tBuf, tCmd );
 	ClusterFileSendReply_t tRes;
 
-	assert ( RecvState::HasState ( tCmd.m_tWriterKey ) );
-	auto& tState = RecvState::GetState ( tCmd.m_tWriterKey );
+	auto pState = RecvState::FindState ( tCmd.m_tWriterKey );
 
 	VecTraits_T<BYTE> dBuf ( tCmd.m_tSendBuf.Begin(), tCmd.m_tSendBuf.GetLength() );
 	ApiReplyStream_c tStream ( uHeartbeatIntervalMs, uReplyVersion, tOut );
 	tStream.Start ();
-	tRes.m_eRes = tState.Write ( tCmd.m_iFile, tCmd.m_dOps, dBuf );
+	if ( pState )
+		tRes.m_eRes = pState->Write ( tCmd.m_iFile, tCmd.m_dOps, dBuf );
+	else
+		TlsMsg::Err ( "missed write state" );
 	tRes.m_iFile = tCmd.m_iFile;
 
 	if ( tRes.m_eRes != WriteResult_e::OK )

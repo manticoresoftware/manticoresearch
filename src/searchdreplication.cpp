@@ -1601,15 +1601,13 @@ bool HandleCmdReplicateUpdate ( RtAccum_t & tAcc, CSphString & sWarning, int & i
 	return HandleCmdReplicateImpl ( tAcc, nullptr, &sWarning, &iUpdated );
 }
 
-// an applied command whose replay needs table files: a node that missed it can not catch up by IST; the caller saves the config
+// an applied command whose replay needs table files: a node that missed it can not catch up by IST; the caller holds the
+// write lock of the table list and saves the config
 static void SetFilesSeqNo ( ReplicationCluster_t & tCluster, int64_t iSeqNo )
 {
 	assert ( iSeqNo>0 );
-	tCluster.WithWlockedIndexes ( [&tCluster, iSeqNo] ( auto &, auto & )
-	{
-		if ( !tCluster.m_bFilesSeqNoReset )
-			tCluster.m_iFilesSeqNo = iSeqNo;
-	});
+	if ( !tCluster.m_bFilesSeqNoReset )
+		tCluster.m_iFilesSeqNo = iSeqNo;
 }
 
 // a node that could not apply a command needing table files: 0 differs from the cluster value, so the node joins by SST next time;
@@ -1657,6 +1655,7 @@ bool SetIndexesClusterTOI ( const ReplicationCommand_t * pCmd )
 				hIndexes.Add ( sIndex );
 				hIndexesLoaded.Delete ( sIndex );
 			}
+			SetFilesSeqNo ( *pCluster, tCmd.m_iOrderSeqNo );
 		});
 
 	} else
@@ -1668,9 +1667,9 @@ bool SetIndexesClusterTOI ( const ReplicationCommand_t * pCmd )
 		{
 			for ( const CSphString & sIndex : dIndexes )
 				hIndexes.Delete ( sIndex );
+			SetFilesSeqNo ( *pCluster, tCmd.m_iOrderSeqNo );
 		});
 	}
-	SetFilesSeqNo ( *pCluster, tCmd.m_iOrderSeqNo );
 
 	TLS_MSG_STRING ( sError );
 	bool bSaved = SaveConfigInt ( sError );
@@ -1719,7 +1718,7 @@ bool AttachBulkChunkTOI ( const ReplicationCommand_t & tCmd )
 	}
 
 	// a failed save keeps the previous value in the config, a restart then goes by SST as well
-	SetFilesSeqNo ( *pCluster, tCmd.m_iOrderSeqNo );
+	pCluster->WithWlockedIndexes ( [&] ( auto &, auto & ) { SetFilesSeqNo ( *pCluster, tCmd.m_iOrderSeqNo ); } );
 	if ( !SaveConfigInt ( sError ) )
 		sphWarning ( "cluster '%s': failed to save files seqno " INT64_FMT ": %s", tCmd.m_sCluster.cstr(), tCmd.m_iOrderSeqNo, sError.cstr() );
 
@@ -2106,7 +2105,6 @@ static bool PrepareClusterStartupMode ( ReplicationCluster_t & tCluster, RplBoot
 	return true;
 }
 
-// start one cluster from an offline object: remote checks, provider, connect, listen; error goes to TlsMsg
 static bool StartOfflineCluster ( ReplicationCluster_t & tCluster, RplBootstrap_e eBs )
 {
 	ClusterStartupMode_t tMode;
@@ -2133,7 +2131,6 @@ static void AppendClusterError ( ReplicationCluster_t & tCluster, Str_t sError )
 	tCluster.m_sError << sError;
 }
 
-// description of a live cluster; tables and options are copied under their own locks
 static ClusterDesc_t CopyClusterDesc ( const ReplicationCluster_t & tCluster )
 {
 	ClusterDesc_t tDesc;
@@ -2792,6 +2789,7 @@ static void ClusterDetachLocal ( const ReplicationClusterRefPtr_c & pCluster ) E
 
 	StrVec_t dClusterIndexes = pCluster->GetIndexes();
 	pCluster->WithRlockedIndexes ( [] ( const auto& hIndexes ) { for_each ( hIndexes, [] ( const auto& tIndex ) { AssignClusterToIndex ( tIndex.first, "" ); } ); } );
+	ForgetClusterBulkChunkSessions ( sCluster );
 	RplBinlog()->OnClusterDelete ( sCluster, dClusterIndexes );
 }
 
@@ -2979,9 +2977,6 @@ static bool ClusterAlterDrop ( const CSphString & sCluster, const VecTraits_T<CS
 	return HandleCmdReplicate ( tAcc );
 }
 
-// tests only: a pause between the delivery of a bulk_import chunk and its attach command
-static const long g_iBulkChunkPauseMs = env_long ( "INDEXER_RT_BULK_CLUSTER_PAUSE_MS" ).value_or ( 0 );
-
 static bool HasNode ( const VecTraits_T<CSphString> & dNodes, const CSphString & sNode )
 {
 	return dNodes.any_of ( [&sNode] ( const CSphString & sItem ) { return sItem==sNode; } );
@@ -2993,13 +2988,13 @@ static bool CheckBulkChunkCancelled()
 	if ( !CheckIndexerRtBulkCancelled ( sError ) )
 		return false;
 
-	TlsMsg::Err ( sError ); // returns false
+	TlsMsg::Err ( sError );
 	return true;
 }
 
 // Deliver the chunk files of repl-<id>/ to the other nodes once none of them is a donor or joining, then attach the chunk
 // on every node by one command. A retry delivers only to the nodes that came meanwhile; the nodes that left get
-// CHUNK_ABORT. The cluster object is taken anew at every step, so a rejoin of this node does not wait for the delivery.
+// the abort of the chunk. The cluster object is taken anew at every step, so a rejoin of this node does not wait for the delivery.
 void ReplicateBulkImportChunk ( const CSphString & sCluster, const CSphString & sTable, uint64_t uId, const StrVec_t & dFiles, BulkChunkAttach_t & tResult ) EXCLUDES ( g_tClustersLock )
 {
 	TlsMsg::ResetErr();
@@ -3092,12 +3087,6 @@ void ReplicateBulkImportChunk ( const CSphString & sCluster, const CSphString & 
 		sphLogDebugRpl ( "bulk_import chunk " UINT64_FMT " of table '%s': nodes of cluster '%s' changed during the delivery, retry in %d seconds", uId, sTable.cstr(), sCluster.cstr(), iRetryDelay / 1000 );
 		pCluster = nullptr;
 		Threads::Coro::SleepMsec ( iRetryDelay );
-	}
-
-	if ( g_iBulkChunkPauseMs>0 )
-	{
-		sphInfo ( "bulk_import chunk " UINT64_FMT " of table '%s': delivered, pause %ld ms before the attach command", uId, sTable.cstr(), g_iBulkChunkPauseMs );
-		Threads::Coro::SleepMsec ( (int)g_iBulkChunkPauseMs );
 	}
 
 	if ( CheckBulkChunkCancelled() )
@@ -3429,7 +3418,7 @@ bool SendClusterIndexes ( ReplicationCluster_t * pCluster, const CSphString & sN
 	{
 		tSyncedRequest.m_bSendFilesSuccess = false;
 		tSyncedRequest.m_sMsg = "the donor did not attach a bulk_import chunk and leaves the cluster, join again";
-		SendClusterSynced ( dDesc, tSyncedRequest, pCluster->m_sUser );
+		SendClusterSynced ( dDesc, tSyncedRequest, pCluster->GetUserSnapshot() );
 		return TlsMsg::Err ( "refused to donate SST to '%s': %s", sNode.cstr(), tSyncedRequest.m_sMsg.cstr() );
 	}
 

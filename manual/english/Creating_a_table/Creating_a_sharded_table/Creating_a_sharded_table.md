@@ -50,7 +50,7 @@ If the timeout is exceeded, the table creation will fail, and you'll need to ret
 
 #### Bulk loading a Sharded Table
 
-A sharded table with `rf='1'` takes a [shared bulk import](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Shared-bulk-import-into-a-sharded-table) over HTTP `/bulk` or SQL: documents go straight to new disk chunks of the shards they are routed to, one chunk per shard, and become searchable at the commit.
+A sharded table takes a [shared bulk import](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Shared-bulk-import-into-a-sharded-table) over HTTP `/bulk` or SQL: documents go straight to new disk chunks of the shards they are routed to, one chunk per shard, and become searchable at the commit.
 
 #### Dropping a Sharded Table
 

@@ -17,67 +17,16 @@
 #include "searchdaemon.h"
 #include "sphinxrt.h"
 #include "indexer_rt_bulk.h"
-#include "api_reply_stream.h"
 
 #include "cluster_file_reserve.h"
 #include "cluster_file_send.h"
+#include "cluster_index_add_local.h"
 #include "cluster_sst_progress.h"
 #include "recv_state.h"
 #include "send_files.h"
 #include "configuration.h"
 
 #include <atomic>
-
-void operator<< ( ISphOutputBuffer & tOut, const BulkChunkRequest_t & tReq )
-{
-	tOut << (const ClusterRequest_t &)tReq;
-	tOut.SendString ( tReq.m_sTable.cstr() );
-	tOut.SendUint64 ( tReq.m_uId );
-}
-
-void operator>> ( InputBuffer_c & tIn, BulkChunkRequest_t & tReq )
-{
-	tIn >> (ClusterRequest_t &)tReq;
-	tReq.m_sTable = tIn.GetString();
-	tReq.m_uId = tIn.GetUint64();
-}
-
-StringBuilder_c & operator<< ( StringBuilder_c & tOut, const BulkChunkRequest_t & tReq )
-{
-	tOut << (const ClusterRequest_t &)tReq << "table:" << tReq.m_sTable << "id:" << tReq.m_uId;
-	return tOut;
-}
-
-// the files of the chunk: names, hash layout and hashes; there is nothing at the node to compare them with
-struct BulkChunkReserveRequest_t : BulkChunkRequest_t
-{
-	SyncSrc_t * m_pFiles = nullptr;
-};
-
-void operator<< ( ISphOutputBuffer & tOut, const BulkChunkReserveRequest_t & tReq )
-{
-	tOut << (const BulkChunkRequest_t &)tReq;
-	assert ( tReq.m_pFiles );
-	SendSyncSrcLayout ( tOut, *tReq.m_pFiles );
-}
-
-void operator>> ( InputBuffer_c & tIn, BulkChunkReserveRequest_t & tReq )
-{
-	tIn >> (BulkChunkRequest_t &)tReq;
-	assert ( tReq.m_pFiles );
-	GetSyncSrcLayout ( tIn, *tReq.m_pFiles );
-}
-
-StringBuilder_c & operator<< ( StringBuilder_c & tOut, const BulkChunkReserveRequest_t & tReq )
-{
-	tOut << (const BulkChunkRequest_t &)tReq << "files:" << ( tReq.m_pFiles ? tReq.m_pFiles->m_dBaseNames.GetLength() : 0 );
-	return tOut;
-}
-
-using ClusterChunkReserve_c = ClusterCommand_T<E_CLUSTER::CHUNK_RESERVE, BulkChunkReserveRequest_t>;
-using ClusterChunkPrepare_c = ClusterCommand_T<E_CLUSTER::CHUNK_PREPARE, BulkChunkRequest_t>;
-using ClusterChunkAbort_c = ClusterCommand_T<E_CLUSTER::CHUNK_ABORT, BulkChunkRequest_t>;
-
 
 // the API address of this node with its port, the pid, the time and a process counter: nodes that start in one second
 // on one host still differ by the port
@@ -98,287 +47,400 @@ uint64_t BulkChunkSessionKey ( const CSphString & sCluster, const CSphString & s
 }
 
 
-CSphString BulkChunkDir ( const CSphString & sRoot, uint64_t uId, bool bReceiving )
+CSphString BulkChunkFilebase ( const CSphString & sRoot, uint64_t uId )
 {
-	return SphSprintf ( "%s/repl-" UINT64_FMT "%s", sRoot.cstr(), uId, bReceiving ? ".recv" : "" );
+	return SphSprintf ( "%s/repl-" UINT64_FMT, sRoot.cstr(), uId );
+}
+
+BulkChunkSession_t::BulkChunkSession_t ( const CSphString & sCluster, const CSphString & sTable, uint64_t uId, const CSphString & sFilebase )
+	: m_sCluster ( sCluster )
+	, m_sTable ( sTable )
+	, m_sFilebase ( sFilebase )
+	, m_uKey ( BulkChunkSessionKey ( sCluster, sTable, uId ) )
+{}
+
+BulkChunkSession_t::~BulkChunkSession_t() = default;
+
+bool BulkChunkSession_t::BeginPrepare()
+{
+	auto eExpected = BulkChunkState_e::RECEIVING;
+	return m_eState.compare_exchange_strong ( eExpected, BulkChunkState_e::PREPARING );
+}
+
+bool BulkChunkSession_t::Publish ( std::unique_ptr<CSphIndex> & pChunk )
+{
+	assert ( pChunk );
+	auto eExpected = BulkChunkState_e::PREPARING;
+	if ( !m_eState.compare_exchange_strong ( eExpected, BulkChunkState_e::READY ) )
+		return false;
+	m_pChunk = std::move ( pChunk );
+	return true;
+}
+
+std::unique_ptr<CSphIndex> BulkChunkSession_t::Take()
+{
+	auto eExpected = BulkChunkState_e::READY;
+	if ( !m_eState.compare_exchange_strong ( eExpected, BulkChunkState_e::APPLYING ) )
+		return nullptr;
+	return std::move ( m_pChunk );
+}
+
+void BulkChunkSession_t::Cancel()
+{
+	auto eState = m_eState.load();
+	while ( eState!=BulkChunkState_e::FINISHED && eState!=BulkChunkState_e::CANCELLED
+		&& !m_eState.compare_exchange_weak ( eState, BulkChunkState_e::CANCELLED ) )
+	{}
+}
+
+void BulkChunkSession_t::Finish()
+{
+	m_pChunk.reset();
+	m_eState.store ( BulkChunkState_e::FINISHED );
 }
 
 //////////////////////////////////////////////////////////////////////////
-// chunks of tables that this node receives, keeps prepared or attaches
-
-struct BulkChunkSession_t
-{
-	CSphString	m_sTable;
-	uint64_t	m_uKey;
-};
+// The registry owns stable sessions, never an address into its movable vector.
 
 static Threads::Coro::Mutex_c g_tBulkChunkSessionsLock;
-static CSphVector<BulkChunkSession_t> g_dBulkChunkSessions GUARDED_BY ( g_tBulkChunkSessionsLock );
+static CSphVector<BulkChunkSessionRefPtr_t> g_dBulkChunkSessions GUARDED_BY ( g_tBulkChunkSessionsLock );
+static bool g_bBulkChunkShutdown GUARDED_BY ( g_tBulkChunkSessionsLock ) = false;
 
-static void AddBulkChunkSession ( const CSphString & sTable, uint64_t uKey )
+static BulkChunkSessionRefPtr_t FindBulkChunkSession ( uint64_t uKey )
 {
 	Threads::ScopedCoroMutex_t tLock ( g_tBulkChunkSessionsLock );
-	g_dBulkChunkSessions.Add ( { sTable, uKey } );
+	for ( const auto & pSession : g_dBulkChunkSessions )
+		if ( pSession->m_uKey==uKey )
+			return pSession;
+	return nullptr;
 }
 
-static void RemoveBulkChunkSession ( uint64_t uKey )
+static bool AddBulkChunkSession ( const BulkChunkSessionRefPtr_t & pSession )
+{
+	Threads::ScopedCoroMutex_t tLock ( g_tBulkChunkSessionsLock );
+	if ( g_bBulkChunkShutdown || sphInterrupted() )
+		return TlsMsg::Err ( "Server shutdown in progress" );
+	for ( const auto & pOld : g_dBulkChunkSessions )
+		if ( pOld->m_uKey==pSession->m_uKey )
+			return TlsMsg::Err ( "bulk_import chunk of table '%s' already has a session", pSession->m_sTable.cstr() );
+	g_dBulkChunkSessions.Add ( pSession );
+	return true;
+}
+
+static void RemoveBulkChunkSession ( const BulkChunkSessionRefPtr_t & pSession )
 {
 	Threads::ScopedCoroMutex_t tLock ( g_tBulkChunkSessionsLock );
 	ARRAY_FOREACH ( i, g_dBulkChunkSessions )
-		if ( g_dBulkChunkSessions[i].m_uKey==uKey )
+		if ( g_dBulkChunkSessions[i].Ptr()==pSession.Ptr() )
 		{
 			g_dBulkChunkSessions.RemoveFast ( i );
 			return;
 		}
 }
 
-void RegisterBulkChunk ( const CSphString & sCluster, const CSphString & sTable, uint64_t uId )
+// Caller holds the operation lock. Close the object before unlinking its captured staging paths.
+static void CleanupBulkChunkSession ( BulkChunkSession_t & tSession )
 {
-	AddBulkChunkSession ( sTable, BulkChunkSessionKey ( sCluster, sTable, uId ) );
+	if ( tSession.m_bReceiving && RecvState::HasState ( tSession.m_uKey ) )
+		RecvState::Free ( tSession.m_uKey );
+	tSession.m_bReceiving = false;
+	tSession.Finish();
+	RemoveFiles ( tSession.m_dFilesNew );
+	RemoveFiles ( tSession.m_dFilesRef );
+	tSession.m_dFilesNew.Reset();
+	tSession.m_dFilesRef.Reset();
+}
+
+static void CancelBulkChunkSession ( const BulkChunkSessionRefPtr_t & pSession )
+{
+	pSession->Cancel(); // wins against a late Publish even while Load holds the operation lock
+	{
+		Threads::ScopedCoroMutex_t tLock ( pSession->m_tLock );
+		CleanupBulkChunkSession ( *pSession );
+	}
+	RemoveBulkChunkSession ( pSession );
+}
+
+bool RegisterBulkChunk ( const CSphString & sCluster, const CSphString & sTable, uint64_t uId, std::unique_ptr<CSphIndex> pChunk, const VecTraits_T<CSphString> & dFiles, CSphString & sError )
+{
+	BulkChunkSessionRefPtr_t pSession { new BulkChunkSession_t ( sCluster, sTable, uId, pChunk->GetFilebase() ) };
+	pSession->m_dFilesRef.Append ( dFiles );
+	pSession->BeginPrepare();
+	pSession->Publish ( pChunk );
+	if ( AddBulkChunkSession ( pSession ) )
+		return true;
+	sError = TlsMsg::szError();
+	CancelBulkChunkSession ( pSession );
+	return false;
+}
+
+static void ForgetBulkChunks ( const CSphString * pTable, const CSphString * pCluster, bool bShutdown=false )
+{
+	CSphVector<BulkChunkSessionRefPtr_t> dSessions;
+	{
+		Threads::ScopedCoroMutex_t tLock ( g_tBulkChunkSessionsLock );
+		if ( bShutdown )
+			g_bBulkChunkShutdown = true;
+		for ( const auto & pSession : g_dBulkChunkSessions )
+			if ( ( !pTable || pSession->m_sTable==*pTable ) && ( !pCluster || pSession->m_sCluster==*pCluster ) )
+			{
+				pSession->Cancel();
+				dSessions.Add ( pSession );
+			}
+	}
+	for ( const auto & pSession : dSessions )
+		CancelBulkChunkSession ( pSession );
 }
 
 void ForgetBulkChunkSessions ( const CSphString & sTable )
 {
-	Threads::ScopedCoroMutex_t tLock ( g_tBulkChunkSessionsLock );
-	for ( int i = g_dBulkChunkSessions.GetLength()-1; i>=0; --i )
-		if ( g_dBulkChunkSessions[i].m_sTable==sTable )
-			g_dBulkChunkSessions.RemoveFast ( i );
+	ForgetBulkChunks ( &sTable, nullptr );
+}
+
+void ForgetClusterBulkChunkSessions ( const CSphString & sCluster )
+{
+	ForgetBulkChunks ( nullptr, &sCluster );
+}
+
+void ShutdownBulkChunkSessions()
+{
+	Threads::CallCoroutine ( [] { ForgetBulkChunks ( nullptr, nullptr, true ); } );
 }
 
 bool HasBulkChunkSessions ( const CSphString & sTable )
 {
 	Threads::ScopedCoroMutex_t tLock ( g_tBulkChunkSessionsLock );
-	return g_dBulkChunkSessions.any_of ( [&sTable] ( const BulkChunkSession_t & tSession ) { return tSession.m_sTable==sTable; } );
+	return g_dBulkChunkSessions.any_of ( [&sTable] ( const auto & pSession ) { return pSession->m_sTable==sTable; } );
 }
 
-//////////////////////////////////////////////////////////////////////////
-// receive side
-
-// the staging root of the table of the chunk; bInCluster: the table must be an RT table of the cluster of the request
-static bool GetBulkChunkRoot ( const BulkChunkRequest_t & tCmd, bool bInCluster, CSphString & sRoot )
+static bool GetBulkChunkRoot ( const CSphString & sTable, const CSphString * pCluster, CSphString & sRoot )
 {
-	cServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sTable );
+	cServedIndexRefPtr_c pServed = GetServed ( sTable );
 	if ( !pServed || pServed->m_eType!=IndexType_e::RT )
-		return TlsMsg::Err ( "bulk_import chunk: table '%s' is absent or not an RT table", tCmd.m_sTable.cstr() );
-
-	if ( bInCluster && pServed->m_sCluster!=tCmd.m_sCluster )
-		return TlsMsg::Err ( "bulk_import chunk: table '%s' is not in cluster '%s'", tCmd.m_sTable.cstr(), tCmd.m_sCluster.cstr() );
-
+		return TlsMsg::Err ( "bulk_import chunk: table '%s' is absent or not an RT table", sTable.cstr() );
+	if ( pCluster && pServed->m_sCluster!=*pCluster )
+		return TlsMsg::Err ( "bulk_import chunk: table '%s' is not in cluster '%s'", sTable.cstr(), pCluster->cstr() );
 	RIdx_T<RtIndex_i *> pRt { pServed };
 	sRoot = GetIndexerRtBulkRoot ( *pRt.Ptr() );
 	return true;
 }
 
-
-// a new receive session of the chunk files into repl-<id>.recv/
-static bool ReserveBulkChunk ( const BulkChunkReserveRequest_t & tCmd )
+bool ReserveBulkChunk ( const FileReserveRequest_t & tCmd, FileReserveReply_t & tRes )
 {
-	assert ( tCmd.m_pFiles );
-	const SyncSrc_t & tFiles = *tCmd.m_pFiles;
-	sphLogDebugRpl ( "bulk_import chunk " UINT64_FMT " of table '%s': reserve %d files", tCmd.m_uId, tCmd.m_sTable.cstr(), tFiles.m_dBaseNames.GetLength() );
-
+	assert ( tCmd.m_pChunks );
+	const SyncSrc_t & tFiles = *tCmd.m_pChunks;
+	sphLogDebugRpl ( "bulk_import chunk " UINT64_FMT " of table '%s': reserve %d files", tCmd.m_uBulkChunkId, tCmd.m_sIndex.cstr(), tFiles.m_dBaseNames.GetLength() );
 	if ( tFiles.m_dBaseNames.IsEmpty() || tFiles.m_dBaseNames.GetLength()!=tFiles.m_dChunks.GetLength() )
-		return TlsMsg::Err ( "bulk_import chunk: wrong file list, %d names, %d layouts", tFiles.m_dBaseNames.GetLength(), tFiles.m_dChunks.GetLength() );
+		return TlsMsg::Err ( "bulk_import chunk: invalid file list" );
 
-	for ( const CSphString & sFile : tFiles.m_dBaseNames )
-		if ( !IsReplicationFileName ( sFile ) )
-			return TlsMsg::Err ( "invalid replication file name" );
+	sph::StringSet hNames;
+	for ( const auto & sFile : tFiles.m_dBaseNames )
+	{
+		if ( !IsReplicationFileName ( sFile ) || sFile.Length()<=6 || strncmp ( sFile.cstr(), "chunk.", 6 ) )
+			return TlsMsg::Err ( "invalid replication chunk file name" );
+		if ( hNames[sFile] )
+			return TlsMsg::Err ( "duplicate replication chunk file name" );
+		hNames.Add ( sFile );
+	}
 
-	const FileChunks_t & tLast = tFiles.m_dChunks.Last();
-	const int iHashes = tLast.m_iHashStartItem + tLast.GetChunksCount();
+	int64_t iHashes = tFiles.m_dBaseNames.GetLength();
+	for ( const auto & tFile : tFiles.m_dChunks )
+	{
+		if ( tFile.m_iFileSize<0 || tFile.m_iChunkBytes<=0 || tFile.m_iHashStartItem!=iHashes )
+			return TlsMsg::Err ( "bulk_import chunk: invalid file layout" );
+		iHashes += tFile.m_iFileSize ? 1+( tFile.m_iFileSize-1 )/tFile.m_iChunkBytes : 0;
+		if ( iHashes>INT_MAX )
+			return TlsMsg::Err ( "bulk_import chunk: too many hashes" );
+	}
 	if ( iHashes!=tFiles.m_dHashes.GetLength() )
-		return TlsMsg::Err ( "bulk_import chunk: %d hashes, expected %d", tFiles.m_dHashes.GetLength(), iHashes );
+		return TlsMsg::Err ( "bulk_import chunk: wrong hash count" );
 
 	CSphString sRoot;
-	if ( !GetBulkChunkRoot ( tCmd, true, sRoot ) )
+	if ( !GetBulkChunkRoot ( tCmd.m_sIndex, &tCmd.m_sCluster, sRoot ) )
 		return false;
-
-	const uint64_t uKey = BulkChunkSessionKey ( tCmd.m_sCluster, tCmd.m_sTable, tCmd.m_uId );
-	if ( RecvState::HasState ( uKey ) )
-		return TlsMsg::Err ( "bulk_import chunk " UINT64_FMT " of table '%s' is already being received", tCmd.m_uId, tCmd.m_sTable.cstr() );
-
-	if ( sphDirExists ( BulkChunkDir ( sRoot, tCmd.m_uId, false ) ) )
-		return TlsMsg::Err ( "bulk_import chunk " UINT64_FMT " of table '%s' already exists", tCmd.m_uId, tCmd.m_sTable.cstr() );
-
-	CSphString sDir = BulkChunkDir ( sRoot, tCmd.m_uId, true );
+	BulkChunkSessionRefPtr_t pSession { new BulkChunkSession_t ( tCmd.m_sCluster, tCmd.m_sIndex, tCmd.m_uBulkChunkId, BulkChunkFilebase ( sRoot, tCmd.m_uBulkChunkId ) ) };
+	if ( !AddBulkChunkSession ( pSession ) )
+		return false;
+	bool bReserved = false;
+	AT_SCOPE_EXIT ( [&] { if ( !bReserved ) CancelBulkChunkSession ( pSession ); } );
+	Threads::ScopedCoroMutex_t tLock ( pSession->m_tLock );
+	if ( RecvState::HasState ( pSession->m_uKey ) )
+		return TlsMsg::Err ( "bulk_import chunk already has a receive state" );
 	TLS_MSG_STRING ( sError );
-	if ( !CreateIndexerRtBulkDir ( sRoot, sDir, sError ) )
+	if ( !PrepareStagingRoot ( sRoot, sError ) )
 		return false;
+	if ( sphFileExists ( pSession->m_sFilebase.cstr() ) || !FindFiles ( SphSprintf ( "%s.*", pSession->m_sFilebase.cstr() ).cstr() ).IsEmpty() )
+		return TlsMsg::Err ( "bulk_import chunk " UINT64_FMT " of table '%s' already exists", tCmd.m_uBulkChunkId, tCmd.m_sIndex.cstr() );
 
-	// the directory is new: every block comes from the sender, there are no local files to copy blocks from
-	SyncDst_t tDst;
-	tDst.m_dNodeChunksMask.Init ( iHashes );
-	tDst.m_dRemotePaths.Resize ( tFiles.m_dBaseNames.GetLength() );
-	ARRAY_FOREACH ( i, tDst.m_dRemotePaths )
-		tDst.m_dRemotePaths[i].SetSprintf ( "%s/%s", sDir.cstr(), tFiles.m_dBaseNames[i].cstr() );
-	StrVec_t dNoRefs ( tDst.m_dRemotePaths.GetLength() );
-
-	RecvState::GetState ( uKey ).SetMerge ( tFiles, tDst, sDir, dNoRefs );
-	AddBulkChunkSession ( tCmd.m_sTable, uKey );
+	tRes.m_dNodeChunksMask.Init ( (int)iHashes );
+	StrVec_t dFilesRef ( tFiles.m_dBaseNames.GetLength() );
+	ARRAY_FOREACH ( i, dFilesRef )
+		dFilesRef[i].SetSprintf ( "%s%s", pSession->m_sFilebase.cstr(), tFiles.m_dBaseNames[i].cstr()+5 );
+	if ( !ReserveFiles ( dFilesRef, tFiles.m_dChunks, tRes.m_dNodeChunksMask, tRes.m_dRemotePaths, sError ) )
+		return false;
+	pSession->m_dFilesNew.Append ( tRes.m_dRemotePaths );
+	pSession->m_dFilesRef = std::move ( dFilesRef );
+	if ( pSession->m_eState.load()!=BulkChunkState_e::RECEIVING )
+		return TlsMsg::Err ( "bulk_import chunk was cancelled" );
+	RecvState::GetState ( pSession->m_uKey )->SetMerge ( tFiles, tRes, pSession->m_sFilebase, pSession->m_dFilesRef );
+	pSession->m_bReceiving = true;
+	bReserved = true;
 	return true;
 }
 
-
-// all the files came: load and check the chunk, then rename repl-<id>.recv/ to repl-<id>/
-static bool PrepareBulkChunk ( const BulkChunkRequest_t & tCmd )
+bool PrepareBulkChunk ( const ClusterIndexAddLocalRequest_t & tCmd )
 {
-	sphLogDebugRpl ( "bulk_import chunk " UINT64_FMT " of table '%s': prepare", tCmd.m_uId, tCmd.m_sTable.cstr() );
-
-	const uint64_t uKey = BulkChunkSessionKey ( tCmd.m_sCluster, tCmd.m_sTable, tCmd.m_uId );
-	if ( !RecvState::HasState ( uKey ) )
-		return TlsMsg::Err ( "bulk_import chunk " UINT64_FMT " of table '%s' has no receive session", tCmd.m_uId, tCmd.m_sTable.cstr() );
-
-	std::unique_ptr<MergeState_t> pMerge { RecvState::GetState ( uKey ).Flush() };
-	RecvState::Free ( uKey );
-
-	// every file was verified by its hash as it was written; a missing or short one was not sent to the end
+	sphLogDebugRpl ( "bulk_import chunk " UINT64_FMT " of table '%s': prepare", tCmd.m_uBulkChunkId, tCmd.m_sIndex.cstr() );
+	auto pSession = FindBulkChunkSession ( BulkChunkSessionKey ( tCmd.m_sCluster, tCmd.m_sIndex, tCmd.m_uBulkChunkId ) );
+	if ( !pSession )
+		return TlsMsg::Err ( "bulk_import chunk " UINT64_FMT " of table '%s' has no receive session", tCmd.m_uBulkChunkId, tCmd.m_sIndex.cstr() );
+	Threads::ScopedCoroMutex_t tLock ( pSession->m_tLock );
+	if ( !pSession->BeginPrepare() || !pSession->m_bReceiving )
+		return TlsMsg::Err ( "bulk_import chunk has no active receive session" );
+	std::unique_ptr<MergeState_t> pMerge { RecvState::GetState ( pSession->m_uKey )->Flush() };
+	RecvState::Free ( pSession->m_uKey );
+	pSession->m_bReceiving = false;
 	ARRAY_FOREACH ( i, pMerge->m_dFilesNew )
 	{
 		int64_t iSize = sphGetFileSize ( pMerge->m_dFilesNew[i], nullptr );
 		if ( iSize!=pMerge->m_dChunks[i].m_iFileSize )
 			return TlsMsg::Err ( "bulk_import chunk file '%s' has " INT64_FMT " bytes, expected " INT64_FMT, pMerge->m_dFilesNew[i].cstr(), iSize, pMerge->m_dChunks[i].m_iFileSize );
 	}
-
-	CSphString sRoot;
-	if ( !GetBulkChunkRoot ( tCmd, true, sRoot ) )
-		return false;
-
-	CSphString sDir = BulkChunkDir ( sRoot, tCmd.m_uId, true );
 	TLS_MSG_STRING ( sError );
+	FilesTrait_t tRotated;
+	if ( !RotateFiles ( *pMerge, tRotated, sError ) )
+		return false;
+	for ( const auto & sOld : tRotated.m_dOld )
+		pSession->m_dFilesRef.Add ( sOld );
+	auto pChunk = LoadIndexerRtBulkChunk ( pSession->m_sFilebase, sError );
+	if ( !pChunk )
+		return false;
 	{
-		auto pChunk = LoadIndexerRtBulkChunk ( SphSprintf ( "%s/chunk", sDir.cstr() ), sError );
-		if ( !pChunk )
-			return false;
-
-		cServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sTable );
-		if ( !pServed )
-			return TlsMsg::Err ( "bulk_import chunk: table '%s' is absent", tCmd.m_sTable.cstr() );
-
+		auto pServed = GetServed ( tCmd.m_sIndex );
+		if ( !pServed || pServed->m_eType!=IndexType_e::RT || pServed->m_sCluster!=tCmd.m_sCluster )
+			return TlsMsg::Err ( "bulk_import chunk: table '%s' is not an RT table of cluster '%s'", tCmd.m_sIndex.cstr(), tCmd.m_sCluster.cstr() );
 		RIdx_T<RtIndex_i *> pRt { pServed };
-		if ( !CanAttachIndexerRtBulkChunk ( *pRt.Ptr(), *pChunk, sError ) )
+		if ( !pRt->CanAttachDiskIndex ( pChunk.get(), sError ) )
 			return false;
+		// as on the loading node: the attach command has only the rows written since
+		if ( pRt->ForceDiskChunkResult()!=RtActionResult_e::OK )
+			return TlsMsg::Err ( "failed to flush RAM chunk of table '%s' before bulk_import attach: %s", tCmd.m_sIndex.cstr(), pRt->GetLastError().cstr() );
 	}
-
-	return RenameIndexerRtBulkDir ( sDir, BulkChunkDir ( sRoot, tCmd.m_uId, false ), sError );
+	if ( !pSession->Publish ( pChunk ) )
+		return TlsMsg::Err ( "bulk_import chunk was cancelled during preparation" );
+	return true;
 }
-
 
 void DropBulkChunk ( const CSphString & sCluster, const CSphString & sTable, uint64_t uId )
 {
 	const uint64_t uKey = BulkChunkSessionKey ( sCluster, sTable, uId );
-	if ( RecvState::HasState ( uKey ) )
-		RecvState::Free ( uKey );
-	RemoveBulkChunkSession ( uKey );
-
-	// the table may be gone or out of the cluster already; its staging root is still the place of the files
-	BulkChunkRequest_t tCmd;
-	tCmd.m_sCluster = sCluster;
-	tCmd.m_sTable = sTable;
-	CSphString sRoot;
-	if ( GetBulkChunkRoot ( tCmd, false, sRoot ) )
+	auto pSession = FindBulkChunkSession ( uKey );
+	if ( !pSession )
 	{
-		RemoveIndexerRtBulkDir ( BulkChunkDir ( sRoot, uId, true ) );
-		RemoveIndexerRtBulkDir ( BulkChunkDir ( sRoot, uId, false ) );
+		// A restart loses the session, but its staging files still need an abort.
+		CSphString sRoot;
+		if ( GetBulkChunkRoot ( sTable, nullptr, sRoot ) )
+		{
+			BulkChunkSessionRefPtr_t pNew { new BulkChunkSession_t ( sCluster, sTable, uId, BulkChunkFilebase ( sRoot, uId ) ) };
+			pNew->m_dFilesRef = FindFiles ( SphSprintf ( "%s.*", pNew->m_sFilebase.cstr() ).cstr() );
+			pNew->Cancel(); // exclude a concurrent fallback attach while cleanup owns the files
+			if ( AddBulkChunkSession ( pNew ) )
+				pSession = std::move ( pNew );
+			else
+				pSession = FindBulkChunkSession ( uKey );
+		}
+		TlsMsg::ResetErr();
 	}
-	TlsMsg::ResetErr();
+	if ( pSession )
+		CancelBulkChunkSession ( pSession );
 }
 
-
-// the chunk is not going to be attached: drop its session and its files
-static bool AbortBulkChunk ( const BulkChunkRequest_t & tCmd )
+bool AbortBulkChunk ( const ClusterIndexAddLocalRequest_t & tCmd )
 {
-	sphLogDebugRpl ( "bulk_import chunk " UINT64_FMT " of table '%s': abort", tCmd.m_uId, tCmd.m_sTable.cstr() );
-	DropBulkChunk ( tCmd.m_sCluster, tCmd.m_sTable, tCmd.m_uId );
+	sphLogDebugRpl ( "bulk_import chunk " UINT64_FMT " of table '%s': abort", tCmd.m_uBulkChunkId, tCmd.m_sIndex.cstr() );
+	DropBulkChunk ( tCmd.m_sCluster, tCmd.m_sIndex, tCmd.m_uBulkChunkId );
 	return true;
 }
 
-
 bool AttachBulkChunk ( const CSphString & sCluster, const CSphString & sTable, uint64_t uId, CSphString & sError )
 {
-	cServedIndexRefPtr_c pServed = GetServed ( sTable );
-	if ( !pServed || pServed->m_eType!=IndexType_e::RT )
+	const uint64_t uKey = BulkChunkSessionKey ( sCluster, sTable, uId );
+	auto pSession = FindBulkChunkSession ( uKey );
+	bool bFallback = false;
+	if ( !pSession )
 	{
-		DropBulkChunk ( sCluster, sTable, uId );
-		sError.SetSprintf ( "table '%s' is absent or not an RT table", sTable.cstr() );
+		CSphString sRoot;
+		if ( !GetBulkChunkRoot ( sTable, &sCluster, sRoot ) )
+		{
+			sError = TlsMsg::szError();
+			return false;
+		}
+		BulkChunkSessionRefPtr_t pNew { new BulkChunkSession_t ( sCluster, sTable, uId, BulkChunkFilebase ( sRoot, uId ) ) };
+		pNew->m_dFilesRef = FindFiles ( SphSprintf ( "%s.*", pNew->m_sFilebase.cstr() ).cstr() );
+		if ( AddBulkChunkSession ( pNew ) )
+		{
+			pSession = std::move ( pNew );
+			bFallback = true;
+		} else
+			pSession = FindBulkChunkSession ( uKey );
+		if ( !pSession )
+		{
+			sError = TlsMsg::szError();
+			return false;
+		}
+	}
+
+	AT_SCOPE_EXIT ( [&] { RemoveBulkChunkSession ( pSession ); } );
+	Threads::ScopedCoroMutex_t tLock ( pSession->m_tLock );
+	AT_SCOPE_EXIT ( [&] { CleanupBulkChunkSession ( *pSession ); } );
+	auto pServed = GetServed ( sTable );
+	if ( !pServed || pServed->m_eType!=IndexType_e::RT || pServed->m_sCluster!=sCluster )
+	{
+		sError.SetSprintf ( "table '%s' is absent or not an RT table of cluster '%s'", sTable.cstr(), sCluster.cstr() );
 		return false;
 	}
-
-	CSphString sDir;
-	{
-		RIdx_T<RtIndex_i *> pRt { pServed };
-		sDir = BulkChunkDir ( GetIndexerRtBulkRoot ( *pRt.Ptr() ), uId, false );
-	}
-	AT_SCOPE_EXIT ( [&sCluster, &sTable, uId] { DropBulkChunk ( sCluster, sTable, uId ); } );
-
-	// a node that joined after the delivery, or one that lost the directory
-	CSphString sChunk = SphSprintf ( "%s/chunk", sDir.cstr() );
-	if ( !sphFileExists ( SphSprintf ( "%s.sph", sChunk.cstr() ).cstr() ) )
+	if ( !sphFileExists ( SphSprintf ( "%s.sph", pSession->m_sFilebase.cstr() ).cstr() ) )
 	{
 		sError.SetSprintf ( "bulk_import chunk " UINT64_FMT " of table '%s' is not prepared on this node", uId, sTable.cstr() );
 		return false;
 	}
-
-	auto pChunk = LoadIndexerRtBulkChunk ( sChunk, sError );
+	if ( bFallback && pSession->BeginPrepare() )
+	{
+		auto pLoaded = LoadIndexerRtBulkChunk ( pSession->m_sFilebase, sError );
+		if ( !pLoaded )
+			return false;
+		{
+			RIdx_T<RtIndex_i *> pRt { pServed };
+			if ( !pRt->CanAttachDiskIndex ( pLoaded.get(), sError ) )
+				return false;
+		}
+		pSession->Publish ( pLoaded );
+	}
+	auto pChunk = pSession->Take();
 	if ( !pChunk )
+	{
+		sError.SetSprintf ( "bulk_import chunk " UINT64_FMT " of table '%s' has no prepared object", uId, sTable.cstr() );
 		return false;
-
+	}
+	sphLogDebugRpl ( "bulk_import chunk " UINT64_FMT " of table '%s': take prepared object %p", uId, sTable.cstr(), pChunk.get() );
 	WIdx_T<RtIndex_i *> pRt { pServed };
-	bool bCantAttach = false;
-	return AttachLoadedIndexerRtBulkChunk ( *pRt.Ptr(), pChunk, bCantAttach, sError )==DiskAttachRes_e::OK;
+	bool bFatal = false;
+	auto eResult = pRt->AttachDiskIndexWithMeta ( pChunk.get(), false, bFatal, sError );
+	if ( eResult!=DiskAttachRes_e::NOT_ATTACHED )
+		pChunk.release(); // the table owns the chunk now
+	return eResult==DiskAttachRes_e::OK;
 }
 
 
-template<typename COMMAND, typename REQUEST, typename ACTION>
-static bool ReceiveBulkChunkCommand ( GenericOutputBuffer_c & tOut, InputBuffer_c & tBuf, CSphString & sCluster, WORD uReplyVersion, DWORD uHeartbeatIntervalMs, REQUEST & tCmd, ACTION && fnAction )
-{
-	COMMAND::ParseRequest ( tBuf, tCmd );
-	sCluster = tCmd.m_sCluster;
-
-	ApiReplyStream_c tStream ( uHeartbeatIntervalMs, uReplyVersion, tOut );
-	tStream.Start ();
-	const bool bOk = fnAction ( tCmd );
-	if ( !tStream.StopAndHandoff () )
-		return false;
-
-	if ( bOk )
-		COMMAND::BuildReply ( tOut );
-	return true;
-}
-
-
-bool ReceiveClusterChunkReserve ( GenericOutputBuffer_c & tOut, InputBuffer_c & tBuf, CSphString & sCluster, WORD uReplyVersion, DWORD uHeartbeatIntervalMs )
-{
-	SyncSrc_t tFiles;
-	BulkChunkReserveRequest_t tCmd;
-	tCmd.m_pFiles = &tFiles;
-	return ReceiveBulkChunkCommand<ClusterChunkReserve_c> ( tOut, tBuf, sCluster, uReplyVersion, uHeartbeatIntervalMs, tCmd, ReserveBulkChunk );
-}
-
-
-bool ReceiveClusterChunkPrepare ( GenericOutputBuffer_c & tOut, InputBuffer_c & tBuf, CSphString & sCluster, WORD uReplyVersion, DWORD uHeartbeatIntervalMs )
-{
-	BulkChunkRequest_t tCmd;
-	return ReceiveBulkChunkCommand<ClusterChunkPrepare_c> ( tOut, tBuf, sCluster, uReplyVersion, uHeartbeatIntervalMs, tCmd, PrepareBulkChunk );
-}
-
-
-bool ReceiveClusterChunkAbort ( GenericOutputBuffer_c & tOut, InputBuffer_c & tBuf, CSphString & sCluster, WORD uReplyVersion, DWORD uHeartbeatIntervalMs )
-{
-	BulkChunkRequest_t tCmd;
-	return ReceiveBulkChunkCommand<ClusterChunkAbort_c> ( tOut, tBuf, sCluster, uReplyVersion, uHeartbeatIntervalMs, tCmd, AbortBulkChunk );
-}
-
-//////////////////////////////////////////////////////////////////////////
-// send side
-
-// drop the chunk at the nodes; a node without the session just has nothing to drop
-static void AbortBulkChunkOnNodes ( const BulkChunkRequest_t & tReq, const CSphString & sUser, const VecTraits_T<AgentDesc_t> & dDesc )
+// drop the chunk at the nodes, including staging files left after a restart
+static void AbortBulkChunkOnNodes ( ClusterIndexAddLocalRequest_t tReq, const CSphString & sUser, const VecTraits_T<AgentDesc_t> & dDesc )
 {
 	CSphString sReason = TlsMsg::MoveToString(); // the error that made the abort, the abort keeps it
-	auto dNodes = ClusterChunkAbort_c::MakeAgents ( dDesc, sUser, ReplicationSstQueryTimeout(), tReq );
-	ClusterChunkAbort_c tAbort;
+	tReq.m_bSendFilesSuccess = false;
+	auto dNodes = ClusterIndexAddLocal_c::MakeAgents ( dDesc, sUser, ReplicationSstQueryTimeout(), tReq );
+	ClusterIndexAddLocal_c tAbort;
 	if ( !PerformRemoteTasksWrap ( dNodes, tAbort, tAbort, true ) )
-		sphWarning ( "bulk_import chunk " UINT64_FMT " of table '%s': abort failed: %s", tReq.m_uId, tReq.m_sTable.cstr(), TlsMsg::szError() );
+		sphWarning ( "bulk_import chunk " UINT64_FMT " of table '%s': abort failed: %s", tReq.m_uBulkChunkId, tReq.m_sIndex.cstr(), TlsMsg::szError() );
 	TlsMsg::ResetErr();
 	if ( !sReason.IsEmpty() )
 		TlsMsg::Err ( sReason );
@@ -390,10 +452,11 @@ void AbortBulkChunkOnNodes ( const CSphString & sCluster, const CSphString & sUs
 	if ( dDesc.IsEmpty() )
 		return;
 
-	BulkChunkRequest_t tReq;
+	ClusterIndexAddLocalRequest_t tReq;
 	tReq.m_sCluster = sCluster;
-	tReq.m_sTable = sTable;
-	tReq.m_uId = uId;
+	tReq.m_sIndex = sTable;
+	tReq.m_eIndex = IndexType_e::RT;
+	tReq.m_uBulkChunkId = uId;
 	AbortBulkChunkOnNodes ( tReq, sUser, dDesc );
 }
 
@@ -404,7 +467,7 @@ static bool BulkChunkCancelled()
 	if ( !CheckIndexerRtBulkCancelled ( sError ) )
 		return false;
 
-	TlsMsg::Err ( sError ); // returns false
+	TlsMsg::Err ( sError );
 	return true;
 }
 
@@ -414,10 +477,12 @@ bool ReplicateBulkChunkToNodes ( const CSphString & sCluster, const CSphString &
 	assert ( !dDesc.IsEmpty() );
 	const int64_t tmStart = sphMicroTimer();
 
-	BulkChunkRequest_t tReq;
+	ClusterIndexAddLocalRequest_t tReq;
 	tReq.m_sCluster = sCluster;
-	tReq.m_sTable = sTable;
-	tReq.m_uId = uId;
+	tReq.m_sIndex = sTable;
+	tReq.m_eIndex = IndexType_e::RT;
+	tReq.m_uBulkChunkId = uId;
+	tReq.m_bSendFilesSuccess = true; // prepare; the abort sends false
 
 	// a progress of its own: the progress object of the cluster belongs to SST and ALTER CLUSTER ADD
 	auto pProgress = CreateProgress();
@@ -426,6 +491,14 @@ bool ReplicateBulkChunkToNodes ( const CSphString & sCluster, const CSphString &
 	SyncSrc_t tSrc { std::move ( dFiles ) };
 	if ( !tSrc.CalculateFilesSignatures ( *pProgress ) )
 		return false;
+
+	// Physical paths and logical wire names have the same order and hash indices.
+	CSphString sBase = SphSprintf ( "repl-" UINT64_FMT, uId );
+	for ( auto & sName : tSrc.m_dBaseNames )
+	{
+		assert ( !strncmp ( sName.cstr(), sBase.cstr(), sBase.Length() ) );
+		sName = SphSprintf ( "chunk%s", sName.cstr()+sBase.Length() );
+	}
 
 	const int64_t tmHashed = sphMicroTimer();
 	sphLogDebugRpl ( "bulk_import chunk " UINT64_FMT " of table '%s': sha1 of %d files in %.3f sec, sending to %d nodes", uId, sTable.cstr(), tSrc.m_dBaseNames.GetLength(), ( tmHashed-tmStart ) / 1000000.0f, dDesc.GetLength() );
@@ -437,11 +510,13 @@ bool ReplicateBulkChunkToNodes ( const CSphString & sCluster, const CSphString &
 			return false;
 
 		// a repeated reserve or prepare finds the session of the first one and fails, so neither is retried
-		BulkChunkReserveRequest_t tReserve;
-		(BulkChunkRequest_t &)tReserve = tReq;
-		tReserve.m_pFiles = &tSrc;
-		auto dReserve = ClusterChunkReserve_c::MakeAgents ( dDesc, sUser, iTimeoutMs, tReserve );
-		ClusterChunkReserve_c tReserveCmd;
+		FileReserveRequest_t tReserve;
+		tReserve.m_sCluster = sCluster;
+		tReserve.m_sIndex = sTable;
+		tReserve.m_pChunks = &tSrc;
+		tReserve.m_uBulkChunkId = uId;
+		auto dReserve = ClusterFileReserve_c::MakeAgents ( dDesc, sUser, iTimeoutMs, tReserve );
+		ClusterFileReserve_c tReserveCmd;
 		if ( !PerformRemoteTasksWrap ( dReserve, tReserveCmd, tReserveCmd, false ) )
 			return false;
 
@@ -465,8 +540,8 @@ bool ReplicateBulkChunkToNodes ( const CSphString & sCluster, const CSphString &
 		if ( BulkChunkCancelled() )
 			return false;
 
-		auto dPrepare = ClusterChunkPrepare_c::MakeAgents ( dDesc, sUser, iTimeoutMs, tReq );
-		ClusterChunkPrepare_c tPrepareCmd;
+		auto dPrepare = ClusterIndexAddLocal_c::MakeAgents ( dDesc, sUser, iTimeoutMs, tReq );
+		ClusterIndexAddLocal_c tPrepareCmd;
 		return PerformRemoteTasksWrap ( dPrepare, tPrepareCmd, tPrepareCmd, false );
 	}();
 

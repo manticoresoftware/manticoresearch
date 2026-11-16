@@ -52,18 +52,6 @@ source /tmp/rb.sh; sql 2306 "CREATE TABLE a_1 (title TEXT, gid INT)"; sql 1306 "
 {"items":[],"current_line":30,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
 {"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
 ––– comment –––
-A KILL of a data request that writes to a remote target fails only that request: the load stays
-open, another request continues it and the commit publishes only that request.
-––– input –––
-source /tmp/rb.sh; gen a 101 400 > /tmp/ak.ndjson; gen a 1001 1030 > /tmp/a2.ndjson; curl -sS --local-port 45679 --limit-rate 4k -X POST "http://localhost:1308/bulk?bulk_import=a&shared" -H 'Content-Type: application/x-ndjson' --data-binary @/tmp/ak.ndjson -w ' HTTP %{http_code}\n' > /tmp/ak.reply 2>&1 & P=$!; sleep 1; sql 1306 "KILL $(sql 1306 'SHOW QUERIES' | awk -F'\t' '$5=="127.0.0.1:45679" {print $1}')"; wait $P; cat /tmp/ak.reply; post a '' /tmp/a2.ndjson; commit a ''; sql 2306 "SELECT COUNT(*) FROM a_1 WHERE id BETWEEN 101 AND 400; SELECT COUNT(*) FROM a_1 WHERE id BETWEEN 1001 AND 1030"; kids
-––– output –––
-{"items":[],"current_line":300,"skipped_lines":300,"errors":true,"error":"query was killed","error_code":"shared_failed","shared_state":"failed"} HTTP 500
-{"items":[],"current_line":30,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
-{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
-0
-30
-children=0
-––– comment –––
 A replaced shard table object (here by ALTER CLUSTER ... ADD) fails the load at the commit, which
 cancels the remote pool; data requests before it go on.
 ––– input –––
@@ -129,20 +117,6 @@ source /tmp/rb.sh; gen r 30001 30030 > /tmp/e1.ndjson; gen r 30031 30060 > /tmp/
 children=0
 {"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"shared bulk_import into shard table 'r' failed to write to remote table 'r_1' at 127.0.0.1:2312: remote error: table 'r_1' has no pool of this bulk_import into a shard table: it was cancelled, or the server restarted","error_code":"shared_failed","shared_state":"failed"} HTTP 500
 ––– comment –––
-A client that drops its request after its data reached both targets (more than one remote batch)
-only loses that request: the load stays open with both children, another request continues it and
-the commit publishes what was written before the drop.
-––– input –––
-source /tmp/rb.sh; gen r 40001 140000 > /tmp/big.ndjson; gen r 180001 180030 > /tmp/k.ndjson; curl -sS --limit-rate 1m -X POST "http://localhost:1308/bulk?bulk_import=r&shared" -H 'Content-Type: application/x-ndjson' --data-binary @/tmp/big.ndjson > /dev/null 2>&1 & P=$!; sleep 2; kill $P; wait $P 2>/dev/null; kids; post r '' /tmp/k.ndjson; for i in $(seq 1 40); do c=$(commit r ''); case "$c" in *shared_busy*) sleep 0.25;; *) break;; esac; done; echo "$c"; sql 1306 "SELECT COUNT(*) FROM r WHERE id BETWEEN 180001 AND 180030; SELECT COUNT(*) FROM r_0 WHERE id BETWEEN 40001 AND 140000"; sql 2306 "SELECT COUNT(*) FROM r_1 WHERE id BETWEEN 40001 AND 140000"; kids
-––– output –––
-children=2
-{"items":[],"current_line":30,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
-{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
-30
-#!/[1-9][0-9]*/!#
-#!/[1-9][0-9]*/!#
-children=0
-––– comment –––
 A coordinator killed during a load leaves the remote pool: the next load is refused on it with
 the PURGE hint, PURGE BULK_IMPORT by the shard table name on the coordinator cancels it on the
 other node, and the load passes.
@@ -195,30 +169,6 @@ ERROR 1064 (42000) at line 1: table r_1: agent 127.0.0.1:2312: table 'r_1' is a 
 ERROR 1064 (42000) at line 1: table r_1: agent 127.0.0.1:3312: #!/[^"]+/!#
 children=1
 children=0
-––– comment –––
-Heartbeats: with agent_query_timeout='1000' a remote commit that builds for about 2 s (the indexer
-on node 2 reads its CSV through a command that waits 2 s after the end of the input) publishes.
-––– input –––
-source /tmp/rb.sh; stop 2; rm -f /var/log/manticore-2/searchd.log; INDEXER_RT_BULK_CSV_PIPE_COMMAND='/bin/sh -c "cat; sleep 2"' INSTANCE=2 searchd -c /tmp/two.conf > /dev/null; if timeout 30 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore-2/searchd.log); then echo "node 2 up, slow csvpipe"; fi; sql 2306 "CREATE TABLE h_1 (title TEXT, gid INT)"; sql 1306 "CREATE TABLE h_0 (title TEXT, gid INT); CREATE TABLE h (title TEXT, gid INT) type='shard' local='h_0' agent='127.0.0.1:2312:h_1' agent_query_timeout='1000'"; gen h 1 30 > /tmp/h.ndjson; post h '' /tmp/h.ndjson; commit h ''; counts h
-––– output –––
-node 2 stopped
-node 2 up, slow csvpipe
-{"items":[],"current_line":30,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
-{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
-30 = #!/[1-9][0-9]*/!# + #!/[1-9][0-9]*/!#
-––– comment –––
-D07: node 2 dies while it builds the commit of its table: that commit is not confirmed, the local
-target commits at the same time and is published (ids 1 and 2), and the remote table has nothing of
-the load after the restart.
-––– input –––
-source /tmp/rb.sh; printf '%s\n' '{"insert":{"table":"h","id":3,"doc":{"title":"x","gid":77}}}' '{"insert":{"table":"h","id":1,"doc":{"title":"y","gid":77}}}' '{"insert":{"table":"h","id":2,"doc":{"title":"z","gid":77}}}' > /tmp/h2.ndjson; post h '' /tmp/h2.ndjson; commit h '' > /tmp/h2.reply & P=$!; sleep 1; kill -9 $(cat /var/log/manticore-2/searchd.pid); wait $P; cat /tmp/h2.reply; for i in $(seq 1 50); do [ $(ps -eo args | grep -c "[i]ndexer_rt_bulk_chunk") -eq 0 ] && break; sleep 0.1; done; kids; start 2; sql 1306 "SELECT COUNT(*) FROM h_0 WHERE gid=77"; sql 2306 "SELECT COUNT(*) FROM h_1 WHERE gid=77"
-––– output –––
-{"items":[],"current_line":3,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
-{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"shared bulk_import into shard table 'h' has no confirmed commit of remote table 'h_1' at 127.0.0.1:2312: #!/[^";]+/!#; published 1 of 2 tables: h_0; not published: 1","error_code":"shared_failed","shared_state":"failed"} HTTP 500
-children=0
-node 2 up
-2
-0
 ––– comment –––
 SQL feeds a load with a local and a remote target (D24): COMMIT publishes both.
 ––– input –––

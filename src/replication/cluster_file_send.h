@@ -23,6 +23,6 @@ struct RemoteFileState_t
 	const SyncDst_t * m_pSyncDst = nullptr;
 };
 
-// send file to multiple nodes by chunks as API command CLUSTER_FILE_SEND; uSessionKey selects the receive state at the nodes
+// send file to multiple nodes by chunks as API command CLUSTER_FILE_SEND
 bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileState_t> & dDesc, const CSphString & sCluster, const CSphString & sIndex, uint64_t uSessionKey, const CSphString & sUser, SstProgress_i & tProgress );
 

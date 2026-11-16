@@ -11,38 +11,66 @@
 #pragma once
 
 #include "api_command_cluster.h"
+#include "coroutine.h"
+#include "std/refcounted_mt.h"
+#include <atomic>
+#include <memory>
 
-// A chunk that bulk_import built for a cluster table goes to every node of the cluster before the cluster attaches it.
-// A node receives the files into repl-<id>.recv/ in the staging root of the table, checks the chunk and renames the
-// directory to repl-<id>/: a chunk is prepared when repl-<id>/chunk.sph exists. Every chunk has its own id, the
-// receive session is keyed by (cluster, table, id), so it never meets the SST session of the table.
-
-struct BulkChunkRequest_t : ClusterRequest_t
-{
-	CSphString	m_sTable;
-	uint64_t	m_uId = 0;
-};
+// Each node receives repl-<id>.<ext>.new in the table's staging root by the SST commands with the id of the chunk, then
+// keeps the loaded chunk in its session until the ordered attach command. The wire uses logical chunk.<ext> names.
+class CSphIndex;
+struct FileReserveRequest_t;
+struct FileReserveReply_t;
+struct ClusterIndexAddLocalRequest_t;
 
 uint64_t NewBulkChunkId(); // unique across the nodes and the restarts of this one, never 0
 uint64_t BulkChunkSessionKey ( const CSphString & sCluster, const CSphString & sTable, uint64_t uId );
-CSphString BulkChunkDir ( const CSphString & sRoot, uint64_t uId, bool bReceiving );
+CSphString BulkChunkFilebase ( const CSphString & sRoot, uint64_t uId );
 
-// whether this node receives, keeps prepared or attaches a chunk of the table
+enum class BulkChunkState_e { RECEIVING, PREPARING, READY, APPLYING, CANCELLED, FINISHED };
+
+// Stable operation state. The operation lock protects paths and the unique owner; cancellation can prevent a
+// late READY without waiting for Load. No table lock is held when waiting for this lock.
+struct BulkChunkSession_t : ISphRefcountedMT
+{
+	BulkChunkSession_t ( const CSphString & sCluster, const CSphString & sTable, uint64_t uId, const CSphString & sFilebase );
+	~BulkChunkSession_t() override;
+
+	bool BeginPrepare();
+	bool Publish ( std::unique_ptr<CSphIndex> & pChunk );
+	std::unique_ptr<CSphIndex> Take();
+	void Cancel();
+	void Finish();
+
+	CSphString m_sCluster;
+	CSphString m_sTable;
+	CSphString m_sFilebase;
+	uint64_t m_uKey;
+	Threads::Coro::Mutex_c m_tLock;
+	std::atomic<BulkChunkState_e> m_eState { BulkChunkState_e::RECEIVING };
+	std::unique_ptr<CSphIndex> m_pChunk;
+	StrVec_t m_dFilesNew;
+	StrVec_t m_dFilesRef;
+	bool m_bReceiving = false;
+};
+
+using BulkChunkSessionRefPtr_t = RefCountedRefPtr_T<BulkChunkSession_t>;
+
 bool HasBulkChunkSessions ( const CSphString & sTable );
 
-// PURGE with clear_sessions=1 forgets the chunks of the table; a receive still running fails on its next packet and its
-// state goes with CHUNK_ABORT, a state left by a gone loading node stays in memory until restart
+// Close objects before removing their captured staging files, outside the registry lock.
 void ForgetBulkChunkSessions ( const CSphString & sTable );
+void ForgetClusterBulkChunkSessions ( const CSphString & sCluster );
+void ShutdownBulkChunkSessions();
 
-// the loading node keeps its own copy of the chunk in repl-<id>/ until the command
-void RegisterBulkChunk ( const CSphString & sCluster, const CSphString & sTable, uint64_t uId );
+// The sender transfers its already loaded (and KNN-built) object to the same session used by receivers.
+bool RegisterBulkChunk ( const CSphString & sCluster, const CSphString & sTable, uint64_t uId, std::unique_ptr<CSphIndex> pChunk, const VecTraits_T<CSphString> & dFiles, CSphString & sError );
 
 // The attach command BULK_IMPORT_ATTACH. AttachBulkChunk() moves the prepared chunk into the table, DropBulkChunk()
-// removes it when the command skips it. Both remove repl-<id>/ and the session in any case.
+// removes it when the command skips it. Cleanup uses captured staging paths even after the table is replaced.
 bool AttachBulkChunk ( const CSphString & sCluster, const CSphString & sTable, uint64_t uId, CSphString & sError );
 void DropBulkChunk ( const CSphString & sCluster, const CSphString & sTable, uint64_t uId );
 
-// what the attach command did on the loading node
 enum class BulkChunkAttach_e
 {
 	NOT_APPLIED,	// the command was not ordered: the nodes still keep the chunk
@@ -57,11 +85,14 @@ struct BulkChunkAttach_t
 	CSphString			m_sError;
 };
 
-bool ReceiveClusterChunkReserve ( GenericOutputBuffer_c & tOut, InputBuffer_c & tBuf, CSphString & sCluster, WORD uReplyVersion, DWORD uHeartbeatIntervalMs );
-bool ReceiveClusterChunkPrepare ( GenericOutputBuffer_c & tOut, InputBuffer_c & tBuf, CSphString & sCluster, WORD uReplyVersion, DWORD uHeartbeatIntervalMs );
-bool ReceiveClusterChunkAbort ( GenericOutputBuffer_c & tOut, InputBuffer_c & tBuf, CSphString & sCluster, WORD uReplyVersion, DWORD uHeartbeatIntervalMs );
+// The chunk side of CLUSTER_FILE_RESERVE and CLUSTER_INDEX_ADD_LOCAL with a chunk id: reserve the files, then prepare
+// (load and check) or abort the chunk.
+bool ReserveBulkChunk ( const FileReserveRequest_t & tCmd, FileReserveReply_t & tRes );
+bool PrepareBulkChunk ( const ClusterIndexAddLocalRequest_t & tCmd );
+bool AbortBulkChunk ( const ClusterIndexAddLocalRequest_t & tCmd );
 
-// Send the chunk files dFiles (full paths) to the nodes dDesc: hashes, CHUNK_RESERVE, FILE_SEND and CHUNK_PREPARE, with a
-// check of a shutdown or KILL between the steps. On a failure every node gets CHUNK_ABORT and TlsMsg has the reason.
+// Send the chunk files dFiles (full paths) to the nodes dDesc: hashes, FILE_RESERVE, FILE_SEND and INDEX_ADD_LOCAL, all
+// with the chunk id, with a check of a shutdown or KILL between the steps. On a failure every node gets INDEX_ADD_LOCAL
+// that aborts the chunk, and TlsMsg has the reason.
 bool ReplicateBulkChunkToNodes ( const CSphString & sCluster, const CSphString & sUser, const CSphString & sTable, uint64_t uId, StrVec_t dFiles, const VecTraits_T<AgentDesc_t> & dDesc );
 void AbortBulkChunkOnNodes ( const CSphString & sCluster, const CSphString & sUser, const CSphString & sTable, uint64_t uId, const VecTraits_T<AgentDesc_t> & dDesc );

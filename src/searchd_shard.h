@@ -168,7 +168,6 @@ bool ConvertInsertDocId ( const SqlInsert_t & tVal, int iRow, int iQuerySchemaId
 
 ResultAndIndex_t AddShardIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bLoadMeta, CSphString & sError, StrVec_t * pWarnings=nullptr );
 
-// write routing: the route target of a document id, as an ordinary write picks it
 int GetShardTargetOrdinal ( const ShardIndex_c & tShard, int64_t iDocID );
 
 bool EnsureNoPendingShardTxn ( const ClientSession_c & tSession, CSphString & sError );

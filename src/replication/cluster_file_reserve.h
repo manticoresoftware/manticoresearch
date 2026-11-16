@@ -23,6 +23,8 @@ struct FileReserveRequest_t: ClusterRequest_t
 
 	// donor - joiner progress related
 	SstProgressContext_t m_tProgressCtx;
+
+	uint64_t m_uBulkChunkId = 0; // not 0: the files are a bulk_import chunk of table m_sIndex, not the table
 };
 
 void operator<< ( ISphOutputBuffer& tOut, const FileReserveRequest_t& tReq );
@@ -49,7 +51,6 @@ using ClusterFileReserve_c = ClusterCommand_T<E_CLUSTER::FILE_RESERVE, FileReser
 
 bool IsReplicationFileName ( const CSphString & sName );
 
-// file names, hash layout and hashes of the files to send, as FILE_RESERVE sends them
 void SendSyncSrcLayout ( ISphOutputBuffer & tOut, const SyncSrc_t & tSrc );
 void GetSyncSrcLayout ( InputBuffer_c & tIn, SyncSrc_t & tSrc );
 bool SendClusterFileReserve ( VecRefPtrs_t<AgentConn_t*>& dAgents );

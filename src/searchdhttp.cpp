@@ -2536,7 +2536,6 @@ private:
 		return ProcessSharedRequest ( tRequest );
 	}
 
-	// The same lines and replies for a shared load into an RT table and into a shard table.
 	template<typename REQUEST>
 	bool ProcessSharedRequest ( REQUEST & tRequest )
 	{
@@ -2600,7 +2599,6 @@ private:
 		return bResult;
 	}
 
-	// a shard table takes only the shared load, so it needs no shared option
 	static bool IsShared ( const OptionsHash_t & tOptions )
 	{
 		if ( tOptions.Exists ( "shared" ) || tOptions.Exists ( "shared_join" ) )

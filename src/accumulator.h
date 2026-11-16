@@ -94,7 +94,6 @@ struct ReplicationCommand_t
 	bool m_bBlobUpdate = false;
 	const CSphQuery * m_pUpdateCond = nullptr;
 
-	// bulk_import attach
 	uint64_t				m_uBulkChunkId = 0;
 	BulkChunkAttach_t *		m_pBulkChunkAttach = nullptr; // the loading node reads the outcome here; nullptr on the other nodes
 };

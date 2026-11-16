@@ -61,8 +61,8 @@ public:
 	int64_t m_iLoadId = 0;
 	DWORD m_uHeartbeatIntervalMs = 0;
 	Str_t m_tShard;			// start: the shard table, for messages
-	Str_t m_tCsv;			// data
-	int64_t m_iRows = 0;	// data
+	Str_t m_tCsv;
+	int64_t m_iRows = 0;
 
 	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
@@ -122,7 +122,6 @@ static bool IsNotConnected ( const AgentConn_t & tAgent )
 }
 
 
-// Success only with a confirmed reply without a refusal; otherwise the refusal or the failure of the transport.
 static bool GetTargetResult ( const AgentConn_t & tAgent, CSphString & sError )
 {
 	if ( !tAgent.m_bSuccess )
@@ -136,7 +135,6 @@ static bool GetTargetResult ( const AgentConn_t & tAgent, CSphString & sError )
 }
 
 
-// One load into a shard table on the node that takes its requests; the CSV goes to the pools of the physical targets.
 class ShardBulkLoad_c : public ISphRefcountedMT
 {
 public:
@@ -158,6 +156,7 @@ public:
 	bool FailOpen ( const CSphString & sError );
 	SharedBulkResult_e Publish ( bool bAdmitted, CSphString & sError );
 	int GetBatchBytes ( int iRoute ) const;
+	bool IsFailed() const { return m_bFailed.load ( std::memory_order_acquire ); }
 
 private:
 	class Call_c;
@@ -256,7 +255,7 @@ bool ShardBulkLoad_c::IsCurrentWrapper() const
 
 int ShardBulkLoad_c::GetBatchBytes ( int iRoute ) const
 {
-	return m_tShard.m_dRouteTargets[iRoute].IsLocal() ? GetSharedBulkBatchBytes() : SHARD_BULK_REMOTE_BATCH_BYTES; // a local target takes batches as a Shared pool does
+	return m_tShard.m_dRouteTargets[iRoute].IsLocal() ? GetSharedBulkBatchBytes() : SHARD_BULK_REMOTE_BATCH_BYTES;
 }
 
 
@@ -381,7 +380,7 @@ SharedBulkResult_e ShardBulkLoad_c::Start ( CSphString & sError )
 {
 	const int64_t tmStart = ShardBulkTimer();
 	Call_c tCall ( *this, ShardBulkOp_e::START );
-	tCall.Send(); // START is on its way to every remote target
+	tCall.Send();
 	for ( int iRoute : tCall.m_dLocal )
 	{
 		const auto & tRoute = Route ( iRoute );
@@ -425,7 +424,7 @@ SharedBulkResult_e ShardBulkLoad_c::WaitStarted ( CSphString & sError )
 	while ( m_sError.IsEmpty() && !m_bStarted )
 	{
 		if ( m_tChanged.WaitForMs ( tLock, GetSharedBulkWaitMs() ) )
-			continue; // notified
+			continue;
 
 		if ( CheckIndexerRtBulkCancelled ( sError ) )
 			return SharedBulkResult_e::FAILED;
@@ -562,7 +561,7 @@ SharedBulkResult_e ShardBulkLoad_c::Publish ( bool bAdmitted, CSphString & sErro
 
 	const int64_t tmStart = ShardBulkTimer();
 	Call_c tCall ( *this, ShardBulkOp_e::COMMIT );
-	tCall.Send(); // COMMIT is on its way to every remote target
+	tCall.Send();
 	StrVec_t dNames;
 	for ( int iRoute : tCall.m_dLocal )
 		dNames.Add ( Route ( iRoute ).m_sName );
@@ -652,9 +651,6 @@ void ShardBulkLoad_c::CancelTarget ( int iRoute ) const
 }
 
 
-//////////////////////////////////////////////////////////////////////////
-// one HTTP request
-
 struct ShardBulkRequest_c::Impl_t
 {
 	struct Batch_t
@@ -666,11 +662,11 @@ struct ShardBulkRequest_c::Impl_t
 	CSphString m_sTable;
 	CSphString m_sShared;			// N of shared=N: ignored, every target has one child
 	bool m_bJoin = false;			// shared_join: never create a load
-	ShardBulkLoadRefPtr_c m_pLoad;	// the load this request is admitted to
+	ShardBulkLoadRefPtr_c m_pLoad;
 	bool m_bStarted = false;		// the first document waited for the start of the targets
 	CSphFixedVector<Batch_t> m_dBatches { 0 };	// by route
 
-	IndexerRtBulkLayout_t m_tLayout; // insert layout of the shard table schema
+	IndexerRtBulkLayout_t m_tLayout;
 
 	void Admit ( ShardBulkLoadRefPtr_c pLoad )
 	{
@@ -820,8 +816,7 @@ SharedBulkResult_e ShardBulkRequest_c::Stage ( const SqlStmt_t & tStmt, CSphStri
 		tImpl.m_bStarted = true;
 	}
 
-	// the cluster prefix of the row as an ordinary write into the shard table checks it
-	if ( !ValidateClusterStatement ( tStmt.m_sIndex, tLoad.m_tShard.m_sCluster, tStmt.m_sCluster, true ) )
+	if ( !tStmt.m_bBulkImportDoc && !ValidateClusterStatement ( tStmt.m_sIndex, tLoad.m_tShard.m_sCluster, tStmt.m_sCluster, IsHttpStmt ( tStmt ) ) )
 	{
 		TlsMsg::MoveError ( sError );
 		tLoad.Fail ( sError );
@@ -867,7 +862,6 @@ SharedBulkResult_e ShardBulkRequest_c::Commit ( CSphString & sError )
 }
 
 
-// The end of a data request writes the tails of every target, one by one.
 SharedBulkResult_e ShardBulkRequest_c::End ( CSphString & sError )
 {
 	auto & tImpl = *m_pImpl;
@@ -884,8 +878,12 @@ SharedBulkResult_e ShardBulkRequest_c::End ( CSphString & sError )
 }
 
 
-//////////////////////////////////////////////////////////////////////////
-// control
+bool HasActiveShardBulkLoad ( const CSphString & sTable )
+{
+	auto pLoad = GetShardBulkLoad ( sTable );
+	return pLoad && !pLoad->IsFailed();
+}
+
 
 bool PurgeShardBulkLoad ( const CSphString & sTable, bool bClearSessions, CSphString & sError )
 {
@@ -994,9 +992,6 @@ void ShutdownShardBulkImport()
 	} );
 }
 
-
-//////////////////////////////////////////////////////////////////////////
-// a remote target
 
 void HandleCommandShardBulk ( GenericOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq )
 {

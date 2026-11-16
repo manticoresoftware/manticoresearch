@@ -275,8 +275,11 @@ TEST_F ( SortBoundTest_c, IndependentFilterBranches )
 	tLoc.m_iBitCount = 32;
 	tLoc.m_iBitOffset = 0;
 	SortBoundFilter_c tFilter ( tBound, tLoc, dRows, dMinMax, iRows, 1, nullptr );
+	tFilter.SetFilterComplexity(3.0f);
 	auto pRight = tFilter.CloneCursor();
 	auto pNested = pRight->CloneCursor();
+	EXPECT_FLOAT_EQ ( pRight->GetFilterComplexity(), 3.0f );
+	EXPECT_FLOAT_EQ ( pNested->GetFilterComplexity(), 3.0f );
 	ASSERT_TRUE ( pRight && pNested );
 	EXPECT_EQ ( tFilter.AdvanceTo(iRows-1), iRows-1 );
 	EXPECT_EQ ( pRight->AdvanceTo(0), 0 );
@@ -301,4 +304,31 @@ TEST_F ( SortBoundTest_c, IndependentFilterBranches )
 	EXPECT_EQ ( pNested->AdvanceTo(DOCINFO_INDEX_FREQ), INVALID_ROWID );
 	EXPECT_EQ ( tFilter.AdvanceTo(iRows-1), INVALID_ROWID );
 	EXPECT_EQ ( pRight->SelectRows ( dCandidates, 2 ), 0 );
+}
+
+
+TEST_F ( SortBoundTest_c, SharedFilterComplexity )
+{
+	m_tSchema.AddAttr ( CSphColumnInfo ( "label", SPH_ATTR_STRING ), true );
+	m_tSchema.AddAttr ( CSphColumnInfo ( "tags", SPH_ATTR_UINT32SET ), true );
+
+	SIContainer_c tSI;
+	SelectIteratorCtx_t tCtx ( m_tQuery, m_tQuery.m_dFilters, m_tSchema, m_tSchema, nullptr, nullptr, tSI, -1, 100, 1 );
+	SecondaryIndexInfo_t tInfo;
+	tInfo.m_iTotalValues = 400;
+	CSphFilterSettings tFilter;
+	tFilter.m_sAttrName = "ts";
+	tFilter.m_eType = SPH_FILTER_RANGE;
+	EXPECT_FLOAT_EQ ( CalcGetFilterComplexity ( tInfo, tFilter, tCtx ), 1.0f );
+
+	tFilter.m_sAttrName = "label";
+	tFilter.m_eType = SPH_FILTER_STRING;
+	tFilter.m_dStrings.Add("value");
+	EXPECT_FLOAT_EQ ( CalcGetFilterComplexity ( tInfo, tFilter, tCtx ), 20.0f );
+
+	tFilter.m_sAttrName = "tags";
+	tFilter.m_eType = SPH_FILTER_VALUES;
+	tFilter.m_dValues.Add(1);
+	tFilter.m_dValues.Add(2);
+	EXPECT_FLOAT_EQ ( CalcGetFilterComplexity ( tInfo, tFilter, tCtx ), 4.0f );
 }

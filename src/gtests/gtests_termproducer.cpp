@@ -61,7 +61,18 @@ public:
 	int Intersect ( const PostingWindow_t &, DWORD * ) final { ADD_FAILURE() << "decoded source"; return 0; }
 
 
-	int FilterRows ( RowID_t *, int ) final { ADD_FAILURE() << "unexpected probe"; return 0; }
+	int FilterRows ( RowID_t * pRows, int iCount ) final
+	{
+		m_iFilterRows += iCount;
+		int iOut = 0;
+		for ( int i=0; i<iCount; ++i )
+			if ( m_dDocs[pRows[i]].m_uFields & m_uFields )
+				pRows[iOut++] = pRows[i];
+
+		return iOut;
+	}
+
+	int		m_iFilterRows = 0;
 
 private:
 	const std::vector<QwordDoc_t> & m_dDocs;
@@ -166,6 +177,27 @@ public:
 
 
 	int		SelectRows ( RowID_t *, int iCount ) final { return iCount; }
+};
+
+
+class SelectiveProducerFilter_c final : public PostingCandidateFilter_i
+{
+public:
+	RowID_t	AdvanceTo ( RowID_t tMin ) final { return tMin; }
+
+
+	int		SelectRows ( RowID_t * pRows, int iCount ) final
+	{
+		m_dSizes.push_back(iCount);
+		int iOut = 0;
+		for ( int i=0; i<iCount; ++i )
+			if ( pRows[i]>=8 )
+				pRows[iOut++] = pRows[i];
+
+		return iOut;
+	}
+
+	std::vector<int> m_dSizes;
 };
 
 
@@ -345,4 +377,32 @@ TEST ( TermProducer, EmptyAndSentinelBounds )
 
 				EXPECT_EQ ( pProducer->NextCandidates().m_iCount, 0 );
 			}
+}
+
+
+TEST ( TermProducer, EarlyFilterRequiresCheapComplexity )
+{
+	for ( float fComplexity : { 1.0f, 1.01f, 3.0f, std::numeric_limits<float>::infinity() } )
+	{
+		SCOPED_TRACE(fComplexity);
+		ProducerQword_c tWord;
+		SelectiveProducerFilter_c tFilter;
+		if ( fComplexity!=std::numeric_limits<float>::infinity() )
+			tFilter.SetFilterComplexity(fComplexity);
+
+		auto pOther = std::make_unique<ProducerBlock_c> ( tWord.m_dDocs, 1, tWord.m_iPayloadReads );
+		auto * pIntersection = pOther.get();
+		PostingBlockAnd_c tAnd({});
+		tAnd.Add ( std::make_unique<ProducerBlock_c> ( tWord.m_dDocs, 3, tWord.m_iPayloadReads ) );
+		tAnd.Add(std::move(pOther));
+		tAnd.SetCandidateFilter(&tFilter);
+
+		auto tRows = tAnd.ReadRows ( 0, 12, 12 );
+		ASSERT_EQ ( tRows.m_iCount, 2 );
+		EXPECT_EQ ( tRows.m_pRows[0], 9U );
+		EXPECT_EQ ( tRows.m_pRows[1], 11U );
+		EXPECT_EQ ( pIntersection->m_iFilterRows, fComplexity==1.0f ? 4 : 12 );
+		EXPECT_EQ ( tFilter.m_dSizes, fComplexity==1.0f ? (std::vector<int>{12,2}) : (std::vector<int>{6}) );
+		EXPECT_EQ ( tAnd.ReadRows ( 12, 12, 12 ).m_iCount, 0 );
+	}
 }

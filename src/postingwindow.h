@@ -14,6 +14,7 @@
 #include <memory>
 #include <array>
 #include <vector>
+#include <limits>
 
 class ISphQword;
 struct CSphQueryStats;
@@ -138,8 +139,14 @@ public:
 	virtual RowID_t	AdvanceTo ( RowID_t tMin ) = 0;
 	virtual int		SelectRows ( RowID_t * pRows, int iCount ) = 0;
 
+	void		SetFilterComplexity ( float fComplexity ) { m_fFilterComplexity = fComplexity; }
+	float		GetFilterComplexity() const	{ return m_fFilterComplexity; }
+
 	// Create a fresh cursor sharing the threshold and pruning state.
 	virtual std::unique_ptr<PostingCandidateFilter_i> CloneCursor() { return nullptr; }
+
+private:
+	float		m_fFilterComplexity = std::numeric_limits<float>::infinity();
 };
 
 // Retains one term's leaf while bounded candidate batches are consumed and their
@@ -198,6 +205,7 @@ private:
 	RowID_t					m_tNext = 0;
 	int						m_iCount = 0;
 	int						m_iRead = 0;
+	int						m_iEarlyFilterRetry = 0;
 	bool					m_bDone = false;
 };
 

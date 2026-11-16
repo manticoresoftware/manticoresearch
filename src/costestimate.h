@@ -64,6 +64,9 @@ struct SelectIteratorCtx_t
 	void	IgnorePushCost() { m_bCalcPushCost = false; }
 };
 
+// Relative filter evaluation complexity; a simple scalar filter has complexity 1.
+float CalcGetFilterComplexity ( const SecondaryIndexInfo_t & tSIInfo, const CSphFilterSettings & tFilter, const SelectIteratorCtx_t & tCtx );
+
 struct NodeEstimate_t;
 struct CreateFilterContext_t;
 

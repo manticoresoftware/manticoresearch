@@ -12582,7 +12582,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 	SortBound_c tSortBound;
 	bool bSortBound = m_tSettings.m_uPostingsFormat && CanUseSortBound ( tQuery, dSorters, tArgs, bRanklessCount ) && tSortBound.Setup ( tQuery, m_tSchema, *dSorters[0] );
 	const CSphColumnInfo * pSortAttr = bSortBound ? m_tSchema.GetAttr ( tSortBound.GetAttr().cstr() ) : nullptr;
-	bSortBound &= pSortAttr && !pSortAttr->IsColumnar() && !pSortAttr->m_tLocator.m_bDynamic && m_pDocinfoIndex;
+	bSortBound &= pSortAttr && ( pSortAttr->IsColumnar() ? bool(m_pColumnar) : ( !pSortAttr->m_tLocator.m_bDynamic && m_pDocinfoIndex ) );
 	if ( bSortBound )
 		tCtx.m_bSkipQCache = true;
 
@@ -12672,8 +12672,19 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 	if ( bSortBound && !pIterator )
 	{
 		const SIContainer_c * pSortSI = m_tSI.IsEnabled(tSortBound.GetAttr()) && tQuery.m_dIndexHints.IsEmpty() ? &m_tSI : nullptr;
-		pSortFilter = std::make_unique<SortBoundFilter_c> ( tSortBound, pSortAttr->m_tLocator, GetRawAttrs(), m_pDocinfoIndex, RowID_t(m_iDocinfo), m_tSchema.GetRowSize(), pSortSI );
-		if ( !pRanker->SetCandidateFilter(pSortFilter.get()) )
+		if ( pSortAttr->IsColumnar() )
+			pSortFilter = std::make_unique<SortBoundFilter_c> ( tSortBound, *m_pColumnar, RowID_t(m_iDocinfo), pSortSI );
+		else
+			pSortFilter = std::make_unique<SortBoundFilter_c> ( tSortBound, pSortAttr->m_tLocator, GetRawAttrs(), m_pDocinfoIndex, RowID_t(m_iDocinfo), m_tSchema.GetRowSize(), pSortSI );
+
+		CSphFilterSettings tSortFilter;
+		tSortFilter.m_sAttrName = tSortBound.GetAttr();
+		tSortFilter.m_eType = SPH_FILTER_RANGE;
+
+		SelectIteratorCtx_t tEstimateCtx ( tQuery, dTransformedFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_tSI, iCutoff, m_iDocinfo, 1 );
+		pSortFilter->SetFilterComplexity ( CalcGetFilterComplexity ( {}, tSortFilter, tEstimateCtx ) );
+
+		if ( !pSortFilter->IsValid() || !pRanker->SetCandidateFilter(pSortFilter.get()) )
 			pSortFilter.reset();
 	}
 

@@ -388,6 +388,18 @@ bool PostingBlockAnd_c::FillCandidates ( uint64_t uEnd )
 		if ( (bDecoded || m_dCursors.size()==1) && m_dExcluded.empty() )
 		{
 			m_iCount = m_dCursors.front()->ReadRows ( tWindow, m_dRows.data() );
+			if ( m_pFilter && m_pFilter->GetFilterComplexity()<=1.0f && m_iCount && m_dCursors.size()>1 )
+			{
+				if ( !m_iEarlyFilterRetry )
+				{
+					int iBefore = m_iCount;
+					m_iCount = m_pFilter->SelectRows ( m_dRows.data(), m_iCount );
+					// Retry every 32 batches when the filter rejects less than half the candidates.
+					m_iEarlyFilterRetry = m_iCount*2<=iBefore ? 0 : 31;
+				} else
+					--m_iEarlyFilterRetry;
+			}
+
 			for ( size_t i=1; i<m_dCursors.size() && m_iCount; ++i )
 				m_iCount = m_dCursors[i]->FilterRows ( m_dRows.data(), m_iCount );
 		} else if ( !IntersectBitmap(tWindow) )

@@ -262,9 +262,6 @@ private:
 	float	CalcMTCostCS ( float fCost ) const	{ return EstimateMTCostCS ( fCost, m_tCtx.m_iThreads );}
 	float	CalcMTCostSI ( float fCost ) const	{ return EstimateMTCostSI ( fCost, m_tCtx.m_iThreads ); }
 
-	bool	IsGeodistFilter ( const CSphFilterSettings & tFilter ) const;
-	bool	IsPoly2dFilter ( const CSphFilterSettings & tFilter, int & iNumPoints ) const;
-	float	CalcGetFilterComplexity ( const SecondaryIndexInfo_t & tSIInfo, const CSphFilterSettings & tFilter ) const;
 	bool	NeedBitmapUnion ( int iNumIterators ) const;
 	uint32_t CalcNumSIIterators ( const CSphFilterSettings & tFilter, int64_t iDocs ) const;
 	int64_t	ApplyCutoff ( int64_t iDocs ) const;
@@ -301,13 +298,13 @@ int64_t CostEstimate_c::ApplyCutoff ( int64_t iDocs ) const
 }
 
 
-bool CostEstimate_c::IsGeodistFilter ( const CSphFilterSettings & tFilter ) const
+static bool IsGeodistFilter ( const CSphFilterSettings & tFilter, const SelectIteratorCtx_t & tCtx )
 {
-	int iAttr = GetAliasedAttrIndex ( tFilter.m_sAttrName, m_tCtx.m_tQuery, m_tCtx.m_tSorterSchema );
+	int iAttr = GetAliasedAttrIndex ( tFilter.m_sAttrName, tCtx.m_tQuery, tCtx.m_tSorterSchema );
 	if ( iAttr<0 )
 		return false;
 
-	const CSphColumnInfo & tAttr = m_tCtx.m_tSorterSchema.GetAttr(iAttr);
+	const CSphColumnInfo & tAttr = tCtx.m_tSorterSchema.GetAttr(iAttr);
 	if ( !tAttr.m_pExpr )
 		return false;
 
@@ -317,13 +314,13 @@ bool CostEstimate_c::IsGeodistFilter ( const CSphFilterSettings & tFilter ) cons
 }
 
 
-bool CostEstimate_c::IsPoly2dFilter ( const CSphFilterSettings & tFilter, int & iNumPoints ) const
+static bool IsPoly2dFilter ( const CSphFilterSettings & tFilter, const SelectIteratorCtx_t & tCtx, int & iNumPoints )
 {
-	int iAttr = GetAliasedAttrIndex ( tFilter.m_sAttrName, m_tCtx.m_tQuery, m_tCtx.m_tSorterSchema );
+	int iAttr = GetAliasedAttrIndex ( tFilter.m_sAttrName, tCtx.m_tQuery, tCtx.m_tSorterSchema );
 	if ( iAttr<0 )
 		return false;
 
-	const CSphColumnInfo & tAttr = m_tCtx.m_tSorterSchema.GetAttr(iAttr);
+	const CSphColumnInfo & tAttr = tCtx.m_tSorterSchema.GetAttr(iAttr);
 	if ( !tAttr.m_pExpr )
 		return false;
 
@@ -339,19 +336,19 @@ bool CostEstimate_c::IsPoly2dFilter ( const CSphFilterSettings & tFilter, int & 
 }
 
 
-float CostEstimate_c::CalcGetFilterComplexity ( const SecondaryIndexInfo_t & tSIInfo, const CSphFilterSettings & tFilter ) const
+float CalcGetFilterComplexity ( const SecondaryIndexInfo_t & tSIInfo, const CSphFilterSettings & tFilter, const SelectIteratorCtx_t & tCtx )
 {
-	if ( IsGeodistFilter(tFilter) )
+	if ( IsGeodistFilter ( tFilter, tCtx ) )
 		return 3.0f;
 
 	int iNumPoints = 0;
-	if ( IsPoly2dFilter ( tFilter, iNumPoints ) )
+	if ( IsPoly2dFilter ( tFilter, tCtx, iNumPoints ) )
 	{
 		const float COMPLEXITY_PER_POINT = 0.007f;
 		return 1.2f + COMPLEXITY_PER_POINT*iNumPoints;
 	}
 
-	auto pAttr = m_tCtx.m_tIndexSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
+	auto pAttr = tCtx.m_tIndexSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
 	if ( !pAttr )
 		return 1.0f;
 
@@ -359,13 +356,13 @@ float CostEstimate_c::CalcGetFilterComplexity ( const SecondaryIndexInfo_t & tSI
 	float fFilterComplexity = 1.0f;
 	if ( ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET ) && tFilter.m_eType==SPH_FILTER_VALUES )
 	{
-		float fCoeff = Max ( float( tSIInfo.m_iTotalValues )/m_tCtx.m_iTotalDocs, 2.0f );
+		float fCoeff = Max ( float( tSIInfo.m_iTotalValues )/tCtx.m_iTotalDocs, 2.0f );
 		fFilterComplexity *= log2f(fCoeff)*tFilter.m_dValues.GetLength();
 	}
 	else if ( tFilter.m_eType==SPH_FILTER_STRING || tFilter.m_eType==SPH_FILTER_STRING_LIST )
 	{
 		const float STRING_COMPLEXITY = 10.0f;
-		float fCoeff = Max ( float( tSIInfo.m_iTotalValues )/m_tCtx.m_iTotalDocs, 2.0f );
+		float fCoeff = Max ( float( tSIInfo.m_iTotalValues )/tCtx.m_iTotalDocs, 2.0f );
 		fFilterComplexity *= STRING_COMPLEXITY*log2f(fCoeff)*tFilter.m_dStrings.GetLength();
 	}
 
@@ -377,7 +374,7 @@ float CostEstimate_c::CalcFilterCost ( const SecondaryIndexInfo_t & tIndex, cons
 {
 	assert ( tIndex.m_eType==SecondaryIndexType_e::FILTER );
 
-	float fFilterComplexity = CalcGetFilterComplexity ( tIndex, tFilter );
+	float fFilterComplexity = CalcGetFilterComplexity ( tIndex, tFilter, m_tCtx );
 
 	if ( bFromIterator || bFilterOverExpr )
 	{
@@ -412,7 +409,7 @@ float CostEstimate_c::CalcAnalyzerCost ( const SecondaryIndexInfo_t & tIndex, co
 	columnar::AttrInfo_t tAttrInfo;
 	m_tCtx.m_pColumnar->GetAttrInfo ( tFilter.m_sAttrName.cstr(), tAttrInfo );
 
-	float fFilterComplexity = CalcGetFilterComplexity ( tIndex, tFilter );
+	float fFilterComplexity = CalcGetFilterComplexity ( tIndex, tFilter, m_tCtx );
 	int64_t iDocsBeforeFilter = tIndex.m_iPartialColumnarMinMax==-1 ? m_tCtx.m_iTotalDocs : std::min ( tIndex.m_iPartialColumnarMinMax, m_tCtx.m_iTotalDocs );
 
 	// filters that process but reject values are 2x faster

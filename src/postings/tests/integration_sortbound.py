@@ -27,11 +27,14 @@ def main():
     parser.add_argument("--prefix", default="sortbound")
     parser.add_argument("--output", required=True)
     parser.add_argument("--expect-si", action="store_true")
+    parser.add_argument("--columnar", action="store_true")
     args = parser.parse_args()
     assert re.fullmatch(r"[a-z][a-z0-9_]*", args.prefix)
     endpoint = args.url.rstrip("/") + "/sql?mode=raw"
     table = args.prefix + "_block"
     checks = []
+    storage = " engine='columnar'" if args.columnar else ""
+    scan_name = "SortBoundColumnar" if args.columnar else "SortBoundMinMax"
 
     def sql(query):
         Path(args.output + ".last-sql").write_text(query, encoding="utf-8")
@@ -55,7 +58,7 @@ def main():
 
     status = {item["Counter"]: item["Value"] for item in sql("SHOW STATUS")[0]["data"]}
     assert status["qcache_max_bytes"] == "0", "Disable query caching before running this test"
-    sql(f"CREATE TABLE {table}(body text, ts bigint) postings_format='block'")
+    sql(f"CREATE TABLE {table}(body text, ts bigint) postings_format='block'{storage}")
     for chunk in range(2):
         for start in range(0, 8192, 512):
             rows = []
@@ -119,7 +122,7 @@ def main():
 
     # Separate fields force low-field-mask rejection; rare terms exercise short lists.
     fields = args.prefix + "_fields"
-    sql(f"CREATE TABLE {fields}(body text, other text, ts bigint) postings_format='block'")
+    sql(f"CREATE TABLE {fields}(body text, other text, ts bigint) postings_format='block'{storage}")
     for start in range(0, 5000, 500):
         rows = [f"({i+1},'{('error rare' if i%977==0 else 'error') if i%3 else 'other'}',"
                 f"'error',{i%137})" for i in range(start, start+500)]
@@ -136,7 +139,7 @@ def main():
 
     # Legacy tables retain exhaustive execution for both membership and ranked roots.
     legacy = args.prefix + "_legacy"
-    sql(f"CREATE TABLE {legacy}(body text, ts bigint)")
+    sql(f"CREATE TABLE {legacy}(body text, ts bigint) postings_format='legacy'{storage}")
     for start in range(0, 4096, 512):
         rows = [f"({i+1},'{('error failed' if i%3 else 'failed')}',{10000+i%11 if i<128 else i%100})"
                 for i in range(start, start+512)]
@@ -163,11 +166,11 @@ def main():
     for ranker in ["none", "bm25", "proximity_bm25"]:
         admitted = [item for item in checks if "MATCH('failed | place | missing')" in item["query"]
                     and f"ranker={ranker}" in item["query"]]
-        assert any("SortBoundMinMax" in item["meta"].get("index", "") for item in admitted), admitted
+        assert any(scan_name in item["meta"].get("index", "") for item in admitted), admitted
         if args.expect_si:
             assert any("SortBoundSI" in item["meta"].get("index", "") for item in admitted), admitted
 
-    assert any("SortBoundMinMax" in item["meta"].get("index", "") for item in checks)
+    assert any(scan_name in item["meta"].get("index", "") for item in checks)
     if args.expect_si:
         assert any("SortBoundSI" in item["meta"].get("index", "") for item in checks)
     assert any(item["meta"]["total_relation"] == "gte" for item in checks)

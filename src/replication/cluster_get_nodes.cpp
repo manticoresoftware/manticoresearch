@@ -192,7 +192,7 @@ struct ClusterNodeVerReply_t
 	WORD m_uVerCommandCluster = 0;
 	WORD m_uVerCommandReplicate = 0;
 	int m_iServerId = 0;
-	int64_t m_iClusterEpoch = 0;
+	int64_t m_iFilesSeqNo = 0;
 	CSphString m_sUser;
 
 	void Save ( ISphOutputBuffer & tOut ) const
@@ -200,7 +200,7 @@ struct ClusterNodeVerReply_t
 		tOut.SendWord ( m_uVerCommandCluster );
 		tOut.SendWord ( m_uVerCommandReplicate );
 		tOut.SendInt ( m_iServerId );
-		tOut.SendUint64 ( m_iClusterEpoch );
+		tOut.SendUint64 ( m_iFilesSeqNo );
 		tOut.SendString ( m_sUser.cstr() );		
 	}
 
@@ -212,7 +212,7 @@ struct ClusterNodeVerReply_t
 
 		m_uVerCommandReplicate = tIn.GetWord();
 		m_iServerId = tIn.GetInt();
-		m_iClusterEpoch = (int64_t)tIn.GetUint64();
+		m_iFilesSeqNo = (int64_t)tIn.GetUint64();
 		m_sUser = tIn.GetString();
 	}
 };
@@ -244,7 +244,7 @@ void ReceiveClusterGetVer ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf )
 	tReply.m_uVerCommandCluster = VER_COMMAND_CLUSTER;
 	tReply.m_uVerCommandReplicate = GetVerCommandReplicate();
 	tReply.m_iServerId = GetUidShortServerId();
-	tReply.m_iClusterEpoch = ClusterGetRemoteEpoch ( tReq.m_sCluster );
+	tReply.m_iFilesSeqNo = ClusterGetRemoteFilesSeqNo ( tReq.m_sCluster );
 	
 	if ( !ClusterGetDonorMeta ( tReq.m_sCluster, tReply.m_sUser ) )
 		return;
@@ -254,7 +254,7 @@ void ReceiveClusterGetVer ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf )
 
 static bool CheckNodeVersions ( const ClusterDesc_t & tDesc, const ClusterNodeVerReply_t  & tVer, CSphString & sUser );
 
-bool CheckRemotesVersions ( const ClusterDesc_t & tDesc, CSphString & sUser, int64_t * pEpoch )
+bool CheckRemotesVersions ( const ClusterDesc_t & tDesc, CSphString & sUser, int64_t * pFilesSeqNo )
 {
 	ClusterNodeVerId_c::REQUEST_T tReqId;
 	tReqId.m_sCluster = tDesc.m_sName;
@@ -264,8 +264,8 @@ bool CheckRemotesVersions ( const ClusterDesc_t & tDesc, CSphString & sUser, int
 	if ( dAgents.IsEmpty() )
 		return true;
 
-	if ( pEpoch )
-		*pEpoch = 0;
+	if ( pFilesSeqNo )
+		*pFilesSeqNo = 0;
 
 	ClusterNodeVerId_c tReply;
 	PerformRemoteTasksWrap ( dAgents, tReply, tReply, false );
@@ -302,8 +302,8 @@ bool CheckRemotesVersions ( const ClusterDesc_t & tDesc, CSphString & sUser, int
 			return false;
 		}
 
-		if ( pEpoch )
-			*pEpoch = tVer.m_iClusterEpoch;
+		if ( pFilesSeqNo )
+			*pFilesSeqNo = tVer.m_iFilesSeqNo;
 	}
 
 	if ( !iSuccess )

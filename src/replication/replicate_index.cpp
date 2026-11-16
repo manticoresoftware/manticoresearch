@@ -22,6 +22,7 @@
 #include "cluster_index_add_local.h"
 #include "cluster_recv_state_cleanup.h"
 #include "cluster_sst_progress.h"
+#include "recv_state.h"
 #include "searchdreplication.h"
 
 // for send dist indexes
@@ -239,7 +240,7 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 
 	bool bSendOk = true;
 	if ( !dSendStates.IsEmpty() )
-		bSendOk = RemoteClusterFileSend ( tSigSrc, dSendStates, sCluster, sIndex, sUser, tProgress );
+		bSendOk = RemoteClusterFileSend ( tSigSrc, dSendStates, sCluster, sIndex, DoubleStringKey ( sCluster, sIndex ), sUser, tProgress );
 
 	// allow index local write operations passed without replicator
 	tIndexSaveGuard.EnableSave ();

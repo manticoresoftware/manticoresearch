@@ -46,10 +46,11 @@ struct IndexerRtBulkState_t
 	CSphString m_sTable;
 	ServedIndexWriteReservation_c m_tReservation;
 	std::unique_ptr<RtBulkIndexer_c> m_pIndexer;
+	bool m_bShard = false; // a shard table: every INSERT is a data request of its Shared load, nothing is reserved
 
 	IndexerRtBulkState_t();
 	~IndexerRtBulkState_t();
-	bool IsEnabled() const { return m_tReservation.IsActive(); }
+	bool IsEnabled() const { return m_tReservation.IsActive() || m_bShard; }
 	bool HasPendingData() const { return !!m_pIndexer; }
 };
 

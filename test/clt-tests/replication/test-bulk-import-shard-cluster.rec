@@ -31,7 +31,7 @@ node 3 prepared:
 ––– comment –––
 The shard table t itself joins cluster v1 (the same layout)
 ––– input –––
-source /tmp/bs.sh; wrap "1 2 3" "2 3 1"; m 1 "ALTER CLUSTER v1 ADD t"; echo "rc $?"; for n in 1 2 3; do echo "node $n $(v $n indexes)"; done
+source /tmp/bs.sh; wrap "1 2 3" "2 3 1"; m 1 "ALTER CLUSTER v1 ADD t"; echo "rc $?"; lcwait; for n in 1 2 3; do echo "node $n $(v $n indexes)"; done
 ––– output –––
 rc 0
 node 1 t_s0,t_s1,t

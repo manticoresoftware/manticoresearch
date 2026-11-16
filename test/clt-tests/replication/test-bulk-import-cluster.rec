@@ -7,7 +7,10 @@ rows() { local i=$2 e=$(( $2 + $3 - 1 )) k j s; while [ $i -le $e ]; do k=$(( i 
 load() { { echo "SET bulk_import=$2;"; echo "BEGIN;"; rows $2 $3 $4; echo "COMMIT;"; echo "SET bulk_import=0;"; } | mysql -h0 -P${1}306 2>&1; }
 seqno() { grep -o '"files_seqno":[0-9-]*' /var/log/manticore-$1/manticore.json | cut -d: -f2; }
 repl() { find /var/log/manticore-$1 -maxdepth 3 -name 'repl-*' -printf '%f\n' | sed -nE 's/^repl-([0-9]+)(\..*)?$/\1/p' | sort -u | wc -l; }
-st() { for n in 1 2 3; do echo "node $n: $(v $n node_state) count=$(m $n "SELECT COUNT(*) FROM $1" | tail -1) sum=$(m $n "SELECT SUM(v) FROM $1" | tail -1) last_committed=$(v $n last_committed) files_seqno=$(seqno $n) repl=$(repl $n)"; done; }
+vt() { timeout 2 mysql --skip-table --batch --raw --skip-column-names -h0 -P${1}306 -e "SHOW STATUS LIKE 'cluster_v1_$2'" 2>/dev/null | awk '{print $2}'; }
+lcsame() { local n s=; for n in 1 2 3; do [ "$(vt $n node_state)" = synced ] && s="$s $(vt $n last_committed)"; done; [ "$(echo $s | tr ' ' '\n' | sort -u | wc -l)" -le 1 ]; }
+lcwait() { local k; for k in $(seq 100); do lcsame && return 0; sleep 0.1; done; return 1; }
+st() { lcwait; for n in 1 2 3; do echo "node $n: $(v $n node_state) count=$(m $n "SELECT COUNT(*) FROM $1" | tail -1) sum=$(m $n "SELECT SUM(v) FROM $1" | tail -1) last_committed=$(v $n last_committed) files_seqno=$(seqno $n) repl=$(repl $n)"; done; }
 add() { mysql -h0 -P1306 -e "CREATE TABLE $1 (title text, v int)"; mysql -h0 -P1306 -e "ALTER CLUSTER v1 ADD $1"; echo "add $1 $?"; }
 waitsynced() { for k in $(seq 240); do [ "$(v $1 node_state)" = synced ] && [ "$(v $1 last_committed)" = "$(v $2 last_committed)" ] && return 0; sleep 0.5; done; return 1; }
 EOF
@@ -137,7 +140,7 @@ node 3 count=5000
 ––– comment –––
 A bare document has no place for the cluster and takes the cluster of the table (E25): private on node 1 and Shared on node 2, the rows on all nodes
 ––– input –––
-for ((i=6001; i<=6050; i++)); do printf '{"id":%d,"title":"bare %d","v":%d}\n' $i $i $i; done > /tmp/bp.ndjson; for ((i=6051; i<=6100; i++)); do printf '{"id":%d,"title":"bare %d","v":%d}\n' $i $i $i; done > /tmp/bs.ndjson; post 1308 '' /tmp/bp.ndjson | sed 's/^/private: /'; post 2308 '&shared' /tmp/bs.ndjson | sed 's/^/shared: /'; post 2308 '&shared' /tmp/commit.ndjson | sed 's/^/shared commit: /'; source /tmp/bc.sh; st th
+for ((i=6001; i<=6050; i++)); do printf '{"id":%d,"title":"bare %d","v":%d}\n' $i $i $i; done > /tmp/bp.ndjson; for ((i=6051; i<=6100; i++)); do printf '{"id":%d,"title":"bare %d","v":%d}\n' $i $i $i; done > /tmp/bs.ndjson; post 1308 '' /tmp/bp.ndjson | sed 's/^/private: /'; source /tmp/bc.sh; lcwait; post 2308 '&shared' /tmp/bs.ndjson | sed 's/^/shared: /'; post 2308 '&shared' /tmp/commit.ndjson | sed 's/^/shared commit: /'; source /tmp/bc.sh; st th
 ––– output –––
 private: {"items":[{"bulk":{"table":"th","_id":0,"created":50,"deleted":0,"updated":0,"result":"created","status":201}}],"current_line":51,"skipped_lines":0,"errors":false,"error":""} HTTP 200
 shared: {"items":[],"current_line":50,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
@@ -201,7 +204,7 @@ source /tmp/bc.sh; add ta
 add ta 0
 ––– block: ../base/replication/rejoin-pause-node3 –––
 ––– input –––
-source /tmp/bc.sh; L3=$(wc -l < /var/log/manticore-3/searchd.log); load 1 ta 1 1000; echo "rc $?"; for n in 1 2; do echo "node $n count=$(m $n 'SELECT COUNT(*) FROM ta') files_seqno=$(seqno $n)"; done
+source /tmp/bc.sh; L3=$(wc -l < /var/log/manticore-3/searchd.log); load 1 ta 1 1000; echo "rc $?"; waitsynced 2 1; for n in 1 2; do echo "node $n count=$(m $n 'SELECT COUNT(*) FROM ta') files_seqno=$(seqno $n)"; done
 ––– output –––
 rc 0
 node 1 count=1000 files_seqno=17

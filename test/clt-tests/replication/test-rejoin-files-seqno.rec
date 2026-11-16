@@ -7,7 +7,7 @@ export INSTANCE=3; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-
 ––– output –––
 stopped 0
 ––– input –––
-mysql -h0 -P1306 -e "INSERT INTO v1:t0 (id,title,v) VALUES (2,'b',2)"; echo $?; LC=$(mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_v1_last_committed'\G" | awk '/Value:/{print $2}'); echo "last_committed $LC"
+rj_q 1306 "INSERT INTO v1:t0 (id,title,v) VALUES (2,'b',2)"; echo $?; LC=$(mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_v1_last_committed'\G" | awk '/Value:/{print $2}'); echo "last_committed $LC"
 ––– output –––
 0
 last_committed 3
@@ -16,7 +16,7 @@ export INSTANCE=3; stdbuf -oL searchd --logreplication -c test/clt-tests/base/se
 ––– output –––
 started 0
 ––– input –––
-timeout 90 bash -c 'v() { mysql -h0 -P3306 -e "SHOW STATUS LIKE '\''cluster_v1_$1'\''\G" 2>/dev/null | awk "/Value:/{print \$2}"; }; until [ "$(v node_state)" = synced ] && [ "$(v last_committed)" = 3 ]; do sleep 0.5; done'; echo "synced $?"
+rj_wait 3306 90 '[ "$(rj_v 3306 node_state)" = synced ] && [ "$(rj_v 3306 last_committed)" = 3 ]'; echo "synced $?"
 ––– output –––
 synced 0
 ––– input –––
@@ -39,15 +39,15 @@ full SST 0
 Missed ALTER CLUSTER ADD: node 3 is paused and misses ALTER CLUSTER ADD t1 and two writes; on resume Galera gives it IST, the donor sends CLUSTER_SYNCED with files seqno 4 (its ALTER CLUSTER ADD), node 3 has 1, refuses and rejoins by full SST without a restart
 ––– block: ../base/replication/rejoin-pause-node3 –––
 ––– input –––
-L3=$(wc -l < /var/log/manticore-3/searchd.log); mysql -h0 -P1306 -e "CREATE TABLE t1 (title text, v int)"; mysql -h0 -P1306 -e "INSERT INTO t1 (id,title,v) VALUES (1,'x',1)"; timeout 60 mysql -h0 -P1306 -e "ALTER CLUSTER v1 ADD t1"; echo $?
+L3=$(wc -l < /var/log/manticore-3/searchd.log); rj_q 1306 "CREATE TABLE t1 (title text, v int)" && rj_q 1306 "INSERT INTO t1 (id,title,v) VALUES (1,'x',1)" && rj_q 1306 "ALTER CLUSTER v1 ADD t1"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "INSERT INTO v1:t0 (id,title,v) VALUES (3,'c',3)"; mysql -h0 -P2306 -e "INSERT INTO v1:t1 (id,title,v) VALUES (2,'y',2)"; echo $?
+rj_q 1306 "INSERT INTO v1:t0 (id,title,v) VALUES (3,'c',3)" && rj_q 1306 "INSERT INTO v1:t1 (id,title,v) VALUES (2,'y',2)"; echo $?
 ––– output –––
 0
 ––– input –––
-for p in 1306 2306; do echo "$p $(mysql -h0 -P$p -e "SHOW STATUS LIKE 'cluster_v1_indexes'\G" | awk '/Value:/{print $2}') $(mysql -h0 -P$p -e "SHOW STATUS LIKE 'cluster_v1_last_committed'\G" | awk '/Value:/{print $2}')"; done
+rj_wait "1306 2306" 60 'rj_all "1306 2306" last_committed 6'; for p in 1306 2306; do echo "$p $(mysql -h0 -P$p -e "SHOW STATUS LIKE 'cluster_v1_indexes'\G" | awk '/Value:/{print $2}') $(mysql -h0 -P$p -e "SHOW STATUS LIKE 'cluster_v1_last_committed'\G" | awk '/Value:/{print $2}')"; done
 ––– output –––
 1306 #!/(t0,t1|t1,t0)/!# 6
 2306 #!/(t0,t1|t1,t0)/!# 6
@@ -56,7 +56,7 @@ kill -CONT $P3; echo "node 3 resumed"
 ––– output –––
 node 3 resumed
 ––– input –––
-timeout 60 bash -c 'v() { mysql -h0 -P3306 -e "SHOW STATUS LIKE '\''cluster_v1_$1'\''\G" | awk "/Value:/{print \$2}"; }; until [ "$(v node_state)" = synced ] && [ "$(v last_committed)" = 6 ]; do sleep 0.5; done'; echo "synced $?"
+rj_wait 3306 60 '[ "$(rj_v 3306 node_state)" = synced ] && [ "$(rj_v 3306 last_committed)" = 6 ]'; echo "synced $?"
 ––– output –––
 synced 0
 ––– input –––
@@ -85,7 +85,7 @@ yes: rejoin attempt 1
 yes: SST join sync seqno 6
 crash dumps 0 restarts 0
 ––– input –––
-for p in 1306 2306; do echo "$p $(mysql -h0 -P$p -e "SHOW STATUS LIKE 'cluster_v1_node_state'\G" | awk '/Value:/{print $2}')"; done
+rj_wait "1306 2306" 60 'rj_all "1306 2306" node_state synced'; for p in 1306 2306; do echo "$p $(mysql -h0 -P$p -e "SHOW STATUS LIKE 'cluster_v1_node_state'\G" | awk '/Value:/{print $2}')"; done
 ––– output –––
 1306 synced
 2306 synced
@@ -93,7 +93,7 @@ for p in 1306 2306; do echo "$p $(mysql -h0 -P$p -e "SHOW STATUS LIKE 'cluster_v
 Attempts exhausted (last, it leaves the cluster on node 3 closed): node 3 misses ALTER CLUSTER ADD t2 and a regular file where it would create the t2 directory makes every SST of t2 to node 3 fail; both rejoin attempts fail, the cluster stays closed with the reason in last_error, the daemon keeps running
 ––– block: ../base/replication/rejoin-pause-node3 –––
 ––– input –––
-L3=$(wc -l < /var/log/manticore-3/searchd.log); mysql -h0 -P1306 -e "CREATE TABLE t2 (title text, v int)"; mysql -h0 -P1306 -e "INSERT INTO t2 (id,title,v) VALUES (1,'x',1)"; timeout 60 mysql -h0 -P1306 -e "ALTER CLUSTER v1 ADD t2"; echo $?
+L3=$(wc -l < /var/log/manticore-3/searchd.log); rj_q 1306 "CREATE TABLE t2 (title text, v int)" && rj_q 1306 "INSERT INTO t2 (id,title,v) VALUES (1,'x',1)" && rj_q 1306 "ALTER CLUSTER v1 ADD t2"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -101,7 +101,7 @@ touch /var/log/manticore-3/t2; kill -CONT $P3; echo "node 3 resumed"
 ––– output –––
 node 3 resumed
 ––– input –––
-timeout 90 bash -c 'until mysql -h0 -P3306 -e "SHOW STATUS LIKE '\''cluster_v1_last_error'\''\G" | grep -q "failed 2 times"; do sleep 0.5; done'; echo "gave up $?"
+rj_wait 3306 90 'rj_v 3306 last_error | grep -q "failed 2 times"'; echo "gave up $?"
 ––– output –––
 gave up 0
 ––– input –––
@@ -121,7 +121,7 @@ yes: SST 2 started
 yes: gave up
 attempts 2 crash dumps 0 restarts 0
 ––– input –––
-for p in 1306 2306; do echo "$p $(mysql -h0 -P$p -e "SHOW STATUS LIKE 'cluster_v1_node_state'\G" | awk '/Value:/{print $2}')"; done
+rj_wait "1306 2306" 60 'rj_all "1306 2306" node_state synced'; for p in 1306 2306; do echo "$p $(mysql -h0 -P$p -e "SHOW STATUS LIKE 'cluster_v1_node_state'\G" | awk '/Value:/{print $2}')"; done
 ––– output –––
 1306 synced
 2306 synced

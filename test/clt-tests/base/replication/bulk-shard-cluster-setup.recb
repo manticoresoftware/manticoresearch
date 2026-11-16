@@ -34,7 +34,7 @@ mysql -h0 -P1306 -e "CREATE CLUSTER v1"; for n in 2 3; do mysql -h0 -P${n}306 -e
 ––– output –––
 0
 ––– input –––
-source /tmp/bs.sh; for n in 1 2 3; do echo "node $n $(v $n node_state) $(v $n indexes) $(seqno $n)"; done
+source /tmp/bs.sh; lcwait; for n in 1 2 3; do echo "node $n $(v $n node_state) $(v $n indexes) $(seqno $n)"; done
 ––– output –––
 node 1 synced t_s0,t_s1 #!/[0-9]+/!#
 node 2 synced t_s0,t_s1 #!/[0-9]+/!#

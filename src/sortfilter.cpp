@@ -144,6 +144,9 @@ SortBoundFilter_c::SortBoundFilter_c ( const SortBound_c & tBound, const columna
 }
 
 
+SortBoundFilter_c::~SortBoundFilter_c() = default;
+
+
 bool SortBoundFilter_c::IsValid() const
 {
 	return !m_pColumnar || m_pColumnar->IsValid();

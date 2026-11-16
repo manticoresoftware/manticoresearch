@@ -22,6 +22,7 @@ class SortBoundFilter_c final : public PostingCandidateFilter_i
 public:
 				SortBoundFilter_c ( const SortBound_c & tBound, const CSphAttrLocator & tLocator, const DWORD * pRows, const DWORD * pMinMax, RowID_t tRows, int iStride, const SIContainer_c * pSI );
 				SortBoundFilter_c ( const SortBound_c & tBound, const columnar::Columnar_i & tColumnar, RowID_t tRows, const SIContainer_c * pSI );
+				~SortBoundFilter_c() final;
 
 	std::unique_ptr<PostingCandidateFilter_i> CloneCursor() final;
 

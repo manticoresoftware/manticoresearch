@@ -145,8 +145,9 @@ elif echo "$BLOG_CONTENT" | grep -E "compatible with Grafana versions.*(up to |-
     echo "✅ Blog: contains ${GRAFANA_LATEST}"
 else
     BLOG_VERSION=$(echo "$BLOG_CONTENT" | grep -o "compatible with Grafana versions [0-9.–-]* " | head -1 | sed 's/compatible with Grafana versions //')
-    echo "⚠️  WARNING: Blog does NOT contain ${GRAFANA_LATEST} (found: ${BLOG_VERSION})" >&2
+    echo "❌ Blog does NOT contain ${GRAFANA_LATEST} (found: ${BLOG_VERSION})" >&2
     echo "   Update: site/content/english/blog/manticoresearch-grafana-integration/index.md" >&2
+    exit 1
 fi
 
 echo ""
@@ -159,6 +160,5 @@ Checking Grafana version references in documentation...
 ✅ Manual: versions 10.0-13.3 are
 === Checking website blog post ===
 ✓ Fetching https://manticoresearch.com/blog/manticoresearch-grafana-integration/
-⚠️  WARNING: Blog does NOT contain 13.3 (found: )
-   Update: site/content/english/blog/manticoresearch-grafana-integration/index.md
+✅ Blog: contains 13.3
 ✅ Documentation validation complete

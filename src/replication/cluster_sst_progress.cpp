@@ -637,6 +637,10 @@ static void CoPushSstProgress(  const CSphString & sCluster, const CSphString & 
 		SstProgressStatus_t tStatus;
 		pProgress->GetStatus ( tStatus );
 
+		// on shutdown a request to the agents never completes
+		if ( sphInterrupted() )
+			break;
+
 		SendSstProgress ( sCluster, sUser, dDesc, tStatus );
 		if ( pProgress->IsPushUpdateDone() )
 			break;

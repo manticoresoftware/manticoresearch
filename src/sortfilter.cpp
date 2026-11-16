@@ -153,7 +153,7 @@ bool SortBoundFilter_c::IsValid() const
 }
 
 
-std::unique_ptr<PostingCandidateFilter_i> SortBoundFilter_c::CloneCursor()
+std::unique_ptr<PostingCandidateFilter_c> SortBoundFilter_c::CloneCursor()
 {
 	auto pBranch = std::make_unique<SortBoundFilter_c> ( m_tBound, m_tLocator, m_pRows, m_pMinMax, m_tRows, m_iStride, m_pSI );
 	if ( m_pColumnar )

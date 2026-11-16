@@ -102,7 +102,7 @@ public:
 
 	// Capabilities describe this node, never an unfiltered descendant.
 	// Attach a borrowed candidate prefilter before iteration starts.
-	virtual bool				SetCandidateFilter ( PostingCandidateFilter_i * ) { return false; }
+	virtual bool				SetCandidateFilter ( PostingCandidateFilter_c * ) { return false; }
 	virtual ExtNode_i *			GetDocsNode() { return nullptr; }
 	virtual CountWindowIterator_i * GetCountWindows() { return nullptr; }
 	virtual void				Reset ( const ISphQwordSetup & tSetup ) = 0;

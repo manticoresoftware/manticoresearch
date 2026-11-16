@@ -124,17 +124,11 @@ public:
 	virtual bool	ReadPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits ) = 0;
 };
 
-struct PostingCandidateRows_t
-{
-	const RowID_t *	m_pRows = nullptr;
-	int				m_iCount = 0;
-};
-
 // A conservative prefilter. May retain false positives
-class PostingCandidateFilter_i
+class PostingCandidateFilter_c
 {
 public:
-	virtual ~PostingCandidateFilter_i() = default;
+	virtual ~PostingCandidateFilter_c() = default;
 
 	virtual RowID_t	AdvanceTo ( RowID_t tMin ) = 0;
 	virtual int		SelectRows ( RowID_t * pRows, int iCount ) = 0;
@@ -143,72 +137,11 @@ public:
 	float		GetFilterComplexity() const	{ return m_fFilterComplexity; }
 
 	// Create a fresh cursor sharing the threshold and pruning state.
-	virtual std::unique_ptr<PostingCandidateFilter_i> CloneCursor() { return nullptr; }
+	virtual std::unique_ptr<PostingCandidateFilter_c> CloneCursor() { return nullptr; }
 
 private:
 	float		m_fFilterComplexity = std::numeric_limits<float>::infinity();
 };
-
-// Retains one term's leaf while bounded candidate batches are consumed and their
-// payloads gathered. Batches never cross an aligned membership window.
-class PostingBlockTerm_c
-{
-public:
-	PostingBlockTerm_c ( std::unique_ptr<PostingBlock_i> pCursor, PostingCandidateFilter_i & tFilter, const PostingWindowContext_t & tContext );
-
-	PostingCandidateRows_t	ReadRows ( RowID_t tMin, uint64_t uEnd, int iCapacity );
-	PostingBlock_i &		GetCursor() { return *m_pCursor; }
-
-private:
-	bool	FillRows ( RowID_t tMin, uint64_t uEnd );
-
-	std::unique_ptr<PostingBlock_i>	m_pCursor;
-	PostingCandidateFilter_i &		m_tFilter;
-	PostingWindowContext_t			m_tContext;
-	std::array<RowID_t,PostingWindow_t::ROWS> m_dRows;
-
-	RowID_t	m_tNext = 0;
-	int		m_iCount = 0;
-	int		m_iRead = 0;
-};
-
-
-// Intersects leaf-bounded intervals, then holds every participating leaf until
-// the returned rows' payloads have been gathered. Excluded terms only supply
-// exact membership; sparse survivors use row probes.
-class PostingBlockAnd_c
-{
-public:
-	explicit PostingBlockAnd_c ( const PostingWindowContext_t & tContext );
-
-	void					Add ( std::unique_ptr<PostingBlock_i> pCursor );
-	void					AddExcluded ( std::unique_ptr<PostingWindow_i> pCursor );
-	void					SetCandidateFilter ( PostingCandidateFilter_i * pFilter ) { m_pFilter = pFilter; }
-	PostingBlock_i &		GetCursor ( int i )	{ return *m_dCursors[i]; }
-
-	// Sorted rows in [min,end), valid (with their payloads) until the next call.
-	PostingCandidateRows_t	ReadRows ( RowID_t tMin, uint64_t uEnd, int iCapacity );
-
-private:
-	bool	FillCandidates ( uint64_t uEnd );
-	bool	IntersectBitmap ( const PostingWindow_t & tWindow );
-	void	ExtractRows ( RowID_t tBase, const DWORD * pBits, int iWords );
-	bool	SubtractRows();
-
-	std::vector<std::unique_ptr<PostingBlock_i>>	m_dCursors;
-	std::vector<std::unique_ptr<PostingWindow_i>>	m_dExcluded;
-	std::array<RowID_t,PostingWindow_t::ROWS>		m_dRows;
-
-	PostingCandidateFilter_i * m_pFilter = nullptr;
-
-	PostingWindowContext_t	m_tContext;
-	RowID_t					m_tNext = 0;
-	int						m_iCount = 0;
-	int						m_iRead = 0;
-	int						m_iEarlyFilterRetry = 0;
-	bool					m_bDone = false;
-};
-
 
 // Counts distinct clause membership independently for every bit (up to 32 clauses).
 class PostingQuorum_c

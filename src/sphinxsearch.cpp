@@ -181,7 +181,7 @@ public:
 	// skip caching when SI iterators used as qcache will see the full-text without SI filters as SI modify filters
 	void						DisableCaching() { SafeReleaseAndZero ( m_pQcacheEntry ); }
 
-	bool						SetCandidateFilter ( PostingCandidateFilter_i * pFilter ) override
+	bool						SetCandidateFilter ( PostingCandidateFilter_c * pFilter ) override
 	{
 		if ( !m_pRoot || !m_pRoot->SetCandidateFilter(pFilter) )
 			return false;

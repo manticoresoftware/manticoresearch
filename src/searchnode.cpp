@@ -11,7 +11,8 @@
 //
 
 #include "searchnode.h"
-#include "termproducer.h"
+#include "postingsproducers/termproducer.h"
+#include "postingsproducers/andproducer.h"
 #include "sphinxquery/sphinxquery.h"
 #include "sphinxint.h"
 #include "sphinxqcache.h"
@@ -255,7 +256,7 @@ public:
 	uint64_t			GetWordID () const override;
 	void				HintRowID ( RowID_t tRowID ) override;
 	void				SetCollectHits() override;
-	bool				SetCandidateFilter ( PostingCandidateFilter_i * pFilter ) override;
+	bool				SetCandidateFilter ( PostingCandidateFilter_c * pFilter ) override;
 	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override { return { float(m_pQword->m_iDocs)*COST_SCALE*60.0f, m_pQword->m_iDocs, 1 }; }
 	void				SetRowidBoundaries ( const RowIdBoundaries_t & tBoundaries ) override;
 
@@ -270,7 +271,7 @@ protected:
 	};
 
 	bool				CheckContinue();
-	std::unique_ptr<TermProducer_i> CreateProducer ( PostingCandidateFilter_i * pFilter );
+	std::unique_ptr<PostingProducer_i> CreateProducer ( PostingCandidateFilter_c * pFilter );
 	void				PrefetchMatchedHits ( const ExtDoc_t * pMatched, const StoredHit_t * pStoredHit ) const;
 
 	std::unique_ptr<ISphQword> m_pQword;
@@ -283,7 +284,7 @@ protected:
 	bool				m_bCollectHits = false;
 	RowIdBoundaries_t	m_tBoundaries;
 
-	std::unique_ptr<TermProducer_i> m_pProducer;
+	std::unique_ptr<PostingProducer_i> m_pProducer;
 	RowID_t				m_tProducerHint = 0;
 
 	CSphVector<StoredHit_t> m_dStoredHits;
@@ -482,7 +483,7 @@ struct MultiAndTerm_t
 };
 
 
-template <bool USE_BM25, bool TEST_FIELDS, bool ROWID_LIMITS>
+template <bool USE_BM25, bool TEST_FIELDS>
 class ExtMultiAnd_T : public ExtNode_c
 {
 public:
@@ -499,19 +500,12 @@ public:
 	bool				GotHitless () override { return false; }
 	int					GetDocsCount() const override;
 	void				HintRowID ( RowID_t tRowID ) override;
-	void				SetCollectHits() override { m_bCollectHits = true; }
+	void				SetCollectHits() override;
 	void				DebugDump ( int iLevel ) override;
 	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override;
-	void				SetRowidBoundaries ( const RowIdBoundaries_t & tBoundaries ) override { m_tBoundaries = tBoundaries; }
+	void				SetRowidBoundaries ( const RowIdBoundaries_t & tBoundaries ) override { assert(!m_pProducer); m_tBoundaries = tBoundaries; }
 
-	bool				SetCandidateFilter ( PostingCandidateFilter_i * pFilter ) override
-	{
-		if ( !m_pBlockAnd )
-			return false;
-
-		m_pBlockAnd->SetCandidateFilter(pFilter);
-		return true;
-	}
+	bool				SetCandidateFilter ( PostingCandidateFilter_c * pFilter ) override;
 
 	PhraseMatcher_fn	GetPhraseMatcher() override;
 	int				MatchDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch );
@@ -525,7 +519,6 @@ private:
 	struct NodeInfo_t
 	{
 		ISphQword *		m_pQword {nullptr};
-		RowID_t			m_tRowID {INVALID_ROWID};
 		bool			m_bHitsOver {false};
 
 		float			m_fIDF {0.0f};
@@ -536,7 +529,6 @@ private:
 		bool			m_bNotWeighted {true};
 
 		void			UpdateWideFieldFlag ( const ISphQwordSetup & tSetup );
-		bool			FitsFields() const;
 	};
 
 	struct StoredMultiHit_t
@@ -575,16 +567,14 @@ private:
 	};
 
 
-	std::unique_ptr<PostingBlockAnd_c> m_pBlockAnd;
-	RowID_t							m_tBlockHint = 0;
+	std::unique_ptr<PostingProducer_i> m_pProducer;
+	RowID_t							m_tProducerHint = 0;
 	bool							m_bStopped = false;
 
-	void				SetupBlocks ( const ISphQwordSetup & tSetup );
+	std::unique_ptr<PostingProducer_i> CreateProducer ( PostingCandidateFilter_c * pFilter );
 	bool				CheckContinue();
-	const ExtDoc_t *	GetBlockDocsChunk();
-	bool				GatherBlockDocs ( PostingCandidateRows_t tRows, int iStart );
+	bool				GatherDocs ( PostingCandidateBatch_t tRows, int iStart );
 
-	bool							m_bFirstChunk {true};
 	bool							m_bCollectHits {false};
 	CSphVector<NodeInfo_t>			m_dNodes;
 	CSphVector<NodeInfo_t>			m_dExcluded;
@@ -598,12 +588,6 @@ private:
 	CSphFixedVector<uint64_t>		m_dWordIds;
 	CSphQueue<HitWithQpos_t, HitWithQpos_t > m_tQueue;
 
-	FORCE_INLINE bool	AdvanceQwords();
-	FORCE_INLINE RowID_t Advance ( int iNode );
-	FORCE_INLINE RowID_t Advance ( int iNode, RowID_t tRowID );
-	FORCE_INLINE bool	FitsFields ( const NodeInfo_t & tNode ) const;
-	FORCE_INLINE DWORD	GetDocFieldsMask() const;
-	FORCE_INLINE float	GetTFIDF() const;
 	int					GetQword ( NodeInfo_t & tNode, ExtQwordsHash_t & hQwords );
 	FORCE_INLINE void	PushNextHit ( int iNode );
 	FORCE_INLINE void	CopySingleHits ( const StoredMultiHit_t & tStoredHit );
@@ -658,13 +642,13 @@ public:
 						ExtOr_c ( ExtNode_i * pLeft, ExtNode_i * pRight );
 
 	void				Reset ( const ISphQwordSetup & tSetup ) override;
-	bool				SetCandidateFilter ( PostingCandidateFilter_i * pFilter ) override;
+	bool				SetCandidateFilter ( PostingCandidateFilter_c * pFilter ) override;
 	const ExtDoc_t *	GetDocsChunk() override;
 	void				CollectHits ( const ExtDoc_t * pDocs ) override;
 	void				DebugDump ( int iLevel ) override;
 	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override;
 private:
-	std::unique_ptr<PostingCandidateFilter_i> m_pRightFilter;
+	std::unique_ptr<PostingCandidateFilter_c> m_pRightFilter;
 };
 
 
@@ -674,7 +658,7 @@ class ExtMaybe_c : public ExtOr_c
 public:
 						ExtMaybe_c ( ExtNode_i * pLeft, ExtNode_i * pRight );
 
-	bool				SetCandidateFilter ( PostingCandidateFilter_i * ) override { return false; }
+	bool				SetCandidateFilter ( PostingCandidateFilter_c * ) override { return false; }
 	const ExtDoc_t *	GetDocsChunk() override;
 	void				DebugDump ( int iLevel ) override;
 };
@@ -713,7 +697,7 @@ public:
 	uint64_t			GetWordID() const override;
 	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override { assert(m_pNode); return m_pNode->Estimate(iTotalDocs); }
 	void				SetRowidBoundaries ( const RowIdBoundaries_t & tBoundaries ) override { assert(m_pNode); m_pNode->SetRowidBoundaries(tBoundaries); }
-	bool				SetCandidateFilter ( PostingCandidateFilter_i * pFilter ) override { return m_pNode && m_pNode->SetCandidateFilter(pFilter); }
+	bool				SetCandidateFilter ( PostingCandidateFilter_c * pFilter ) override { return m_pNode && m_pNode->SetCandidateFilter(pFilter); }
 
 protected:
 	ExtNode_i *			m_pNode	{nullptr};					///< my and-node for all the terms
@@ -780,7 +764,7 @@ private:
 
 class FSMphrase_c
 {
-	template<bool,bool,bool>
+	template<bool,bool>
 	friend class ExtMultiAnd_T;
 
 protected:
@@ -1128,7 +1112,7 @@ public:
 		return std::move(m_pSource);
 	}
 
-	bool	SetCandidateFilter ( PostingCandidateFilter_i * pFilter ) override { return m_pSource->SetCandidateFilter(pFilter); }
+	bool	SetCandidateFilter ( PostingCandidateFilter_c * pFilter ) override { return m_pSource->SetCandidateFilter(pFilter); }
 	int		GetQwords ( ExtQwordsHash_t & hWords ) override { return m_pSource->GetQwords(hWords); }
 	void	SetQwordsIDF ( const ExtQwordsHash_t & hWords ) override { m_pSource->SetQwordsIDF(hWords); }
 	void	GetTerms ( const ExtQwordsHash_t & hWords, CSphVector<TermPos_t> & dTerms ) const override { m_pSource->GetTerms ( hWords, dTerms ); }
@@ -1273,11 +1257,11 @@ public:
 	bool HasDistinctTerms() const { return m_bDistinct; }
 	const char * GetName() const override { return m_dTerms.GetLength()==1 ? "WindowTermCount" : IS_QUORUM ? "WindowQuorumCount" : IS_AND ? "WindowAndCount" : "WindowOrCount"; }
 
-	bool SetCandidateFilter ( PostingCandidateFilter_i * pFilter ) override
+	bool SetCandidateFilter ( PostingCandidateFilter_c * pFilter ) override
 	{
 		if ( !pFilter )
 		{
-			m_pBlockTerm.reset();
+			m_pProducer.reset();
 			m_pOrFilter = nullptr;
 			return true;
 		}
@@ -1293,13 +1277,15 @@ public:
 		}
 
 		auto & tTerm = m_dTerms[0];
-		auto tContext = CursorContext();
-		auto pCursor = tTerm.m_pWord->CreatePostingBlock ( tTerm.m_uFields, tContext );
-		if ( !pCursor )
-			return false;
-
-		m_pBlockTerm = std::make_unique<PostingBlockTerm_c> ( std::move(pCursor), *pFilter, tContext );
-		return true;
+		TermProducerSetup_t tSetup;
+		tSetup.m_tFields.Assign32(tTerm.m_uFields);
+		tSetup.m_tContext = CursorContext();
+		tSetup.m_pFilter = pFilter;
+		tSetup.m_tMin = m_tBounds.m_tMinRowID;
+		tSetup.m_uEnd = m_tBounds.m_tMaxRowID==INVALID_ROWID ? INVALID_ROWID : m_tBounds.m_tMaxRowID+1;
+		tSetup.m_iCapacity = MAX_BLOCK_DOCS-1;
+		m_pProducer = CreateTermProducer ( *tTerm.m_pWord, tSetup );
+		return bool(m_pProducer);
 	}
 
 	CountWindow_t * NextWindow() override
@@ -1307,9 +1293,9 @@ public:
 		if ( m_pOrFilter )
 			return FillFilteredOrWindow();
 
-		if ( m_pBlockTerm )
+		if ( m_pProducer )
 		{
-			auto tRows = m_pBlockTerm->ReadRows ( m_tBounds.m_tMinRowID, uint64_t(m_tBounds.m_tMaxRowID)+1, MAX_BLOCK_DOCS-1 );
+			auto tRows = m_pProducer->NextCandidates(MAX_BLOCK_DOCS-1);
 			if ( !tRows.m_iCount )
 				return nullptr;
 
@@ -1336,10 +1322,13 @@ public:
 	{
 		m_tBounds.m_tMinRowID = Max ( m_tBounds.m_tMinRowID, tRow );
 		m_tFilteredHint = Max ( m_tFilteredHint, tRow );
+		if ( m_pProducer )
+			m_pProducer->HintRowID(tRow);
 	}
 
 	void SetRowidBoundaries ( const RowIdBoundaries_t & tBounds ) override
 	{
+		assert(!m_pProducer);
 		m_tInitialBounds = m_tBounds = tBounds;
 		HintRowID ( tBounds.m_tMinRowID );
 	}
@@ -1354,7 +1343,7 @@ public:
 		m_tWindow.m_pRows = nullptr;
 		m_tWindow.m_iRows = 0;
 		m_tBounds = m_tInitialBounds;
-		m_pBlockTerm.reset();
+		m_pProducer.reset();
 		m_pOrFilter = nullptr;
 		m_iFilteredRead = m_iFilteredCount = 0;
 		m_tFilteredNext = 0;
@@ -1469,14 +1458,14 @@ public:
 	}
 
 private:
-	std::unique_ptr<PostingBlockTerm_c> m_pBlockTerm;
-	PostingCandidateFilter_i * m_pOrFilter = nullptr;
+	PostingCandidateFilter_c * m_pOrFilter = nullptr;
 	CSphFixedVector<RowID_t> m_dFilteredRows { 0 };
 	int						m_iFilteredRead = 0;
 	int						m_iFilteredCount = 0;
 	RowID_t					m_tFilteredNext = 0;
 	RowID_t					m_tFilteredHint = 0;
 	CSphFixedVector<Term_t> m_dTerms;
+	std::unique_ptr<PostingProducer_i> m_pProducer;
 	int						m_iThreshold = 1;
 	bool					m_bDistinct = true;
 	CountWindow_t			m_tWindow;
@@ -2045,23 +2034,19 @@ int CountAtomPos ( const CSphVector<T *> & dNodes, const NODE_CHECK & fnCheck )
 }
 
 
-static ExtNode_i * CreateMultiAndTerms ( const VecTraits_T<MultiAndTerm_t> & dTerms, const ISphQwordSetup & tSetup, bool bUseBM25, bool bRowidLimits, bool bPositional, const VecTraits_T<MultiAndTerm_t> & dExcluded = {} )
+static ExtNode_i * CreateMultiAndTerms ( const VecTraits_T<MultiAndTerm_t> & dTerms, const ISphQwordSetup & tSetup, bool bUseBM25, bool bPositional, const VecTraits_T<MultiAndTerm_t> & dExcluded = {} )
 {
 	bool bNeedFieldSpec = false;
 	for ( const auto & tTerm : dTerms )
 		bNeedFieldSpec |= !tTerm.m_pNode->m_dSpec.m_dFieldMask.TestAll(true);
 
-	int iSwitch = 4*(bUseBM25?1:0) + 2*(bNeedFieldSpec?1:0) + (bRowidLimits?1:0);
+	int iSwitch = 2*(bUseBM25?1:0) + (bNeedFieldSpec?1:0);
 	switch ( iSwitch )
 	{
-	case 0:	return new ExtMultiAnd_T<false, false, false> ( dTerms, tSetup, bPositional, dExcluded );
-	case 1:	return new ExtMultiAnd_T<false, false, true>  ( dTerms, tSetup, bPositional, dExcluded );
-	case 2:	return new ExtMultiAnd_T<false, true,  false> ( dTerms, tSetup, bPositional, dExcluded );
-	case 3:	return new ExtMultiAnd_T<false, true,  true>  ( dTerms, tSetup, bPositional, dExcluded );
-	case 4:	return new ExtMultiAnd_T<true,  false, false> ( dTerms, tSetup, bPositional, dExcluded );
-	case 5:	return new ExtMultiAnd_T<true,  false, true>  ( dTerms, tSetup, bPositional, dExcluded );
-	case 6:	return new ExtMultiAnd_T<true,  true,  false> ( dTerms, tSetup, bPositional, dExcluded );
-	case 7:	return new ExtMultiAnd_T<true,  true,  true>  ( dTerms, tSetup, bPositional, dExcluded );
+	case 0:	return new ExtMultiAnd_T<false, false> ( dTerms, tSetup, bPositional, dExcluded );
+	case 1:	return new ExtMultiAnd_T<false, true>  ( dTerms, tSetup, bPositional, dExcluded );
+	case 2:	return new ExtMultiAnd_T<true,  false> ( dTerms, tSetup, bPositional, dExcluded );
+	case 3:	return new ExtMultiAnd_T<true,  true>  ( dTerms, tSetup, bPositional, dExcluded );
 	default:
 		assert ( 0 && "Internal error" );
 		return nullptr;
@@ -2122,7 +2107,7 @@ static bool CollectBlockAndNotTerms ( const XQNode_t & tNode, bool bExcluded, CS
 }
 
 
-static ExtNode_i * CreateBlockAndNotNode ( const XQNode_t & tNode, const ISphQwordSetup & tSetup, bool bUseBM25, bool bRowidLimits )
+static ExtNode_i * CreateBlockAndNotNode ( const XQNode_t & tNode, const ISphQwordSetup & tSetup, bool bUseBM25 )
 {
 	if ( tNode.GetOp()!=SPH_QUERY_ANDNOT || tNode.dChildren().GetLength()!=2 || tNode.GetCount() || tSetup.m_bHasWideFields || !tSetup.m_pIndex
 		|| !tSetup.m_pIndex->GetSettings().m_uPostingsFormat || tSetup.m_pIndex->GetSettings().m_eHitless!=SPH_HITLESS_NONE )
@@ -2165,14 +2150,14 @@ static ExtNode_i * CreateBlockAndNotNode ( const XQNode_t & tNode, const ISphQwo
 		return nullptr;
 	}
 
-	ExtNode_i * pResult = CreateMultiAndTerms ( dTerms, tSetup, bUseBM25, bRowidLimits, false, dExcluded );
+	ExtNode_i * pResult = CreateMultiAndTerms ( dTerms, tSetup, bUseBM25, false, dExcluded );
 	pResult->SetAtomPos(dTerms[0].m_pQword->m_iAtomPos);
 	return pResult;
 }
 
 
 template <typename T>
-static ExtNode_i * CreatePositionalMultiAnd ( const XQNode_t & tNode, const ISphQwordSetup & tSetup, bool bUseBM25, bool bRowidLimits )
+static ExtNode_i * CreatePositionalMultiAnd ( const XQNode_t & tNode, const ISphQwordSetup & tSetup, bool bUseBM25 )
 {
 	if ( !CanUsePositionalMultiAnd(tNode) )
 		return nullptr;
@@ -2227,7 +2212,7 @@ static ExtNode_i * CreatePositionalMultiAnd ( const XQNode_t & tNode, const ISph
 		return nullptr;
 	}
 
-	ExtNode_i * pAnd = CreateMultiAndTerms ( dTerms, tSetup, bUseBM25, bRowidLimits, true );
+	ExtNode_i * pAnd = CreateMultiAndTerms ( dTerms, tSetup, bUseBM25, true );
 	return new T ( pAnd, dAtomPos, tNode, tSetup );
 }
 
@@ -2237,7 +2222,7 @@ static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwor
 {
 	if constexpr ( std::is_same_v<T,ExtPhrase_c> || std::is_same_v<T,ExtProximity_c> || std::is_same_v<T,ExtMultinear_c> )
 	{
-		ExtNode_i * pResult = CreatePositionalMultiAnd<T> ( *pQueryNode, tSetup, bUseBM25, pBoundaries!=nullptr );
+		ExtNode_i * pResult = CreatePositionalMultiAnd<T> ( *pQueryNode, tSetup, bUseBM25 );
 		if ( pResult )
 			return pResult;
 	}
@@ -2460,13 +2445,13 @@ static ExtNode_i * CreateTermNode ( ISphQword * pQword, const ISphQwordSetup & t
 }
 
 
-static ExtNode_i * CreateMultiAndNode ( const VecTraits_T<XQNode_t*> & dXQNodes, const ISphQwordSetup & tSetup, bool bUseBM25, bool bRowidLimits )
+static ExtNode_i * CreateMultiAndNode ( const VecTraits_T<XQNode_t*> & dXQNodes, const ISphQwordSetup & tSetup, bool bUseBM25 )
 {
 	CSphVector<MultiAndTerm_t> dTerms;
 	for ( const XQNode_t * pNode : dXQNodes )
 		dTerms.Add ( { CreateQueryWord ( pNode->dWord(0), tSetup ), pNode } );
 
-	return CreateMultiAndTerms ( dTerms, tSetup, bUseBM25, bRowidLimits, false );
+	return CreateMultiAndTerms ( dTerms, tSetup, bUseBM25, false );
 }
 
 
@@ -3192,7 +3177,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 				return pCur;
 			}
 
-			return CreateMultiAndNode ( pNode->dChildren(), tSetup, bUseBM25, bRowidLimits );
+			return CreateMultiAndNode ( pNode->dChildren(), tSetup, bUseBM25 );
 		}
 
 		// Multinear and phrase could be also non-plain, so here is the second entry for it.
@@ -3201,7 +3186,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 		if ( pNode->GetOp()==SPH_QUERY_PHRASE )
 			return CreateMultiNode<ExtPhrase_c> ( pNode, tSetup, true, bUseBM25, pBoundaries );
 
-		if ( ExtNode_i * pBlockAndNot = CreateBlockAndNotNode ( *pNode, tSetup, bUseBM25, bRowidLimits ) )
+		if ( ExtNode_i * pBlockAndNot = CreateBlockAndNotNode ( *pNode, tSetup, bUseBM25 ) )
 			return pBlockAndNot;
 
 		// generic create
@@ -3344,7 +3329,7 @@ bool ExtTerm_T<USE_BM25,STATS>::CheckContinue()
 
 
 template<bool USE_BM25, bool STATS>
-std::unique_ptr<TermProducer_i> ExtTerm_T<USE_BM25,STATS>::CreateProducer ( PostingCandidateFilter_i * pFilter )
+std::unique_ptr<PostingProducer_i> ExtTerm_T<USE_BM25,STATS>::CreateProducer ( PostingCandidateFilter_c * pFilter )
 {
 	TermProducerSetup_t tSetup;
 	tSetup.m_tFields = m_dQueriedFields;
@@ -3364,7 +3349,7 @@ std::unique_ptr<TermProducer_i> ExtTerm_T<USE_BM25,STATS>::CreateProducer ( Post
 
 
 template<bool USE_BM25, bool STATS>
-bool ExtTerm_T<USE_BM25,STATS>::SetCandidateFilter ( PostingCandidateFilter_i * pFilter )
+bool ExtTerm_T<USE_BM25,STATS>::SetCandidateFilter ( PostingCandidateFilter_c * pFilter )
 {
 	if ( !pFilter )
 	{
@@ -3390,7 +3375,7 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,STATS>::GetDocsChunk()
 	if ( !m_pProducer )
 		m_pProducer = CreateProducer(nullptr);
 
-	const auto tBatch = m_pProducer->NextCandidates();
+	const auto tBatch = m_pProducer->NextCandidates(MAX_BLOCK_DOCS-1);
 	if ( !tBatch.m_iCount )
 		return nullptr;
 
@@ -4274,8 +4259,8 @@ void ExtAnd_c::DebugDump ( int iLevel )
 
 //////////////////////////////////////////////////////////////////////////
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::NodeInfo_t::UpdateWideFieldFlag ( const ISphQwordSetup & tSetup )
+template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::NodeInfo_t::UpdateWideFieldFlag ( const ISphQwordSetup & tSetup )
 {
 	m_bHasWideFields = false;
 	if ( tSetup.m_bHasWideFields )
@@ -4284,39 +4269,17 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::NodeInfo_t::UpdateWideFie
 				m_bHasWideFields = true;
 }
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::NodeInfo_t::FitsFields() const
-{
-	if ( !m_bHasWideFields )
-	{
-		// fields 0-31 can be quickly checked right here, right now
-		if (!( m_pQword->m_dQwordFields.GetMask32() & m_dQueriedFields.GetMask32() ))
-			return false;
-	} else
-	{
-		// fields 32+ need to be checked with CollectHitMask() and stuff
-		m_pQword->CollectHitMask();
-		bool bHasSameFields = false;
-		for ( int i=0; i<FieldMask_t::SIZE && !bHasSameFields; i++ )
-			bHasSameFields = ( m_pQword->m_dQwordFields[i] & m_dQueriedFields[i] )!=0;
 
-		if ( !bHasSameFields )
-			return false;
-	}
-
-	return true;
-}
-
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::HitWithQpos_t::HitWithQpos_t ( int iNode, Hitpos_t uHit, WORD uQueryPos )
+template <bool USE_BM25,bool TEST_FIELDS>
+ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::HitWithQpos_t::HitWithQpos_t ( int iNode, Hitpos_t uHit, WORD uQueryPos )
 	: m_iNode ( iNode )
 	, m_uHit ( uHit )
 	, m_uQueryPos ( uQueryPos )
 {}
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::ExtMultiAnd_T ( const VecTraits_T<MultiAndTerm_t> & dTerms, const ISphQwordSetup & tSetup, bool bPositional, const VecTraits_T<MultiAndTerm_t> & dExcluded )
+template <bool USE_BM25,bool TEST_FIELDS>
+ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::ExtMultiAnd_T ( const VecTraits_T<MultiAndTerm_t> & dTerms, const ISphQwordSetup & tSetup, bool bPositional, const VecTraits_T<MultiAndTerm_t> & dExcluded )
 	: ExtNode_c { tSetup.m_iMaxTimer }
 	, m_dWordIds ( dTerms.GetLength()+(dExcluded.GetLength() ? dExcluded.GetLength()+1 : 0) )
 	, m_tQueue ( dTerms.GetLength() )
@@ -4344,6 +4307,7 @@ ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::ExtMultiAnd_T ( const VecTrait
 		tTerm.m_iAtomPos = tTerm.m_pQword->m_iAtomPos;
 		tTerm.m_dQueriedFields = dExcluded[i].m_pNode->m_dSpec.m_dFieldMask;
 		tTerm.m_bNotWeighted = dExcluded[i].m_pNode->m_bNotWeighted;
+		tTerm.UpdateWideFieldFlag(tSetup);
 	}
 
 	m_dNodes.Sort ( SelectivitySorter_t() );
@@ -4351,16 +4315,15 @@ ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::ExtMultiAnd_T ( const VecTrait
 
 	m_pWarning = tSetup.m_pWarning;
 	m_pStats = tSetup.m_pStats;
-	SetupBlocks(tSetup);
 	if ( bPositional )
 		SetQPosReverse();
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::~ExtMultiAnd_T()
+template <bool USE_BM25,bool TEST_FIELDS>
+ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::~ExtMultiAnd_T()
 {
-	m_pBlockAnd.reset();
+	m_pProducer.reset();
 	for ( auto & i : m_dNodes )
 		SafeDelete ( i.m_pQword );
 
@@ -4369,136 +4332,63 @@ ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::~ExtMultiAnd_T()
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-DWORD ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetDocFieldsMask() const
+template <bool USE_BM25,bool TEST_FIELDS>
+std::unique_ptr<PostingProducer_i> ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::CreateProducer ( PostingCandidateFilter_c * pFilter )
 {
-	DWORD uMask = 0;
-	for ( const auto & i : m_dNodes )
-		uMask |= i.m_pQword->m_dQwordFields.GetMask32() & i.m_dQueriedFields.GetMask32();
+	if ( m_iNodesSet!=m_dNodes.GetLength() )
+		return nullptr;
 
-	return uMask;
+	AndProducerSetup_t tSetup;
+	for ( const auto & tNode : m_dNodes )
+		tSetup.m_dTerms.push_back ( { tNode.m_pQword, tNode.m_dQueriedFields, tNode.m_bHasWideFields } );
+
+	for ( const auto & tNode : m_dExcluded )
+		tSetup.m_dExcluded.push_back ( { tNode.m_pQword, tNode.m_dQueriedFields, tNode.m_bHasWideFields } );
+
+	tSetup.m_tMin = m_tBoundaries.m_tMinRowID;
+	tSetup.m_uEnd = m_tBoundaries.m_tMaxRowID==INVALID_ROWID ? INVALID_ROWID : m_tBoundaries.m_tMaxRowID+1;
+	tSetup.m_iCapacity = MAX_BLOCK_DOCS-1;
+	tSetup.m_tPayloads = { USE_BM25, m_bCollectHits };
+	tSetup.m_pFilter = pFilter;
+	tSetup.m_tContext = { this, [] ( void * p ) { return static_cast<ExtMultiAnd_T *>(p)->CheckContinue(); }, m_pStats };
+
+	auto pProducer = CreateAndProducer(tSetup);
+	if ( pProducer && m_tProducerHint )
+		pProducer->HintRowID(m_tProducerHint);
+
+	return pProducer;
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-float ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetTFIDF() const
+template <bool USE_BM25,bool TEST_FIELDS>
+bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::SetCandidateFilter ( PostingCandidateFilter_c * pFilter )
 {
-	float fTFIDF = 0.0f;
-
-	if constexpr ( USE_BM25 )
+	if ( !pFilter )
 	{
-		for ( const auto & i : m_dNodes )	
-			fTFIDF += float(i.m_pQword->m_uMatchHits) / float(i.m_pQword->m_uMatchHits+SPH_BM25_K1) * i.m_fIDF;
+		m_pProducer.reset();
+		return true;
 	}
 
-	return fTFIDF;
-}
+	auto pProducer = CreateProducer(pFilter);
+	if ( !pProducer )
+		return false;
 
-
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-RowID_t ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::Advance ( int iNode )
-{
-	NodeInfo_t & tNode = m_dNodes[iNode];
-	do
-	{
-		tNode.m_tRowID = tNode.m_pQword->GetNextDoc().m_tRowID;
-	}
-	while ( tNode.m_tRowID!=INVALID_ROWID && !tNode.FitsFields() );
-
-	return tNode.m_tRowID;
-}
-
-
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-RowID_t ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::Advance ( int iNode, RowID_t tRowID )
-{
-	NodeInfo_t & tNode = m_dNodes[iNode];
-	if ( tRowID==tNode.m_tRowID )
-		return tRowID;
-
-	tNode.m_tRowID = tNode.m_pQword->AdvanceTo ( tRowID );
-	while ( tNode.m_tRowID!=INVALID_ROWID )
-	{
-		if constexpr ( ROWID_LIMITS )
-		{
-			// don't check left boundary as we already enforced it when we advanced node #0
-			if ( tNode.m_tRowID > m_tBoundaries.m_tMaxRowID )
-			{
-				tNode.m_tRowID = INVALID_ROWID;
-				break;
-			}
-		}
-
-		if ( tNode.FitsFields() )
-			break;
-		
-		tNode.m_tRowID = tNode.m_pQword->GetNextDoc().m_tRowID;
-	}
-
-	return tNode.m_tRowID;
-}
-
-
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::AdvanceQwords()
-{
-	RowID_t tMaxRowID = m_dNodes[0].m_tRowID;
-	for ( int i=1; i < m_dNodes.GetLength(); i++ )
-	{
-		NodeInfo_t & tCurNode = m_dNodes[i];
-		if ( tCurNode.m_tRowID==tMaxRowID )
-			continue;
-		
-		Advance ( i, tMaxRowID );
-		
-		if ( tCurNode.m_tRowID==INVALID_ROWID )
-			return false;
-		else if ( tCurNode.m_tRowID>tMaxRowID )
-		{
-			if ( Advance ( 0, tCurNode.m_tRowID )==INVALID_ROWID )
-				return false;
-
-			tMaxRowID = m_dNodes[0].m_tRowID;
-			i = 0;
-		}
-	}
-
+	m_pProducer = std::move(pProducer);
 	return true;
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::SetupBlocks ( const ISphQwordSetup & tSetup )
+template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::SetCollectHits()
 {
-	m_pBlockAnd.reset();
-	m_tBlockHint = 0;
-	m_bStopped = false;
-	if ( tSetup.m_bHasWideFields || m_iNodesSet!=m_dNodes.GetLength() )
-		return;
-
-	PostingWindowContext_t tContext { this, [] ( void * p ) { return static_cast<ExtMultiAnd_T *>(p)->CheckContinue(); }, m_pStats };
-	std::unique_ptr<PostingBlockAnd_c> pAnd;
-	for ( auto & tNode : m_dNodes )
-	{
-		auto pCursor = tNode.m_pQword->CreatePostingBlock ( tNode.m_dQueriedFields.GetMask32(), tContext );
-		if ( !pCursor )
-			return;
-
-		if ( !pAnd )
-			pAnd = std::make_unique<PostingBlockAnd_c>(tContext);
-
-		pAnd->Add(std::move(pCursor));
-	}
-
-	for ( auto & tNode : m_dExcluded )
-		pAnd->AddExcluded ( tNode.m_pQword->CreatePostingWindow ( tNode.m_dQueriedFields.GetMask32(), tContext ) );
-
-	m_pBlockAnd = std::move(pAnd);
+	m_bCollectHits = true;
+	if ( m_pProducer )
+		m_pProducer->SetPayloadRequirements ( { USE_BM25, true } );
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GatherBlockDocs ( PostingCandidateRows_t tRows, int iStart )
+template <bool USE_BM25,bool TEST_FIELDS>
+bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GatherDocs ( PostingCandidateBatch_t tRows, int iStart )
 {
 	int iStored = m_dStoredHits.GetLength();
 	if ( m_bCollectHits )
@@ -4507,7 +4397,7 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GatherBlockDocs ( Posting
 		for ( int i=0; i<tRows.m_iCount; ++i )
 		{
 			auto & tHit = m_dStoredHits[iStored+i];
-			tHit.m_tRowID = tRows.m_pRows[i];
+			tHit.m_tRowID = tRows.GetRowID(i);
 			tHit.m_dHitlistOffsets.Reset(m_dNodes.GetLength());
 		}
 	}
@@ -4515,15 +4405,15 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GatherBlockDocs ( Posting
 	for ( int i=0; i<tRows.m_iCount; ++i )
 	{
 		auto & tDoc = m_dDocs[iStart+i];
-		tDoc.m_tRowID = tRows.m_pRows[i];
+		tDoc.m_tRowID = tRows.GetRowID(i);
 		tDoc.m_uDocFields = 0;
 		tDoc.m_fTFIDF = 0.0f;
 	}
 
-	QwordDoc_t dPayloads[MAX_BLOCK_DOCS];
 	ARRAY_FOREACH ( iTerm, m_dNodes )
 	{
-		if ( !m_pBlockAnd->GetCursor(iTerm).ReadPayloads ( tRows.m_pRows, tRows.m_iCount, dPayloads, USE_BM25, m_bCollectHits ) )
+		const QwordDoc_t * pPayloads = m_pProducer->ReadPayloads(iTerm);
+		if ( !pPayloads )
 		{
 			m_bStopped = true;
 			return false;
@@ -4533,12 +4423,12 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GatherBlockDocs ( Posting
 		for ( int i=0; i<tRows.m_iCount; ++i )
 		{
 			auto & tDoc = m_dDocs[iStart+i];
-			tDoc.m_uDocFields |= dPayloads[i].m_uFields & tNode.m_dQueriedFields.GetMask32();
+			tDoc.m_uDocFields |= pPayloads[i].m_uFields & tNode.m_dQueriedFields.GetMask32();
 			if constexpr ( USE_BM25 )
-				tDoc.m_fTFIDF += float(dPayloads[i].m_uMatchHits) / float(dPayloads[i].m_uMatchHits+SPH_BM25_K1) * tNode.m_fIDF;
+				tDoc.m_fTFIDF += float(pPayloads[i].m_uMatchHits) / float(pPayloads[i].m_uMatchHits+SPH_BM25_K1) * tNode.m_fIDF;
 
 			if ( m_bCollectHits )
-				m_dStoredHits[iStored+i].m_dHitlistOffsets[iTerm] = dPayloads[i].m_iHitlistPos;
+				m_dStoredHits[iStored+i].m_dHitlistOffsets[iTerm] = pPayloads[i].m_iHitlistPos;
 		}
 	}
 
@@ -4546,36 +4436,8 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GatherBlockDocs ( Posting
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetBlockDocsChunk()
-{
-	RowID_t tMin = m_tBlockHint;
-	uint64_t uEnd = INVALID_ROWID;
-	if constexpr ( ROWID_LIMITS )
-	{
-		tMin = Max ( tMin, m_tBoundaries.m_tMinRowID );
-		uEnd = Min ( uEnd, uint64_t(m_tBoundaries.m_tMaxRowID)+1 );
-	}
-
-	int iDocs = 0;
-	while ( iDocs<MAX_BLOCK_DOCS-1 )
-	{
-		auto tRows = m_pBlockAnd->ReadRows ( tMin, uEnd, MAX_BLOCK_DOCS-1-iDocs );
-		if ( !tRows.m_iCount )
-			break;
-
-		if ( !GatherBlockDocs ( tRows, iDocs ) )
-			return nullptr;
-
-		iDocs += tRows.m_iCount;
-	}
-
-	return ReturnDocsChunk ( iDocs, "multiand" );
-}
-
-
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CheckContinue()
+template <bool USE_BM25,bool TEST_FIELDS>
+bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::CheckContinue()
 {
 	if ( m_bStopped )
 		return false;
@@ -4618,83 +4480,32 @@ bool ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CheckContinue()
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetDocsChunk()
+template <bool USE_BM25,bool TEST_FIELDS>
+const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GetDocsChunk()
 {
 	if ( !CheckContinue() )
 		return nullptr;
 
-	if ( m_pBlockAnd )
-		return GetBlockDocsChunk();
+	if ( !m_pProducer )
+		m_pProducer = CreateProducer(nullptr);
 
-	// Exclusion nodes require block-capable qwords. After reset a missing
-	// producer means a required term is absent from this segment.
-	if ( m_dExcluded.GetLength() )
+	if ( !m_pProducer )
 		return nullptr;
 
-	if ( m_bFirstChunk )
+	int iDocs = 0;
+	while ( iDocs<MAX_BLOCK_DOCS-1 )
 	{
-		if ( m_iNodesSet!=m_dNodes.GetLength() || !m_dNodes[0].m_pQword->m_iDocs )
+		auto tRows = m_pProducer->NextCandidates(MAX_BLOCK_DOCS-1-iDocs);
+		if ( !tRows.m_iCount )
+			break;
+
+		if ( !GatherDocs ( tRows, iDocs ) )
 			return nullptr;
 
-		if constexpr ( ROWID_LIMITS )
-			Advance ( 0, m_tBoundaries.m_tMinRowID );
-		else
-			Advance(0);
-
-		m_bFirstChunk = false;
+		iDocs += tRows.m_iCount;
 	}
 
-	StoredMultiHit_t * pStoredHit = nullptr;
-	StoredMultiHit_t * pFirstHit = nullptr;
-	if ( m_bCollectHits )
-	{
-		int iLength = m_dStoredHits.GetLength();
-		m_dStoredHits.Reserve ( iLength+MAX_BLOCK_DOCS );
-		pStoredHit = m_dStoredHits.End();
-		pFirstHit = pStoredHit-iLength;	// hack to get to m_pData
-	}
-
-	int iDoc = 0;
-	while ( iDoc<MAX_BLOCK_DOCS-1 )
-	{
-		if ( m_dNodes[0].m_tRowID==INVALID_ROWID )
-			break;
-
-		if ( !AdvanceQwords() )
-		{
-			m_dNodes[0].m_tRowID=INVALID_ROWID;
-			break;
-		}
-
-		RowID_t tMatchedRowID = m_dNodes[0].m_tRowID;
-
-		ExtDoc_t & tDoc = m_dDocs[iDoc++];
-		tDoc.m_tRowID = tMatchedRowID;
-		tDoc.m_uDocFields = GetDocFieldsMask();
-		tDoc.m_fTFIDF = GetTFIDF();
-
-		if ( m_bCollectHits )
-		{
-			pStoredHit->m_tRowID = tMatchedRowID;
-			pStoredHit->m_dHitlistOffsets.Reset(m_dNodes.GetLength());
-			ARRAY_FOREACH ( i, m_dNodes )
-				pStoredHit->m_dHitlistOffsets[i] = m_dNodes[i].m_pQword->m_iHitlistPos;
-
-			pStoredHit++;
-		}
-
-		// we assume that the 1st node returns the least docs
-		Advance(0);
-	}
-
-	if ( m_bCollectHits )
-		m_dStoredHits.Resize ( pStoredHit-pFirstHit );
-
-	if (m_pStats)
-		m_pStats->m_iFetchedDocs += iDoc;
-
-	return ReturnDocsChunk ( iDoc, "multiand" );
+	return ReturnDocsChunk ( iDocs, "multiand" );
 }
 
 
@@ -4723,8 +4534,8 @@ struct HitWithQpos_t
 	}
 };
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::InitHitMerge ( HitInfo_t & tHitInfo, int iNode, const StoredMultiHit_t & tStoredHit )
+template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::InitHitMerge ( HitInfo_t & tHitInfo, int iNode, const StoredMultiHit_t & tStoredHit )
 {
 	const NodeInfo_t & tNode = m_dNodes[iNode];
 
@@ -4738,8 +4549,8 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::InitHitMerge ( HitInfo_t 
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::AddHit ( RowID_t tRowID, HitInfo_t & tHit )
+template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::AddHit ( RowID_t tRowID, HitInfo_t & tHit )
 {
 	if constexpr(TEST_FIELDS)
 	{
@@ -4753,8 +4564,8 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::AddHit ( RowID_t tRowID, 
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::DoHitMerge ( RowID_t tRowID, HitInfo_t & tLeft, HitInfo_t & tRight )
+template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::DoHitMerge ( RowID_t tRowID, HitInfo_t & tLeft, HitInfo_t & tRight )
 {
 	while ( tLeft.m_uHitpos!=EMPTY_HIT && tRight.m_uHitpos!=EMPTY_HIT )
 	{		
@@ -4766,8 +4577,8 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::DoHitMerge ( RowID_t tRow
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::DoHitMerge ( RowID_t tRowID, HitInfo_t & tHit1, HitInfo_t & tHit2, HitInfo_t & tHit3 )
+template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::DoHitMerge ( RowID_t tRowID, HitInfo_t & tHit1, HitInfo_t & tHit2, HitInfo_t & tHit3 )
 {
 	while ( tHit1.m_uHitpos!=EMPTY_HIT && tHit2.m_uHitpos!=EMPTY_HIT && tHit3.m_uHitpos!=EMPTY_HIT )
 	{
@@ -4787,8 +4598,9 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::DoHitMerge ( RowID_t tRow
 		DoHitMerge ( tRowID, tHit1, tHit2 );
 }
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CopyHits ( RowID_t tRowID, HitInfo_t & tHitInfo, int iNode )
+
+template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::CopyHits ( RowID_t tRowID, HitInfo_t & tHitInfo, int iNode )
 {
 	while ( tHitInfo.m_uHitpos!=EMPTY_HIT )
 	{
@@ -4805,8 +4617,8 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CopyHits ( RowID_t tRowID
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CopySingleHits ( const StoredMultiHit_t & tStoredHit )
+template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::CopySingleHits ( const StoredMultiHit_t & tStoredHit )
 {
 	HitInfo_t tHit;
 	InitHitMerge ( tHit, 0, tStoredHit );
@@ -4814,8 +4626,8 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CopySingleHits ( const St
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MergeHits2 ( const StoredMultiHit_t & tStoredHit )
+template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::MergeHits2 ( const StoredMultiHit_t & tStoredHit )
 {
 	const int NUM_STREAMS = 2;
 	HitInfo_t dHits[NUM_STREAMS];
@@ -4831,8 +4643,8 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MergeHits2 ( const Stored
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MergeHits3 ( const StoredMultiHit_t & tStoredHit )
+template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::MergeHits3 ( const StoredMultiHit_t & tStoredHit )
 {
 	const int NUM_STREAMS = 3;
 	HitInfo_t dHits[NUM_STREAMS];
@@ -4847,8 +4659,9 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MergeHits3 ( const Stored
 		CopyHits ( tRowID, dHits[i], i );
 }
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::PushNextHit ( int iNode )
+
+template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::PushNextHit ( int iNode )
 {
 	NodeInfo_t & tNode = m_dNodes[iNode];
 	while ( !tNode.m_bHitsOver )
@@ -4864,8 +4677,9 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::PushNextHit ( int iNode )
 	}
 }
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MergeHitsN ( const StoredMultiHit_t & tStoredHit )
+
+template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::MergeHitsN ( const StoredMultiHit_t & tStoredHit )
 {
 	// setup hitlist reader
 	ARRAY_FOREACH ( i, m_dNodes )
@@ -4899,8 +4713,8 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MergeHitsN ( const Stored
 
 // one hitlist prefetch request per term for the matched documents, before CollectHits walks them one by one;
 // hit counts are not stored here, so each document gets one page. pStoredHit is the first stored hit of the chunk
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::PrefetchMatchedHits ( const ExtDoc_t * pMatched, const StoredMultiHit_t * pStoredHit ) const
+template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::PrefetchMatchedHits ( const ExtDoc_t * pMatched, const StoredMultiHit_t * pStoredHit ) const
 {
 	ARRAY_FOREACH ( iNode, m_dNodes )
 	{
@@ -4942,8 +4756,8 @@ static void ReverseHitQueryPositions ( VecTraits_T<ExtHit_t> dHits )
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CollectHits ( const ExtDoc_t * pMatched )
+template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::CollectHits ( const ExtDoc_t * pMatched )
 {
 	if ( !pMatched )
 		return;
@@ -4983,16 +4797,19 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::CollectHits ( const ExtDo
 		ReverseHitQueryPositions(m_dHits);
 }
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::Reset ( const ISphQwordSetup & tSetup )
+
+template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::Reset ( const ISphQwordSetup & tSetup )
 {
-	m_bFirstChunk = true;
+	m_pProducer.reset();
+	m_tProducerHint = 0;
+	m_bStopped = false;
 	m_iNodesSet = 0;
 	SetMaxTimeout ( tSetup.m_iMaxTimer );
 	for ( auto & i : m_dNodes )
 	{
-		i.m_tRowID = INVALID_ROWID;
 		i.m_bHitsOver = false;
+		i.UpdateWideFieldFlag(tSetup);
 		i.m_pQword->Reset ();
 		// need to track active nodes for every segment
 		// however AND requires all nodes that is why can use fast reject
@@ -5002,17 +4819,17 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::Reset ( const ISphQwordSe
 	
 	for ( auto & tNode : m_dExcluded )
 	{
+		tNode.UpdateWideFieldFlag(tSetup);
 		tNode.m_pQword->Reset();
 		tSetup.QwordSetup(tNode.m_pQword);
 	}
 
 	m_dStoredHits.Resize(0);
-	SetupBlocks(tSetup);
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-int ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetQword ( NodeInfo_t & tNode, ExtQwordsHash_t & hQwords )
+template <bool USE_BM25,bool TEST_FIELDS>
+int ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GetQword ( NodeInfo_t & tNode, ExtQwordsHash_t & hQwords )
 {
 	tNode.m_fIDF = 0.0f;
 
@@ -5039,8 +4856,8 @@ int ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetQword ( NodeInfo_t & tN
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-int ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetQwords ( ExtQwordsHash_t & hQwords )
+template <bool USE_BM25,bool TEST_FIELDS>
+int ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GetQwords ( ExtQwordsHash_t & hQwords )
 {
 	int iMax = -1;
 	for ( auto & i : m_dNodes )
@@ -5056,8 +4873,8 @@ int ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetQwords ( ExtQwordsHash_
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
+template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 {
 	for ( auto & i : m_dNodes )
 		if ( i.m_fIDF<0.0f )
@@ -5068,8 +4885,8 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::SetQwordsIDF ( const ExtQ
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetTerms ( const ExtQwordsHash_t & hQwords, CSphVector<TermPos_t> & dTermDupes ) const
+template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GetTerms ( const ExtQwordsHash_t & hQwords, CSphVector<TermPos_t> & dTermDupes ) const
 {
 	for ( const auto & i : m_dNodes )
 		if ( i.m_bNotWeighted || !i.m_pQword->m_bExcluded )
@@ -5083,8 +4900,8 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetTerms ( const ExtQword
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-uint64_t ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetWordID() const
+template <bool USE_BM25,bool TEST_FIELDS>
+uint64_t ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GetWordID() const
 {
 	ARRAY_FOREACH ( i, m_dNodes )
 	{
@@ -5106,8 +4923,9 @@ uint64_t ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetWordID() const
 	return sphFNV64 ( m_dWordIds.Begin(), (int) m_dWordIds.GetLengthBytes() );
 }
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-int ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetDocsCount() const
+
+template <bool USE_BM25,bool TEST_FIELDS>
+int ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GetDocsCount() const
 {
 	if ( !m_dNodes.GetLength() || !m_dNodes[0].m_pQword->m_iDocs )
 		return 0;
@@ -5115,33 +4933,18 @@ int ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetDocsCount() const
 	return ExtNode_c::GetDocsCount();
 }
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::HintRowID ( RowID_t tRowID )
+
+template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::HintRowID ( RowID_t tRowID )
 {
-	if ( m_pBlockAnd )
-	{
-		m_tBlockHint = Max ( m_tBlockHint, tRowID );
-		return;
-	}
-
-	if ( !m_dNodes[0].m_pQword->m_iDocs )
-		return;
-
-	if constexpr ( ROWID_LIMITS )
-		tRowID = Max ( tRowID, m_tBoundaries.m_tMinRowID );
-
-	if ( m_bFirstChunk || ( m_dNodes[0].m_tRowID!=INVALID_ROWID && tRowID>m_dNodes[0].m_tRowID ) )
-	{
-		if ( m_bFirstChunk && m_iNodesSet!=m_dNodes.GetLength() )
-			return;
-
-		Advance ( 0, tRowID );
-		m_bFirstChunk = false;
-	}
+	m_tProducerHint = Max ( m_tProducerHint, tRowID );
+	if ( m_pProducer )
+		m_pProducer->HintRowID(tRowID);
 }
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::DebugDump ( int iLevel )
+
+template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::DebugDump ( int iLevel )
 {
 	DebugIndent ( iLevel );
 	printf ( "%s\n", m_dExcluded.GetLength() ? "ExtMultiAndNot" : "ExtMultiAnd" );
@@ -5185,8 +4988,9 @@ static float CalcQwordReadCost ( ISphQword * pQword )
 	return float(pQword->m_iDocs)*COST_SCALE*55.0f;
 }
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-NodeEstimate_t ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::Estimate ( int64_t iTotalDocs ) const
+
+template <bool USE_BM25,bool TEST_FIELDS>
+NodeEstimate_t ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::Estimate ( int64_t iTotalDocs ) const
 {
 	float fRatio = 1.0f;
 	float fCostLeft = 0.0f;
@@ -5298,7 +5102,7 @@ void ExtOr_c::Reset ( const ISphQwordSetup & tSetup )
 }
 
 
-bool ExtOr_c::SetCandidateFilter ( PostingCandidateFilter_i * pFilter )
+bool ExtOr_c::SetCandidateFilter ( PostingCandidateFilter_c * pFilter )
 {
 	if ( !pFilter )
 	{
@@ -5919,8 +5723,8 @@ inline void FSMphrase_c::ResetFSM()
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-PhraseMatcher_fn ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetPhraseMatcher()
+template <bool USE_BM25,bool TEST_FIELDS>
+PhraseMatcher_fn ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GetPhraseMatcher()
 {
 	if ( !m_bQPosReverse || m_dNodes.GetLength()<2 || m_dNodes.GetLength()>MAX_LAZY_PHRASE_TERMS )
 		return nullptr;
@@ -5936,8 +5740,8 @@ PhraseMatcher_fn ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetPhraseMatc
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
-int ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MatchDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch )
+template <bool USE_BM25,bool TEST_FIELDS>
+int ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::MatchDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch )
 {
 	assert ( m_bCollectHits && m_bQPosReverse );
 	PrefetchMatchedHits ( pDocs, m_dStoredHits.Begin() );
@@ -5956,9 +5760,9 @@ int ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MatchDocs ( const ExtDoc_t
 }
 
 
-template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
+template <bool USE_BM25,bool TEST_FIELDS>
 template<int TERMS>
-int ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::MatchPhraseDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch )
+int ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::MatchPhraseDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch )
 {
 	const int iTerms = TERMS ? TERMS : m_dNodes.GetLength();
 	assert ( iTerms>=2 && iTerms<=MAX_LAZY_PHRASE_TERMS );

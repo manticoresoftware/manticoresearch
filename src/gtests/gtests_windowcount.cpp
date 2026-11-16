@@ -30,12 +30,86 @@ namespace
 {
 using Docs_t = std::vector<QwordDoc_t>;
 
+class WindowTestBlock_c final : public PostingBlock_i
+{
+public:
+	WindowTestBlock_c ( const Docs_t & dDocs, DWORD uFields, int * pLiveQwords ) : m_dDocs(dDocs), m_uFields(uFields), m_pLiveQwords(pLiveQwords) {}
+
+
+	~WindowTestBlock_c() final { EXPECT_GT ( *m_pLiveQwords, 0 ); }
+
+
+	bool Prepare ( RowID_t tMin, PostingLeaf_t & tLeaf ) final
+	{
+		auto pRow = std::lower_bound ( m_dDocs.begin(), m_dDocs.end(), tMin, [] ( const QwordDoc_t & tDoc, RowID_t tRow ) { return tDoc.m_tRowID<tRow; } );
+		if ( pRow==m_dDocs.end() )
+			return false;
+
+		m_iBegin = size_t(pRow-m_dDocs.begin())/256*256;
+		m_iEnd = std::min ( m_iBegin+256, m_dDocs.size() );
+		tLeaf = { pRow->m_tRowID, uint64_t(m_dDocs[m_iEnd-1].m_tRowID)+1, true };
+		return true;
+	}
+
+
+	int ReadRows ( const PostingWindow_t & tWindow, RowID_t * pRows ) final
+	{
+		int iCount = 0;
+		for ( size_t i=m_iBegin; i<m_iEnd; ++i )
+		{
+			const auto & tDoc = m_dDocs[i];
+			if ( tDoc.m_tRowID>=tWindow.m_tMin && tDoc.m_tRowID<tWindow.m_uEnd && (tDoc.m_uFields & m_uFields) )
+				pRows[iCount++] = tDoc.m_tRowID;
+		}
+
+		return iCount;
+	}
+
+
+	int Intersect ( const PostingWindow_t &, DWORD * ) final { ADD_FAILURE() << "expected term enumeration"; return 0; }
+
+
+	int FilterRows ( RowID_t *, int ) final { ADD_FAILURE() << "expected term enumeration"; return 0; }
+
+
+	bool ReadPayloads ( const RowID_t *, int, QwordDoc_t *, bool, bool ) final { ADD_FAILURE() << "membership must not read payloads"; return false; }
+
+private:
+	const Docs_t &	m_dDocs;
+	DWORD			m_uFields;
+	int *			m_pLiveQwords;
+	size_t			m_iBegin = 0;
+	size_t			m_iEnd = 0;
+};
+
+
+class WindowTestFilter_c final : public PostingCandidateFilter_c
+{
+public:
+	RowID_t	AdvanceTo ( RowID_t tMin ) final { return std::max ( tMin, m_tMin ); }
+
+
+	int SelectRows ( RowID_t * pRows, int iCount ) final
+	{
+		int iOut = 0;
+		for ( int i=0; i<iCount; ++i )
+			if ( pRows[i]>=m_tMin && !(pRows[i]%2) )
+				pRows[iOut++] = pRows[i];
+
+		return iOut;
+	}
+
+	RowID_t	m_tMin = 0;
+};
+
+
 class WindowTestQword_c final : public ISphQword
 {
 public:
-	explicit WindowTestQword_c ( const Docs_t & dDocs, int * pLiveQwords=nullptr )
+	explicit WindowTestQword_c ( const Docs_t & dDocs, int * pLiveQwords=nullptr, bool bBlock=false )
 		: m_dDocs(dDocs)
 		, m_pLiveQwords(pLiveQwords)
+		, m_bBlock(bBlock)
 	{
 		if ( m_pLiveQwords )
 			++*m_pLiveQwords;
@@ -64,6 +138,14 @@ public:
 			++m_iPos;
 		return true;
 	}
+	std::unique_ptr<PostingBlock_i> CreatePostingBlock ( DWORD uFields, const PostingWindowContext_t & ) override
+	{
+		if ( !m_bBlock )
+			return nullptr;
+
+		return std::make_unique<WindowTestBlock_c> ( m_dDocs, uFields, m_pLiveQwords );
+	}
+
 	void Reset() override { ISphQword::Reset(); m_iPos = 0; }
 	const Docs_t & m_dDocs;
 	int m_iBatchCalls = 0;
@@ -72,6 +154,7 @@ private:
 	size_t m_iPos = 0;
 	CSphMatch m_tMatch;
 	int * m_pLiveQwords;
+	bool m_bBlock;
 };
 
 class WindowTestSetup_c final : public ISphQwordSetup
@@ -79,9 +162,10 @@ class WindowTestSetup_c final : public ISphQwordSetup
 public:
 	Docs_t m_dAlpha, m_dBeta, m_dGamma, m_dEmpty;
 	mutable int m_iLiveQwords = 0;
+	bool m_bBlock = false;
 	ISphQword * QwordSpawn ( const XQKeyword_t & tWord ) const override
 	{
-		return new WindowTestQword_c ( tWord.m_sWord=="alpha" ? m_dAlpha : tWord.m_sWord=="beta" ? m_dBeta : tWord.m_sWord=="gamma" ? m_dGamma : m_dEmpty, &m_iLiveQwords );
+		return new WindowTestQword_c ( tWord.m_sWord=="alpha" ? m_dAlpha : tWord.m_sWord=="beta" ? m_dBeta : tWord.m_sWord=="gamma" ? m_dGamma : m_dEmpty, &m_iLiveQwords, m_bBlock );
 	}
 	bool QwordSetup ( ISphQword * pWord ) const override
 	{
@@ -1245,5 +1329,98 @@ TEST ( WindowCount, AdaptiveIntersection )
 		ASSERT_TRUE(pExpired);
 		EXPECT_TRUE ( ReadWindows(*pExpired).empty() );
 		EXPECT_STREQ ( sError.cstr(), "query time exceeded max_query_time" );
+	} );
+}
+
+
+TEST ( WindowCount, FilteredTermProducerBoundsHintsResetAndStats )
+{
+	Threads::CallCoroutine ( [] {
+		WindowTestSetup_c tSetup;
+		tSetup.m_bBlock = true;
+		CSphString sError;
+		CSphDictSettings tDictSettings;
+		tDictSettings.SetDictFormat ( DictFormat_e::CRC );
+
+		auto pTok = Tokenizer::Detail::CreateUTF8Tokenizer();
+		auto pDict = sphCreateDictionaryCRC ( tDictSettings, nullptr, pTok, "window-filtered-term", false, 32, nullptr, sError );
+		ASSERT_TRUE(pDict) << sError.cstr();
+		tSetup.SetDict(pDict);
+
+		auto pIndex = sphCreateIndexPhrase ( "window-filtered-term", "unused-window-index" );
+		CSphIndexSettings tSettings;
+		tSettings.m_uPostingsFormat = 1;
+		pIndex->Setup(tSettings);
+		tSetup.m_pIndex = pIndex.get();
+		for ( RowID_t i=0; i<10000; ++i )
+			tSetup.m_dAlpha.push_back ( { i, i%5 ? DWORD(1) : DWORD(2), 1, 0 } );
+
+		tSetup.m_dAlpha.push_back ( { INVALID_ROWID-1, 1, 1, 0 } );
+
+		XQLimitSpec_t tSpec;
+		tSpec.m_bFieldSpec = true;
+		tSpec.m_dFieldMask.Assign32(1);
+
+		XQNode_t tRoot(tSpec);
+		tRoot.AddDirtyWord ( { "alpha", 1 } );
+
+		WindowTestFilter_c tFilter;
+		std::unique_ptr<QueryNode_i> pNode ( CreateWindowTermCountNode ( &tRoot, tSetup, nullptr ) );
+		ASSERT_TRUE(pNode);
+		EXPECT_STREQ ( pNode->GetCountWindows()->GetName(), "WindowTermCount" );
+		for ( RowID_t tEnd : { RowID_t(8300), INVALID_ROWID } )
+		{
+			pNode->Reset(tSetup);
+			pNode->SetRowidBoundaries ( { 127, tEnd } );
+			tFilter.m_tMin = 200;
+			ASSERT_TRUE ( pNode->SetCandidateFilter(&tFilter) );
+
+			auto * pWindow = pNode->GetCountWindows()->NextWindow();
+			ASSERT_TRUE(pWindow);
+			ASSERT_NE ( pWindow->m_pRows, nullptr );
+			EXPECT_EQ ( pWindow->m_pRows[0], 202U );
+
+			// A later threshold and a hint must also trim an already buffered leaf.
+			tFilter.m_tMin = 4100;
+			pNode->HintRowID(4201);
+			std::vector<RowID_t> dExpected;
+			for ( const auto & tDoc : tSetup.m_dAlpha )
+				if ( tDoc.m_tRowID>=4201 && tDoc.m_tRowID<=tEnd && !(tDoc.m_tRowID%2) && (tDoc.m_uFields & 1) )
+					dExpected.push_back(tDoc.m_tRowID);
+
+			std::vector<RowID_t> dRows;
+			while ( ( pWindow = pNode->GetCountWindows()->NextWindow() ) )
+			{
+				ASSERT_NE ( pWindow->m_pRows, nullptr );
+				EXPECT_LE ( pWindow->m_iRows, MAX_BLOCK_DOCS-1 );
+				for ( int i=0; i<pWindow->m_iRows; ++i )
+					EXPECT_EQ ( pWindow->m_pRows[i]/CountWindow_t::ROWS, pWindow->m_tBase/CountWindow_t::ROWS );
+
+				dRows.insert ( dRows.end(), pWindow->m_pRows, pWindow->m_pRows+pWindow->m_iRows );
+			}
+			EXPECT_EQ ( dRows, dExpected );
+			EXPECT_EQ ( pNode->GetCountWindows()->NextWindow(), nullptr );
+
+			ExtQwordsHash_t hWords;
+			pNode->GetQwords(hWords);
+			ASSERT_TRUE ( hWords("alpha") );
+			EXPECT_EQ ( hWords["alpha"].m_iDocs, tSetup.m_dAlpha.size() );
+		}
+
+		pNode->Reset(tSetup);
+		pNode->SetRowidBoundaries ( { 0, 100 } );
+		ASSERT_TRUE ( pNode->SetCandidateFilter(&tFilter) );
+		ASSERT_TRUE ( pNode->SetCandidateFilter(nullptr) );
+		std::vector<RowID_t> dExpected;
+		for ( RowID_t i=0; i<=100; ++i )
+			if ( i%5 )
+				dExpected.push_back(i);
+
+		EXPECT_EQ ( ReadWindows(*pNode), dExpected );
+		pNode->Reset(tSetup);
+		tFilter.m_tMin = 0;
+		ASSERT_TRUE ( pNode->SetCandidateFilter(&tFilter) );
+		pNode.reset();
+		EXPECT_EQ ( tSetup.m_iLiveQwords, 0 );
 	} );
 }

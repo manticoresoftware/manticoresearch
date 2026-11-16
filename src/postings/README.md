@@ -422,7 +422,7 @@ pins its current leaf until a later `Prepare` advances to another leaf.
 survivors. These operations must not be mixed with qword document reads. Hit
 reads through the qword remain independent.
 
-`PostingBlockAnd_c` intersects intervals bounded by all participating leaves and
+`BlockAndProducer_c` intersects intervals bounded by all participating leaves and
 at most 4096 row IDs. Once few candidates remain (interval length / 32), remaining
 clauses filter a sorted row array. Output batches retain all participating leaves
 until the next batch request, allowing consumers to gather payloads first.
@@ -430,7 +430,12 @@ Bitmap posting ordinals use a lazily built prefix-popcount table; ranges use row
 offsets, and decoded leaves use a forward merge with the survivor batch. TF and
 hit-reference columns are decoded once per accessed leaf only when requested.
 
-Eligible block qwords in `ExtMultiAnd_T` use this producer and retain the existing
+`BlockTermProducer_c` owns the corresponding single-term traversal and candidate
+filtering. Both implement `PostingProducer_i`; the filtered single-term path in
+`ExtWindowBool_T` uses `CreateTermProducer` with membership-only requirements.
+Its batches remain within aligned 4096-row windows.
+
+Eligible block qwords in `ExtMultiAnd_T` use the AND producer and retain the existing
 document-chunk, scoring and hit-merging interfaces. Legacy/RAM/unsupported qwords
 and wide-field schemas keep the existing qword advancement path. Flat phrase,
 proximity and NEAR nodes also use MultiAND candidates while retaining their

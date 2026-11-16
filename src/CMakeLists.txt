@@ -54,11 +54,16 @@ add_subdirectory ( sphinxquery )
 add_subdirectory ( indexing_sources )
 add_subdirectory ( postings )
 
+set ( POSTING_PRODUCER_SOURCES
+		postingsproducers/termproducer.cpp postingsproducers/andproducer.cpp
+		postingsproducers/qword/termproducer.cpp postingsproducers/qword/andproducer.cpp
+		postingsproducers/block/termproducer.cpp postingsproducers/block/andproducer.cpp )
+
 # main bunch of sources (for libsphinx)
 add_library ( lmanticore STATIC sphinx.cpp sphinxutils.cpp
 		sphinxsort.cpp sortsetup.cpp sortbound.cpp sortfilter.cpp sphinxexpr.cpp sphinxfilter.cpp sphinxsearch.cpp sphinxrt.cpp accumulator.cpp uuid_docid.cpp
 		sphinxjson.cpp sphinxaot.cpp sphinxplugin.cpp sphinxudf.c sphinxqcache.cpp 
-		attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp postingwindow.cpp termproducer.cpp fastcount.cpp diskqword.cpp postings/disk.cpp postings/blockqword.cpp postings/blockwindow.cpp postings/blockqwordvalidation.cpp json/cJSON_test.c sphinxpq.cpp
+		attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp postingwindow.cpp ${POSTING_PRODUCER_SOURCES} fastcount.cpp diskqword.cpp postings/disk.cpp postings/blockqword.cpp postings/blockwindow.cpp postings/blockqwordvalidation.cpp json/cJSON_test.c sphinxpq.cpp
 		global_idf.cpp docstore.cpp lz4/lz4.c lz4/lz4hc.c snippetfunctor.cpp snippetindex.cpp
 		snippetstream.cpp snippetpassage.cpp threadutils.cpp sphinxversion.cpp datareader.cpp
 		indexformat.cpp indexsettings.cpp fileutils.cpp threads_detached.cpp hazard_pointer.cpp
@@ -90,7 +95,7 @@ int main() { return 0; }" SEARCH_TARGET_X86 )
 
 		check_cxx_compiler_flag ( "${SEARCH_BRANCH_ALIGNMENT_FLAG}" SEARCH_HAVE_BRANCH_ALIGNMENT )
 		if ( SEARCH_HAVE_BRANCH_ALIGNMENT )
-			set_property ( SOURCE sphinxsearch.cpp diskqword.cpp postingwindow.cpp termproducer.cpp postings/blockwindow.cpp APPEND PROPERTY COMPILE_OPTIONS "${SEARCH_BRANCH_ALIGNMENT_FLAG}" )
+			set_property ( SOURCE sphinxsearch.cpp diskqword.cpp postingwindow.cpp ${POSTING_PRODUCER_SOURCES} postings/blockwindow.cpp APPEND PROPERTY COMPILE_OPTIONS "${SEARCH_BRANCH_ALIGNMENT_FLAG}" )
 		endif ()
 		unset ( SEARCH_BRANCH_ALIGNMENT_FLAG )
 	endif ()

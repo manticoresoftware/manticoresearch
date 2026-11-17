@@ -1,0 +1,60 @@
+bulk_import into a shard table whose shards t_s0 and t_s1 are cluster tables with a mirror on every node. Load: the master (node 1) pins t_s0 to node 1 and t_s1 to node 2, an HTTP and an SQL request feed the same load, and the commit publishes each shard through the cluster from its pinned mirror; every node has the rows of both shards and the same files seqno. Prefix: then the shard table t itself joins cluster v1: a row without the cluster gets the error of an ordinary INSERT into t (D21); a bare document takes the cluster of the shard table (as E25 for an RT table); the rows replace ids 1-300 of the first load on every node.
+––– block: ../base/replication/bulk-shard-cluster-setup –––
+––– input –––
+source /tmp/bs.sh; wrap "1 2 3" "2 3 1"; gen 1 2000 > /tmp/a.ndjson; post 1 /tmp/a.ndjson; printf "SET bulk_import=t;\nINSERT INTO t (id,title,v) VALUES $(vals 2001 3000);\nSET bulk_import=0;\n" | mysql -h0 -P1306; echo "rc $?"; pools
+––– output –––
+{"items":[],"current_line":2000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+rc 0
+pools: manticore-1/t_s0 manticore-2/t_s1
+––– comment –––
+Nothing is visible before the commit; the commit publishes both shards, two attach commands
+––– input –––
+source /tmp/bs.sh; st; commit 1; st; pools
+––– output –––
+node 1: synced s0=0 s1=0 sum=0 last_committed=2 files_seqno=2 repl=0
+node 2: synced s0=0 s1=0 sum=0 last_committed=2 files_seqno=2 repl=0
+node 3: synced s0=0 s1=0 sum=0 last_committed=2 files_seqno=2 repl=0
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+node 1: synced s0=1500 s1=1500 sum=4501500 last_committed=4 files_seqno=4 repl=0
+node 2: synced s0=1500 s1=1500 sum=4501500 last_committed=4 files_seqno=4 repl=0
+node 3: synced s0=1500 s1=1500 sum=4501500 last_committed=4 files_seqno=4 repl=0
+pools:
+––– comment –––
+Each pinned mirror delivered its chunk to the two other nodes; the shard table reads all rows
+––– input –––
+source /tmp/bs.sh; for n in 1 2 3; do prepared $n; done; m 1 "SELECT COUNT(*), SUM(v) FROM t"
+––– output –––
+node 1 prepared: t_s0:2
+node 2 prepared: t_s1:2
+node 3 prepared:
+3000	4501500
+––– comment –––
+The shard table t itself joins cluster v1 (the same layout)
+––– input –––
+source /tmp/bs.sh; wrap "1 2 3" "2 3 1"; m 1 "ALTER CLUSTER v1 ADD t"; echo "rc $?"; lcwait; for n in 1 2 3; do echo "node $n $(v $n indexes)"; done
+––– output –––
+rc 0
+node 1 t_s0,t_s1,t
+node 2 t_s0,t_s1,t
+node 3 t_s0,t_s1,t
+––– comment –––
+SQL: an ordinary INSERT and a row of the load get the same text; the failed load is removed by its commit
+––– input –––
+source /tmp/bs.sh; m 1 "INSERT INTO t (id,title,v) VALUES (9001,'plain',0)"; printf "SET bulk_import=t;\nINSERT INTO t (id,title,v) VALUES (1,'bulk',1);\n" | mysql -h0 -P1306 2>&1; commit 1
+––– output –––
+ERROR 1064 (42000) at line 1: table 't' is a part of cluster 'v1', use 'v1:t'
+ERROR 1064 (42000) at line 2: table 't' is a part of cluster 'v1', use 'v1:t'
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"table 't' is a part of cluster 'v1', use 'v1:t'","error_code":"shared_failed","shared_state":"failed"} HTTP 500
+––– comment –––
+Rows with the cluster over SQL and HTTP and bare documents form one load; they replace ids 1-300 of the first load, so the counts and the sum stay
+––– input –––
+source /tmp/bs.sh; printf "SET bulk_import=t;\nINSERT INTO v1:t (id,title,v) VALUES $(vals 1 100);\nSET bulk_import=0;\n" | mysql -h0 -P1306; echo "rc $?"; for ((i=101; i<=200; i++)); do printf '{"insert":{"cluster":"v1","table":"t","id":%d,"doc":{"title":"title %d","v":%d}}}\n' $i $i $i; done > /tmp/c.ndjson; for ((i=201; i<=300; i++)); do printf '{"id":%d,"title":"title %d","v":%d}\n' $i $i $i; done > /tmp/bare.ndjson; post 1 /tmp/c.ndjson; post 1 /tmp/bare.ndjson; commit 1; st
+––– output –––
+rc 0
+{"items":[],"current_line":100,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":100,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+node 1: synced s0=1500 s1=1500 sum=4501500 last_committed=7 files_seqno=7 repl=0
+node 2: synced s0=1500 s1=1500 sum=4501500 last_committed=7 files_seqno=7 repl=0
+node 3: synced s0=1500 s1=1500 sum=4501500 last_committed=7 files_seqno=7 repl=0
+––– block: ../base/replication/node-starts –––

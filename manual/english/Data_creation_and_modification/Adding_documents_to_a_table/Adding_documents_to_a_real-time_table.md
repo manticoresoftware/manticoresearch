@@ -904,6 +904,8 @@ Run `SET bulk_import=<table>` before `BEGIN` and before any uncommitted write on
 
 `COMMIT` publishes the rows collected since the previous `COMMIT` or `ROLLBACK` as one disk chunk. `ROLLBACK` discards those rows. In both cases, bulk import remains enabled so you can start another batch. Run `SET bulk_import=0` to discard any uncommitted rows, disable bulk import, and release this connection's reservation. Writes to the table resume after the reservation is released. Closing the connection does the same. Autocommit cannot be changed while bulk import is enabled.
 
+For a sharded table, SQL works differently: see [Shared bulk import into a sharded table](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Shared-bulk-import-into-a-sharded-table).
+
 #### HTTP `/bulk`
 
 Add `bulk_import=<table>` to a Manticore `/bulk` request. The request body remains standard newline-delimited JSON (NDJSON), and each operation must be `insert` or `create` for the bound table:
@@ -937,6 +939,8 @@ In a request body, an empty line ends and publishes the current batch; the end o
 For a typical import, send the complete NDJSON body in one request as shown above. Close the HTTP connection when the import is complete to release the table for other writes.
 
 The endpoint supports chunked transfer encoding, so it can process bodies larger than `max_packet_size` without buffering the whole request.
+
+For a sharded table, `/bulk` works differently: see [Shared bulk import into a sharded table](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Shared-bulk-import-into-a-sharded-table).
 
 #### Shared HTTP bulk import
 
@@ -990,6 +994,159 @@ PURGE BULK_IMPORT FROM TABLE products OPTION clear_sessions=1;
 
 The cancel stops the indexers, releases the table and removes the staging files; chunks published earlier stay in the table. A commit answers `409` with `shared_busy` while a data request of a vanished client still counts as running, until that request times out; the cancel does not wait for it. Once the table is released, `SHOW LOCKS` no longer lists it, and a new Shared load can start. See [`PURGE BULK_IMPORT`](../../Node_info_and_management/PURGE.md#PURGE-BULK_IMPORT) for details.
 
+#### Shared bulk import into a sharded table
+
+A [sharded table](../../Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md) also takes a Shared HTTP bulk import, and SQL `INSERT` statements can feed the same load. Name the sharded table in the request:
+
+```bash
+curl -sS -X POST -H 'Content-Type: application/x-ndjson' --data-binary @part1.ndjson \
+  'http://localhost:9308/bulk?bulk_import=sharded_products'
+```
+
+Send all requests of a load and all ordinary writes to the sharded table through one node, the node that coordinates the load. With replication factor `1`, a load started on another node is refused at its first document. With a higher replication factor, it can pick other replicas and is not refused.
+
+The coordinating node routes every document to the shard that a regular `INSERT` into the sharded table would choose, after the same ID conversion and auto-ID assignment. A document with a cluster prefix is checked as in a regular `INSERT` into the sharded table. A bare document takes the cluster of the sharded table.
+
+The first document of the load starts a Shared pool with one indexer on every shard; for the memory an indexer needs, see [Shared HTTP bulk import](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Shared-HTTP-bulk-import). A pool runs on the node of its shard, so every node with shards of the table needs:
+
+* `indexer` next to `searchd`;
+* a version of Manticore Search that supports this load. An older node fails the load at its first document.
+
+Every shard that received documents gets one new disk chunk. A request needs no `shared`; `shared=N` and `INDEXER_RT_BULK_SHARED_POOL_SIZE` are ignored. The responses, `shared_join` and the empty-line commit work as described above.
+
+##### Replication factor above 1
+
+With a replication factor above `1`, every shard is a table in a [replication cluster](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) with a replica on several nodes. When the load starts, the coordinating node picks one replica of every shard, as a regular write does, and the pool of the shard runs on that replica. At the commit, that replica publishes its chunk as a [bulk import into a replicated table](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import-into-a-replicated-table) does. The load does not move to another replica: if the picked replica fails, the load fails as with one replica.
+
+SQL is one more client of the same load. On a connection to the coordinating node, run `SET bulk_import=<sharded table>`. Then every `INSERT` works as a data request and `COMMIT` as the commit request:
+
+```sql
+SET bulk_import=sharded_products;
+INSERT INTO sharded_products(id,title,price) VALUES
+  (101,'Crossbody Bag with Tassel',19.85),
+  (102,'Microfiber Sheet Set',19.99);
+COMMIT;
+```
+
+Unlike SQL bulk import into a real-time table, the load belongs to the sharded table, not to the connection:
+
+* `SET bulk_import=<sharded table>` reserves nothing; the shards are reserved from the first document.
+* Other SQL connections and HTTP requests can feed the same load.
+* `SET bulk_import=0` or a closed connection leaves the load open.
+* An invalid `INSERT` fails the whole load, as an invalid document does.
+* `COMMIT` fails while another request is writing to the load, and when there is no load to commit.
+* `ROLLBACK` is not supported. Cancel the load with `PURGE BULK_IMPORT FROM TABLE <sharded table> OPTION clear_sessions=1`.
+
+##### Writes during a sharded load
+
+The coordinating node refuses an ordinary `INSERT`, `REPLACE`, `DELETE` or `UPDATE` of the sharded table with `table '<sharded table>' is locked` until the commit ends, with any replication factor. Nothing is applied to any shard. In a transaction, `INSERT`, `REPLACE` and `DELETE` are accepted, and `COMMIT` is refused. An `UPDATE` of a sharded table is not part of a transaction and is refused at once.
+
+A write that bypasses the coordinating node, through another node or straight into a shard:
+
+* with one replica, fails with `table is locked` on every shard that runs a pool of the load;
+* with a replication factor above `1`, can reach a replica without the pool and is applied there. A write whose commit had passed the check of the coordinating node before the load started can also finish this way. A published row replaces a row with the same ID in the order the cluster applies them.
+
+A direct Shared request into a shard of the load is refused. `SHOW LOCKS` and `@files` show the shards by their own names.
+
+##### Failures before the commit
+
+Until the commit, any of these fails the whole load and cancels its pools on all shards:
+
+* an invalid document;
+* a shard that cannot start a pool: it is locked by another bulk import or by a running ordinary write, it is a local shard changed after the sharded table was loaded, or its node has no `indexer`;
+* a failed write to a shard;
+* any failed call to a remote shard, including a lost connection or a timeout.
+
+The next commit returns the error and removes the load, or `PURGE` cancels it. Then repeat the whole load. A client that breaks its own request, or a `KILL` of a data request, fails only that request.
+
+The cancel is best effort. After a load has failed, the coordinating node no longer refuses writes, but a shard whose node the cancel did not reach keeps its pool. Such a shard refuses ordinary writes with `table is locked`, so an ordinary commit that spans several shards can apply its changes to some of them before it stops there. The next load is refused on that shard too. Remove such pools as described below.
+
+##### Commit and partial failure
+
+The commit publishes all the shards at once. Every indexer builds its chunk at the same time, so the commit takes about as long as the largest shard. A shard that fails does not stop the others, and the shards that succeeded keep their chunks. The commit then answers `500` with `shared_failed` and an error that names the first failed shard and its error, followed by `published <N> of <M> tables` and the published shards.
+
+A failed shard can still have published its rows:
+
+* the reply of a remote shard to the commit was lost. The error says that its commit is not confirmed.
+* a replica of a replicated shard failed to attach its chunk while the other nodes of its cluster attached it. The rows reach every node, and that replica gets them when it rejoins the cluster.
+
+After a failed commit, repeating the load with explicit IDs is safe. A `KILL` of the commit request fails the local shards that are still building. Remote shards have already received the commit and finish it.
+
+##### Leftover shard pools
+
+A shard pool stays on its node until the load is committed or cancelled, also when the coordinating node stops or crashes. Remove leftover pools with `PURGE BULK_IMPORT FROM TABLE <sharded table> OPTION clear_sessions=1` on any node that has the sharded table, or by the shard name on the node of the shard. [`PURGE BULK_IMPORT`](../../Node_info_and_management/PURGE.md#Sharded-and-distributed-tables) describes its errors. Run it:
+
+* after the coordinating node stopped or crashed. A daemon shutdown cancels the load it coordinates and the pools of its own shards, but not the pools on other nodes.
+* with a replication factor above `1`, after the coordinating node restarts, before you write to the sharded table or start a new load. Until then, a write or a new load that picks the replica with the old pool is refused, and one that picks another replica is not.
+* when a node that the cancel did not reach is back.
+
+`DROP TABLE` of the sharded table on the coordinating node cancels the load and the pools of its shards with the same best effort. A commit that is already running finishes. A pool left on an unreachable node can then be removed only by the shard name on that node.
+
+Duplicate document IDs follow the rules below for each shard: a document ID always goes to the same shard, so the first row with an ID in the load stays, and a published row replaces a row with the same ID.
+
+#### Bulk import into a replicated table
+
+A real-time table in a [replication cluster](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) takes SQL, Manticore `/bulk` and Shared bulk import on any node of the cluster. As in any [write to a cluster table](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Write-statements), every row must name the cluster: `INSERT INTO <cluster>:<table>` in SQL and `"cluster":"<cluster>"` in JSON. A row without it is rejected with the same error as a regular `INSERT`. So is a row with a cluster for a table that is not in a cluster. `SET bulk_import=<table>` and the `bulk_import=<table>` parameter take the table name without the cluster. A bare document belongs to the table of the request and goes to its cluster without a cluster name.
+
+```sql
+SET bulk_import=products;
+INSERT INTO posts:products(id,title,price) VALUES
+  (101,'Crossbody Bag with Tassel',19.85),
+  (102,'Microfiber Sheet Set',19.99);
+COMMIT;
+SET bulk_import=0;
+```
+
+```bash
+printf '%s\n' \
+  '{"insert":{"cluster":"posts","table":"products","id":101,"doc":{"title":"Crossbody Bag with Tassel","price":19.85}}}' |
+curl -sS -X POST -H 'Content-Type: application/x-ndjson' --data-binary @- \
+  'http://localhost:9308/bulk?bulk_import=products'
+```
+
+##### Replicated commit
+
+The node that runs the load builds the disk chunk as described above. At commit it:
+
+1. Waits until no node of the cluster is a donor or is joining. It checks up to twice [replication_retry_count](../../Server_settings/Searchd.md#replication_retry_count) times, twice [replication_retry_delay](../../Server_settings/Searchd.md#replication_retry_delay) apart, and then fails the commit.
+2. Sends the chunk files to every other node of the cluster. Each node checks the chunk when it has received it.
+3. Attaches the chunk on all nodes, its own included, with one replicated command.
+
+The commit answers once the node that runs the load has attached the chunk. The other nodes attach it as they apply the command, as with any replicated write. A Shared commit does this for every chunk it publishes, one after another.
+
+Sending the chunk uses the same file transfer as [adding a table to a cluster](../../Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md), to all nodes at once. So a commit takes longer than the same commit into a local table, by about the time that `ALTER CLUSTER ... ADD` of a table of the chunk's size would take. The command itself only attaches the files that the nodes already have. If the table has rows in RAM that are not saved to disk yet, for example from ordinary writes through other nodes, the command first saves them to disk on every node, and replication of the cluster waits until it finishes.
+
+Each node keeps a received chunk in `<table-filebase>.indexer-rt-bulk/repl-<id>.<ext>`, with a `.new` suffix while it is being received, and keeps the prepared chunk open in memory until the attach command takes it or cleanup discards it.
+
+##### Writes during a replicated load
+
+While a load runs, only the node that runs it reserves the table: on that node, ordinary writes to the table fail with `table is locked`, as described above. Writes through other nodes keep working and are replicated as usual. Another node can run its own bulk import into the same table at the same time; every commit attaches its own chunk. A published row replaces a row with the same ID on every node, also a row written through another node while the load ran.
+
+##### Node failures
+
+* A node of the cluster cannot receive the chunk, for example it does not answer or cannot create the staging directory of the table. The commit fails with an error that names the node, every node that answers removes the chunk, and no node changes the table. A Shared commit publishes its chunks one by one, so the chunks attached before the failed one stay on all nodes, as described in [Duplicate document IDs](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Duplicate-document-IDs).
+* A node is not in the cluster at the moment of the commit, for example because it stopped or lost its network. It does not get the chunk. When it comes back, it rejoins the cluster with a full state transfer (SST) and gets the table with the rows.
+* A node has left the cluster but is still in its [node list](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) and accepts connections without answering, for example a hung process. It delays the commit: the check for donor and joining nodes waits for its answer, which can take minutes. Run `ALTER CLUSTER <cluster> UPDATE nodes` to drop such a node from the list. A node that does not accept connections delays the commit by seconds only.
+* A node cannot attach a chunk that the other nodes attach, for example because its copy was removed. It leaves the cluster: the replication provider stops the daemon, and after a restart (at once, if the watchdog is enabled) the node rejoins with a full state transfer.
+* The node that runs the load cannot attach the chunk that the other nodes attach. The client gets an error saying that the other nodes attached the chunk, and the node rejoins the cluster with a full state transfer without a restart. If this rejoin fails twice, the cluster stays `closed` on the node, with the reason in `cluster_<name>_last_error` (see [Replication cluster status](../../Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md)). Restart the daemon, and the node rejoins with a full state transfer.
+
+Until a node that did not attach a chunk has left the cluster, it does not send its tables to a joining node. A `JOIN CLUSTER` that it serves fails with `the donor did not attach a bulk_import chunk and leaves the cluster, join again`; repeat the join.
+
+##### Leftover chunks
+
+Between the delivery of a chunk and its attach command, `PURGE BULK_IMPORT` of the table is refused on every node that keeps the chunk. A node can also keep a delivered chunk after the load has ended, when:
+
+* the node that runs the load stopped before the command;
+* the node itself was out of the cluster at the moment of the command;
+* the node did not answer while the delivery was cancelled.
+
+The chunk stays in the staging root of the table, which `@files` shows. [`PURGE BULK_IMPORT`](../../Node_info_and_management/PURGE.md#Tables-in-a-replication-cluster) describes when to wait for the commit and when to remove the chunk.
+
+##### Limitations of a replicated table
+
+* A table with external files, such as stopwords, wordforms or exceptions, is not supported: the chunk is built on one node and attached on all nodes as it is. This is not checked, so such a load is not refused.
+* Every node of the cluster needs a version of Manticore Search that supports it. When upgrading from an earlier version, stop all nodes of the cluster and start it again, see [Upgrading a cluster](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Upgrading-a-cluster).
+
 #### Elasticsearch `/_bulk`
 
 The Elasticsearch-compatible `/_bulk` endpoint does not support direct-to-disk `bulk_import`; use SQL or Manticore `/bulk`.
@@ -1034,11 +1191,13 @@ PURGE BULK_IMPORT FROM TABLE products;
 
 While the table has an open Shared pool, `PURGE` is refused; `PURGE BULK_IMPORT FROM TABLE products OPTION clear_sessions=1` cancels the pool first, stops its indexers, releases the table and then removes the staging root. While the pool is attaching its chunks, `PURGE` is refused; repeat it after the commit finishes. On Windows, `PURGE … OPTION clear_sessions=1` or `DROP TABLE` while a data request is still writing to the pool can answer `failed to remove bulk staging root`: the pool is already cancelled, but its stopped indexers keep their files open for a moment; repeat the statement.
 
-`PURGE` requires an existing local real-time table that is not in a replication cluster. It removes only direct-to-disk staging state and does not change the table schema or indexed rows. It succeeds as a no-op when the staging root is absent. In configless mode, `DROP TABLE` also removes the table's direct-to-disk staging root and cancels its Shared pool; a daemon shutdown cancels every Shared pool. Chunks published earlier stay in the table.
+`PURGE` requires an existing local real-time table, or a sharded or distributed table, see [`PURGE BULK_IMPORT`](../../Node_info_and_management/PURGE.md#Sharded-and-distributed-tables). For a table in a replication cluster, it purges only the node where it runs, see [Bulk import into a replicated table](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import-into-a-replicated-table). It removes only direct-to-disk staging state and does not change the table schema or indexed rows. It succeeds as a no-op when the staging root is absent. In configless mode, `DROP TABLE` also removes the table's direct-to-disk staging root and cancels its Shared pool; a daemon shutdown cancels every Shared pool. Chunks published earlier stay in the table.
 
 #### Current limitations
 
-* The target must be one existing, unfrozen local real-time table that is not a replication-cluster member. Distributed, sharded, replicated, percolate, and plain tables are not supported.
+* The target is one existing, unfrozen local real-time table, also one in a replication cluster, see [Bulk import into a replicated table](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import-into-a-replicated-table).
+* For Manticore `/bulk` and SQL, the target can also be a sharded table, see [Shared bulk import into a sharded table](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Shared-bulk-import-into-a-sharded-table).
+* Distributed, percolate, and plain tables are not supported.
 * SQL supports only `INSERT`. Manticore `/bulk` accepts `insert`, `create` and bare documents; `index`, `replace`, `update`, and `delete` are rejected.
 * A document ID is converted as in a regular `INSERT`, including [attr_autoconv_strict](../../Server_settings/Searchd.md#attr_autoconv_strict). A row without an ID, or with an ID that converts to 0, gets an [auto-generated ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID); the response does not return generated IDs, and a repeated load adds such rows again. UUID document IDs are not supported.
 * Static builds are not supported.

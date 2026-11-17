@@ -22,6 +22,7 @@ struct ClusterIndexAddLocalRequest_t : ClusterRequest_t
 	CSphString m_sIndex; // local name of index
 	IndexType_e m_eIndex = IndexType_e::ERROR_;
 	bool m_bSendFilesSuccess = false;
+	uint64_t m_uBulkChunkId = 0; // not 0: prepare (success) or abort a bulk_import chunk of table m_sIndex, not the table
 };
 
 void operator<< ( ISphOutputBuffer& tOut, const ClusterIndexAddLocalRequest_t& tReq );

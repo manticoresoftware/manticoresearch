@@ -373,6 +373,7 @@ public:
 	int						m_iIntParam = -1;
 
 	bool					m_bJson = false;
+	bool					m_bBulkImportDoc = false; // a bare document of a bulk_import request: its table, and so its cluster, come from the request
 	bool					m_bShardPhysicalUpdate = false;
 	CSphString				m_sEndpoint;
 	CSphString				m_sRawQuery;

@@ -2323,6 +2323,48 @@ TEST ( functions, histogram )
 	}
 }
 
+TEST ( functions, direct_blob_expression )
+{
+	CSphSchema tSchema;
+	CSphColumnInfo tCol;
+	tCol.m_sName = "s";
+	tCol.m_eAttrType = SPH_ATTR_STRING;
+	tSchema.AddAttr ( tCol, false );
+	tCol.m_sName = "p";
+	tCol.m_eAttrType = SPH_ATTR_STRINGPTR;
+	tSchema.AddAttr ( tCol, true );
+
+	for ( const char * szExpr : { "s", "(s)", "concat(s,'!')", "p" } )
+	{
+		SCOPED_TRACE(szExpr);
+		CSphString sError;
+		ExprParseArgs_t tArgs;
+		ISphExprRefPtr_c pExpr ( sphExprParse ( szExpr, tSchema, sError, tArgs ) );
+		ASSERT_TRUE ( pExpr.Ptr() ) << sError.cstr();
+		bool bDirect = !strcmp ( szExpr, "s" ) || !strcmp ( szExpr, "(s)" );
+		CSphAttrLocator tLocator;
+		EXPECT_EQ ( pExpr->GetBlobAttrLocator(tLocator), bDirect );
+		if ( bDirect )
+		{
+			EXPECT_TRUE ( tLocator==tSchema.GetAttr(0).m_tLocator );
+			ISphExprRefPtr_c pClone ( pExpr->Clone() );
+			EXPECT_TRUE ( pClone->GetBlobAttrLocator(tLocator) );
+			EXPECT_TRUE ( tLocator==tSchema.GetAttr(0).m_tLocator );
+
+			CSphSchema tRemapped;
+			tCol.m_sName = "other";
+			tCol.m_eAttrType = SPH_ATTR_STRING;
+			tRemapped.AddAttr ( tCol, false );
+			tCol.m_sName = "s";
+			tRemapped.AddAttr ( tCol, false );
+			pClone->FixupLocator ( &tSchema, &tRemapped );
+			EXPECT_TRUE ( pClone->GetBlobAttrLocator(tLocator) );
+			EXPECT_TRUE ( tLocator==tRemapped.GetAttr("s")->m_tLocator );
+		}
+	}
+}
+
+
 TEST ( functions, histogram_expression )
 {
 	CSphColumnInfo tCol;

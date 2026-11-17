@@ -2,6 +2,9 @@ name: Windows Test Template
 
 on:
   workflow_call:
+    secrets:
+      MCL_SUBMODULE_TOKEN:
+        required: false
     inputs:
       CTEST_START:
         required: false
@@ -39,6 +42,11 @@ on:
         description: Outcome of the test step (success/failure)
         value: ${{ jobs.test_windows.outputs.test_outcome }}
 
+permissions:
+  contents: read
+  # The test result publisher writes a check run.
+  checks: write
+
 jobs:
   test_windows:
     name: ${{ inputs.suite_name || format('{0}_{1}', inputs.CTEST_START, inputs.CTEST_END) }}
@@ -61,8 +69,9 @@ jobs:
       test_outcome: ${{ steps.test.outcome }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5.1.0
         with:
+          persist-credentials: false
           submodules: recursive
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Download build artifacts
@@ -105,7 +114,7 @@ jobs:
           Get-ChildItem "mcl-runtime" | Select-Object -ExpandProperty FullName
       - name: Check out Windows bundle cache
         id: windows_bundle_cache
-        uses: actions/cache@v5
+        uses: actions/cache@v5.1.0
         with:
           path: |
             bundle
@@ -126,7 +135,7 @@ jobs:
           }
       - name: Check out cache
         id: build_cache
-        uses: actions/cache@v5
+        uses: actions/cache@v5.1.0
         with:
           path: cache
           enableCrossOsArchive: true
@@ -151,7 +160,7 @@ jobs:
       # - name: Install OpenSSL
       #   run: powershell.exe ./.github/workflows/Install-OpenSSL.ps1
       - name: Setup PHP and mysqli
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@2.40.0
         with:
           php-version: '8.2'
           extensions: mysqli
@@ -201,8 +210,9 @@ jobs:
       image: manticoresearch/ubertests_public:332_aot
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5.1.0
         with:
+          persist-credentials: false
           submodules: recursive
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Download test report artifacts
@@ -232,7 +242,7 @@ jobs:
         shell: bash
       - name: Publish test results
         if: github.repository_owner == 'manticoresoftware'
-        uses: manticoresoftware/publish-unit-test-result-action@v2
+        uses: manticoresoftware/publish-unit-test-result-action@v2.16.1
         with:
           check_name: ${{ inputs.results_name }}
           compare_to_earlier_commit: false

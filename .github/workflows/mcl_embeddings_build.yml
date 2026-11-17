@@ -2,6 +2,15 @@ name: MCL embeddings build
 
 on:
   workflow_call:
+    secrets:
+      MCL_SUBMODULE_TOKEN:
+        required: false
+      OPENAI_API_KEY:
+        required: false
+      VOYAGE_API_KEY:
+        required: false
+      JINA_API_KEY:
+        required: false
     inputs:
       distr:
         required: true
@@ -29,6 +38,9 @@ on:
         type: boolean
         default: true
 
+permissions:
+  contents: read
+
 jobs:
   build:
     uses: ./.github/workflows/mcl_embeddings_core.yml
@@ -40,4 +52,8 @@ jobs:
       mcl_full_sha: ${{ inputs.mcl_full_sha }}
       source_ref: ${{ inputs.source_ref }}
       run_quality_checks: ${{ inputs.run_quality_checks }}
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      JINA_API_KEY: ${{ secrets.JINA_API_KEY }}

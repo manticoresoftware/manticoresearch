@@ -14,7 +14,9 @@ jobs:
     name: CLT failure rates (30 days)
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
+        with:
+          persist-credentials: false
 
       - name: Verify report calculations
         run: python3 -m unittest discover -s .github/scripts/tests -p 'test_clt_reliability.py' -v
@@ -25,7 +27,7 @@ jobs:
         run: python3 .github/scripts/clt_reliability.py
 
       - name: Upload CSV report
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: clt-failure-rates-30d
           path: ${{ runner.temp }}/clt-failure-rates.csv

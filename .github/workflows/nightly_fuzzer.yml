@@ -18,6 +18,9 @@ concurrency:
   group: nightly_fuzzing_${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
 
   recover_build_from_cache:
@@ -27,17 +30,19 @@ jobs:
         cache-hit: ${{ steps.check-cache.outputs.cache-hit }}
     steps:
         - name: 📥 Checkout repo
-          uses: actions/checkout@v5
+          uses: actions/checkout@v5.1.0
+          with:
+            persist-credentials: false
         - name: 💾 Attempt to restore build cache
           id: check-cache
-          uses: actions/cache@v5
+          uses: actions/cache@v5.1.0
           with:
             path: build
             key: build-linux-fuzz-${{ github.sha }}
 #            key: build-linux-fuzz
         - name: 📦 Upload restored build (if cache was found)
           if: steps.check-cache.outputs.cache-hit == 'true'
-          uses: actions/upload-artifact@v6
+          uses: actions/upload-artifact@v6.0.0
           with:
               name: fuzz-build
               path: build
@@ -71,7 +76,7 @@ jobs:
               name: fuzz-build
               path: build
         - name: 💾 Save build to cache
-          uses: actions/cache/save@v5
+          uses: actions/cache/save@v5.1.0
           with:
               path: build
               key: build-linux-fuzz-${{ github.sha }}
@@ -88,11 +93,12 @@ jobs:
       run:
         shell: bash
     container:
-      image: ubuntu:jammy
+      image: ubuntu:jammy@sha256:076e7bf82319619f28dd0aa9c02ab34b055ad37100395b4f49a2ffba04fb5e11
     steps:
       - name: 📥 Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5.1.0
         with:
+          persist-credentials: false
           token: ${{ secrets.GITHUB_TOKEN }}
           set-safe-directory: true
       - name: 📦 Download built artifact with retry logic
@@ -102,7 +108,7 @@ jobs:
           name: fuzz-build
           path: .
       - name: Restore cache
-        uses: actions/cache@v5
+        uses: actions/cache@v5.1.0
         with:
           path: build/src/fuzzer/corpus
           key: fuzz-corpus-cache-to-delete
@@ -134,13 +140,13 @@ jobs:
             exit $qfuzzer_exit_code
       - name: Save cache
         if: always()
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v5.1.0
         with:
           path: build/src/fuzzer/corpus
           key: fuzz-corpus-${{ steps.run.outputs.corpus_size || 'unknown' }}
       - name: 📦 Upload fuzzer directory
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: fuzzer-dir
           path: |
@@ -152,7 +158,7 @@ jobs:
             !build/src/fuzzer/CTest*
       - name: 📦 Upload updated fuzzer corpus
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: fuzzer-corpus
           path: build/src/fuzzer/corpus

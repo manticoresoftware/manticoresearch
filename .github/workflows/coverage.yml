@@ -12,6 +12,10 @@ concurrency:
   group: coverage_${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   commit_info:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}

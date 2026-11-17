@@ -65,8 +65,9 @@ jobs:
       run_image_push: ${{ steps.calc.outputs.run_image_push }} # push test-kit image tags
       skip_clt_reason: ${{ steps.related_prs.outputs.skip_clt_reason }} # explanation for CLT skip
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
         with:
+          persist-credentials: false
           fetch-depth: 0
           submodules: recursive
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
@@ -355,7 +356,7 @@ jobs:
     steps:
       - name: Check out cache
         id: cache
-        uses: actions/cache@v5
+        uses: actions/cache@v5.1.0
         with:
           path: |
             bundle
@@ -374,7 +375,7 @@ jobs:
           wget https://repo.manticoresearch.com/repository/ci/boost_1_75_0.tgz
           tar -xf boost_1_75_0.tgz
       - name: Upload Windows bundle artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: windows_bundle
           path: |
@@ -386,7 +387,8 @@ jobs:
     needs: [meta]
     name: Linux debug build
     uses: ./.github/workflows/build_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     with:
       CTEST_CONFIGURATION_TYPE: "Debug"
       artifact_name: debug_build
@@ -404,7 +406,8 @@ jobs:
       checks: write
       contents: read
     uses: ./.github/workflows/test_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     with:
       build_artifact_name: debug_build
       artifact_name: debug_test_results
@@ -422,7 +425,8 @@ jobs:
       checks: write
       contents: read
     uses: ./.github/workflows/test_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     with:
       build_artifact_name: debug_build
       artifact_name: debug_test_results_rt_indexer
@@ -440,7 +444,8 @@ jobs:
       checks: write
       contents: read
     uses: ./.github/workflows/test_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     with:
       build_artifact_name: debug_build
       artifact_name: debug_test_results_mcl
@@ -455,7 +460,8 @@ jobs:
     needs: [meta, mcl_cached_package_jammy, mcl_package_jammy]
     name: Linux release build
     uses: ./.github/workflows/build_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     with:
       artifact_name: release_build
       cache_key: build_linux_release_x86_64
@@ -475,7 +481,8 @@ jobs:
     needs: [meta]
     name: Linux release test build
     uses: ./.github/workflows/build_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     with:
       artifact_name: release_test_build
       cache_key: build_linux_release_tests_x86_64
@@ -499,7 +506,7 @@ jobs:
       - name: Restore exact-SHA MCL package cache
         id: probe
         if: ${{ needs.meta.outputs.mcl_full_sha != '' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v5.1.0
         with:
           path: .mcl-package-cache
           key: mcl-test-pkg-jammy-amd64-${{ needs.meta.outputs.mcl_full_sha }}
@@ -530,7 +537,7 @@ jobs:
       image: manticoresearch/external_toolchain:clang16_cmake3263
     steps:
       - name: Restore exact-SHA MCL package cache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v5.1.0
         with:
           path: .mcl-package-cache
           key: ${{ needs.mcl_test_package_cache_probe.outputs.cache_key }}
@@ -548,7 +555,7 @@ jobs:
             exit 1
           fi
       - name: Upload cached MCL package artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: mcl_package_jammy_x86_64
           path: mcl-package
@@ -568,7 +575,7 @@ jobs:
         run: mkdir -p .mcl-runtime-cache
       - name: Restore exact MCL Linux Release runtime cache
         id: restore
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v5.1.0
         with:
           path: .mcl-runtime-cache
           key: ${{ needs.meta.outputs.mcl_runtime_linux_release_cache_key }}
@@ -598,7 +605,7 @@ jobs:
           echo "cache_hit=${ok}" >> "$GITHUB_OUTPUT"
       - name: Upload cached MCL Linux Release runtime artifact
         if: steps.validate.outputs.cache_hit == 'true'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: mcl_runtime_linux_release_x86_64
           path: mcl-runtime
@@ -618,7 +625,7 @@ jobs:
         run: mkdir -p .mcl-runtime-cache
       - name: Restore exact MCL Linux Debug runtime cache
         id: restore
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v5.1.0
         with:
           path: .mcl-runtime-cache
           key: ${{ needs.meta.outputs.mcl_runtime_linux_debug_cache_key }}
@@ -648,7 +655,7 @@ jobs:
           echo "cache_hit=${ok}" >> "$GITHUB_OUTPUT"
       - name: Upload cached MCL Linux Debug runtime artifact
         if: steps.validate.outputs.cache_hit == 'true'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: mcl_runtime_linux_debug_x86_64
           path: mcl-runtime
@@ -668,7 +675,7 @@ jobs:
         run: mkdir -p .mcl-runtime-cache
       - name: Restore exact MCL Windows Debug runtime cache
         id: restore
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v5.1.0
         with:
           path: .mcl-runtime-cache
           key: ${{ needs.meta.outputs.mcl_runtime_windows_debug_cache_key }}
@@ -698,7 +705,7 @@ jobs:
           echo "cache_hit=${ok}" >> "$GITHUB_OUTPUT"
       - name: Upload cached MCL Windows Debug runtime artifact
         if: steps.validate.outputs.cache_hit == 'true'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: mcl_runtime_windows_debug_x64
           path: mcl-runtime
@@ -709,7 +716,11 @@ jobs:
     name: MCL embeddings jammy x86_64
     needs: [meta, mcl_test_package_cache_probe, mcl_runtime_linux_release_cached, mcl_runtime_linux_debug_cached]
     uses: ./.github/workflows/mcl_embeddings_build.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
     with:
       enabled: true
       mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
@@ -723,7 +734,8 @@ jobs:
     name: MCL jammy package
     needs: [meta, mcl_embeddings_jammy_x86_64, mcl_test_package_cache_probe]
     uses: ./.github/workflows/mcl_package_build.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     with:
       enabled: true
       mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
@@ -739,7 +751,11 @@ jobs:
     name: MCL embeddings windows x86_64
     needs: [meta, mcl_runtime_windows_debug_cached]
     uses: ./.github/workflows/mcl_embeddings_build.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
     with:
       enabled: true
       mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
@@ -753,7 +769,8 @@ jobs:
     name: MCL runtime Linux release
     needs: [meta, mcl_runtime_linux_release_cached, mcl_embeddings_jammy_x86_64]
     uses: ./.github/workflows/mcl_runtime_build.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     with:
       enabled: true
       mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
@@ -770,7 +787,8 @@ jobs:
     name: MCL runtime Linux debug
     needs: [meta, mcl_runtime_linux_debug_cached, mcl_embeddings_jammy_x86_64]
     uses: ./.github/workflows/mcl_runtime_build.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     with:
       enabled: true
       mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
@@ -787,7 +805,8 @@ jobs:
     name: MCL runtime Windows debug
     needs: [meta, mcl_runtime_windows_debug_cached, mcl_embeddings_windows_x86_64]
     uses: ./.github/workflows/mcl_runtime_build.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     with:
       enabled: true
       mcl_full_sha: ${{ needs.meta.outputs.mcl_full_sha }}
@@ -810,7 +829,8 @@ jobs:
       checks: write
       contents: read
     uses: ./.github/workflows/test_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     with:
       build_artifact_name: release_test_build
       artifact_name: release_test_results_plain
@@ -828,7 +848,8 @@ jobs:
       checks: write
       contents: read
     uses: ./.github/workflows/test_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     with:
       build_artifact_name: release_test_build
       artifact_name: release_test_results_rt
@@ -846,7 +867,8 @@ jobs:
       checks: write
       contents: read
     uses: ./.github/workflows/test_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     with:
       build_artifact_name: release_test_build
       artifact_name: release_test_results_mcl
@@ -870,8 +892,9 @@ jobs:
       candidate_image: ${{ steps.candidate.outputs.candidate_image }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5.1.0
         with:
+          persist-credentials: false
           submodules: recursive
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Reuse cached test kit image
@@ -891,7 +914,7 @@ jobs:
         run: tar -cf artifact.tar manticore_test_kit.img
       - name: Upload docker image artifact for fork PRs
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: manticore_test_kit.img
           path: artifact.tar
@@ -920,8 +943,9 @@ jobs:
       candidate_image: ${{ steps.candidate.outputs.candidate_image }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5.1.0
         with:
+          persist-credentials: false
           submodules: recursive
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Download built x86_64 Ubuntu Jammy packages
@@ -931,7 +955,7 @@ jobs:
           path: .
       - name: Restore exact-SHA MCL package cache
         if: ${{ needs.mcl_test_package_cache_probe.outputs.cache_hit == 'true' }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v5.1.0
         with:
           path: ./.mcl-package-cache
           key: ${{ needs.mcl_test_package_cache_probe.outputs.cache_key }}
@@ -961,7 +985,7 @@ jobs:
         run: tar -cf artifact.tar manticore_test_kit.img
       - name: Upload docker image artifact for fork PRs
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: manticore_test_kit.img
           path: artifact.tar
@@ -1019,7 +1043,9 @@ jobs:
       CANDIDATE_IMAGE: ${{ needs.test_kit_docker_build.outputs.candidate_image || needs.test_kit_docker_reuse.outputs.candidate_image }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5.1.0
+        with:
+          persist-credentials: false
       - name: Download light image artifact
         uses: actions/download-artifact@v7
         with:
@@ -1044,7 +1070,9 @@ jobs:
       (needs.test_kit_docker_build.outputs.candidate_image != '' || needs.test_kit_docker_reuse.outputs.candidate_image != '')
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
+        with:
+          persist-credentials: false
       - name: Delete candidate image
         env:
           GH_TOKEN: ${{ secrets.GHCR_PASSWORD || github.token }}
@@ -1059,7 +1087,9 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5.1.0
+        with:
+          persist-credentials: false
       - name: Download bundle package
         uses: manticoresoftware/download_artifact_with_retries@v5
         with:
@@ -1068,7 +1098,7 @@ jobs:
       - name: Build official-style image
         run: ./dist/test_kit_light_docker_build.sh bundle-package
       - name: Upload light image artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: test_kit_light_docker
           path: test_kit_light_docker.tar.gz
@@ -1079,7 +1109,8 @@ jobs:
     needs: [meta]
     name: Linux aarch64 build
     uses: ./.github/workflows/build_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     # Use -VV instead of -V below for more verbose output
     with:
       arch: aarch64
@@ -1096,7 +1127,8 @@ jobs:
     needs: [meta]
     name: FreeBSD x86_64 build
     uses: ./.github/workflows/build_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     with:
       DISTR: freebsd13
       boost_url_key: none
@@ -1113,7 +1145,8 @@ jobs:
     needs: [meta]
     name: Windows x64 build
     uses: ./.github/workflows/build_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     with:
       DISTR: windows
       arch: x64
@@ -1135,7 +1168,8 @@ jobs:
       checks: write
       contents: read
     uses: ./.github/workflows/win_test_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     with:
       CTEST_START: 1
       CTEST_END: 999999
@@ -1153,7 +1187,8 @@ jobs:
       checks: write
       contents: read
     uses: ./.github/workflows/win_test_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     with:
       CTEST_START: 1
       CTEST_END: 999999
@@ -1171,7 +1206,8 @@ jobs:
       checks: write
       contents: read
     uses: ./.github/workflows/win_test_template.yml
-    secrets: inherit
+    secrets:
+      MCL_SUBMODULE_TOKEN: ${{ secrets.MCL_SUBMODULE_TOKEN }}
     with:
       CTEST_START: 1
       CTEST_END: 999999

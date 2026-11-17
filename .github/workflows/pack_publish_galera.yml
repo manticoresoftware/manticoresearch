@@ -26,6 +26,9 @@ concurrency:
   group: pack_galera_${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
 
   pack:

@@ -2,6 +2,9 @@ name: Test Template
 
 on:
   workflow_call:
+    secrets:
+      MCL_SUBMODULE_TOKEN:
+        required: false
     inputs:
       WITH_COVERAGE:
         required: false
@@ -81,6 +84,11 @@ on:
         description: Outcome of the test step (success/failure)
         value: ${{ jobs.test.outputs.test_outcome }}
 
+permissions:
+  contents: read
+  # The test result publisher writes a check run.
+  checks: write
+
 jobs:
   test:
     name: ${{ inputs.suite_name || format('{0}_{1}', inputs.CTEST_START, inputs.CTEST_END) }}
@@ -111,8 +119,9 @@ jobs:
         FLOAT_TOLERANCE: ${{ inputs.FLOAT_TOLERANCE }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5.1.0
         with:
+          persist-credentials: false
           submodules: recursive
           token: ${{ secrets.MCL_SUBMODULE_TOKEN || secrets.GITHUB_TOKEN }}
 
@@ -129,7 +138,7 @@ jobs:
           test -f /work/aot/uk.pak
 
       - name: Check out cache before building
-        uses: actions/cache@v5
+        uses: actions/cache@v5.1.0
         with:
           path: cache
           enableCrossOsArchive: true
@@ -264,7 +273,7 @@ jobs:
       - name: Upload test artifacts
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: ${{ inputs.artifact_name }}
           path: |
@@ -282,7 +291,7 @@ jobs:
       - name: Publish test results
         if: always() && github.repository_owner == 'manticoresoftware'
         continue-on-error: true
-        uses: manticoresoftware/publish-unit-test-result-action@v2
+        uses: manticoresoftware/publish-unit-test-result-action@v2.16.1
         with:
           check_name: ${{ inputs.results_name }}
           files: build/junit*.xml

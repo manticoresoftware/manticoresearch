@@ -40,6 +40,30 @@ struct MergeState_t
 	CSphFixedVector<HASH20_t> m_dHashes { 0 };
 };
 
+bool ReserveFiles ( const VecTraits_T<CSphString> & dFilesRef, const VecTraits_T<FileChunks_t> & dChunks, const CSphBitvec & dMatched, StrVec_t & dFilesNew, CSphString & sError );
+void RemoveFiles ( const VecTraits_T<CSphString> & dFiles );
+void RemoveStagedFiles ( const MergeState_t & tMerge );
+
+struct FilesTrait_t
+{
+	StrVec_t m_dOld;
+	StrVec_t m_dRef;
+
+	void Reset()
+	{
+		m_dOld.Reset();
+		m_dRef.Reset();
+	}
+};
+
+struct RollbackFilesGuard_t
+{
+	~RollbackFilesGuard_t();
+	FilesTrait_t m_tFiles;
+};
+
+bool RotateFiles ( const MergeState_t & tMerge, FilesTrait_t & tFilesGuard, CSphString & sError );
+
 class SstProgress_i;
 
 struct SyncSrc_t

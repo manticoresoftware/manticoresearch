@@ -25,8 +25,6 @@ WriteResult_e RecvState_c::Write ( int iFile, const CSphVector<FileOp_t>& dOps, 
 {
 	Threads::ScopedCoroMutex_t tLock ( m_tLock );
 
-	assert ( m_pMerge );
-
 	if ( !SetFile ( iFile, false ) )
 		return WriteResult_e::WRITE_FAILED;
 
@@ -62,6 +60,13 @@ MergeState_t* RecvState_c::Flush ()
 
 	assert ( m_pMerge );
 	return m_pMerge.release();
+}
+
+void RecvState_c::Cancel()
+{
+	Threads::ScopedCoroMutex_t tLock ( m_tLock );
+	Close();
+	m_pMerge.reset();
 }
 
 void RecvState_c::SetMerge ( const SyncSrc_t& tSync, const SyncDst_t& tRes, const CSphString& sIndexPath, const VecTraits_T<CSphString>& dFilesRef )
@@ -230,24 +235,41 @@ bool RecvState_c::CheckFiles ( bool bSeekReader, int64_t iOff )
 
 class StatesCache_c
 {
-	CSphOrderedHash<RecvState_c, uint64_t, IdentityHash_fn, 64> m_hStates GUARDED_BY ( m_tLock );
+	CSphOrderedHash<RecvState::RefPtr_t, uint64_t, IdentityHash_fn, 64> m_hStates GUARDED_BY ( m_tLock );
 	Threads::Coro::Mutex_c m_tLock;
 
 public:
-	RecvState_c& GetState ( uint64_t tWriterKey )
+	RecvState::RefPtr_t GetState ( uint64_t tWriterKey )
 	{
 		Threads::ScopedCoroMutex_t tLock ( m_tLock );
-		RecvState_c* pState = m_hStates ( tWriterKey );
+		auto * pState = m_hStates ( tWriterKey );
 		if ( pState )
 			return *pState;
 
-		return m_hStates.AddUnique ( tWriterKey );
+		auto & pNew = m_hStates.AddUnique ( tWriterKey );
+		pNew = new RecvState_c;
+		return pNew;
+	}
+
+	RecvState::RefPtr_t FindState ( uint64_t tWriterKey )
+	{
+		Threads::ScopedCoroMutex_t tLock ( m_tLock );
+		auto * pState = m_hStates ( tWriterKey );
+		return pState ? *pState : RecvState::RefPtr_t {};
 	}
 
 	void Free ( uint64_t tWriterKey )
 	{
-		Threads::ScopedCoroMutex_t tLock ( m_tLock );
-		m_hStates.Delete ( tWriterKey );
+		RecvState::RefPtr_t pState;
+		{
+			Threads::ScopedCoroMutex_t tLock ( m_tLock );
+			auto * pFound = m_hStates ( tWriterKey );
+			if ( !pFound )
+				return;
+			pState = *pFound;
+			m_hStates.Delete ( tWriterKey );
+		}
+		pState->Cancel(); // no cache lock while waiting for an in-flight Write
 	}
 
 	bool HasState ( uint64_t tWriterKey )
@@ -259,9 +281,14 @@ public:
 
 static StatesCache_c g_tRecvStates;
 
-RecvState_c& RecvState::GetState ( uint64_t tWriterKey )
+RecvState::RefPtr_t RecvState::GetState ( uint64_t tWriterKey )
 {
 	return g_tRecvStates.GetState ( tWriterKey );
+}
+
+RecvState::RefPtr_t RecvState::FindState ( uint64_t tWriterKey )
+{
+	return g_tRecvStates.FindState ( tWriterKey );
 }
 
 void RecvState::Free ( uint64_t tWriterKey )

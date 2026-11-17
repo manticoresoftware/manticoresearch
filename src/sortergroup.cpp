@@ -81,7 +81,6 @@ class KBufferGroupSorter_T : public CSphMatchQueueTraits, protected BaseGroupSor
 {
 	using MYTYPE = KBufferGroupSorter_T<COMPGROUP,UNIQ,DISTINCT,NOTIFICATIONS>;
 	using BASE = CSphMatchQueueTraits;
-	using BaseGroupSorter_c::AggrDiscard;
 
 public:
 	KBufferGroupSorter_T ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
@@ -134,6 +133,20 @@ public:
 			m_pDistinctFetcher->SetBlobPool(pBlobPool);
 	}
 
+	bool GetGroupbyBlobLocator ( CSphAttrLocator & tLocator ) const final
+	{
+		if ( m_eGroupBy!=SPH_GROUPBY_ATTR || !m_pGrouper || m_pGrouper->IsMultiValue() )
+			return false;
+
+		CSphAttrLocator tSource;
+		m_pGrouper->GetLocator(tSource);
+		if ( !tSource.IsBlobAttr() || tSource.m_bDynamic )
+			return false;
+
+		tLocator = tSource;
+		return true;
+	}
+
 	void SetColumnar ( columnar::Columnar_i * pColumnar ) final
 	{
 		CSphMatchQueueTraits::SetColumnar(pColumnar);
@@ -181,6 +194,8 @@ public:
 	bool CanBeCloned() const final { return !DISTINCT && BASE::CanBeCloned(); }
 
 protected:
+	using BaseGroupSorter_c::AggrDiscard;
+
 	ESphGroupBy 				m_eGroupBy;     ///< group-by function
 	void OnMatchFree ( CSphMatch & tMatch ) override
 	{

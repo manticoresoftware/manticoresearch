@@ -823,8 +823,8 @@ To control which access mode to use, the options **access_plain_attrs**, **acces
 | - | - | - |
 | access_plain_attrs  | mmap, **mmap_preread** (default), mlock | controls how `*.spa` (plain attributes) `*.spe` (skip lists) `*.spt` (lookups) `*.spm` (killed docs) will be read |
 | access_blob_attrs   | mmap, **mmap_preread** (default), mlock  | controls how `*.spb` (blob attributes) (string, mva and json attributes) will be read |
-| access_doclists   | **file** (default), mmap, mlock  | controls how `*.spd` (doc lists) data will be read |
-| access_hitlists   | **file** (default), mmap, mlock  | controls how `*.spp` (hit lists) data will be read |
+| access_doclists   | file, **mmap** (default), mlock  | controls how `*.spd` (doc lists) data will be read |
+| access_hitlists   | file, **mmap** (default), mlock  | controls how `*.spp` (hit lists) data will be read |
 | access_dict   | mmap, **mmap_preread** (default), mlock  | controls how `*.spi` (dictionary) will be read |
 | access_columnar_attrs | file, **mmap** (default) | controls how `*.spc` (columnar attributes) will be read |
 | access_secondary | **file** (default), mmap | controls how `*.spidx` and `*.spjidx` (secondary indexes) will be read |
@@ -836,8 +836,8 @@ Here is a table which can help you select your desired mode:
 | plain attributes in [row-wise](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) (non-columnar) storage, skip lists, word lists, lookups, killed docs | 	mmap | mmap |	**mmap_preread** (default) | mlock |
 | row-wise string, multi-value attributes (MVA) and json attributes | mmap | mmap | **mmap_preread** (default) | mlock |
 | [columnar](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) numeric, string and multi-value attributes | file | **mmap** (default) | no | not supported |
-| doc lists | **file** (default) | mmap | no	| mlock |
-| hit lists | **file** (default) | mmap | no	| mlock |
+| doc lists | file | **mmap** (default) | no	| mlock |
+| hit lists | file | **mmap** (default) | no	| mlock |
 | dictionary | mmap | mmap | **mmap_preread** (default) | mlock |
 | secondary indexes | **file** (default) | mmap | no | not supported |
 
@@ -853,7 +853,8 @@ The default mode offers a balance of:
 * mmap,
 * Prereading non-columnar attributes,
 * Memory-mapping columnar attributes with no preread,
-* Seeking and reading doclists, hitlists, and secondary indexes with no preread.
+* Memory-mapping doclists and hitlists with no preread,
+* Seeking and reading secondary indexes with no preread.
 
 This provides a decent search performance, optimal memory utilization, and faster searchd restart in most scenarios.
 

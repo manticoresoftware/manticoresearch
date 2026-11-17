@@ -171,6 +171,15 @@ jobs:
           run_args: "-e OPENAI_API_KEY -e VOYAGE_API_KEY -e JINA_API_KEY -v ${{ runner.temp }}/clt-model-cache:/var/lib/manticore/.cache"
           ui_host: "https://clt.manticoresearch.com"
 
+      - name: Upload per-test results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: clt-test-results-${{ matrix.chunk.id }}-attempt-${{ github.run_attempt }}
+          path: ${{ steps.run-clt.outputs.test-results }}
+          if-no-files-found: error
+          retention-days: 90
+
       # Containers write model blobs as root with mode 600; make them readable so the
       # runner user can upload changed cache subtrees.
       - name: Fix model cache permissions
@@ -242,6 +251,21 @@ jobs:
           path: ${{ runner.temp }}/clt-timing-artifact/${{ matrix.chunk.id }}.tsv
           overwrite: true
           retention-days: 1
+
+  aggregate-clt-results:
+    name: Aggregate per-test results
+    needs: [clt]
+    if: ${{ always() && needs.clt.result != 'skipped' }}
+    runs-on: ubuntu-22.04
+    continue-on-error: true
+    steps:
+      - name: Merge per-test result artifacts
+        uses: actions/upload-artifact/merge@v6
+        with:
+          name: clt-results-merged-${{ github.run_attempt }}
+          pattern: clt-test-results-*-attempt-*
+          separate-directories: true
+          retention-days: 90
 
   persist-clt-caches:
     name: Persist CLT caches

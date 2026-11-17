@@ -1,0 +1,288 @@
+––– comment –––
+Shared bulk_import into a shard table with local targets: /bulk?bulk_import=<shard>&shared routes
+rows as an ordinary write into the shard table does and feeds one indexer child per target;
+the empty-line commit publishes all the targets at once, one disk chunk each. The daemon gets
+threads = 8 for any CPU count of the runner.
+––– input –––
+sed -i '/^searchd *{/a threads = 8' /etc/manticoresearch/manticore.conf
+––– output –––
+––– block: ../../base/start-searchd –––
+––– input –––
+cat > /tmp/sb.sh <<'EOF'
+gen() { for ((i=$2; i<=$3; i++)); do printf '{"insert":{"table":"%s","id":%d,"doc":{"title":"doc %d","gid":%d}}}\n' "$1" "$i" "$i" "$((i % 7))"; done; }
+post() { curl -sS -X POST "http://localhost:9308/bulk?bulk_import=$1&shared$2" -H 'Content-Type: application/x-ndjson' --data-binary @"$3" -w ' HTTP %{http_code}\n'; }
+commit() { printf '\n' > /tmp/commit.ndjson; post "$1" "$2" /tmp/commit.ndjson; }
+sql() { mysql -h0 -P9306 --skip-table --batch --raw --skip-column-names -e "$1"; }
+mk() { sql "DROP TABLE IF EXISTS $1; DROP TABLE IF EXISTS ${1}_0; DROP TABLE IF EXISTS ${1}_1; DROP TABLE IF EXISTS ${1}_2; CREATE TABLE ${1}_0 (title TEXT, gid INT); CREATE TABLE ${1}_1 (title TEXT, gid INT); CREATE TABLE ${1}_2 (title TEXT, gid INT); CREATE TABLE $1 (title TEXT, gid INT) type='shard' local='${1}_0' local='${1}_1' local='${1}_2'"; }
+counts() { echo "$(sql "SELECT COUNT(*) FROM $1") = $(sql "SELECT COUNT(*) FROM ${1}_0") + $(sql "SELECT COUNT(*) FROM ${1}_1") + $(sql "SELECT COUNT(*) FROM ${1}_2")"; }
+chunks() { echo "disk_chunks $(for t in ${1}_0 ${1}_1 ${1}_2; do sql "SHOW TABLE $t STATUS LIKE 'disk_chunks'" | cut -f2; done | tr '\n' ' ')"; }
+leftovers() { echo "staging=$(ls /var/lib/manticore/*/ | grep -c indexer-rt-bulk) children=$(ps -eo args | grep -c '[i]ndexer_rt_bulk_chunk')"; }
+free() { for t in "$@"; do sql "INSERT INTO $t (id, title, gid) VALUES (999999, 'free', 0); DELETE FROM $t WHERE id=999999" && echo "$t free"; done; }
+vals() { for ((i=$1; i<=$2; i++)); do printf "(%d,'doc %d',%d)" "$i" "$i" "$((i % 7))"; [ "$i" -lt "$2" ] && printf ','; done; }
+EOF
+––– output –––
+––– comment –––
+Two data requests in parallel feed the pools of all three targets; nothing is visible before the
+commit (I3), every target runs one child.
+––– input –––
+source /tmp/sb.sh; mk sb; gen sb 1 3000 > /tmp/a.ndjson; gen sb 3001 6000 > /tmp/b.ndjson; post sb '' /tmp/a.ndjson > /tmp/a.reply & post sb '' /tmp/b.ndjson > /tmp/b.reply & wait; cat /tmp/a.reply /tmp/b.reply; counts sb; leftovers
+––– output –––
+{"items":[],"current_line":3000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":3000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+0 = 0 + 0 + 0
+staging=3 children=3
+––– comment –––
+The commit publishes one disk chunk per target; children and staging are gone.
+––– input –––
+source /tmp/sb.sh; commit sb ''; counts sb; chunks sb; leftovers; sql "SELECT id, title, gid FROM sb WHERE id IN (1, 5, 6, 6000) ORDER BY id ASC"
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+6000 = 1986 + 2024 + 1990
+disk_chunks 1 1 1
+staging=0 children=0
+1	doc 1	1
+5	doc 5	5
+6	doc 6	6
+6000	doc 6000	1
+––– comment –––
+I1: every row is in the target an ordinary write routes its id to, so REPLACE through the shard
+table changes no count.
+––– input –––
+source /tmp/sb.sh; sql "REPLACE INTO sb (id, title, gid) VALUES (1,'r',0),(2,'r',0),(3,'r',0),(4,'r',0),(5,'r',0),(6,'r',0),(7,'r',0),(8,'r',0),(5999,'r',0),(6000,'r',0)"; counts sb
+––– output –––
+6000 = 1986 + 2024 + 1990
+––– comment –––
+Rows without an id get an auto-id before routing, as an ordinary INSERT gives it; REPLACE of
+those ids through the shard table changes no count either.
+––– input –––
+source /tmp/sb.sh; for i in $(seq 1 20); do printf '{"insert":{"table":"sb","doc":{"title":"auto %d","gid":100}}}\n' "$i"; done > /tmp/auto.ndjson; post sb '' /tmp/auto.ndjson; commit sb ''; for id in $(sql "SELECT id FROM sb WHERE gid=100"); do sql "REPLACE INTO sb (id, title, gid) VALUES ($id, 'auto replaced', 100)"; done; total=$(sql "SELECT COUNT(*) FROM sb"); sum=$(( $(sql "SELECT COUNT(*) FROM sb_0") + $(sql "SELECT COUNT(*) FROM sb_1") + $(sql "SELECT COUNT(*) FROM sb_2") )); echo "total=$total sum=$sum auto=$(sql "SELECT COUNT(*) FROM sb WHERE gid=100")"
+––– output –––
+{"items":[],"current_line":20,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+total=6020 sum=6020 auto=20
+––– comment –––
+Explicit ids on both sides of 2^63 land where an ordinary /bulk into an identical shard table puts
+them.
+––– input –––
+source /tmp/sb.sh; mk sr; mk so; for id in 1 2 3 4 5 6 9223372036854775800 9223372036854775801 9223372036854775802 9223372036854775803 9223372036854775804 9223372036854775805 9223372036854775806 9223372036854775807 9223372036854775808 9223372036854775809 9223372036854775810 9223372036854775811 18446744073709551610 18446744073709551611 18446744073709551612 18446744073709551613 18446744073709551614; do printf '{"insert":{"table":"%s","id":%s,"doc":{"title":"big","gid":1}}}\n' sr "$id" >> /tmp/sr.ndjson; printf '{"insert":{"table":"%s","id":%s,"doc":{"title":"big","gid":1}}}\n' so "$id" >> /tmp/so.ndjson; done; post sr '' /tmp/sr.ndjson; commit sr ''; curl -sS -X POST http://localhost:9308/bulk -H 'Content-Type: application/x-ndjson' --data-binary @/tmp/so.ndjson | grep -o '"errors":[a-z]*'; for t in 0 1 2; do a=$(sql "SELECT id FROM sr_$t ORDER BY id ASC" | tr '\n' ' '); b=$(sql "SELECT id FROM so_$t ORDER BY id ASC" | tr '\n' ' '); [ "$a" = "$b" ] && echo "target $t same, $(echo $a | wc -w) ids" || echo "target $t differs: bulk_import $a, ordinary $b"; done; sql "SELECT COUNT(*) FROM sr; SELECT COUNT(*) FROM so"
+––– output –––
+{"items":[],"current_line":23,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+"errors":false
+target 0 same, #!/[1-9][0-9]*/!# ids
+target 1 same, #!/[1-9][0-9]*/!# ids
+target 2 same, #!/[1-9][0-9]*/!# ids
+23
+23
+––– comment –––
+Duplicates (D22): the first row with an id in the load stays; a later load with the same id
+replaces it, a row without an id is added.
+––– input –––
+source /tmp/sb.sh; mk sd; printf '%s\n' '{"insert":{"table":"sd","id":7001,"doc":{"title":"first","gid":1}}}' > /tmp/d1.ndjson; printf '%s\n' '{"insert":{"table":"sd","id":7001,"doc":{"title":"second","gid":2}}}' > /tmp/d2.ndjson; post sd '' /tmp/d1.ndjson; post sd '' /tmp/d2.ndjson; commit sd ''; sql "SELECT id, title FROM sd"
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+7001	first
+––– input –––
+source /tmp/sb.sh; printf '%s\n' '{"insert":{"table":"sd","id":7001,"doc":{"title":"third","gid":3}}}' '{"insert":{"table":"sd","doc":{"title":"no id","gid":4}}}' > /tmp/d3.ndjson; post sd '' /tmp/d3.ndjson; commit sd ''; sql "SELECT title FROM sd WHERE id=7001; SELECT COUNT(*) FROM sd WHERE gid=4"; counts sd
+––– output –––
+{"items":[],"current_line":2,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+third
+1
+2 = #!/[0-9]+/!# + #!/[0-9]+/!# + #!/[0-9]+/!#
+––– comment –––
+shared=N is ignored for a shard table: every target has one child and gets one chunk.
+––– input –––
+source /tmp/sb.sh; mk sn; gen sn 1 3000 > /tmp/n.ndjson; post sn '=4' /tmp/n.ndjson; leftovers; commit sn ''; chunks sn
+––– output –––
+{"items":[],"current_line":3000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+staging=3 children=3
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+disk_chunks 1 1 1
+––– comment –––
+A commit without a load and shared_join without a load: 409 shared_no_pool.
+––– input –––
+source /tmp/sb.sh; mk sc; commit sc ''; gen sc 1 30 > /tmp/c1.ndjson; curl -sS -X POST "http://localhost:9308/bulk?bulk_import=sc&shared_join" -H 'Content-Type: application/x-ndjson' --data-binary @/tmp/c1.ndjson -w ' HTTP %{http_code}\n'
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"no shared bulk_import into table 'sc' to commit","error_code":"shared_no_pool","shared_state":"no_pool"} HTTP 409
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"no shared bulk_import into table 'sc' to join","error_code":"shared_no_pool","shared_state":"no_pool"} HTTP 409
+––– comment –––
+While this node runs the load, an ordinary write and an update through the shard table get 'table <shard table> is
+locked' and change nothing; after the commit they pass.
+––– input –––
+source /tmp/sb.sh; mk sq; gen sq 1 30 > /tmp/q.ndjson; post sq '' /tmp/q.ndjson; sql "INSERT INTO sq (id, title, gid) VALUES (100001, 'w', 1)"; sql "UPDATE sq SET gid=5 WHERE id=1"; commit sq ''; counts sq; sql "INSERT INTO sq (id, title, gid) VALUES (100001, 'w', 1)"; sql "UPDATE sq SET gid=5 WHERE id=1"; counts sq; sql "SELECT gid FROM sq WHERE id=1"
+––– output –––
+{"items":[],"current_line":30,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+ERROR 1064 (42000) at line 1: table 'sq' is locked
+ERROR 1064 (42000) at line 1: table 'sq' is locked
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+30 = #!/[0-9]+/!# + #!/[0-9]+/!# + #!/[0-9]+/!#
+31 = #!/[0-9]+/!# + #!/[0-9]+/!# + #!/[0-9]+/!#
+5
+––– comment –––
+A target in a replication cluster takes the load: its chunk is published through the cluster.
+––– input –––
+source /tmp/sb.sh; mk sk; sql "CREATE CLUSTER sk_c; ALTER CLUSTER sk_c ADD sk_2"; gen sk 1 30 > /tmp/k.ndjson; post sk '' /tmp/k.ndjson; commit sk ''; leftovers; counts sk; sql "ALTER CLUSTER sk_c DROP sk_2; DELETE CLUSTER sk_c"
+––– output –––
+{"items":[],"current_line":30,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+staging=0 children=0
+30 = #!/[0-9]+/!# + #!/[0-9]+/!# + #!/[0-9]+/!#
+––– comment –––
+The start checks what the started pool saved: a local target altered after the shard table was
+created fails the shard guard even with the same columns; the started pool is removed.
+––– input –––
+source /tmp/sb.sh; mk sa; sql "ALTER TABLE sa_1 ADD COLUMN extra INT; ALTER TABLE sa_1 DROP COLUMN extra"; gen sa 1 30 > /tmp/sa.ndjson; post sa '' /tmp/sa.ndjson; leftovers; free sa_1 sa_2; commit sa ''
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"shared bulk_import into shard table 'sa' failed to start table 'sa_1': local table 'sa_1' for shard table 'sa' changed, reload shard table","error_code":"shared_failed","shared_state":"failed"} HTTP 500
+staging=0 children=0
+sa_1 free
+sa_2 free
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"shared bulk_import into shard table 'sa' failed to start table 'sa_1': local table 'sa_1' for shard table 'sa' changed, reload shard table","error_code":"shared_failed","shared_state":"failed"} HTTP 500
+––– comment –––
+An invalid document or a wrong cluster prefix (checked as an ordinary write into the shard table
+checks it) fails the load; the commit returns the error and the targets are free.
+––– input –––
+source /tmp/sb.sh; mk se; printf '%s\n' '{"insert":{"table":"se","id":1,"doc":{"title":"x","gid":1,"nope":2}}}' > /tmp/e1.ndjson; gen se 1 30 > /tmp/e.ndjson; post se '' /tmp/e.ndjson; post se '' /tmp/e1.ndjson; post se '' /tmp/e.ndjson; commit se ''; leftovers; counts se
+––– output –––
+{"items":[],"current_line":30,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"unknown column: 'nope'","error_code":"shared_failed","shared_state":"failed"} HTTP 400
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"unknown column: 'nope'","error_code":"shared_failed","shared_state":"failed"} HTTP 409
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"unknown column: 'nope'","error_code":"shared_failed","shared_state":"failed"} HTTP 500
+staging=0 children=0
+0 = 0 + 0 + 0
+––– input –––
+source /tmp/sb.sh; printf '%s\n' '{"insert":{"cluster":"c1","table":"se","id":1,"doc":{"title":"x","gid":1}}}' > /tmp/e2.ndjson; post se '' /tmp/e.ndjson; post se '' /tmp/e2.ndjson; commit se ''; leftovers; free se_0 se_1 se_2
+––– output –––
+{"items":[],"current_line":30,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"table 'se' is not in any cluster, use just 'se'","error_code":"shared_failed","shared_state":"failed"} HTTP 400
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"table 'se' is not in any cluster, use just 'se'","error_code":"shared_failed","shared_state":"failed"} HTTP 500
+staging=0 children=0
+se_0 free
+se_1 free
+se_2 free
+––– comment –––
+Partial publish: the commit publishes all targets at once; ALTER of sp_1 during the load fails its
+commit only, sp_0 and sp_2 are published, and the error names sp_1.
+––– input –––
+source /tmp/sb.sh; mk sp; gen sp 1 30 > /tmp/p.ndjson; post sp '' /tmp/p.ndjson; sql "ALTER TABLE sp_1 ADD COLUMN extra INT"; commit sp ''; for t in sp_0 sp_1 sp_2; do echo "$t $(sql "SELECT COUNT(*) FROM $t")"; done; leftovers; free sp_0 sp_1
+––– output –––
+{"items":[],"current_line":30,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"shared bulk_import into shard table 'sp' failed to commit table 'sp_1': table 'sp_1' was altered while finalizing bulk_import; published 2 of 3 tables: sp_0, sp_2; not published: 1","error_code":"shared_failed","shared_state":"failed"} HTTP 500
+sp_0 8
+sp_1 0
+sp_2 14
+staging=0 children=0
+sp_0 free
+sp_1 free
+––– comment –––
+DROP TABLE of the shard table cancels the load; its tables are free and a load into the dropped
+name is refused.
+––– input –––
+source /tmp/sb.sh; mk sx; gen sx 1 30 > /tmp/x.ndjson; post sx '' /tmp/x.ndjson; leftovers; sql "DROP TABLE sx"; leftovers; post sx '' /tmp/x.ndjson; sql "INSERT INTO sx_0 (id, title, gid) VALUES (1, 'direct', 1); SELECT COUNT(*) FROM sx_0"
+––– output –––
+{"items":[],"current_line":30,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+staging=3 children=3
+staging=0 children=0
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"bulk_import requires an existing local RT table; table 'sx' is absent or distributed","error_code":"shared_precondition","shared_state":"rejected"} HTTP 400
+1
+––– comment –––
+PURGE BULK_IMPORT by the shard table name: without the option it refuses while the load is open,
+with clear_sessions=1 it cancels the load and its targets.
+––– input –––
+source /tmp/sb.sh; mk sg; gen sg 1 30 > /tmp/g.ndjson; post sg '' /tmp/g.ndjson; sql "PURGE BULK_IMPORT FROM TABLE sg"; leftovers
+––– output –––
+{"items":[],"current_line":30,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+ERROR 1064 (42000) at line 1: shared bulk_import into table 'sg' is open or failed; commit it or use OPTION clear_sessions=1 to cancel it
+staging=3 children=3
+––– input –––
+source /tmp/sb.sh; sql "PURGE BULK_IMPORT FROM TABLE sg OPTION clear_sessions=1"; leftovers; free sg_0 sg_1 sg_2; commit sg ''; post sg '' /tmp/g.ndjson; commit sg ''; counts sg
+––– output –––
+staging=0 children=0
+sg_0 free
+sg_1 free
+sg_2 free
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"no shared bulk_import into table 'sg' to commit","error_code":"shared_no_pool","shared_state":"no_pool"} HTTP 409
+{"items":[],"current_line":30,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+30 = 8 + 8 + 14
+––– comment –––
+A direct Shared request into a physical target of an open load is refused at every entry (data,
+commit, shared_join); an invalid line sent there fails only that request, not the load (P05).
+––– input –––
+source /tmp/sb.sh; mk sz; gen sz 1 30 > /tmp/z.ndjson; gen sz_0 1001 1002 > /tmp/z0.ndjson; printf '{"bad json\n' > /tmp/zbad.ndjson; post sz '' /tmp/z.ndjson; post sz_0 '' /tmp/z0.ndjson; commit sz_0 ''; curl -sS -X POST "http://localhost:9308/bulk?bulk_import=sz_0&shared_join" -H 'Content-Type: application/x-ndjson' --data-binary @/tmp/z0.ndjson -w ' HTTP %{http_code}\n'; post sz_0 '' /tmp/zbad.ndjson
+––– output –––
+{"items":[],"current_line":30,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"table 'sz_0' is a target of a shared bulk_import into a shard table; load and commit it through the shard table","error_code":"shared_precondition","shared_state":"rejected"} HTTP 400
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"table 'sz_0' is a target of a shared bulk_import into a shard table; load and commit it through the shard table","error_code":"shared_precondition","shared_state":"rejected"} HTTP 400
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"table 'sz_0' is a target of a shared bulk_import into a shard table; load and commit it through the shard table","error_code":"shared_precondition","shared_state":"rejected"} HTTP 400
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"unable to parse: bad json","error_code":"shared_failed","shared_state":"failed"} HTTP 400
+––– input –––
+source /tmp/sb.sh; commit sz ''; counts sz; leftovers; post sz_0 '' /tmp/z0.ndjson; commit sz_0 ''; sql "SELECT COUNT(*) FROM sz_0"
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+30 = 8 + 8 + 14
+staging=0 children=0
+{"items":[],"current_line":2,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+10
+––– comment –––
+SQL is one more client of the Shared load (D24): SET bulk_import=<shard> reserves nothing, every
+INSERT is a data request routed as an ordinary write, COMMIT publishes all the targets at once.
+––– input –––
+source /tmp/sb.sh; mk sl; sql "SET bulk_import=sl; SHOW LOCKS"; leftovers; sql "SET bulk_import=sl; INSERT INTO sl (id, title, gid) VALUES $(vals 1 15); INSERT INTO sl (id, title, gid) VALUES $(vals 16 30); SELECT COUNT(*) FROM sl; COMMIT; SELECT COUNT(*) FROM sl"; counts sl; chunks sl; leftovers
+––– output –––
+staging=0 children=0
+0
+30
+30 = 8 + 8 + 14
+disk_chunks 1 1 1
+staging=0 children=0
+––– comment –––
+SQL and HTTP feed one load; SET bulk_import=0, like a closed connection, leaves it open, and a
+COMMIT from another connection publishes it.
+––– input –––
+source /tmp/sb.sh; mk sm; gen sm 1 15 > /tmp/m.ndjson; post sm '' /tmp/m.ndjson; sql "SET bulk_import=sm; INSERT INTO sm (id, title, gid) VALUES $(vals 16 30); SET bulk_import=0"; leftovers; counts sm; sql "SET bulk_import=sm; COMMIT"; counts sm; leftovers
+––– output –––
+{"items":[],"current_line":15,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+staging=3 children=3
+0 = 0 + 0 + 0
+30 = 8 + 8 + 14
+staging=0 children=0
+––– comment –––
+A COMMIT without a load and a ROLLBACK are refused; an invalid INSERT fails the whole load, as an
+invalid document does: later statements get its error, the next COMMIT returns it and removes the load.
+––– input –––
+source /tmp/sb.sh; mk se; echo "SET bulk_import=se; COMMIT; INSERT INTO se (id, title, gid) VALUES (1, 'a', 1); ROLLBACK; INSERT INTO se (id, nope) VALUES (2, 3); INSERT INTO se (id, title, gid) VALUES (3, 'c', 3); COMMIT; COMMIT" | mysql -h0 -P9306 --force 2>&1; leftovers; counts se
+––– output –––
+ERROR 1064 (42000) at line 1: no shared bulk_import into table 'se' to commit
+ERROR 1064 (42000) at line 1: ROLLBACK is not supported by shared bulk_import into shard table 'se'; PURGE BULK_IMPORT FROM TABLE se OPTION clear_sessions=1 cancels the load
+ERROR 1064 (42000) at line 1: unknown column: 'nope'
+ERROR 1064 (42000) at line 1: unknown column: 'nope'
+ERROR 1064 (42000) at line 1: unknown column: 'nope'
+ERROR 1064 (42000) at line 1: no shared bulk_import into table 'se' to commit
+staging=0 children=0
+0 = 0 + 0 + 0
+––– comment –––
+A shard table needs no shared option: data and the commit without it feed and publish the load (D25).
+––– input –––
+source /tmp/sb.sh; mk sn; gen sn 1 30 > /tmp/n.ndjson; printf '\n' > /tmp/nc.ndjson; for f in /tmp/n.ndjson /tmp/nc.ndjson; do curl -sS -X POST "http://localhost:9308/bulk?bulk_import=sn" -H 'Content-Type: application/x-ndjson' --data-binary @$f -w ' HTTP %{http_code}\n'; done; counts sn; leftovers
+––– output –––
+{"items":[],"current_line":30,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+30 = #!/[0-9]+/!# + #!/[0-9]+/!# + #!/[0-9]+/!#
+staging=0 children=0
+––– comment –––
+PURGE BULK_IMPORT by the name of a plain distributed table works on its local RT tables: an open
+Shared load of one of them is refused without the option and cancelled with it.
+––– input –––
+source /tmp/sb.sh; sql "CREATE TABLE dd_a (title TEXT, gid INT); CREATE TABLE dd_b (title TEXT, gid INT); CREATE TABLE dd TYPE='distributed' LOCAL='dd_a' LOCAL='dd_b'"; gen dd_a 1 10 > /tmp/dd.ndjson; post dd_a '' /tmp/dd.ndjson; sql "PURGE BULK_IMPORT FROM TABLE dd"; leftovers; sql "PURGE BULK_IMPORT FROM TABLE dd OPTION clear_sessions=1"; leftovers; free dd_a dd_b
+––– output –––
+{"items":[],"current_line":10,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+ERROR 1064 (42000) at line 1: table dd_a: shared bulk_import into table 'dd_a' is open or failed; commit it or use OPTION clear_sessions=1 to cancel it
+staging=1 children=1
+staging=0 children=0
+dd_a free
+dd_b free

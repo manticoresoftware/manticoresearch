@@ -1424,3 +1424,112 @@ TEST ( WindowCount, FilteredTermProducerBoundsHintsResetAndStats )
 		EXPECT_EQ ( tSetup.m_iLiveQwords, 0 );
 	} );
 }
+
+
+TEST ( ExtOr, FlatMergeMatchesBinaryAndResets )
+{
+	Threads::CallCoroutine ( [] {
+		WindowTestSetup_c tSetup;
+		CSphString sError;
+		CSphDictSettings tDictSettings;
+		tDictSettings.SetDictFormat ( DictFormat_e::CRC );
+
+		auto pTok = Tokenizer::Detail::CreateUTF8Tokenizer();
+		auto pDict = sphCreateDictionaryCRC ( tDictSettings, nullptr, pTok, "or-test", false, 32, nullptr, sError );
+		ASSERT_TRUE(pDict) << sError.cstr();
+		tSetup.SetDict(pDict);
+
+		auto pIndex = sphCreateIndexPhrase ( "or-test", "unused-or-index" );
+		tSetup.m_pIndex = pIndex.get();
+		tSetup.m_pWarning = &sError;
+		for ( RowID_t i=0; i<700; ++i )
+		{
+			if ( i<300 || i%3==0 )
+				tSetup.m_dAlpha.push_back ( { i, 1, 1+i%7, 0 } );
+
+			if ( i>=300 && i%5==0 )
+				tSetup.m_dBeta.push_back ( { i, 3, 1+i%11, 0 } );
+
+			if ( i>=500 && i%7==0 )
+				tSetup.m_dGamma.push_back ( { i, 2, 1+i%13, 0 } );
+		}
+		// Equal TF makes opposite IDFs cancel before the small third contribution.
+		tSetup.m_dAlpha.push_back ( { 1155, 1, 1, 0 } );
+		tSetup.m_dBeta.push_back ( { 1155, 3, 1, 0 } );
+		tSetup.m_dGamma.push_back ( { 1155, 2, 1, 0 } );
+		tSetup.m_dBeta.push_back ( { INVALID_ROWID-1, 1, 1, 0 } );
+
+		auto Read = [] ( ExtNode_i & tNode ) {
+			std::vector<ExtDoc_t> dDocs;
+			while ( const auto * pDocs = tNode.GetDocsChunk() )
+				for ( ; pDocs->m_tRowID!=INVALID_ROWID; ++pDocs )
+					dDocs.push_back(*pDocs);
+
+			return dDocs;
+		};
+		auto Check = [] ( const std::vector<ExtDoc_t> & dActual, const std::vector<ExtDoc_t> & dExpected ) {
+			ASSERT_EQ ( dActual.size(), dExpected.size() );
+			for ( size_t i=0; i<dActual.size(); ++i )
+			{
+				EXPECT_EQ ( dActual[i].m_tRowID, dExpected[i].m_tRowID );
+				EXPECT_EQ ( dActual[i].m_uDocFields, dExpected[i].m_uDocFields );
+				EXPECT_EQ ( dActual[i].m_fTFIDF, dExpected[i].m_fTFIDF );
+			}
+		};
+
+		for ( int iTerms : { 4, 5, 8, 32 } )
+		{
+			XQLimitSpec_t tSpec;
+			tSpec.m_bFieldSpec = true;
+			tSpec.m_dFieldMask.Assign32(3);
+
+			XQNode_t tRoot(tSpec);
+			CSphVector<XQNode_t *> dChildren;
+			const char * dWords[] = { "alpha", "beta", "gamma", "absent" };
+			for ( int i=0; i<iTerms; ++i )
+			{
+				auto * pChild = new XQNode_t(tSpec);
+				pChild->AddDirtyWord ( { dWords[i%4], i+1 } );
+				dChildren.Add(pChild);
+			}
+			tRoot.SetOp ( SPH_QUERY_OR, dChildren );
+
+			std::unique_ptr<ExtNode_i> pFlat ( ExtNode_i::Create ( &tRoot, tSetup, true, nullptr ) );
+			std::unique_ptr<ExtNode_i> pBinary ( ExtNode_i::Create ( &tRoot, tSetup, true, nullptr ) );
+			ASSERT_TRUE(pFlat);
+			ASSERT_TRUE(pBinary);
+			pBinary->SetCollectHits();
+
+			for ( auto * pNode : { pFlat.get(), pBinary.get() } )
+			{
+				ExtQwordsHash_t hWords;
+				pNode->GetQwords(hWords);
+				hWords["alpha"].m_fIDF = 1e8f;
+				hWords["beta"].m_fIDF = -1e8f;
+				hWords["gamma"].m_fIDF = 0.125f;
+				pNode->SetQwordsIDF(hWords);
+			}
+
+			const auto dExpected = Read(*pBinary);
+			ASSERT_FALSE ( dExpected.empty() );
+			Check ( Read(*pFlat), dExpected );
+			EXPECT_EQ ( pFlat->GetDocsChunk(), nullptr );
+			pFlat->Reset(tSetup);
+			ASSERT_TRUE ( pFlat->GetDocsChunk() );
+			pFlat->Reset(tSetup);
+			Check ( Read(*pFlat), dExpected );
+			tSetup.m_iMaxTimer = sph::MicroTimer()-10000;
+			pFlat->Reset(tSetup);
+			EXPECT_EQ ( pFlat->GetDocsChunk(), nullptr );
+			EXPECT_EQ ( pFlat->GetDocsChunk(), nullptr );
+			EXPECT_STREQ ( sError.cstr(), "query time exceeded max_query_time" );
+			tSetup.m_iMaxTimer = 0;
+			pFlat->Reset(tSetup);
+			Check ( Read(*pFlat), dExpected );
+			pFlat->Reset(tSetup);
+			pFlat->SetCollectHits();
+			Check ( Read(*pFlat), dExpected );
+		}
+		EXPECT_EQ ( tSetup.m_iLiveQwords, 0 );
+	} );
+}

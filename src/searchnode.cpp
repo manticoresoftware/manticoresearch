@@ -640,6 +640,8 @@ class ExtOr_c : public ExtTwofer_c
 {
 public:
 						ExtOr_c ( ExtNode_i * pLeft, ExtNode_i * pRight );
+	void				SetFlatTerms ( const std::vector<ExtNode_i *> & dTerms );
+	void				SetCollectHits() override;
 
 	void				Reset ( const ISphQwordSetup & tSetup ) override;
 	bool				SetCandidateFilter ( PostingCandidateFilter_c * pFilter ) override;
@@ -647,8 +649,23 @@ public:
 	void				CollectHits ( const ExtDoc_t * pDocs ) override;
 	void				DebugDump ( int iLevel ) override;
 	NodeEstimate_t		Estimate ( int64_t iTotalDocs ) const override;
+
 private:
+	struct Term_t
+	{
+		ExtNode_i *		m_pNode;
+		const ExtDoc_t *	m_pDoc = nullptr;
+		bool			m_bEOF = false;
+	};
+
 	std::unique_ptr<PostingCandidateFilter_c> m_pRightFilter;
+	std::vector<Term_t>	m_dTerms;
+	bool				m_bStopped = false;
+
+	bool	RefillTerm ( Term_t & tTerm );
+	int		MergeFlatDocs();
+	template<int TERMS>
+	int		MergeFlatDocs();
 };
 
 
@@ -3005,6 +3022,30 @@ static ExtNode_i * CreatePayloadNode ( const XQNode_t * pNode, const ISphQwordSe
 }
 
 
+// Select flat merging for ordinary scored term ORs with at least four operands.
+static bool CanUseFlatOr ( const XQNode_t & tNode, bool bUseBM25 )
+{
+	const int iTerms = tNode.dChildren().GetLength();
+	if ( tNode.GetOp()!=SPH_QUERY_OR || !bUseBM25 || tNode.GetCount() || iTerms<4 || iTerms>32 )
+		return false;
+
+	for ( const auto * pChild : tNode.dChildren() )
+	{
+		if ( !pChild->dChildren().IsEmpty() || pChild->dWords().GetLength()!=1 || pChild->GetCount()
+			|| pChild->m_bVirtuallyPlain || pChild->m_iAtomPos!=-1 || pChild->m_dSpec.m_iFieldMaxPos
+			|| pChild->m_dSpec.m_bZoneSpan || !pChild->m_dSpec.m_dZones.IsEmpty() )
+			return false;
+
+		const auto & tWord = pChild->dWords()[0];
+		if ( tWord.m_pPayload || tWord.m_bExpanded || tWord.m_bExcluded || tWord.m_bRegex
+			|| tWord.m_bFieldStart || tWord.m_bFieldEnd || tWord.m_iBlendedGroup!=-1 )
+			return false;
+	}
+
+	return true;
+}
+
+
 ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25, const RowIdBoundaries_t * pBoundaries )
 {
 	// empty node?
@@ -3189,12 +3230,18 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 		if ( ExtNode_i * pBlockAndNot = CreateBlockAndNotNode ( *pNode, tSetup, bUseBM25 ) )
 			return pBlockAndNot;
 
+		const bool bFlatOr = CanUseFlatOr ( *pNode, bUseBM25 );
+
+		std::vector<ExtNode_i *> dOrTerms;
 		// generic create
 		ExtNode_i * pCur = NULL;
 		for ( int i=0; i<iChildren; i++ )
 		{
 			ExtNode_i * pNext = Create ( pNode->dChildren()[i], tSetup, bUseBM25, pBoundaries );
 			if ( !pNext ) continue;
+			if ( bFlatOr )
+				dOrTerms.push_back(pNext);
+
 			if ( !pCur )
 			{
 				pCur = pNext;
@@ -3220,6 +3267,9 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 				default:					assert ( 0 && "internal error: unhandled op in ExtNode_i::Create()" ); break;
 			}
 		}
+		if ( bFlatOr && dOrTerms.size()>=4 )
+			static_cast<ExtOr_c *>(pCur)->SetFlatTerms(dOrTerms);
+
 		if ( pCur && pNode->GetCount() )
 			return tSetup.m_pNodeCache->CreateProxy ( pCur, pNode, tSetup );
 		return pCur;
@@ -5095,10 +5145,34 @@ ExtOr_c::ExtOr_c ( ExtNode_i * pLeft, ExtNode_i * pRight )
 {}
 
 
+void ExtOr_c::SetFlatTerms ( const std::vector<ExtNode_i *> & dTerms )
+{
+	assert ( dTerms.size()>=4 && dTerms.size()<=32 );
+	m_dTerms.clear();
+	for ( auto * pTerm : dTerms )
+		m_dTerms.push_back ( { pTerm } );
+}
+
+
+void ExtOr_c::SetCollectHits()
+{
+	// Disable flat merging so intermediate OR nodes maintain the document cursors needed for hit collection.
+	m_dTerms.clear();
+	ExtTwofer_c::SetCollectHits();
+}
+
+
 void ExtOr_c::Reset ( const ISphQwordSetup & tSetup )
 {
 	ExtTwofer_c::Reset(tSetup);
 	m_pRightFilter.reset();
+	for ( auto & tTerm : m_dTerms )
+	{
+		tTerm.m_pDoc = nullptr;
+		tTerm.m_bEOF = false;
+	}
+
+	m_bStopped = false;
 }
 
 
@@ -5127,8 +5201,106 @@ bool ExtOr_c::SetCandidateFilter ( PostingCandidateFilter_c * pFilter )
 }
 
 
+bool ExtOr_c::RefillTerm ( Term_t & tTerm )
+{
+	if ( !tTerm.m_bEOF && (!tTerm.m_pDoc || tTerm.m_pDoc->m_tRowID==INVALID_ROWID) )
+	{
+		tTerm.m_pDoc = tTerm.m_pNode->GetDocsChunk();
+		tTerm.m_bEOF = !tTerm.m_pDoc;
+		m_bStopped |= tTerm.m_bEOF && tTerm.m_pNode->TimeExceeded();
+	}
+
+	return !m_bStopped;
+}
+
+
+template<int TERMS>
+int ExtOr_c::MergeFlatDocs()
+{
+	if ( m_bStopped )
+		return 0;
+
+	for ( auto & tTerm : m_dTerms )
+		if ( !RefillTerm(tTerm) )
+			return 0;
+
+	int iDocs = 0;
+	const int iTerms = TERMS ? TERMS : int(m_dTerms.size());
+	while ( iDocs<MAX_BLOCK_DOCS-1 )
+	{
+		int iFirst = -1;
+		RowID_t tFirst = INVALID_ROWID;
+		RowID_t tSecond = INVALID_ROWID;
+		for ( int i=0; i<iTerms; ++i )
+		{
+			auto & tTerm = m_dTerms[i];
+			if ( tTerm.m_bEOF )
+				continue;
+
+			RowID_t tRow = tTerm.m_pDoc->m_tRowID;
+			if ( tRow<tFirst )
+			{
+				tSecond = tFirst;
+				tFirst = tRow;
+				iFirst = i;
+			} else
+				tSecond = Min ( tSecond, tRow );
+		}
+
+		if ( iFirst<0 )
+			break;
+
+		auto & tLead = m_dTerms[iFirst];
+		if ( tFirst<tSecond )
+		{
+			// A sole contributor can copy a run without another multiway comparison.
+			do
+				m_dDocs[iDocs++] = *tLead.m_pDoc++;
+			while ( iDocs<MAX_BLOCK_DOCS-1 && tLead.m_pDoc->m_tRowID<tSecond );
+
+			if ( !RefillTerm(tLead) )
+				return iDocs;
+		} else
+		{
+			ExtDoc_t tDoc = *tLead.m_pDoc++;
+			for ( int i=iFirst+1; i<iTerms; ++i )
+			{
+				auto & tTerm = m_dTerms[i];
+				if ( tTerm.m_bEOF || tTerm.m_pDoc->m_tRowID!=tFirst )
+					continue;
+
+				tDoc.m_uDocFields |= tTerm.m_pDoc->m_uDocFields;
+				tDoc.m_fTFIDF += tTerm.m_pDoc++->m_fTFIDF;
+				if ( !RefillTerm(tTerm) )
+					return iDocs;
+			}
+
+			m_dDocs[iDocs++] = tDoc;
+			if ( !RefillTerm(tLead) )
+				return iDocs;
+		}
+	}
+
+	return iDocs;
+}
+
+
+int ExtOr_c::MergeFlatDocs()
+{
+	switch ( m_dTerms.size() )
+	{
+	case 4:		return MergeFlatDocs<4>();
+	case 8:		return MergeFlatDocs<8>();
+	default:	return MergeFlatDocs<0>();
+	}
+}
+
+
 const ExtDoc_t * ExtOr_c::GetDocsChunk()
 {
+	if ( !m_dTerms.empty() )
+		return ReturnDocsChunk ( MergeFlatDocs(), "or" );
+
 	int iDoc = 0;
 
 	const ExtDoc_t * pDocL = m_pDocL;

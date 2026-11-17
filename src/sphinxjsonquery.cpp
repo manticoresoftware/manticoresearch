@@ -2115,6 +2115,7 @@ static bool ParseJsonBulkImportDoc ( const JsonObj_c & tRoot, const CSphString &
 {
 	tStmt.m_sIndex = sTable;
 	tStmt.m_tQuery.m_sIndexes = sTable;
+	tStmt.m_bBulkImportDoc = true;
 	sStmt = "insert";
 	if ( !ParseDocId ( tRoot, false, tDocId, sError ) )
 		return false;

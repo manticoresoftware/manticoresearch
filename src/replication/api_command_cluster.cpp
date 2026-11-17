@@ -159,7 +159,7 @@ void HandleAPICommandCluster ( GenericOutputBuffer_c & tOut, WORD uCommandVer, I
 		break;
 
 	case E_CLUSTER::SYNCED:
-		ReceiveClusterSynced ( tOut, tBuf, sCluster );
+		ReceiveClusterSynced ( tOut, tBuf, sCluster, szClient );
 		break;
 
 	case E_CLUSTER::GET_NODES:

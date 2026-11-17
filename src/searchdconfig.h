@@ -44,7 +44,7 @@ struct ClusterDesc_t
 	sph::StringSet			m_hIndexes;			// list of index name in cluster
 	StrVec_t				m_dClusterNodes;	// string list of nodes (node - address:API_port)
 	ClusterOptions_t		m_tOptions;			// options for Galera
-	int64_t					m_iClusterEpoch = 0;
+	int64_t					m_iFilesSeqNo = 0;	// seqno of the last command whose replay needs table files; 0 - none yet
 	bool					m_bSelfBootstrapOnStartup = false;
 	CSphString				m_sUser;			// user that owns that cluster
 

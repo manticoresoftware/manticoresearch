@@ -75,9 +75,11 @@ runs:
     - name: Determine branch and target
       id: branch
       shell: bash
+      env:
+        SOURCE_BRANCH: ${{ github.head_ref }}
       run: |
         echo "branch=update-${{ inputs.name }}-version" >> $GITHUB_OUTPUT
-        echo "source_branch=${{ github.head_ref }}" >> $GITHUB_OUTPUT
+        printf 'source_branch=%s\n' "$SOURCE_BRANCH" >> "$GITHUB_OUTPUT"
         echo "target=main" >> $GITHUB_OUTPUT
 
     - name: Prepare update version branch
@@ -98,25 +100,27 @@ runs:
     - name: Check and merge source branch
       if: steps.branch.outputs.source_branch != ''
       shell: bash
+      env:
+        SOURCE_BRANCH: ${{ steps.branch.outputs.source_branch }}
       run: |
         cd manticoresearch
         # Check if the source branch exists in current repository
-        if git ls-remote --exit-code origin ${{ steps.branch.outputs.source_branch }}; then
-          echo "Source branch ${{ steps.branch.outputs.source_branch }} found in current repository"
+        if git ls-remote --exit-code --heads origin "refs/heads/$SOURCE_BRANCH"; then
+          echo "Source branch $SOURCE_BRANCH found in current repository"
 
-          git fetch origin ${{ steps.branch.outputs.source_branch }}
-          git cherry-pick origin/${{ steps.branch.outputs.source_branch }}
+          git fetch origin "refs/heads/$SOURCE_BRANCH"
+          git cherry-pick "origin/$SOURCE_BRANCH"
           if [ $? -eq 0 ]; then
-            echo "Successfully cherry-picked changes from ${{ steps.branch.outputs.source_branch }}"
+            echo "Successfully cherry-picked changes from $SOURCE_BRANCH"
             git push -u origin ${{ steps.branch.outputs.branch }}
-            git push origin :${{ steps.branch.outputs.source_branch }}
+            git push origin ":refs/heads/$SOURCE_BRANCH"
           else
             echo "Cherry-pick failed. Manual intervention required."
             git cherry-pick --abort
             exit 1
           fi
         else
-          echo "Source branch ${{ steps.branch.outputs.source_branch }} not found in current repository"
+          echo "Source branch $SOURCE_BRANCH not found in current repository"
         fi
         cd ..
 

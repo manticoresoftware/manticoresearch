@@ -83,29 +83,30 @@ static bool ReadSslData ( CSphString & sBuf, const CSphString & sFileName, CSphS
 
 	int iGot = sphReadThrottled ( iFD, (char *)sBuf.cstr(), iSize );
 	if ( iGot!=iSize )
+	{
+		sError.SetSprintf ( "%s read %d of %d bytes", sFileName.cstr(), iGot, iSize );
 		return false;
+	}
 
 	memset ( (char *)sBuf.cstr() + iSize, 0, CSphString::GetGap() );
 	return true;
 }
 
+// ssl_cert or ssl_key is set in the config; then both must load, no generated keys instead
+static bool g_bSslKeysConfigured = false;
+static CSphString g_sSslLoadError;
+
 void SetServerSSLKeys ( const CSphString & sSslCert,  const CSphString & sSslKey,  const CSphString & sSslCa )
 {
-	CSphString sError;
-
-	if ( !sSslCert.IsEmpty() && !ReadSslData ( g_sSslCert, sSslCert, sError ) )
-	{
-		sphWarning ( "%s", sError.cstr() );
-		return;
-	}
-
-	if ( !sSslKey.IsEmpty() && !ReadSslData ( g_sSslKey, sSslKey, sError ) )
-	{
-		sphWarning ( "%s", sError.cstr() );
-		return;
-	}
-
+	g_bSslKeysConfigured = !sSslCert.IsEmpty() || !sSslKey.IsEmpty();
 	g_sSslCaFileName = sSslCa;
+
+	// the error is reported once, by CheckWeCanUseSSL at startup
+	if ( !sSslCert.IsEmpty() && !ReadSslData ( g_sSslCert, sSslCert, g_sSslLoadError ) )
+		return;
+
+	if ( !sSslKey.IsEmpty() )
+		ReadSslData ( g_sSslKey, sSslKey, g_sSslLoadError );
 }
 
 static bool IsKeysSet()
@@ -163,32 +164,39 @@ static void SslFreeCtx ( SSL_CTX * pCtx )
 
 using SmartSSL_CTX_t = SharedPtrCustom_t<SSL_CTX>;
 
-// init SSL library and global context by demand
-static SmartSSL_CTX_t GetSslCtx ()
+// global context; created once by SetupSslCtx, released by the shutdown callback
+static SmartSSL_CTX_t g_pSslCtx;
+
+// init SSL library and global context
+static bool CreateSslCtx ( CSphString & sError )
 {
-	static SmartSSL_CTX_t pSslCtx;
-	if ( !pSslCtx )
+	SSL_load_error_strings();
+	SSL_library_init();
+
+	SSL_CTX * pRawCtx = SSL_CTX_new ( TLS_server_method() );
+	if ( !pRawCtx )
 	{
-		SSL_load_error_strings();
-		SSL_library_init();
-
-		const SSL_METHOD * pMode = TLS_server_method();
-		pSslCtx = SmartSSL_CTX_t ( SSL_CTX_new ( pMode ), [] ( SSL_CTX * pCtx )
-		{
-			sphLogDebugv ( BACKN "~~ Releasing ssl context." NORM );
-			BIO_s_coroAsync ( true );
-			SslFreeCtx ( pCtx );
-		});
-		SSL_CTX_set_verify ( pSslCtx, SSL_VERIFY_NONE, nullptr );
-
-		// schedule callback for final shutdown.
-		searchd::AddShutdownCb ( [pRefCtx = pSslCtx] {
-			sphLogDebugv ( BACKN "~~ Shutdowncb called." NORM );
-			pSslCtx = nullptr;
-			// pRefCtx will be also deleted going out of scope
-		} );
+		ERR_print_errors_cb ( &fnSslError, &sError );
+		if ( sError.IsEmpty() )
+			sError = "SSL_CTX_new failed";
+		return false;
 	}
-	return pSslCtx;
+
+	g_pSslCtx = SmartSSL_CTX_t ( pRawCtx, [] ( SSL_CTX * pCtx )
+	{
+		sphLogDebugv ( BACKN "~~ Releasing ssl context." NORM );
+		BIO_s_coroAsync ( true );
+		SslFreeCtx ( pCtx );
+	});
+	SSL_CTX_set_verify ( g_pSslCtx, SSL_VERIFY_NONE, nullptr );
+
+	// schedule callback for final shutdown.
+	searchd::AddShutdownCb ( [pRefCtx = g_pSslCtx] {
+		sphLogDebugv ( BACKN "~~ Shutdowncb called." NORM );
+		g_pSslCtx = nullptr;
+		// pRefCtx will be also deleted going out of scope
+	} );
+	return true;
 }
 
 static bool AddCertExtension ( X509 * pCert, int iNid, char * sVal )
@@ -361,62 +369,59 @@ static bool SetKeysFromPem ( const CSphString & sSslCert, const CSphString & sSs
 	return true;
 }
 
-static SmartSSL_CTX_t GetReadySslCtx ( CSphString * pError=nullptr )
+// set up the global context once; false with an empty sError means SSL is not configured, which is not an error
+static bool SetupSslCtx ( CSphString & sError )
 {
-	auto pCtx = GetSslCtx ();
-	if ( !pCtx )
-		return pCtx;
-
-	static bool bKeysSet = false;
-	if ( bKeysSet )
-		return pCtx;
-
-	bKeysSet = true;
-	bool bHasKeys = ( !g_sSslCert.IsEmpty() && !g_sSslKey.IsEmpty() );
-
-	// keys provided by the config
-	if ( bHasKeys )
+	// keys set in the config must load; generated keys never replace them
+	if ( g_bSslKeysConfigured )
 	{
-		if ( SetKeysFromPem ( g_sSslCert, g_sSslKey, g_sSslCaFileName, pCtx, pError ) )
-			return pCtx;
+		if ( !g_sSslLoadError.IsEmpty() )
+			sError.SetSprintf ( "failed to load configured SSL keys: %s", g_sSslLoadError.cstr() );
+		else if ( g_sSslCert.IsEmpty() || g_sSslKey.IsEmpty() )
+			sError = "failed to load configured SSL keys: both ssl_cert and ssl_key are required";
 
-		// if load keys fails and SSL is forced (for auth and Buddy communication) - fatal error
-		if ( g_bSslForced && pError )
-			pError->SetSprintf ( "failed to load configured SSL keys: %s", pError->cstr() );
+		if ( !sError.IsEmpty() || !CreateSslCtx ( sError ) )
+			return false;
 
-		return SmartSSL_CTX_t ( nullptr );
+		if ( SetKeysFromPem ( g_sSslCert, g_sSslKey, g_sSslCaFileName, g_pSslCtx, &sError ) )
+			return true;
+
+		sError.SetSprintf ( "failed to load configured SSL keys: %s", sError.cstr() );
+		return false;
 	}
+
+	// no keys in config and SSL is not required - nothing to do
+	if ( !g_bSslForced )
+		return false;
 
 	// no keys in config but SSL is required (for auth and Buddy communication)
-	if ( g_bSslForced )
+	if ( !CreateSslCtx ( sError ) )
+		return false;
+
+	if ( GenerateInMemorySslKeys ( g_sSslCert, g_sSslKey, &sError ) && SetKeysFromPem ( g_sSslCert, g_sSslKey, g_sSslCaFileName, g_pSslCtx, &sError ) )
 	{
-		if ( GenerateInMemorySslKeys ( g_sSslCert, g_sSslKey, pError ) && SetKeysFromPem ( g_sSslCert, g_sSslKey, g_sSslCaFileName, pCtx, pError ) )
-		{
-			sphLogDebug ( "generated in-memory SSL certificate" );
-			//sphSafeInfoWrite ( GetActiveLogFD(), g_sSslCert.cstr(), g_sSslCert.Length() );				
-			return pCtx;
-		}
-		else
-		{
-			if ( pError )
-				pError->SetSprintf ( "failed to generate in-memory SSL keys: %s", pError->cstr() );
-		}
-		return SmartSSL_CTX_t ( nullptr );
+		sphLogDebug ( "generated in-memory SSL certificate" );
+		return true;
 	}
 
-	// no keys provided and SSL is not required - nothing to do
-	return SmartSSL_CTX_t ( nullptr );
+	sError.SetSprintf ( "failed to generate in-memory SSL keys: %s", sError.cstr() );
+	return false;
 }
 
-// is global SSL context created and keys set
+// decided once: the first call (CheckSSL at startup) sets up the context, the static init serializes
+// concurrent first calls, later calls (handshakes, Buddy) only read the result
 bool CheckWeCanUseSSL ( CSphString * pError )
 {
-	static std::optional<bool> bWeCanUseSSL;
+	static CSphString sError;
+	static const bool bReady = SetupSslCtx ( sError );
+	if ( !bReady && pError )
+		*pError = sError;
+	return bReady;
+}
 
-	if ( !bWeCanUseSSL )
-		bWeCanUseSSL.emplace ( GetReadySslCtx ( pError )!=nullptr );
-
-	return *bWeCanUseSSL;
+static SmartSSL_CTX_t GetReadySslCtx()
+{
+	return CheckWeCanUseSSL() ? g_pSslCtx : SmartSSL_CTX_t ( nullptr );
 }
 
 // translates AsyncNetBuffer_c to openSSL BIO calls.

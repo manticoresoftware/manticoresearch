@@ -47,7 +47,8 @@ bool SecretEqual ( const VecTraits_T<BYTE> & dA, const VecTraits_T<BYTE> & dB );
 	// does NOT anyway initialize SSL library or call any of it's funcitons.
 	void SetServerSSLKeys ( const CSphString & sSslCert,  const CSphString & sSslKey,  const CSphString & sSslCa );
 
-	// Try to initialize SSL, if not yet done. Returns whether it is usable or not (i.e. - no lib, no keys, any error).
+	// Whether SSL is usable (no lib, no keys, any error - not). The first call (CheckSSL at startup) sets SSL up;
+	// on failure pError is empty when SSL is simply not configured.
 	// used to set 'switch-to-ssl' bit in mysql handshake depending from whether we can do it, or not.
 	bool CheckWeCanUseSSL ( CSphString * pError=nullptr );
 

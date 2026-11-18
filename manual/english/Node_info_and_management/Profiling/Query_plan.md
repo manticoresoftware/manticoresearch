@@ -1,5 +1,16 @@
 # Query plan
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS hn_small;
+CREATE TABLE hn_small(comment_text text);
+INSERT INTO hn_small(id,comment_text) VALUES
+(1,'dog story'),
+(2,'cat story'),
+(3,'dog and cat'),
+(4,'bird story');
+-->
 <!-- example SHOW PLAN -->
 
 The `SHOW PLAN` SQL statement and the `"plan": N` JSON interface option display the query execution plan. The plan is generated and stored during the actual execution, so in the case of SQL, profiling must be enabled in the current session **before** running that statement. This can be done with a `SET profiling=1` statement.
@@ -17,18 +28,6 @@ To view the query execution plan in a JSON query, add `"plan": N` to the query. 
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
-
-<!--
-data for the following example:
-
-DROP TABLE IF EXISTS hn_small;
-CREATE TABLE hn_small(comment_text text);
-INSERT INTO hn_small(id,comment_text) VALUES
-(1,'dog story'),
-(2,'cat story'),
-(3,'dog and cat'),
-(4,'bird story');
--->
 
 ```sql
 set profiling=1;
@@ -113,14 +112,6 @@ POST /search
 
 <!-- end -->
 
-<!-- example SHOW PLAN EXPANSION -->
-
-In some cases, the evaluated query tree can be quite different from the original one due to expansions and other transformations.
-
-<!-- intro -->
-##### SQL:
-<!-- request SQL -->
-
 <!--
 data for the following example:
 
@@ -132,6 +123,13 @@ INSERT INTO forum(id,title,content) VALUES
 (711653,'wayyy forward','hey there'),
 (711654,'way point','hey there');
 -->
+<!-- example SHOW PLAN EXPANSION -->
+
+In some cases, the evaluated query tree can be quite different from the original one due to expansions and other transformations.
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
 
 ```sql
 SET profiling=1;

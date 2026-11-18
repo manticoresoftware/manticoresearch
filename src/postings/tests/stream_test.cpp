@@ -370,7 +370,7 @@ static void TestInlineValues()
 }
 
 
-static void TestInline ( unsigned n, unsigned k, bool bMapped, bool bWide, bool bHigh )
+static void TestInline ( unsigned int n, unsigned int k, bool bMapped, bool bWide, bool bHigh, bool bScatter=false )
 {
 	Memory_c tMemory, tHits;
 	tMemory.m_bMapped = bMapped;
@@ -386,10 +386,13 @@ static void TestInline ( unsigned n, unsigned k, bool bMapped, bool bWide, bool 
 	{
 		Posting_t t;
 		t.m_uRow = i*3;
-		t.m_uTF = i%256<k ? 1 : 2;
+		t.m_uTF = (bScatter ? i*97%256 : i%256)<k ? 1 : 2;
 		unsigned f = bWide ? i%256 : 0;
 		t.m_dFields[f/32] = 1U<<(f%32);
 		t.m_uHitRef = t.m_uTF==1 ? INLINE_HIT | (uint64_t(f)<<24) | ((i&1) ? (1U<<23) : 0) | (i%449+1) : (bHigh ? uint64_t(1)<<35 : 4096)+i*20;
+		if ( bScatter && !bWide && t.m_uTF==1 )
+			t.m_uHitRef = INLINE_HIT | (1+i%127);
+
 		dPostings.push_back(t);
 		Check ( tWriter.Add ( t, sError ) );
 	}
@@ -399,6 +402,7 @@ static void TestInline ( unsigned n, unsigned k, bool bMapped, bool bWide, bool 
 	Reader_c tReader(tMemory);
 	ReaderValidation_c tChecked(tMemory);
 	Check ( tReader.Open ( 1, sError ) && tChecked.Open ( 1, sError ) );
+	HitRefView_c tView;
 	unsigned uRead = 0;
 	while ( true )
 	{
@@ -406,12 +410,15 @@ static void TestInline ( unsigned n, unsigned k, bool bMapped, bool bWide, bool 
 		if ( tReader.IsEOF() )
 			break;
 
+		Check ( tReader.ReadHitRefView ( tView, sError ) );
+		Check ( tReader.ReadFields(sError) );
 		Check ( tReader.ReadHitRefs(sError) && !tReader.GetDecodeCounts()[2] );
 		Check ( tChecked.Validate(sError) );
 		const auto & tLeaf = tReader.GetLeaf();
 		for ( unsigned i=0; i<tLeaf.m_uCount; ++i, ++uRead )
 		{
 			uint64_t uRef = tReader.GetHitRefs()[i];
+			Check ( tView.Get(i)==uRef );
 			Check ( uRef==tChecked.GetHitRefs()[i] );
 			const auto & t = dPostings[uRead];
 			if ( t.m_uTF!=1 || (uRef & INLINE_HIT) )
@@ -429,6 +436,13 @@ static void TestInline ( unsigned n, unsigned k, bool bMapped, bool bWide, bool 
 
 				Check ( uHit==uint32_t(t.m_uHitRef) && tHits.m_dData[uRef]==0 );
 			}
+		}
+
+		if ( uRead==n )
+		{
+			Check ( tReader.ReadHitRefView ( tView, sError ) );
+			for ( unsigned int i=0; i<tLeaf.m_uCount; ++i )
+				Check ( tView.Get(i)==tReader.GetHitRefs()[i] );
 		}
 
 		// Verify the selected modes and reject an unknown mode.
@@ -473,6 +487,10 @@ int main()
 				for ( bool bWide : {false,true} )
 					for ( bool bHigh : {false,true} )
 						TestInline ( n, k, bMapped, bWide, bHigh );
+
+	for ( bool bMapped : {false,true} )
+		for ( bool bWide : {false,true} )
+			TestInline ( 513, 164, bMapped, bWide, true, true );
 
 	for ( auto eCodec : {Codec_e::FOR,Codec_e::PFOR,Codec_e::VARINT} )
 		for ( unsigned n : {1U,2U,3U,4U,7U,8U,15U,16U,17U,127U,128U,129U,255U,256U,257U,1025U} )

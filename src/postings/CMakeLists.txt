@@ -16,7 +16,7 @@ endif ()
 
 option ( WITH_POSTINGS_SIMD "Build baseline x86-64 SSE2 posting packing kernels" ON )
 option ( WITH_POSTINGS_TOOLS "Build posting codec tests and benchmark" ${POSTINGS_STANDALONE} )
-add_library ( manticore_postings STATIC codec.cpp packing.cpp stream.cpp streamvalidation.cpp )
+add_library ( manticore_postings STATIC codec.cpp packing.cpp hitrefs.cpp stream.cpp streamvalidation.cpp )
 set_source_files_properties ( streamvalidation.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON )
 if ( NOT TARGET manticore_bitmap )
 	add_subdirectory ( ../std/bitmap "${CMAKE_CURRENT_BINARY_DIR}/bitmap" )

@@ -89,10 +89,9 @@ public:
 };
 
 class ExtNode_i;
-class FSMphrase_c;
 
 // Consume candidate hit bookmarks to match document-only phrases; positions cannot be requested afterwards.
-using PhraseMatcher_fn = int (*) ( ExtNode_i * pNode, const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch );
+using PhraseMatcher_fn = int (*) ( ExtNode_i * pNode, const ExtDoc_t * pDocs, ExtDoc_t * pMatches );
 
 // Lifecycle and metadata shared by document and window producers.
 class QueryNode_i

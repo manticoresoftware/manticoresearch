@@ -120,6 +120,8 @@ private:
 	bool		m_bHaveRows = false;
 };
 
+class HitRefView_c;
+
 // Reads leaf headers independently of payloads; each column is decoded on demand.
 // Structural invariants are debug assertions; indextool uses ReaderValidation_c.
 // I/O errors leave the reader in an error state until Open is called.
@@ -142,6 +144,8 @@ public:
 	bool				ReadFields ( std::string & sError );
 	bool				ReadTF ( std::string & sError );
 	bool				ReadHitRefs ( std::string & sError );
+	// Prepare the current leaf for individual hit-reference lookups by posting ordinal.
+	bool				ReadHitRefView ( HitRefView_c & tView, std::string & sError );
 
 	bool				IsEOF() const	{ return m_bEOF; }
 	uint64_t			GetEnd() const	{ return m_uEnd; }

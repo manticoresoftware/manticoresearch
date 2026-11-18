@@ -43,6 +43,7 @@ def main():
     matches = [
         '"alpha beta"', '"common alpha beta"', '"common alpha beta gamma"',
         '"alpha alpha"', '"alpha beta alpha"', '"alpha absent"', '"rare alpha"',
+        '"alpha beta alpha beta alpha beta alpha beta"', '"beta the alpha beta alpha"',
         '"alpha beta"~3', '"alpha beta gamma"~5', '"alpha alpha"~3',
         'alpha NEAR/3 beta', 'alpha NEAR/3 beta NEAR/3 gamma',
         'common NEAR/5 alpha NEAR/5 beta NEAR/5 gamma', 'alpha NEAR/3 alpha',

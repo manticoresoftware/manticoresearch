@@ -14,6 +14,35 @@
 namespace postings
 {
 
+// Random access to the compact inline and external arrays of one leaf.
+class HitRefView_c
+{
+public:
+	HitRefView_c() = default;
+	HitRefView_c ( const HitRefView_c & ) = delete;
+	HitRefView_c & operator= ( const HitRefView_c & ) = delete;
+
+	// Return the .spp offset or tagged inline hit for the posting at this index.
+	uint64_t	Get ( unsigned int iIdx ) const;
+
+private:
+	friend class Reader_c;
+
+	std::vector<uint8_t> &	GetReadBuffer()	{ return m_dBuffer; }
+
+	void		UseDecodedRefs ( const uint64_t * pRefs );
+	void		UseInlineBytes ( const uint8_t * pHits );
+	uint64_t *	PrepareDecodedRefs();
+	uint64_t *	PrepareMixedRefs ( const uint8_t * pBitmap, unsigned int uCount, unsigned int uNumExternal );
+
+	std::vector<uint8_t>					m_dBuffer;	// Encoded hit-reference column for file-backed reads.
+	std::array<uint64_t,MAX_VALUES>			m_dValues;	// Decoded .spp offsets followed by tagged inline hits.
+	std::array<uint8_t,MAX_VALUES>			m_dIndices;	// For mixed leaves, entry i is the slot in m_dValues for posting i.
+	const uint64_t *	m_pRefs = nullptr;				// Points to m_dValues or the reader's decoded references in posting order.
+	const uint8_t *		m_pIndices = nullptr;			// Points to m_dIndices when a mixed leaf needs ordinal lookup.
+	const uint8_t *		m_pInlineBytes = nullptr;		// Points directly to encoded hits when every posting has a one-byte inline hit.
+};
+
 // Decode a packed 32-bit hit from up to five canonical LEB128 bytes.
 template<bool CHECKED>
 bool InlineHitValue ( Bytes_t & tData, uint32_t & uValue, std::string & sError )

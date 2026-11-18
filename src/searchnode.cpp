@@ -508,13 +508,10 @@ public:
 	bool				SetCandidateFilter ( PostingCandidateFilter_c * pFilter ) override;
 
 	PhraseMatcher_fn	GetPhraseMatcher() override;
-	int				MatchDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch );
+	int				MatchDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches );
 
 private:
 	static constexpr int MAX_LAZY_PHRASE_TERMS = 8;
-
-	template<int TERMS>
-	int				MatchPhraseDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch );
 
 	struct NodeInfo_t
 	{
@@ -594,6 +591,7 @@ private:
 	FORCE_INLINE void	MergeHitsN ( const StoredMultiHit_t & tStoredHit );
 	FORCE_INLINE void	MergeHits2 ( const StoredMultiHit_t & tStoredHit );
 	FORCE_INLINE void	MergeHits3 ( const StoredMultiHit_t & tStoredHit );
+	void				MergeHits4 ( const StoredMultiHit_t & tStoredHit );
 
 	void				InitHitMerge ( HitInfo_t & tHitInfo, int iNode, const StoredMultiHit_t & tStoredHit );
 	void				PrefetchMatchedHits ( const ExtDoc_t * pMatched, const StoredMultiHit_t * pStoredHit ) const;
@@ -4711,6 +4709,36 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::MergeHits3 ( const StoredMultiHit_t & 
 
 
 template <bool USE_BM25,bool TEST_FIELDS>
+void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::MergeHits4 ( const StoredMultiHit_t & tStoredHit )
+{
+	auto GetKey = [] ( const HitInfo_t & tHit )
+	{
+		return tHit.m_uHitpos ? (uint64_t(tHit.m_uHitpos)<<16) | tHit.m_uQueryPos : UINT64_MAX;
+	};
+
+	HitInfo_t dHits[4];
+	uint64_t dKeys[4];
+	for ( int i=0; i<4; ++i )
+	{
+		InitHitMerge ( dHits[i], i, tStoredHit );
+		dKeys[i] = GetKey(dHits[i]);
+	}
+
+	while ( true )
+	{
+		int iLeft = dKeys[0]<=dKeys[1] ? 0 : 1;
+		int iRight = dKeys[2]<=dKeys[3] ? 2 : 3;
+		int iNext = dKeys[iLeft]<=dKeys[iRight] ? iLeft : iRight;
+		if ( dKeys[iNext]==UINT64_MAX )
+			return;
+
+		AddHit ( tStoredHit.m_tRowID, dHits[iNext] );
+		dKeys[iNext] = GetKey(dHits[iNext]);
+	}
+}
+
+
+template <bool USE_BM25,bool TEST_FIELDS>
 void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::PushNextHit ( int iNode )
 {
 	NodeInfo_t & tNode = m_dNodes[iNode];
@@ -4830,6 +4858,13 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::CollectHits ( const ExtDoc_t * pMatche
 		case 1:		CopySingleHits ( *pStoredHit );	break;
 		case 2:		MergeHits2 ( *pStoredHit );	break;
 		case 3:		MergeHits3 ( *pStoredHit );	break;
+		case 4:
+			if ( m_bQPosReverse )
+			{
+				MergeHits4 ( *pStoredHit );
+				break;
+			}
+			[[fallthrough]];
 		default:	MergeHitsN ( *pStoredHit );	break;
 		}
 	}
@@ -5723,7 +5758,7 @@ const ExtDoc_t * ExtNWay_T<FSM>::GetLazyPhraseDocs ( PhraseMatcher_fn fnMatcher 
 {
 	while ( const ExtDoc_t * pDocs = m_pNode->GetDocsChunk() )
 	{
-		int iDocs = fnMatcher ( m_pNode, pDocs, m_dDocs, *this, m_dMyHits );
+		int iDocs = fnMatcher ( m_pNode, pDocs, m_dDocs );
 		if ( iDocs )
 			return ReturnDocsChunk ( iDocs, "phrase" );
 	}
@@ -5905,102 +5940,75 @@ PhraseMatcher_fn ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GetPhraseMatcher()
 		if ( tNode.m_bHasWideFields )
 			return nullptr;
 
-	return [] ( ExtNode_i * pNode, const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch )
+	return [] ( ExtNode_i * pNode, const ExtDoc_t * pDocs, ExtDoc_t * pMatches )
 	{
-		return static_cast<ExtMultiAnd_T *>(pNode)->MatchDocs ( pDocs, pMatches, tFSM, dScratch );
+		return static_cast<ExtMultiAnd_T *>(pNode)->MatchDocs ( pDocs, pMatches );
 	};
 }
 
 
 template <bool USE_BM25,bool TEST_FIELDS>
-int ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::MatchDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch )
+int ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::MatchDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches )
 {
 	assert ( m_bCollectHits && m_bQPosReverse );
 	PrefetchMatchedHits ( pDocs, m_dStoredHits.Begin() );
 
-	int iDocs = 0;
-	switch ( m_dNodes.GetLength() )
-	{
-	case 2: iDocs = MatchPhraseDocs<2> ( pDocs, pMatches, tFSM, dScratch ); break;
-	case 3: iDocs = MatchPhraseDocs<3> ( pDocs, pMatches, tFSM, dScratch ); break;
-	case 4: iDocs = MatchPhraseDocs<4> ( pDocs, pMatches, tFSM, dScratch ); break;
-	default: iDocs = MatchPhraseDocs<0> ( pDocs, pMatches, tFSM, dScratch ); break;
-	}
-
-	m_dStoredHits.Resize(0);
-	return iDocs;
-}
-
-
-template <bool USE_BM25,bool TEST_FIELDS>
-template<int TERMS>
-int ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::MatchPhraseDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches, FSMphrase_c & tFSM, CSphVector<ExtHit_t> & dScratch )
-{
-	const int iTerms = TERMS ? TERMS : m_dNodes.GetLength();
-	assert ( iTerms>=2 && iTerms<=MAX_LAZY_PHRASE_TERMS );
-
+	const int iTerms = m_dNodes.GetLength();
 	int iDocs = 0;
 	DWORD uReads = 0;
 	int64_t iHits = 0;
 	const StoredMultiHit_t * pStored = m_dStoredHits.Begin();
-	for ( ; HasDocs(pDocs); ++pDocs, ++pStored )
+	for ( ; HasDocs(pDocs) && !m_bStopped; ++pDocs, ++pStored )
 	{
 		assert ( pStored!=m_dStoredHits.End() && pStored->m_tRowID==pDocs->m_tRowID );
-		tFSM.ResetFSM();
-
-		HitInfo_t dHeads[TERMS ? TERMS : MAX_LAZY_PHRASE_TERMS];
 		for ( int i=0; i<iTerms; ++i )
-			InitHitMerge ( dHeads[i], i, *pStored );
+			m_dNodes[i].m_pQword->SeekHitlist ( pStored->m_dHitlistOffsets[i] );
 
+		// Each hit proposes a phrase start within its field. If a term moves the
+		// start forward, all other terms must reach the new start before we accept.
+		int64_t iStart = INT64_MIN;
+		int iAligned = 0;
+		int iTerm = 0;
 		while ( true )
 		{
-			int iNext = -1;
-			for ( int i=0; i<iTerms; ++i )
-			{
-				if ( dHeads[i].m_uHitpos==EMPTY_HIT )
-					continue;
-
-				// Positional consumers receive descending query positions on ties.
-				if ( iNext<0 || dHeads[i].m_uHitpos<dHeads[iNext].m_uHitpos || (dHeads[i].m_uHitpos==dHeads[iNext].m_uHitpos && dHeads[i].m_uQueryPos>dHeads[iNext].m_uQueryPos) )
-					iNext = i;
-			}
-
-			if ( iNext<0 )
+			const auto & tNode = m_dNodes[iTerm];
+			Hitpos_t uHit = tNode.m_pQword->GetNextHit();
+			if ( uHit==EMPTY_HIT || (!(++uReads & 4095) && !CheckContinue()) )
 				break;
 
-			auto & tHead = dHeads[iNext];
-			bool bAccepted = true;
+			int iField = HITMAN::GetField(uHit);
 			if constexpr ( TEST_FIELDS )
-				bAccepted = m_dNodes[iNext].m_dQueriedFields.Test ( HITMAN::GetField(tHead.m_uHitpos) );
+				if ( !tNode.m_dQueriedFields.Test(iField) )
+					continue;
 
-			if ( bAccepted )
+			++iHits;
+			// Keep fields disjoint even when the position minus the query offset is negative.
+			int64_t iHitStart = (int64_t(iField)<<32) + HITMAN::GetPos(uHit) - tNode.m_iAtomPos;
+			if ( iHitStart<iStart )
+				continue;
+
+			if ( iHitStart>iStart )
 			{
-				ExtHit_t tHit { pDocs->m_tRowID, tHead.m_uHitpos, tHead.m_uQueryPos, tHead.m_uNodePos, 1, 1, 1, 0 };
-				++iHits;
-				if ( tFSM.HitFSM ( &tHit, dScratch ) )
-				{
-					pMatches[iDocs] = *pDocs;
-					pMatches[iDocs++].m_uDocFields = 1U<<HITMAN::GetField(tHit.m_uHitpos);
-					dScratch.Pop();
-					break;
-				}
+				iStart = iHitStart;
+				iAligned = 0;
 			}
 
-			if ( !(++uReads & 4095) && !CheckContinue() )
+			if ( ++iAligned==iTerms )
 			{
-				if ( m_pStats )
-					m_pStats->m_iFetchedHits += iHits;
-
-				return iDocs;
+				pMatches[iDocs] = *pDocs;
+				pMatches[iDocs++].m_uDocFields = 1U<<iField;
+				break;
 			}
 
-			tHead.m_uHitpos = tHead.m_pQword->GetNextHit();
+			if ( ++iTerm==iTerms )
+				iTerm = 0;
 		}
 	}
 
 	if ( m_pStats )
 		m_pStats->m_iFetchedHits += iHits;
 
+	m_dStoredHits.Resize(0);
 	return iDocs;
 }
 

@@ -292,7 +292,7 @@ bool Writer_c::PrepareHitRefs ( bool bShort, std::vector<uint8_t> & dOutput, std
 	std::array<uint64_t,MAX_VALUES> dExternal, dAll;
 	std::array<uint8_t,MAX_VALUES/8> dBitmap {};
 	std::vector<uint8_t> dInline, dHits;
-	unsigned uExternal = 0;
+	unsigned int uNumExternal = 0;
 	for ( size_t i=0; i<m_iCount; ++i )
 	{
 		uint64_t uRef = m_dPostings[i].m_uHitRef;
@@ -304,10 +304,10 @@ bool Writer_c::PrepareHitRefs ( bool bShort, std::vector<uint8_t> & dOutput, std
 			dAll[i] = m_pHits->GetPos()+dHits.size();
 			AppendExternalHit ( dHits, uint32_t(uRef) );
 		} else
-			dAll[i] = dExternal[uExternal++] = uRef;
+			dAll[i] = dExternal[uNumExternal++] = uRef;
 	}
 
-	if ( uExternal==m_iCount )
+	if ( uNumExternal==m_iCount )
 	{
 		dOutput.push_back(uint8_t(HitRefMode_e::ALL_EXTERNAL));
 		return EncodeExternalRefs ( dAll.data(), unsigned(m_iCount), bShort, dOutput, sError );
@@ -316,8 +316,8 @@ bool Writer_c::PrepareHitRefs ( bool bShort, std::vector<uint8_t> & dOutput, std
 	// Build the candidate .spd hit-reference section, starting with its mode byte:
 	// ALL_INLINE: [mode] [inline values]
 	// MIXED: [mode] [bitmap] [inline byte length] [inline values] [external offsets]
-	dOutput.push_back ( uint8_t(uExternal ? HitRefMode_e::MIXED : HitRefMode_e::ALL_INLINE) );
-	if ( uExternal )
+	dOutput.push_back ( uint8_t(uNumExternal ? HitRefMode_e::MIXED : HitRefMode_e::ALL_INLINE) );
+	if ( uNumExternal )
 	{
 		// Mixed-mode selection bitmap: one bit per posting, set for inline hits.
 		dOutput.insert ( dOutput.end(), dBitmap.begin(), dBitmap.begin()+(m_iCount+7)/8 );
@@ -328,7 +328,7 @@ bool Writer_c::PrepareHitRefs ( bool bShort, std::vector<uint8_t> & dOutput, std
 	// Packed single-hit values encoded as varints, in posting order.
 	dOutput.insert ( dOutput.end(), dInline.begin(), dInline.end() );
 	// Mixed mode ends with encoded .spp offsets for the external postings.
-	if ( uExternal && !EncodeExternalRefs ( dExternal.data(), uExternal, bShort, dOutput, sError ) )
+	if ( uNumExternal && !EncodeExternalRefs ( dExternal.data(), uNumExternal, bShort, dOutput, sError ) )
 		return false;
 
 	std::vector<uint8_t> dFallback {uint8_t(HitRefMode_e::ALL_EXTERNAL)};
@@ -937,6 +937,68 @@ bool Reader_c::ReadHitRefs ( std::string & sError )
 	assert ( CheckHitRefs(sError) );
 
 	m_dLoaded[3] = true;
+	++m_dDecodeCounts[3];
+	return true;
+}
+
+
+bool Reader_c::ReadHitRefView ( HitRefView_c & tView, std::string & sError )
+{
+	if ( !m_tDesc.m_bPositions || m_tDesc.m_tHitRefs.m_eCodec!=Codec_e::INLINE_HITS || m_dLoaded[3] )
+	{
+		if ( !ReadHitRefs(sError) )
+			return false;
+
+		tView.UseDecodedRefs ( m_dHitRefs.data() );
+		return true;
+	}
+
+	Bytes_t tData;
+	if ( !ReadColumn ( Column_e::HITREFS, tData, tView.GetReadBuffer(), sError ) )
+		return false;
+
+	auto eMode = HitRefMode_e(*tData.m_pData++);
+	--tData.m_iSize;
+
+	unsigned int uCount = m_tLeaf.m_uCount;
+	if ( eMode==HitRefMode_e::ALL_INLINE )
+	{
+		if ( tData.m_iSize==uCount )
+			tView.UseInlineBytes(tData.m_pData);
+		else if ( !MergeInlineHitRefs<false> ( tData, eMode, nullptr, uCount, nullptr, tView.PrepareDecodedRefs(), sError ) )
+			return false;
+	} else
+	{
+		unsigned int uNumExternal = uCount;
+		uint64_t * pRefs;
+		if ( eMode==HitRefMode_e::MIXED )
+		{
+			const uint8_t * pBitmap = nullptr;
+			unsigned int uInline = 0;
+			Bytes_t tHits;
+			if ( !ReadMixedHitRefsHeader<false> ( tData, uCount, pBitmap, uInline, tHits, sError ) )
+				return false;
+
+			uNumExternal = uCount-uInline;
+			pRefs = tView.PrepareMixedRefs ( pBitmap, uCount, uNumExternal );
+
+			uint64_t * pInline = pRefs+uNumExternal;
+			if ( tHits.m_iSize==uInline )
+			{
+				for ( unsigned int i=0; i<uInline; ++i )
+					pInline[i] = INLINE_HIT | tHits.m_pData[i];
+			} else if ( !MergeInlineHitRefs<false> ( tHits, HitRefMode_e::ALL_INLINE, nullptr, uInline, nullptr, pInline, sError ) )
+				return false;
+		} else
+		{
+			assert ( eMode==HitRefMode_e::ALL_EXTERNAL );
+			pRefs = tView.PrepareDecodedRefs();
+		}
+
+		if ( !ReadExternalHitRefs<false> ( tData, uNumExternal, m_tLeaf.m_bShort, pRefs, Frame, sError ) )
+			return false;
+	}
+
 	++m_dDecodeCounts[3];
 	return true;
 }

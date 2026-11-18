@@ -7,6 +7,7 @@
 // did not, you can find it at http://www.gnu.org/
 
 #include "blockqword.h"
+#include "hitrefs.h"
 #include "std/bitmap/bitmap.h"
 #include "std/bitcount.h"
 #include <algorithm>
@@ -33,6 +34,8 @@ public:
 	bool					ReadPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits ) final;
 
 private:
+	template<bool INLINE_REFS>
+	bool					ReadLeafPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits );
 	int						DrainDecodedRows ( uint64_t uEnd, RowID_t * pRows, int iCapacity );
 	const uint32_t *			FindDecodedRow ( RowID_t tRow, unsigned iHint ) const;
 	void					BuildBitmapOrdinals();
@@ -64,9 +67,11 @@ private:
 	bool		m_bAllFields = false;
 	bool		m_bRowsDecoded = true;
 	bool		m_bLowFields = false;
+	bool		m_bHitRefs = false;
 	bool		m_bOrdinals = false;
 
 	std::array<uint16_t,postings::MAX_BITMAP_BITS/32+1> m_dOrdinals;
+	std::unique_ptr<postings::HitRefView_c> m_pHitRefs;
 };
 
 
@@ -144,7 +149,7 @@ bool BlockPostingWindow_T<MAPPED>::LoadLeaf ( RowID_t tMin )
 	if ( !m_tReader.ReadRowBlock ( m_tBlock, m_tWord.m_sError ) )
 		return false;
 
-	m_bLowFields = m_bOrdinals = false;
+	m_bLowFields = m_bOrdinals = m_bHitRefs = false;
 
 	unsigned uFields = m_tReader.GetDesc().m_uFields;
 	m_bAllFields = uFields<=32 && (m_uFields & (UINT32_MAX>>(32-uFields)))==(UINT32_MAX>>(32-uFields));
@@ -695,19 +700,56 @@ bool BlockPostingWindow_T<MAPPED>::ReadPayloads ( const RowID_t * pRows, int iCo
 	if ( !iCount )
 		return true;
 
-	if ( (!m_bLowFields && !m_tReader.ReadLowFields ( m_dFields.data(), m_tWord.m_sError ))
-		|| (bTF && !m_tReader.ReadTF(m_tWord.m_sError)) || (bHits && !m_tReader.ReadHitRefs(m_tWord.m_sError)) )
+	if ( bHits && m_tReader.GetDesc().m_tHitRefs.m_eCodec==postings::Codec_e::INLINE_HITS && m_tReader.GetDesc().m_bPositions )
+		return ReadLeafPayloads<true> ( pRows, iCount, pDocs, bTF, true );
+
+	return ReadLeafPayloads<false> ( pRows, iCount, pDocs, bTF, bHits );
+}
+
+
+template<bool MAPPED>
+template<bool INLINE_REFS>
+bool BlockPostingWindow_T<MAPPED>::ReadLeafPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits )
+{
+	if ( (!m_bLowFields && !m_tReader.ReadLowFields ( m_dFields.data(), m_tWord.m_sError )) || (bTF && !m_tReader.ReadTF(m_tWord.m_sError)) )
 	{
 		m_tWord.Fail();
 		return false;
 	}
 
 	m_bLowFields = true;
+	if constexpr ( INLINE_REFS )
+	{
+		if ( !m_bHitRefs )
+		{
+			if ( !m_pHitRefs )
+				m_pHitRefs = std::make_unique<postings::HitRefView_c>();
 
-	auto Store = [&] ( int i, unsigned iOrdinal )
+			if ( !m_tReader.ReadHitRefView ( *m_pHitRefs, m_tWord.m_sError ) )
+			{
+				m_tWord.Fail();
+				return false;
+			}
+
+			m_bHitRefs = true;
+		}
+	} else if ( bHits && !m_tReader.ReadHitRefs(m_tWord.m_sError) )
+	{
+		m_tWord.Fail();
+		return false;
+	}
+
+	auto Store = [&] ( int i, unsigned int iOrdinal )
 	{
 		assert ( iOrdinal<m_tBlock.m_uCount );
-		pDocs[i] = { pRows[i], m_dFields[iOrdinal], bTF ? m_tReader.GetTF()[iOrdinal] : 0, bHits ? SphOffset_t(m_tReader.GetHitRefs()[iOrdinal]) : 0 };
+
+		SphOffset_t iRef = 0;
+		if constexpr ( INLINE_REFS )
+			iRef = SphOffset_t(m_pHitRefs->Get(iOrdinal));
+		else if ( bHits )
+			iRef = SphOffset_t(m_tReader.GetHitRefs()[iOrdinal]);
+
+		pDocs[i] = { pRows[i], m_dFields[iOrdinal], bTF ? m_tReader.GetTF()[iOrdinal] : 0, iRef };
 	};
 
 	if ( !m_bRowsDecoded && m_tBlock.m_eKind==postings::Rows_e::RANGE )
@@ -719,7 +761,7 @@ bool BlockPostingWindow_T<MAPPED>::ReadPayloads ( const RowID_t * pRows, int iCo
 		BuildBitmapOrdinals();
 		for ( int i=0; i<iCount; ++i )
 		{
-			unsigned uBit = pRows[i]-m_tBlock.m_uFirst;
+			unsigned int uBit = pRows[i]-m_tBlock.m_uFirst;
 			DWORD uMask = (DWORD(1)<<(uBit%32))-1;
 			Store ( i, m_dOrdinals[uBit/32]+sphBitCount(BitmapWord(uBit & ~31U) & uMask) );
 		}
@@ -733,10 +775,10 @@ bool BlockPostingWindow_T<MAPPED>::ReadPayloads ( const RowID_t * pRows, int iCo
 				++pRow;
 
 			assert ( pRow!=dRows.data()+m_tBlock.m_uCount && *pRow==pRows[i] );
-			Store ( i, unsigned(pRow-dRows.data()) );
+			Store ( i, unsigned int(pRow-dRows.data()) );
 		}
 
-		m_iPayloadPos = unsigned(pRow-dRows.data())+1;
+		m_iPayloadPos = unsigned int(pRow-dRows.data())+1;
 	}
 
 	return true;

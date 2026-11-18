@@ -85,6 +85,14 @@ c: 1
 c: 1
 c: 1
 ––– comment –––
+The bootstrapped node keeps the stored node list: nodes that start after it take the list from it
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_nodes_set'\G" | grep -o "127.0.0.1:[0-9]*" | sort
+––– output –––
+127.0.0.1:1312
+127.0.0.1:2312
+127.0.0.1:3312
+––– comment –––
 Full shutdown again; --new-cluster-force bootstraps node 1 even with safe_to_bootstrap cleared
 ––– input –––
 export INSTANCE=3
@@ -225,3 +233,22 @@ stdbuf -oL searchd --new-cluster -c /tmp/searchd-with-flexible-ports-auth-2.conf
 Value: closed
 1
   Value: recovery-required
+––– comment –––
+The refused node keeps its node list: after node 1 bootstraps, nodes 2 and 3 rejoin with a normal start
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+stdbuf -oL searchd --new-cluster -c /tmp/searchd-with-flexible-ports-auth-1.conf > /dev/null; mysql -h0 -P1306 -e "debug wait ${CLUSTER_NAME} like 'state' option 'timeout'=60\G" | grep Value
+––– output –––
+Value: synced
+––– input –––
+for n in 2 3; do stdbuf -oL searchd -c /tmp/searchd-with-flexible-ports-auth-$n.conf > /dev/null; done; for p in 2306 3306; do mysql -h0 -P$p -e "debug wait ${CLUSTER_NAME} like 'state' option 'timeout'=60\G" | grep Value; done; mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_size'\G" | grep Value; for p in 1306 2306 3306; do mysql -h0 -P$p -e "SELECT COUNT(*) c FROM bootstrap_restart_rt\G" | grep c:; done
+––– output –––
+Value: synced
+Value: synced
+  Value: 3
+c: 2
+c: 2
+c: 2

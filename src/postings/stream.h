@@ -15,6 +15,55 @@
 namespace postings
 {
 
+// Block postings on disk (component 4). Fields below appear in write order.
+// [x] is optional, x+ means one or more, and | separates alternatives.
+// Fixed-width integers are little-endian. See README.md beside this header for codec framing.
+//
+// .spi keyword dictionary
+//   dictionary-entry = delta-keyword posting-locator [doclist-hint] [directory-offset]
+//   posting-locator  = positive-spd-offset doc-count hit-count
+//                    | 0 row-id packed-hit
+//   Locator values are big-endian base-128 varints. In disk format 76, zero marks a
+//   positional term with one document and one hit. The row ID is absolute within the
+//   chunk. The entire posting lives here. A positive offset points to a .spd doclist.
+//   The hint is present for doc-count >= DOCLIST_HINT_THRESH and the .spe offset for
+//   doc-count > skiplist_block_size (both use the count with the hitless flag masked).
+//
+// .spd document lists
+//   doclist-entry = short-header columns | term-header leaf+
+//   short-header  = "PSS1" bytes:u16 count:u8 flags:u8 fields:u16 single-field:u16
+//                   max-tf:u32 column-bytes[4]:u16
+//   term-header   = "PST2" version:u16 flags:u16 fields:u16 reserved:u16
+//                   column-codecs[4]:u16 reserved:u32 absolute-end:u64
+//   leaf          = "BLK1" bytes:u32 count:u16 field-code:u16 first-row:u32 last-row:u32
+//                   max-tf:u32 column-bytes[4]:u32 columns
+//   columns       = rows [field-masks] [term-frequencies] [hit-refs]
+//   Short lists (1..16 rows) store the first row and subsequent gaps as unsigned LEB128.
+//   Normal leaves (1..256 rows) store a row container with inclusive bounds and either
+//   encoded gaps, a bitmap relative to first-row, or a consecutive range with empty payload.
+//   Each column has its own byte length. A shared single field and a constant TF (= max-tf)
+//   take zero column bytes. Hitless terms omit hit-refs.
+//
+// .spd hit references (INLINE_HITS codec)
+//   hit-refs = 0 external-offsets
+//            | 1 inline-values
+//            | 2 inline-bitmap inline-byte-length:u16 inline-values external-offsets
+//   Each inline value is one unsigned LEB128 packed hit. In mixed mode, bit i (LSB first)
+//   selects posting i for the inline array. Both arrays preserve posting order.
+//   External offsets are base-relative and resolve to absolute byte offsets in .spp.
+//
+// .spp positions for one term in one document
+//   hitlist-entry = packed-hit-delta+ 0
+//   Each delta is a big-endian base-128 varint, starting from packed hit zero per document.
+//   A packed hit has the field ID in bits 31..24, field-end flag in bit 23 and word
+//   position in bits 22..0. Dictionary and leaf inline values store that hit directly.
+//
+// .spe leaf directory for each .spd doclist
+//   directory-entry = "SKP1" leaf-count:u32 (first-row:u32 last-row:u32 spd-offset:u64 max-tf:u32)+
+//   A short list has one directory leaf. A dictionary singleton has no directory entry.
+//   The .spd, .spp and .spe file headers are 0x01, "BPD1"/"BPH1"/"BPS1" respectively,
+//   then the component version as a u32.
+
 constexpr unsigned COMPONENT_VERSION = 4;
 constexpr uint64_t INLINE_HIT = uint64_t(1)<<63;
 constexpr size_t MAX_FIELDS = 256;
@@ -97,6 +146,7 @@ public:
 	bool						Begin ( const TermDesc_t & tDesc, std::string & sError );
 	bool						Add ( const Posting_t & tPosting, std::string & sError );
 	bool						Finish ( std::string & sError );
+	bool						FinishDictionarySingleton ( int64_t & iLocator );
 
 	const std::vector<Leaf_t> &	GetLeaves() const	{ return m_dLeaves; }
 
@@ -161,6 +211,7 @@ public:
 private:
 	// The view borrows the input mapping or dBuffer; consume it before either is replaced.
 	bool	ReadColumn ( Column_e eColumn, Bytes_t & tData, std::vector<uint8_t> & dBuffer, std::string & sError );
+	void	OpenDictionarySingleton ( uint64_t uLocator );
 	bool	Fail ( std::string & sError, const char * sMessage );
 	bool	CheckFields ( std::string & sError );
 	bool	CheckTF ( std::string & sError );

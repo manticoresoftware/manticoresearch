@@ -31,7 +31,7 @@ static SphOffset_t PrefetchBytes ( int iHint )
 
 void DiskIndexQwordSetup_c::PrefetchDoclist ( SphOffset_t iOff, int iHint ) const
 {
-	if ( !m_pDoclist || !m_pDoclist->IsMapped() || !m_tPrefetchGate.ShouldProbe() )
+	if ( iOff<0 || !m_pDoclist || !m_pDoclist->IsMapped() || !m_tPrefetchGate.ShouldProbe() )
 		return;
 
 	if ( m_pDoclist->Prefetch ( iOff, PrefetchBytes ( iHint ) ) )
@@ -46,10 +46,12 @@ void DiskIndexQwordSetup_c::PrefetchPayload ( const DiskSubstringPayload_t & tPa
 
 	// every slice in one request; the factory probes the first one and lets the OS coalesce the rest
 	CSphFixedVector<FileRange_t> dRanges ( tPayload.m_dDoclist.GetLength() );
-	ARRAY_FOREACH ( i, dRanges )
-		dRanges[i] = { (SphOffset_t)tPayload.m_dDoclist[i].m_uOff, PrefetchBytes ( tPayload.m_dDoclist[i].m_iLen ) };
+	int iRanges = 0;
+	for ( const auto & t : tPayload.m_dDoclist )
+		if ( SphOffset_t(t.m_uOff)>=0 )
+			dRanges[iRanges++] = { SphOffset_t(t.m_uOff), PrefetchBytes(t.m_iLen) };
 
-	if ( m_pDoclist->Prefetch ( dRanges.Begin(), dRanges.GetLength() ) )
+	if ( iRanges && m_pDoclist->Prefetch ( dRanges.Begin(), iRanges ) )
 		m_tPrefetchGate.OnMiss();
 }
 

@@ -13,7 +13,7 @@ format; RT RAM segments retain their existing representation. Cross-format
 ATTACH (including into an empty table), merge, chunk loading and reconfiguration
 are rejected. One daemon can serve separate legacy and block tables.
 
-Block tables use disk header version 75, RT metadata version 26 and postings
+New block tables use disk header version 76. Version 75 block indexes with component 4 remain readable. Both use RT metadata version 26 and postings
 component version 4. Legacy output retains its existing header/metadata versions.
 Earlier experimental block components (including 2 and 3) require reindexing;
 this reader does not retain their layouts. Legacy tables remain readable.
@@ -89,7 +89,7 @@ last. No conversion or mandatory rewrite occurs at daemon startup.
 The `.spd`, `.spp` and `.spe` files start with byte 1, a four-byte magic
 (`BPD1`, `BPH1`, `BPS1`) and little-endian uint32 component version.
 
-A dictionary posting offset points to either a short-list record (1..16 documents)
+A positive dictionary posting offset points to either a short-list record (1..16 documents)
 or a normal term header. A normal term starts with this 32-byte header:
 
 | Offset | Bytes | Meaning |
@@ -161,7 +161,9 @@ There is no statistics footer.
 
 ### Singleton and short-list records
 
-Lists of 1..16 documents use one `PSS1` record instead of a term header plus leaf
+Version 76 keyword dictionaries can carry a complete posting. After the keyword, a positive doclist offset is followed by the document count and total hit count as usual. A zero offset is followed by the absolute chunk-local row ID and packed hit (field, position and field-end bit). All three values use the dictionary's existing big-endian base-128 varints. Both counts are implicitly one. The term occupies no bytes in `.spd`, `.spp` or `.spe`. This applies to positional terms in both keyword dictionary variants. Hitless terms and single-document terms with multiple hits use the regular posting records.
+
+Remaining lists of 1..16 documents use one `PSS1` record instead of a term header plus leaf
 header and framed columns. Its fixed header is 24 bytes:
 
 | Offset | Bytes | Meaning |
@@ -320,7 +322,7 @@ The six-byte integer header is retained. Its first byte is either a packed width
 - VARINT: `count` canonical uint32 LEB128 values for a non-packed array shorter than 128. Exception count is zero.
 - Width 0..32: pack `floor(count/128)*128` values using the packing layout above (FOR without exceptions, PFOR with optional exceptions). Exceptions refer only to that packed prefix. Append `count%128` canonical uint32 LEB128 values after the exceptions. No unused packed slots are written. Width zero is valid for an all-zero packed prefix with optional exceptions.
 
-Counts remain 1..256. Selection belongs to the FOR/PFOR grammar; no per-block codec ID is added. The earlier padded FOR/PFOR grammar and experimental codec ID 5 have been removed. Membership, TF, field masks and hit references remain independently readable. Singleton dictionary framing remains separate; inline position hits use codec 7 above.
+Counts remain 1..256. Selection belongs to the FOR/PFOR grammar; no per-block codec ID is added. The earlier padded FOR/PFOR grammar and experimental codec ID 5 have been removed. Membership, TF, field masks and hit references remain independently readable. Dictionary singletons carry their packed hit directly. Posting leaves use codec 7 for inline hits.
 
 ## Row container
 

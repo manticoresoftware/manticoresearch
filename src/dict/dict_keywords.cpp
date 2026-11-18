@@ -10,6 +10,7 @@
 // did not, you can find it at http://www.gnu.org
 //
 
+#include "postings/singleton.h"
 #include "dict_crc.h"
 #include "bin.h"
 #include "dict/infix/infix_builder.h"
@@ -523,6 +524,7 @@ bool CSphDictKeywords::DictReadEntry ( CSphBin& dBin, DictKeywordTagged_t& tEntr
 	tEntry.m_uOff = dBin.UnzipOffset();
 	tEntry.m_iDocs = dBin.UnzipInt();
 	tEntry.m_iHits = dBin.UnzipInt();
+	postings::UnpackKeywordPosting ( tEntry.m_uOff, tEntry.m_iDocs, tEntry.m_iHits );
 	tEntry.m_uHint = (BYTE)dBin.ReadByte();
 	if ( ( tEntry.m_iDocs & HITLESS_DOC_MASK ) > m_iSkiplistBlockSize )
 		tEntry.m_iSkiplistPos = dBin.UnzipOffset();
@@ -734,9 +736,7 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 			m_pFinalizer->PutDeltaV2 ( m_wrDict, (const BYTE*)tWord.m_sKeyword, iLen );
 		else
 			m_pFinalizer->PutDeltaKw ( m_wrDict, (const BYTE*)tWord.m_sKeyword, iLen );
-		m_wrDict.ZipOffset ( tWord.m_uOff );
-		m_wrDict.ZipInt ( tWord.m_iDocs );
-		m_wrDict.ZipInt ( tWord.m_iHits );
+		postings::WriteKeywordPosting ( m_wrDict, tWord.m_uOff, tWord.m_iDocs, tWord.m_iHits );
 		if ( (tWord.m_iDocs & HITLESS_DOC_MASK)>=DOCLIST_HINT_THRESH )
 			m_wrDict.PutByte ( tWord.m_uHint );
 		if ( ( tWord.m_iDocs & HITLESS_DOC_MASK ) > m_iSkiplistBlockSize )
@@ -904,9 +904,7 @@ void CSphDictKeywords::DictFlush()
 		else
 			m_wrTmpDict.PutByte ( (BYTE)iLen );
 		m_wrTmpDict.PutBytes ( pWord->m_sKeyword, iLen );
-		m_wrTmpDict.ZipOffset ( pWord->m_uOff );
-		m_wrTmpDict.ZipInt ( pWord->m_iDocs );
-		m_wrTmpDict.ZipInt ( pWord->m_iHits );
+		postings::WriteKeywordPosting ( m_wrTmpDict, pWord->m_uOff, pWord->m_iDocs, pWord->m_iHits );
 		m_wrTmpDict.PutByte ( pWord->m_uHint );
 		assert ( ( ( pWord->m_iDocs & HITLESS_DOC_MASK ) > m_iSkiplistBlockSize ) == ( pWord->m_iSkiplistPos != 0 ) );
 		if ( ( pWord->m_iDocs & HITLESS_DOC_MASK ) > m_iSkiplistBlockSize )
@@ -925,7 +923,7 @@ void CSphDictKeywords::DictEntry ( const DictEntry_t& tEntry )
 	assert ( tEntry.m_iDocs );
 	assert ( tEntry.m_iHits );
 	assert ( tEntry.m_iDoclistOffset );
-	assert ( tEntry.m_iDoclistLength > 0 );
+	assert ( tEntry.m_iDoclistLength>0 || tEntry.m_iDoclistOffset<0 );
 	assert ( m_iSkiplistBlockSize > 0 );
 
 	if ( !IsSorted() )
@@ -966,9 +964,7 @@ void CSphDictKeywords::DictEntry ( const DictEntry_t& tEntry )
 		m_pFinalizer->PutDeltaV2 ( m_wrDict, (const BYTE*)tEntry.m_szKeyword, iLen );
 	else
 		m_pFinalizer->PutDeltaKw ( m_wrDict, (const BYTE*)tEntry.m_szKeyword, iLen );
-	m_wrDict.ZipOffset ( tEntry.m_iDoclistOffset );
-	m_wrDict.ZipInt ( tEntry.m_iDocs );
-	m_wrDict.ZipInt ( tEntry.m_iHits );
+	postings::WriteKeywordPosting ( m_wrDict, tEntry.m_iDoclistOffset, tEntry.m_iDocs, tEntry.m_iHits );
 	auto uHint = sphDoclistHintPack ( tEntry.m_iDocs & HITLESS_DOC_MASK, tEntry.m_iDoclistLength );
 	if ( (tEntry.m_iDocs & HITLESS_DOC_MASK)>=DOCLIST_HINT_THRESH )
 		m_wrDict.PutByte ( uHint );

@@ -10,6 +10,7 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
+#include "postings/singleton.h"
 #include "indexformat.h"
 #include "diskqword.h"
 
@@ -818,6 +819,7 @@ bool KeywordsBlockReader_c::UnpackWord()
 	m_iDoclistOffset = UnzipOffsetBE ( m_pBuf );
 	m_iDocs = UnzipIntBE ( m_pBuf );
 	m_iHits = UnzipIntBE ( m_pBuf );
+	postings::UnpackKeywordPosting ( m_iDoclistOffset, m_iDocs, m_iHits );
 	const DWORD uLayoutDocs = (DWORD)( m_iDocs & HITLESS_DOC_MASK );
 	const BYTE uHint = ( uLayoutDocs>=(DWORD)DOCLIST_HINT_THRESH ) ? *m_pBuf++ : 0;
 	m_iDoclistHint = DoclistHintUnpack ( uLayoutDocs, uHint );
@@ -895,6 +897,7 @@ bool KeywordsBlockReaderV2_c::UnpackWord()
 	m_iDoclistOffset = UnzipOffsetBE ( m_pBuf );
 	m_iDocs = UnzipIntBE ( m_pBuf );
 	m_iHits = UnzipIntBE ( m_pBuf );
+	postings::UnpackKeywordPosting ( m_iDoclistOffset, m_iDocs, m_iHits );
 	const DWORD uLayoutDocs = (DWORD)( m_iDocs & HITLESS_DOC_MASK );
 	const BYTE uHint = ( uLayoutDocs>=(DWORD)DOCLIST_HINT_THRESH ) ? *m_pBuf++ : 0;
 	m_iDoclistHint = DoclistHintUnpack ( uLayoutDocs, uHint );

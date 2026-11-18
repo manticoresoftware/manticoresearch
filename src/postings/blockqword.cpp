@@ -76,7 +76,8 @@ void BlockIndexQword_T<MAPPED>::SeekDocReader ( SphOffset_t iPos, int iHint )
 {
 	ResetCursor();
 	m_iStart = m_iNext = iPos==1 ? postings::FILE_HEADER_SIZE : iPos;
-	m_rdDoclist->SeekTo ( m_iStart, iHint );
+	if ( iPos>=0 )
+		m_rdDoclist->SeekTo ( m_iStart, iHint );
 }
 
 

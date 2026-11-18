@@ -10,6 +10,7 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
+#include "postings/singleton.h"
 #include "sphinx.h"
 #include "dict/stem/sphinxstem.h"
 #include "sphinxquery/sphinxquery.h"
@@ -3698,7 +3699,7 @@ void CSphHitBuilder::DoclistEndList ()
 	if ( m_pBlockWriter )
 	{
 		m_tWord.m_iSkiplistOffset = (m_tWord.m_iDocs & HITLESS_DOC_MASK)>m_iSkiplistBlockSize ? m_wrSkiplist.GetPos() : 0;
-		m_bError |= !m_pBlockWriter->Finish ( m_wrSkiplist, *m_pLastError );
+		m_bError |= !m_pBlockWriter->Finish ( m_wrSkiplist, m_tWord.m_iDoclistOffset, *m_pLastError );
 		return;
 	}
 
@@ -3822,7 +3823,7 @@ void CSphHitBuilder::cidxHit ( AggregateHit_t * pHit )
 			// emit dict entry
 			m_tWord.m_uWordID = m_tLastHit.m_uWordID;
 			m_tWord.m_szKeyword = m_tLastHit.m_szKeyword;
-			m_tWord.m_iDoclistLength = m_wrDoclist.GetPos() - m_tWord.m_iDoclistOffset;
+			m_tWord.m_iDoclistLength = m_tWord.m_iDoclistOffset<0 ? 0 : m_wrDoclist.GetPos()-m_tWord.m_iDoclistOffset;
 			if ( m_tWord.m_iDocs )
 				m_pDict->DictEntry ( m_tWord );
 
@@ -6565,6 +6566,7 @@ public:
 			m_iDoclistOffset = m_pReader->UnzipOffset();
 			m_iDocs = m_pReader->UnzipInt();
 			m_iHits = m_pReader->UnzipInt();
+			postings::UnpackKeywordPosting ( m_iDoclistOffset, m_iDocs, m_iHits );
 			m_iHint = 0;
 			const int iLayoutDocs = m_iDocs & HITLESS_DOC_MASK;
 			if ( iLayoutDocs>=DOCLIST_HINT_THRESH )
@@ -10333,7 +10335,7 @@ void CSphIndex_VLN::DebugDumpDict ( FILE * fp, bool bDumpOnly )
 	{
 		pCtx->Reset ( m_tWordlist.AcquireDict ( &m_tWordlist.m_dCheckpoints[i] ) );
 		while ( pCtx->UnpackWord() )
-			fprintf ( fp, "%s,%d,%d," INT64_FMT "\n", pCtx->GetWord(), pCtx->m_iDocs, pCtx->m_iHits, int64_t(pCtx->m_iDoclistOffset) );
+			fprintf ( fp, "%s,%d,%d," INT64_FMT "\n", pCtx->GetWord(), pCtx->m_iDocs, pCtx->m_iHits, std::max<int64_t> ( pCtx->m_iDoclistOffset, 0 ) );
 	}
 }
 

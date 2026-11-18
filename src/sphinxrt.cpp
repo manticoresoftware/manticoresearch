@@ -10,6 +10,7 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
+#include "postings/singleton.h"
 #include "sphinxint.h"
 #include "fastcount.h"
 #include "sphinxrt.h"
@@ -4964,6 +4965,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 			break;
 
 		SphOffset_t uDocpos = tWriterDocs.GetPos();
+		SphOffset_t iLocator = uDocpos;
 		SphOffset_t uLastHitpos = 0;
 		RowID_t tLastRowID = INVALID_ROWID;
 		RowID_t tSkiplistRowID = INVALID_ROWID;
@@ -5041,7 +5043,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 
 		// write skiplist
 		int64_t iSkiplistOff = tWriterSkips.GetPos();
-		if ( pBlockWriter && iDocs && !pBlockWriter->Finish ( tWriterSkips, sError ) )
+		if ( pBlockWriter && iDocs && !pBlockWriter->Finish ( tWriterSkips, iLocator, sError ) )
 			return false;
 
 		for ( int i=1; i<dSkiplist.GetLength(); ++i )
@@ -5056,7 +5058,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 		}
 
 		// write dict entry if necessary
-		if ( tWriterDocs.GetPos()!=uDocpos )
+		if ( iDocs )
 		{
 			if ( !pBlockWriter )
 				tWriterDocs.ZipInt ( 0 ); // docs over
@@ -5089,13 +5091,18 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 
 			++iWords;
 
+			DWORD iDocsCount = iDocs;
+			if ( !pWord->m_bHasHitlist && m_tSettings.m_eHitless==SPH_HITLESS_SOME )
+				iDocsCount |= HITLESS_DOC_FLAG;
+
 			if ( bWordDict )
 			{
 				if ( bKeywordsV2 )
 					tLastWordV2.PutDelta ( tWriterDict, pWord->m_sWord, pWord->m_iWordLen );
 				else
 					tLastWord.PutDelta ( tWriterDict, pWord->m_sWord, pWord->m_iWordLen );
-				tWriterDict.ZipOffset ( uDocpos );
+
+				postings::WriteKeywordPosting ( tWriterDict, iLocator, iDocsCount, iHits );
 			} else
 			{
 				assert ( pWord->m_uWordID!=uLastWordID );
@@ -5103,14 +5110,9 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 				uLastWordID = pWord->m_uWordID;
 				assert ( uDocpos>tCtx.m_tLastDocPos );
 				tWriterDict.ZipOffset ( uDocpos - tCtx.m_tLastDocPos );
+				tWriterDict.ZipInt ( iDocsCount );
+				tWriterDict.ZipInt ( iHits );
 			}
-
-			DWORD iDocsCount = iDocs;
-			if ( !pWord->m_bHasHitlist && m_tSettings.m_eHitless==SPH_HITLESS_SOME )
-				iDocsCount |= HITLESS_DOC_FLAG;
-
-			tWriterDict.ZipInt ( iDocsCount );
-			tWriterDict.ZipInt ( iHits );
 
 			if ( bWordDict )
 			{

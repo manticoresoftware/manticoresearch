@@ -81,6 +81,13 @@ def main():
             "SELECT count(*) FROM {} WHERE MATCH('absent')",
         ]
 
+        queries += ["SELECT id,weight() FROM {} WHERE MATCH('" + match +
+                    "') ORDER BY id ASC OPTION ranker=proximity_bm25"
+                    for match in ["singlerow", "@title singlerow", "sharedonce", '"singlerow sharedonce"']]
+        if case == "wide":
+            queries += ["SELECT id FROM {} WHERE MATCH('singler*') ORDER BY id",
+                        "SELECT id FROM {} WHERE MATCH('@f33 upperfield') ORDER BY id"]
+
         # Flat scored AND exercises the block candidate/payload path. Compare
         # complete small result sets, scores and hit-based rankers across formats.
         for match in ["common alpha beta", "@title alpha @body beta", "rare common beta", "alpha alpha beta",
@@ -120,6 +127,10 @@ def main():
                          "common " + "alpha beta " * (i % 4)]
                 texts[1] += " " + " ".join("short" + str(count) for count in [1, 2, 3, 4, 8, 16, 17] if i <= count)
                 texts += ["wide common" if f == i % 34 else "" for f in range(len(fields) - 2)]
+                if i in (2, 800):
+                    texts[0] += (" singlerow" if i == 2 else "") + " sharedonce"
+                if case == "wide" and i == 800:
+                    texts[-1] += " upperfield"
                 values.append("(" + str(i) + "," + ",".join("'" + x + "'" for x in texts) + "," + str(i % 9) + ")")
             for table in tables:
                 sql("INSERT INTO " + table + " (id," + ",".join(fields) + ",grp) VALUES " + ",".join(values))

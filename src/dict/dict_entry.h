@@ -22,7 +22,7 @@ struct DictEntry_t
 	const BYTE* m_szKeyword = nullptr; ///< keyword text (for dict=keywords)
 	int m_iDocs = 0;				   ///< number of matching documents
 	int m_iHits = 0;				   ///< number of occurrences
-	SphOffset_t m_iDoclistOffset = 0;  ///< absolute document list offset (into .spd)
+	SphOffset_t m_iDoclistOffset = 0;  ///< absolute .spd offset or packed dictionary singleton
 	SphOffset_t m_iDoclistLength = 0;  ///< document list length in bytes
 	SphOffset_t m_iSkiplistOffset = 0; ///< absolute skiplist offset (into .spe)
 	int m_iDoclistHint = 0;			   ///< raw document list length hint value (0..255 range, 1 byte)

@@ -476,8 +476,43 @@ static void TestInline ( unsigned int n, unsigned int k, bool bMapped, bool bWid
 }
 
 
+static void TestDictionarySingleton()
+{
+	Memory_c tDocs, tHits;
+	Writer_c tWriter ( tDocs, &tHits );
+	TermDesc_t tDesc;
+	tDesc.m_uFields = MAX_FIELDS;
+	tDesc.m_tHitRefs = { Codec_e::INLINE_HITS };
+	std::string sError;
+	Check ( tWriter.Begin ( tDesc, sError ) );
+
+	Posting_t t;
+	t.m_uRow = INT32_MAX-1;
+	t.m_uTF = 1;
+	t.m_uHitRef = INLINE_HIT | 0xff800023U;
+	t.m_dFields.back() = 1U<<31;
+	Check ( tWriter.Add ( t, sError ) );
+
+	int64_t iLocator = 0;
+	Check ( tWriter.FinishDictionarySingleton(iLocator) && iLocator<0 );
+	Check ( tDocs.GetSize()==1 && tHits.GetSize()==1 && tWriter.GetLeaves().empty() );
+
+	Reader_c tReader(tDocs);
+	Check ( tReader.Open ( iLocator, sError ) && tReader.Next ( t.m_uRow, sError ) && !tReader.IsEOF() );
+	RowBlock_t tBlock;
+	Check ( tReader.ReadRowBlock ( tBlock, sError ) && tBlock.m_uFirst==t.m_uRow && tBlock.m_uLast==t.m_uRow );
+	Check ( tReader.ReadTF(sError) && tReader.GetTF()[0]==1 );
+	Check ( tReader.ReadFields(sError) && tReader.GetFields()[0]==t.m_dFields );
+	Check ( tReader.ReadHitRefs(sError) && tReader.GetHitRefs()[0]==t.m_uHitRef );
+	Check ( tReader.Next ( 0, sError ) && tReader.IsEOF() );
+	Check ( tReader.Open ( iLocator, sError ) && tReader.Next ( t.m_uRow+1, sError ) && tReader.IsEOF() );
+	Check ( !tDocs.m_uReadBytes );
+}
+
+
 int main()
 {
+	TestDictionarySingleton();
 	TestInlineBitmap();
 	TestInlineValues();
 	TestAdjacentTerms();

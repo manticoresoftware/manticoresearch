@@ -6,6 +6,7 @@
 // received a copy of the GPL license along with this program; if you
 // did not, you can find it at http://www.gnu.org/
 
+#include "singleton.h"
 #include "stream.h"
 #include "shortlist.h"
 #include "hitrefs.h"
@@ -495,6 +496,22 @@ bool Writer_c::Flush ( std::string & sError )
 }
 
 
+// Transfer a complete one-hit term to the dictionary before writing any posting bytes.
+bool Writer_c::FinishDictionarySingleton ( int64_t & iLocator )
+{
+	if ( !m_tDesc.m_bPositions || !m_dLeaves.empty() || m_iCount!=1 )
+		return false;
+
+	const Posting_t & t = m_dPostings[0];
+	if ( t.m_uTF!=1 || !(t.m_uHitRef & INLINE_HIT) || t.m_uRow>=INT32_MAX )
+		return false;
+
+	iLocator = PackSingleton ( t.m_uRow, uint32_t(t.m_uHitRef) );
+	m_bOpen = false;
+	return true;
+}
+
+
 bool Writer_c::Finish ( std::string & sError )
 {
 	assert ( m_bOpen && m_bHaveRows );
@@ -524,6 +541,28 @@ bool Reader_c::Fail ( std::string & sError, const char * sMessage )
 }
 
 
+void Reader_c::OpenDictionarySingleton ( uint64_t uLocator )
+{
+	uint32_t uHit = SingletonHit(uLocator);
+	unsigned uField = uHit>>24;
+	m_tDesc = {};
+	m_tDesc.m_uFields = uint16_t(uField+1);
+	m_tDesc.m_tHitRefs = { Codec_e::INLINE_HITS };
+	m_tLeaf.m_bShort = true;
+	m_tLeaf.m_uFieldWords = uField/32+1;
+	m_tLeaf.m_uFirst = m_tLeaf.m_uLast = m_dRows[0] = SingletonRow(uLocator);
+	m_tLeaf.m_uSingleField = uint16_t(uField);
+	m_tLeaf.m_uCount = 1;
+	m_tLeaf.m_uMaxTF = m_dTF[0] = 1;
+	m_dHitRefs[0] = INLINE_HIT | uHit;
+	m_dFields[0].fill(0);
+	m_dFields[0][uField/32] = 1U<<(uField%32);
+	m_dLoaded.fill(true);
+	m_uNext = m_uEnd = 0;
+	m_bEOF = false;
+}
+
+
 bool Reader_c::Open ( uint64_t uOffset, std::string & sError )
 {
 	m_bEOF = true;
@@ -533,6 +572,12 @@ bool Reader_c::Open ( uint64_t uOffset, std::string & sError )
 	m_tRowData = {};
 	m_dDecodeCounts.fill(0);
 	m_tLeaf = {};
+	if ( uOffset & DICT_SINGLETON )
+	{
+		OpenDictionarySingleton(uOffset);
+		return true;
+	}
+
 	std::array<uint8_t,TERM_HEADER_SIZE> d {};
 	assert ( uOffset<=m_tInput.GetSize() && 8<=m_tInput.GetSize()-uOffset );
 	if ( !m_tInput.Read ( uOffset, d.data(), 8, sError ) )
@@ -607,7 +652,7 @@ bool Reader_c::Next ( uint32_t uMinRow, std::string & sError )
 	if ( m_bError )
 		return false;
 
-	if ( m_tLeaf.m_bShort && !m_bEOF && m_uNext!=m_uEnd )
+	if ( m_tLeaf.m_bShort && !m_bEOF && !m_bHaveLeaf )
 	{
 		m_bHaveLeaf = true;
 		if ( !ReadRows(sError) )

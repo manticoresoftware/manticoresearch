@@ -10,6 +10,7 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
+#include "postings/singleton.h"
 #include "indexcheck.h"
 #include "postings/blockqwordvalidation.h"
 
@@ -475,9 +476,13 @@ static DictReadResult_e ReadDictEntryForCheck ( CSphAutoreader & tReader, DictFo
 
 		tEntry.m_iDoclistOffset = tReader.UnzipOffset();
 		tEntry.m_iRawDocs = tReader.UnzipInt();
+		tEntry.m_iHits = tReader.UnzipInt();
+		if ( tEntry.m_iDoclistOffset<0 || (!tEntry.m_iDoclistOffset && (uVersion<76 || !tIndexSettings.m_uPostingsFormat || tEntry.m_iRawDocs<0 || !tEntry.m_iHits)) )
+			tReporter.Fail ( "invalid dictionary posting locator at offset " INT64_FMT, tEntry.m_iDictPos );
+
+		postings::UnpackKeywordPosting ( tEntry.m_iDoclistOffset, tEntry.m_iRawDocs, tEntry.m_iHits );
 		tEntry.m_iLayoutDocs = GetDictDocsForCheck ( tEntry.m_iRawDocs, bLegacySkiplistLayout );
 		tEntry.m_iDocs = tEntry.m_iRawDocs;
-		tEntry.m_iHits = tReader.UnzipInt();
 		if ( tEntry.m_iLayoutDocs>=DOCLIST_HINT_THRESH )
 			tEntry.m_iHint = DoclistHintUnpack ( tEntry.m_iLayoutDocs, (BYTE)tReader.GetByte() );
 
@@ -1170,6 +1175,21 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 		uWordid = tEntry.m_uWordid;
 		iDoclistOffset = tEntry.m_iDoclistOffset;
 		bool bHitless = tEntry.m_bHitless;
+
+		if ( iDoclistOffset<0 && tIndexSettings.m_uPostingsFormat && bWordDict )
+		{
+			RowID_t tRow = postings::SingletonRow(iDoclistOffset);
+			Hitpos_t uHit = postings::SingletonHit(iDoclistOffset);
+			int iField = HITMAN::GetField(uHit);
+			if ( tRow>=m_iNumRows || iField>=m_tSchema.GetFieldsCount() || !HITMAN::GetPos(uHit) || tIndexSettings.m_eHitless==SPH_HITLESS_ALL )
+				m_tReporter.Fail ( "invalid dictionary singleton (word=%s, row=%u, hit=%u)", tEntry.m_szWord, tRow, uHit );
+			else if ( fnCbWordid )
+				fnCbWordid ( tRow, tCbWordid, iField, HITMAN::GetPos(uHit), HITMAN::IsEnd(uHit) );
+
+			++iWordsChecked;
+			++iWordsTotal;
+			continue;
+		}
 
 		// check whether the offset is as expected
 		if ( iDoclistOffset!=m_pDocsReader->GetPos() )

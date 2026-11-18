@@ -1945,7 +1945,7 @@ static bool PrepareNodesAndInitCluster ( ReplicationCluster_t & tCluster, BOOTST
 	{
 		if ( ePrepareMode==PrepareMode_e::STARTUP )
 		{
-			CSphString sRemoteUser;
+			CSphString sRemoteUser = tCluster.GetUserSnapshot(); // kept when no remote node is listed
 			int64_t iRemoteFilesSeqNo = 0;
 			if ( !CheckRemotesVersions ( tCluster, sRemoteUser, &iRemoteFilesSeqNo ) )
 				return false;
@@ -2087,10 +2087,15 @@ static bool PrepareClusterStartupMode ( ReplicationCluster_t & tCluster, RplBoot
 	}
 
 	// A bootstrap node starts alone: no remote donor for version, user and auth checks.
+	// It keeps the stored nodes: nodes that start after it get the node list from it.
 	if ( eBs!=RplBootstrap_e::OFF )
+	{
+		tMode.m_bKeepClusterNodes = true;
 		return true;
+	}
 
-	CSphString sRemoteUser;
+	// keep the stored user when no remote node is listed
+	CSphString sRemoteUser = tCluster.GetUserSnapshot();
 	if ( !CheckRemotesVersions ( tCluster, sRemoteUser ) )
 	{
 		CSphString sRemoteError = TlsMsg::szError();

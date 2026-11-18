@@ -2086,6 +2086,10 @@ static bool PrepareClusterStartupMode ( ReplicationCluster_t & tCluster, RplBoot
 		return true;
 	}
 
+	// A bootstrap node starts alone: no remote donor for version, user and auth checks.
+	if ( eBs!=RplBootstrap_e::OFF )
+		return true;
+
 	CSphString sRemoteUser;
 	if ( !CheckRemotesVersions ( tCluster, sRemoteUser ) )
 	{
@@ -2096,8 +2100,7 @@ static bool PrepareClusterStartupMode ( ReplicationCluster_t & tCluster, RplBoot
 
 	tCluster.SetUserSnapshot ( sRemoteUser );
 
-	// need to fetch auth from all other nodes only for non leader
-	if ( eBs==RplBootstrap_e::OFF && !GetRemotesAuth ( tCluster ) )
+	if ( !GetRemotesAuth ( tCluster ) )
 	{
 		CSphString sAuthError = TlsMsg::szError();
 		TlsMsg::Err ( "auth failed: %s", sAuthError.cstr() );

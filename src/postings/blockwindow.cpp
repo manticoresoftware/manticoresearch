@@ -775,10 +775,10 @@ bool BlockPostingWindow_T<MAPPED>::ReadLeafPayloads ( const RowID_t * pRows, int
 				++pRow;
 
 			assert ( pRow!=dRows.data()+m_tBlock.m_uCount && *pRow==pRows[i] );
-			Store ( i, unsigned int(pRow-dRows.data()) );
+			Store(i, (unsigned int)(pRow - dRows.data()));
 		}
 
-		m_iPayloadPos = unsigned int(pRow-dRows.data())+1;
+		m_iPayloadPos = (unsigned int)(pRow-dRows.data())+1;
 	}
 
 	return true;

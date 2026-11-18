@@ -18,6 +18,7 @@
 #include "std/string.h"
 #include "coroutine.h"
 #include "cluster_file_reserve.h"
+#include "std/refcounted_mt.h"
 
 
 enum class FileOp_e : BYTE {
@@ -42,12 +43,13 @@ enum class WriteResult_e : BYTE {
 
 uint64_t DoubleStringKey ( const CSphString& sFirst, const CSphString& sSecond );
 
-class RecvState_c
+class RecvState_c : public ISphRefcountedMT
 {
 public:
 	WriteResult_e Write ( int iFile, const CSphVector<FileOp_t>& dOps, const VecTraits_T<BYTE>& dBuf ) EXCLUDES ( m_tLock );
 	MergeState_t* Flush () EXCLUDES ( m_tLock );
 	void SetMerge ( const SyncSrc_t& tSync, const SyncDst_t& tRes, const CSphString& sIndexPath, const VecTraits_T<CSphString>& dFilesRef ) EXCLUDES ( m_tLock );
+	void Cancel() EXCLUDES ( m_tLock ); // close writers before their staging files can be removed
 
 private:
 	bool SetFile ( int iFile, bool bRestart ) REQUIRES ( m_tLock );
@@ -76,8 +78,10 @@ private:
 
 namespace RecvState {
 
-RecvState_c& GetState ( uint64_t tWriterKey );
+using RefPtr_t = RefCountedRefPtr_T<RecvState_c>;
+RefPtr_t GetState ( uint64_t tWriterKey );
+RefPtr_t FindState ( uint64_t tWriterKey ); // pin an existing state; a late packet must not recreate one
 void Free ( uint64_t tWriterKey );
 bool HasState ( uint64_t tWriterKey );
 
-} // RecvState
+}

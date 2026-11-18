@@ -9,6 +9,7 @@
 //
 
 #include "searchd_shard.h"
+#include "searchd_shard_bulk.h"
 
 #include "api_reply_stream.h"
 #include "client_session.h"
@@ -426,7 +427,7 @@ static int JumpConsistentHash ( uint64_t uKey, int iBuckets )
 	return static_cast<int> ( iBucket );
 }
 
-static int GetShardTargetOrdinal ( const ShardIndex_c & tShard, int64_t iDocID )
+int GetShardTargetOrdinal ( const ShardIndex_c & tShard, int64_t iDocID )
 {
 	int iTargets = tShard.m_dRouteTargets.GetLength();
 	assert ( iTargets > 0 );
@@ -1329,9 +1330,9 @@ bool CommitShardTxn ( ClientSession_c & tSession, CSphString & sError, CSphVecto
 
 	auto pDist = GetDistr ( tShardTxn.m_sShard );
 	const ShardIndex_c * pShard = AsShard ( pDist.Ptr() );
-	if ( !pShard )
+	if ( !pShard || HasActiveShardBulkLoad ( tShardTxn.m_sShard ) )
 	{
-		sError.SetSprintf ( "table '%s' absent", tShardTxn.m_sShard.cstr() );
+		sError.SetSprintf ( pShard ? "table '%s' is locked" : "table '%s' absent", tShardTxn.m_sShard.cstr() );
 		tShardTxn.Cleanup();
 		if ( pCommittedDocIDs )
 			pCommittedDocIDs->Resize ( 0 );

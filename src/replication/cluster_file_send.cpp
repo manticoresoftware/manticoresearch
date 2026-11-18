@@ -414,7 +414,7 @@ void FileReader_t::RetryFile ( int iRemoteFile, bool bNetError, WriteResult_e eR
 }
 
 // send file to multiple nodes by chunks as API command CLUSTER_FILE_SEND
-bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileState_t> & dDesc, const CSphString & sCluster, const CSphString & sIndex, const CSphString & sUser, SstProgress_i & tProgress )
+bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileState_t> & dDesc, const CSphString & sCluster, const CSphString & sIndex, uint64_t uSessionKey, const CSphString & sUser, SstProgress_i & tProgress )
 {
 	StringBuilder_c tErrors ( ";" );
 	const int64_t iSstQueryTimeoutMs = ReplicationSstQueryTimeout ();
@@ -422,7 +422,6 @@ bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteF
 	// setup buffers
 	CSphFixedVector<BYTE> dReadBuf ( tSigSrc.m_iBufferSize * dDesc.GetLength() );
 	CSphFixedVector<FileReader_t> dReaders ( dDesc.GetLength() );
-	uint64_t tKey = DoubleStringKey ( sCluster, sIndex );
 
 	ARRAY_FOREACH ( iNode, dReaders )
 	{
@@ -433,7 +432,7 @@ bool RemoteClusterFileSend ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteF
 		tReader.m_pSyncDst = dDesc[iNode].m_pSyncDst;
 
 		tReader.m_tFileSendRequest.m_tSendBuf = SendBuf_c ( dReadBuf.Begin() + tSigSrc.m_iBufferSize * iNode, tSigSrc.m_iBufferSize );
-		tReader.m_tFileSendRequest.m_tWriterKey = tKey;
+		tReader.m_tFileSendRequest.m_tWriterKey = uSessionKey;
 		tReader.m_iFileRetries = ReplicationFileRetryCount();
 
 		if ( !tReader.StartFile ( 0, tErrors ) )
@@ -530,13 +529,15 @@ bool ReceiveClusterFileSend ( GenericOutputBuffer_c & tOut, InputBuffer_c & tBuf
 	ClusterFileSend_c::ParseRequest ( tBuf, tCmd );
 	ClusterFileSendReply_t tRes;
 
-	assert ( RecvState::HasState ( tCmd.m_tWriterKey ) );
-	auto& tState = RecvState::GetState ( tCmd.m_tWriterKey );
+	auto pState = RecvState::FindState ( tCmd.m_tWriterKey );
 
 	VecTraits_T<BYTE> dBuf ( tCmd.m_tSendBuf.Begin(), tCmd.m_tSendBuf.GetLength() );
 	ApiReplyStream_c tStream ( uHeartbeatIntervalMs, uReplyVersion, tOut );
 	tStream.Start ();
-	tRes.m_eRes = tState.Write ( tCmd.m_iFile, tCmd.m_dOps, dBuf );
+	if ( pState )
+		tRes.m_eRes = pState->Write ( tCmd.m_iFile, tCmd.m_dOps, dBuf );
+	else
+		TlsMsg::Err ( "missed write state" );
 	tRes.m_iFile = tCmd.m_iFile;
 
 	if ( tRes.m_eRes != WriteResult_e::OK )

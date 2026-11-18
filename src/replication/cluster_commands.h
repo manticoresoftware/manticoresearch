@@ -18,7 +18,7 @@ void ReceiveClusterDelete ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphStr
 bool ReceiveClusterFileReserve ( GenericOutputBuffer_c& tOut, InputBuffer_c& tBuf, CSphString& sCluster, WORD uReplyVersion, DWORD uHeartbeatIntervalMs );
 void ReceiveClusterGetNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
 bool ReceiveClusterIndexAddLocal ( GenericOutputBuffer_c& tOut, InputBuffer_c& tBuf, CSphString& sCluster, WORD uReplyVersion, DWORD uHeartbeatIntervalMs );
-void ReceiveClusterSynced ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
+void ReceiveClusterSynced ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster, const char * szClient );
 void ReceiveClusterUpdateNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
 void ReceiveClusterExitUpdateNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphString& sCluster );
 void ReceiveClusterGetState ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSphString & sCluster );

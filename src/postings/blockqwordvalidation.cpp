@@ -32,6 +32,7 @@ void BlockIndexQwordValidation_c::ResetCursor()
 {
 	m_tDoc.m_tRowID = INVALID_ROWID;
 	m_bHitEOF = true;
+	m_uInlineHit = 0;
 	m_bOpen = false;
 	m_bEOF = false;
 	m_iOrdinal = 0;
@@ -161,11 +162,19 @@ const CSphMatch & BlockIndexQwordValidation_c::GetNextDoc()
 void BlockIndexQwordValidation_c::SeekHitlist ( SphOffset_t uOffset )
 {
 	m_iHitPos = EMPTY_HIT;
+	m_uInlineHit = 0;
 	m_bHitEOF = true;
 	m_tValidation.m_dHitTF.fill(0);
 
 	if ( !m_bHasHitlist )
 		return;
+
+	if ( uint64_t(uOffset) & postings::INLINE_HIT )
+	{
+		m_uInlineHit = DWORD(uOffset);
+		m_bHitEOF = false;
+		return;
+	}
 
 	if ( uOffset<postings::FILE_HEADER_SIZE || uOffset>=m_pHitFactory->GetFilesize() )
 	{
@@ -184,6 +193,21 @@ Hitpos_t BlockIndexQwordValidation_c::GetNextHit()
 {
 	if ( m_bHitEOF || !m_bHasHitlist || !m_sError.empty() )
 		return EMPTY_HIT;
+
+	if ( m_uInlineHit )
+	{
+		DWORD uHit = m_uInlineHit;
+		m_uInlineHit = 0;
+		m_bHitEOF = true;
+		++m_tValidation.m_dHitTF[HITMAN::GetField(uHit)];
+		if ( !ValidateHits() )
+		{
+			Fail();
+			return EMPTY_HIT;
+		}
+
+		return uHit;
+	}
 
 	DWORD uDelta;
 	if ( !ReadCheckedHit(uDelta) )

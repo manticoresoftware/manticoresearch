@@ -34,7 +34,7 @@ private:
 class DiskWriter_c
 {
 public:
-	explicit DiskWriter_c ( CSphWriter & tWriter );
+	DiskWriter_c ( CSphWriter & tWriter, CSphWriter & tHits );
 
 	bool	Begin ( unsigned uFields, bool bPositions, CSphString & sError );
 	bool	Add ( const Posting_t & tPosting, CSphString & sError );
@@ -42,6 +42,7 @@ public:
 
 private:
 	DiskOutput_c	m_tOutput;
+	DiskOutput_c	m_tHits;
 	Writer_c		m_tWriter;
 	std::string		m_sError;
 };

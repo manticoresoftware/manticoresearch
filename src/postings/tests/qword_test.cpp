@@ -963,6 +963,19 @@ static void TestHitReader ( const char * sFile, std::initializer_list<FileAccess
 				Check ( tWord.GetNextHit()==EMPTY_HIT && !tWord.GetReadError() );
 			}
 
+		for ( DWORD uHit : {1u,127u,128u,0x800001u,0xff800123u} )
+		{
+			tWord.SeekHitlist ( postings::INLINE_HIT | uHit );
+			Check ( tWord.GetNextHit()==uHit );
+			Check ( tWord.GetNextHit()==EMPTY_HIT && tWord.GetNextHit()==EMPTY_HIT );
+			tWord.SeekHitlist ( postings::INLINE_HIT | uHit );
+			tWord.SeekHitlist(dStarts[0]);
+			Check ( tWord.GetNextHit()==dHits[0][0] );
+			tWord.SeekHitlist ( postings::INLINE_HIT | uHit );
+			tWord.Reset();
+			Check ( tWord.GetNextHit()==EMPTY_HIT );
+		}
+
 		// A failed doclist open must also prevent a later hit seek from reviving the qword.
 		tWord.SetDocReader(pFactory);
 		tWord.SeekDocReader ( 1, 0 );

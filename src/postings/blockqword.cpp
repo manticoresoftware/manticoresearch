@@ -54,6 +54,7 @@ void BlockIndexQword_T<MAPPED>::ResetCursor()
 {
 	m_tDoc.m_tRowID = INVALID_ROWID;
 	m_bHitEOF = true;
+	m_uInlineHit = 0;
 	m_bOpen = false;
 	m_bEOF = false;
 	m_iOrdinal = 0;
@@ -282,10 +283,18 @@ template<bool MAPPED>
 void BlockIndexQword_T<MAPPED>::SeekHitlist ( SphOffset_t uOffset )
 {
 	m_iHitPos = EMPTY_HIT;
+	m_uInlineHit = 0;
 	m_bHitEOF = true;
 
 	if ( !m_bHasHitlist )
 		return;
+
+	if ( uint64_t(uOffset) & postings::INLINE_HIT )
+	{
+		m_uInlineHit = DWORD(uOffset);
+		m_bHitEOF = false;
+		return;
+	}
 
 	assert ( uOffset>=postings::FILE_HEADER_SIZE && uOffset<m_pHitFactory->GetFilesize() );
 	if constexpr ( MAPPED )
@@ -302,6 +311,14 @@ Hitpos_t BlockIndexQword_T<MAPPED>::GetNextHit()
 {
 	if ( m_bHitEOF || !m_bHasHitlist || !m_sError.empty() )
 		return EMPTY_HIT;
+
+	if ( m_uInlineHit )
+	{
+		DWORD uHit = m_uInlineHit;
+		m_uInlineHit = 0;
+		m_bHitEOF = true;
+		return uHit;
+	}
 
 	DWORD uDelta;
 	if constexpr ( MAPPED )

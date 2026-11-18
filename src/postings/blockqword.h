@@ -67,6 +67,7 @@ private:
 	SphOffset_t	m_iNext = 0;
 	unsigned	m_iOrdinal = 0;
 	RowID_t		m_tHint = 0;
+	DWORD		m_uInlineHit = 0;
 	bool		m_bHitEOF = true;
 	bool		m_bOpen = false;
 	bool		m_bEOF = false;

@@ -17,7 +17,10 @@ add_library ( manticore_bitmap STATIC )
 
 function ( bitmap_objects NAME )
 	add_library ( bitmap_${NAME} OBJECT ${ARGN} )
-	target_link_libraries ( bitmap_${NAME} PRIVATE lextra )
+	target_compile_features ( bitmap_${NAME} PRIVATE cxx_std_17 )
+	if ( TARGET lextra )
+		target_link_libraries ( bitmap_${NAME} PRIVATE lextra )
+	endif ()
 	set_target_properties ( bitmap_${NAME} PROPERTIES INTERPROCEDURAL_OPTIMIZATION FALSE POSITION_INDEPENDENT_CODE ON )
 	# Also override LTO supplied through global compiler flags.
 	if ( CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" )

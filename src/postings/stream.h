@@ -16,11 +16,15 @@ namespace postings
 {
 
 constexpr unsigned COMPONENT_VERSION = 4;
+constexpr uint64_t INLINE_HIT = uint64_t(1)<<63;
 constexpr size_t MAX_FIELDS = 256;
 constexpr size_t FIELD_WORDS = MAX_FIELDS/32;
 constexpr size_t TERM_HEADER_SIZE = 32;
 constexpr size_t LEAF_HEADER_SIZE = 40;
 constexpr size_t MAX_LEAF_BYTES = 512*1024;
+
+// Hit-reference layout within a leaf.
+enum class HitRefMode_e : uint8_t { ALL_EXTERNAL = 0, ALL_INLINE = 1, MIXED = 2 };
 
 enum class Column_e { ROWS, FIELDS, TF, HITREFS, COUNT };
 constexpr size_t COLUMNS = size_t(Column_e::COUNT);
@@ -38,10 +42,11 @@ struct TermDesc_t
 
 struct Posting_t
 {
-	uint32_t	m_uRow = 0;
-	uint32_t	m_uTF = 0;
-	uint64_t	m_uHitRef = 0;
+	uint32_t	m_uRow = 0;		// Internal row ID within the disk index or chunk.
+	uint32_t	m_uTF = 0;		// Number of occurrences of this term in the document.
+	uint64_t	m_uHitRef = 0;	// Absolute .spp byte offset, or INLINE_HIT | packed 32-bit hit when TF is 1.
 
+	// Fields containing the term: field f is bit f%32 in word f/32.
 	std::array<uint32_t,FIELD_WORDS>	m_dFields {};
 };
 
@@ -87,7 +92,7 @@ public:
 class Writer_c
 {
 public:
-	explicit Writer_c ( Output_i & tOutput );
+	explicit Writer_c ( Output_i & tOutput, Output_i * pHits = nullptr );
 
 	bool						Begin ( const TermDesc_t & tDesc, std::string & sError );
 	bool						Add ( const Posting_t & tPosting, std::string & sError );
@@ -99,8 +104,10 @@ private:
 	bool	WriteShort ( std::string & sError );
 	bool	Flush ( std::string & sError );
 	bool	EncodeHitRefs ( std::vector<uint8_t> & dOutput, std::string & sError ) const;
+	bool	PrepareHitRefs ( bool bShort, std::vector<uint8_t> & dOutput, std::string & sError );
 
 	Output_i &	m_tOutput;
+	Output_i *	m_pHits;
 	TermDesc_t	m_tDesc;
 
 	std::array<Posting_t,MAX_VALUES>	m_dPostings;

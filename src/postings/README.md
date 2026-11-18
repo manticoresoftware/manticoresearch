@@ -105,7 +105,7 @@ or a normal term header. A normal term starts with this 32-byte header:
 
 Codec IDs are selected once per normal term stream.
 Changing a registered codec selection does not require a component-version bump.
-New output selects PFOR (2) for rows, masks and TF, and BASE_DELTA (6) for hit references. FOR/PFOR use constant and short-array modes plus unpadded varint tails. The earlier experimental padded encoding is no longer supported; existing block tables must be reindexed. The enclosing component version is 4. Legacy-format tables are unaffected.
+New output selects PFOR (2) for rows, masks and TF, and INLINE_HITS (7) for hit references. FOR/PFOR use constant and short-array modes plus unpadded varint tails. The earlier experimental padded encoding is no longer supported; existing block tables must be reindexed. The enclosing component version is 4. Legacy-format tables are unaffected.
 
 Each 1..256-posting normal leaf has a 40-byte header: `BLK1`, byte length (uint32),
 posting count and field code (uint16 each), first/last row and maximum TF
@@ -115,7 +115,47 @@ in its low bits: every posting belongs to that field, and the field section is
 empty. Otherwise the code is the number of 32-bit mask words. A zero-length TF
 section means every posting has the stored maximum TF; this includes TF=1.
 Rows use the row-container grammar below. Other integer frames have a uint32
-byte-length prefix. Field masks store one frame per 32-bit mask word. Hit references decode to absolute 64-bit byte offsets into `.spp`. With BASE_DELTA (6), the section stores a little-endian uint64 base (minimum reference in the leaf), then a one-byte flag (bit 0: high parts present; other bits zero), then a length-prefixed PFOR low-32-bit frame and, only when needed, a PFOR high-32-bit frame. Frames contain offsets relative to the base. All relative offsets fit in uint32 in the common case, even when the base exceeds 4 GiB. The reader adds the base to reconstruct the same stable absolute bookmarks. Unordered references and spans above 4 GiB are supported. Codecs 1-4 in this section use the two-frame absolute low/high layout; ID 6 is valid only for hit-reference sections, not ordinary integer/row streams.
+byte-length prefix. Field masks store one frame per 32-bit mask word. External hit references decode to absolute 64-bit byte offsets into `.spp`; codec 7 can also return tagged inline hits. With BASE_DELTA (6), the section stores a little-endian uint64 base (minimum reference in the leaf), then a one-byte flag (bit 0: high parts present; other bits zero), then a length-prefixed PFOR low-32-bit frame and, only when needed, a PFOR high-32-bit frame. Frames contain offsets relative to the base. All relative offsets fit in uint32 in the common case, even when the base exceeds 4 GiB. The reader adds the base to reconstruct the same stable absolute bookmarks. Unordered references and spans above 4 GiB are supported. Codecs 1-4 in this section use the two-frame absolute low/high layout; ID 6 is valid only for hit-reference sections, not ordinary integer/row streams.
+
+
+### Inline-capable hit references (codec 7)
+
+The codec ID is selected per term. Each hit-reference section begins with one
+mode byte; it does not require the TF column:
+
+| Mode | Remaining bytes |
+|---|---|
+| 0: external | Existing BASE_DELTA section (short lists: base plus varint offsets) |
+| 1: inline | One unsigned LEB128 packed hit per posting, without terminators |
+| 2: mixed | `ceil(count/8)` bitmap bytes, uint16 inline-section byte length, inline varints, external-reference section |
+
+Bitmap bit `i%8` in byte `i/8` selects an inline hit for posting `i`. Unused
+high bits are zero. Both compact arrays follow posting order; mixed mode must
+contain both kinds. The number of external values comes from the bitmap.
+Packed hits retain their existing field, position and end-marker bits. These
+are independent values, not deltas between documents. No high-bit tags are
+stored in the compressed arrays. The decoder returns `(1ULL<<63)|packed_hit`
+for inline entries and ordinary positive byte offsets for external entries.
+Copied bookmarks support delayed and backward hit reads in both cases.
+The reader counts mixed selection bits through runtime-dispatched
+`bitmap::CountBytes`, accepting unaligned bytes and an unpadded tail.
+Inline values use a one-byte fast path and a bounded uint32 LEB128 decoder;
+these reader optimizations do not change the stored encoding.
+
+The writer holds single hits until closing the leaf and writes multi-hit lists
+normally. It encodes the inline candidate and an all-external fallback, including
+the real PFOR tail/constant framing costs. The fallback appends the held single
+hitlists, so its offsets need not follow posting order. Inline/mixed is selected
+only when its reference bytes are strictly smaller than the fallback reference
+bytes plus the appended `.spp` bytes. Equal sizes choose external. This avoids
+assuming that removing one reference always shrinks a packed array.
+
+Plain indexing, RT flush and merge use this selection. Hitless terms have no
+reference section. Previously written external-only block records remain
+readable. Existing readers that do not recognize codec 7 or short-header bit 1
+cannot read new output; rebuild with the new binary to obtain inline hits.
+The enclosing component version remains 4: the new stream codec and short
+record capability bit identify the encoding.
 
 There is no statistics footer.
 
@@ -129,7 +169,7 @@ header and framed columns. Its fixed header is 24 bytes:
 | 0 | 4 | `PSS1` |
 | 4 | 2 | Total record bytes |
 | 6 | 1 | Document count, 1..16 |
-| 7 | 1 | Positions present (bit 0); other bits zero |
+| 7 | 1 | Positions present (bit 0); inline-capable references (bit 1); other bits zero |
 | 8 | 2 | Field count, 1..256 |
 | 10 | 2 | Implicit single field ID, or 256 for explicit masks |
 | 12 | 4 | Maximum TF |
@@ -143,6 +183,8 @@ store a minimum absolute base and one relative offset per document. A singleton
 stores only the base, without a redundant zero offset. An implicit single field
 requires no mask bytes. Hitless records omit references entirely.
 
+With header bit 1 set, references use codec 7 above, with the short external-offset grammar. With bit 1 clear, they retain the external-only grammar above.
+
 The short-record kind defines this fixed varint encoding; normal streams retain
 their codec selectors. Section lengths let consumers skip TF and references.
 Readers expose short lists through the same leaf/window and qword interfaces.
@@ -150,10 +192,11 @@ The last row is obtained by decoding at most 16 row IDs; no bitmap or per-row
 record reconstruction is needed merely to open the list. Maximum TF is retained
 in both normal and short records.
 
-Positions are always external: existing packed-hit deltas, big-endian varints,
-terminated by zero per document. Singleton/single-hit postings are not inline.
+External positions use existing packed-hit deltas, big-endian varints,
+terminated by zero per document. Selected single-hit postings instead store
+their packed position in the hit-reference column, with no `.spp` bytes.
 
-A hit reference points directly to the first varint of that document's hitlist:
+An external hit reference points directly to the first varint of that document's hitlist:
 
 ```text
 .spi term entry -> .spd term header -> posting leaf
@@ -212,7 +255,7 @@ normalization only; original copyright/license notices remain intact.
 Select the integer codec once per encoded posting stream (rows, field masks,
 TF or hit references). These frames do not describe `.spp` hitlists. The M1
 descriptor is one little-endian uint16 codec ID:
-FOR=1, PFOR=2, VARINT=3, CONSTANT=4; zero and unknown IDs are errors. BASE_DELTA=6 is reserved for the hit-reference section grammar described above.
+FOR=1, PFOR=2, VARINT=3, CONSTANT=4; zero and unknown IDs are errors. BASE_DELTA=6 and INLINE_HITS=7 are reserved for the hit-reference section grammars described above.
 Read this descriptor once and pass the resulting StreamDesc_t to every block
 operation. It is not prepended to every frame. The term metadata above identifies the stream kind, boundaries and descriptor location.
 
@@ -277,7 +320,7 @@ The six-byte integer header is retained. Its first byte is either a packed width
 - VARINT: `count` canonical uint32 LEB128 values for a non-packed array shorter than 128. Exception count is zero.
 - Width 0..32: pack `floor(count/128)*128` values using the packing layout above (FOR without exceptions, PFOR with optional exceptions). Exceptions refer only to that packed prefix. Append `count%128` canonical uint32 LEB128 values after the exceptions. No unused packed slots are written. Width zero is valid for an all-zero packed prefix with optional exceptions.
 
-Counts remain 1..256. Selection belongs to the FOR/PFOR grammar; no per-block codec ID is added. The earlier padded FOR/PFOR grammar and experimental codec ID 5 have been removed. Membership, TF, field masks and hit references remain independently readable. Singleton dictionary framing and inline position hits are not part of this change.
+Counts remain 1..256. Selection belongs to the FOR/PFOR grammar; no per-block codec ID is added. The earlier padded FOR/PFOR grammar and experimental codec ID 5 have been removed. Membership, TF, field masks and hit references remain independently readable. Singleton dictionary framing remains separate; inline position hits use codec 7 above.
 
 ## Row container
 

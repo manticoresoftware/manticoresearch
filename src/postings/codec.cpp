@@ -47,7 +47,7 @@ void WriteLE ( uint8_t * pData, uint32_t uValue, unsigned uBytes )
 
 bool IsKnownCodec ( Codec_e eCodec )
 {
-	return eCodec==Codec_e::FOR || eCodec==Codec_e::PFOR || eCodec==Codec_e::VARINT || eCodec==Codec_e::CONSTANT || eCodec==Codec_e::BASE_DELTA;
+	return eCodec==Codec_e::FOR || eCodec==Codec_e::PFOR || eCodec==Codec_e::VARINT || eCodec==Codec_e::CONSTANT || eCodec==Codec_e::BASE_DELTA || eCodec==Codec_e::INLINE_HITS;
 }
 
 unsigned Width ( uint32_t uValue )
@@ -281,7 +281,7 @@ bool EncodeIntegers ( StreamDesc_t tStream, const uint32_t * pValues, size_t iCo
 		return Fail ( sError, "Unavailable packing backend" );
 
 	const Codec_e eCodec = tStream.m_eCodec;
-	if ( !IsKnownCodec(eCodec) || eCodec==Codec_e::BASE_DELTA )
+	if ( !IsKnownCodec(eCodec) || eCodec==Codec_e::BASE_DELTA || eCodec==Codec_e::INLINE_HITS )
 		return Fail ( sError, "Unknown stream codec" );
 
 	bool bPacked = eCodec==Codec_e::FOR || eCodec==Codec_e::PFOR;
@@ -344,7 +344,7 @@ bool InspectIntegers ( StreamDesc_t tStream, Bytes_t tInput, IntegerDesc_t & tDe
 
 	const auto * p = tInput.m_pData;
 	IntegerDesc_t tParsed { p[0], p[1], uint16_t(ReadLE ( p+2, 2 )), { p+6, ReadLE ( p+4, 2 ) } };
-	if ( !IsKnownCodec(tStream.m_eCodec) || tStream.m_eCodec==Codec_e::BASE_DELTA )
+	if ( !IsKnownCodec(tStream.m_eCodec) || tStream.m_eCodec==Codec_e::BASE_DELTA || tStream.m_eCodec==Codec_e::INLINE_HITS )
 		return Fail ( sError, "Unknown stream codec" );
 
 	if ( !tParsed.m_uCount || tParsed.m_uCount>MAX_VALUES || tParsed.m_tPayload.m_iSize!=tInput.m_iSize-INTEGER_HEADER_SIZE )
@@ -507,7 +507,7 @@ static bool ParseRows ( StreamDesc_t tStream, Bytes_t tInput, RowBlock_t & tBloc
 	if ( !tInput.m_pData || tInput.m_iSize<ROW_HEADER_SIZE || std::memcmp ( tInput.m_pData, "PST1", 4 ) || tInput.m_pData[4]!=1 )
 		return Fail ( sError, "Invalid row block magic/version or truncated header" );
 
-	if ( !IsKnownCodec(tStream.m_eCodec) || tStream.m_eCodec==Codec_e::BASE_DELTA )
+	if ( !IsKnownCodec(tStream.m_eCodec) || tStream.m_eCodec==Codec_e::BASE_DELTA || tStream.m_eCodec==Codec_e::INLINE_HITS )
 		return Fail ( sError, "Unknown stream codec" );
 
 	const auto * p = tInput.m_pData;

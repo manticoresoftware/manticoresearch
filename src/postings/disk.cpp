@@ -63,12 +63,13 @@ bool DiskOutput_c::Patch ( uint64_t uOffset, Bytes_t tData, std::string & sError
 }
 
 
-DiskWriter_c::DiskWriter_c ( CSphWriter & tWriter ) : m_tOutput(tWriter), m_tWriter(m_tOutput) {}
+DiskWriter_c::DiskWriter_c ( CSphWriter & tWriter, CSphWriter & tHits ) : m_tOutput(tWriter), m_tHits(tHits), m_tWriter ( m_tOutput, &m_tHits ) {}
 
 
 bool DiskWriter_c::Begin ( unsigned uFields, bool bPositions, CSphString & sError )
 {
 	TermDesc_t tDesc;
+	tDesc.m_tHitRefs = {Codec_e::INLINE_HITS};
 	tDesc.m_uFields = uint16_t(uFields);
 	tDesc.m_bPositions = bPositions;
 	if ( m_tWriter.Begin ( tDesc, m_sError ) )

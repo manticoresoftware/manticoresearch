@@ -4878,15 +4878,18 @@ static bool WriteBlockPosting ( postings::DiskWriter_c & tBlockWriter, CSphWrite
 		};
 
 		if ( tDoc.m_uHits==1 )
-			fnWriteHit(tDoc.m_uHit);
-		else
+		{
+			unsigned f = HITMAN::GetField(tDoc.m_uHit);
+			tPosting.m_dFields[f/32] |= 1U<<(f%32);
+			tPosting.m_uHitRef = postings::INLINE_HIT | tDoc.m_uHit;
+		} else
 		{
 			RtHitReader_c tInHits ( tSegment, tDoc );
 			while ( DWORD uValue = tInHits.UnzipHit() )
 				fnWriteHit(uValue);
-		}
 
-		tWriterHits.ZipInt(0);
+			tWriterHits.ZipInt(0);
+		}
 	} else
 		tPosting.m_dFields[0] = tDoc.m_uDocFields;
 
@@ -4913,7 +4916,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 		postings::WriteFileHeader ( tWriterHits, "BPH1" );
 		postings::WriteFileHeader ( tWriterDocs, "BPD1" );
 		postings::WriteFileHeader ( tWriterSkips, "BPS1" );
-		pBlockWriter = std::make_unique<postings::DiskWriter_c>(tWriterDocs);
+		pBlockWriter = std::make_unique<postings::DiskWriter_c> ( tWriterDocs, tWriterHits );
 	} else
 	{
 		tWriterHits.PutByte(1);

@@ -8,6 +8,7 @@
 
 #include "streamvalidation.h"
 #include "shortlist.h"
+#include "hitrefs.h"
 #include <algorithm>
 #include <cassert>
 #include <cstring>
@@ -95,6 +96,7 @@ bool ReaderValidation_c::Open ( uint64_t uOffset, std::string & sError )
 	{
 		m_tDesc = {};
 		m_tDesc.m_bPositions = d[7]&1;
+		m_tDesc.m_tHitRefs = { (d[7]&2) ? Codec_e::INLINE_HITS : Codec_e::BASE_DELTA };
 		m_tDesc.m_uFields = uint16_t(Get(d.data()+8,2));
 		m_tLeaf.m_bShort = true;
 		m_tLeaf.m_uOffset = uOffset;
@@ -111,7 +113,7 @@ bool ReaderValidation_c::Open ( uint64_t uOffset, std::string & sError )
 			uBytes += m_tLeaf.m_dSizes[i];
 		}
 
-		if ( !ShortCheck<true> ( !(d[7]&~1U) && m_tDesc.m_uFields && m_tDesc.m_uFields<=MAX_FIELDS && m_tLeaf.m_uCount && m_tLeaf.m_uCount<=SHORT_LIST_MAX && m_tLeaf.m_uMaxTF && uBytes==m_tLeaf.m_uBytes && uBytes<=m_tInput.GetSize()-uOffset && m_tLeaf.m_dSizes[0] && (m_tLeaf.m_uSingleField==MAX_FIELDS ? m_tLeaf.m_dSizes[1]!=0 : m_tLeaf.m_uSingleField<m_tDesc.m_uFields && !m_tLeaf.m_dSizes[1]) && bool(m_tLeaf.m_dSizes[3])==m_tDesc.m_bPositions, sError ) )
+		if ( !ShortCheck<true> ( !(d[7]&~3U) && m_tDesc.m_uFields && m_tDesc.m_uFields<=MAX_FIELDS && m_tLeaf.m_uCount && m_tLeaf.m_uCount<=SHORT_LIST_MAX && m_tLeaf.m_uMaxTF && uBytes==m_tLeaf.m_uBytes && uBytes<=m_tInput.GetSize()-uOffset && m_tLeaf.m_dSizes[0] && (m_tLeaf.m_uSingleField==MAX_FIELDS ? m_tLeaf.m_dSizes[1]!=0 : m_tLeaf.m_uSingleField<m_tDesc.m_uFields && !m_tLeaf.m_dSizes[1]) && bool(m_tLeaf.m_dSizes[3])==m_tDesc.m_bPositions, sError ) )
 			return Fail ( sError, "invalid short posting header" );
 
 		m_uEnd = uOffset+uBytes;
@@ -136,7 +138,7 @@ bool ReaderValidation_c::Open ( uint64_t uOffset, std::string & sError )
 			return false;
 		}
 
-	CHECK_DATA ( m_tDesc.m_tRows.m_eCodec!=Codec_e::BASE_DELTA && m_tDesc.m_tFields.m_eCodec!=Codec_e::BASE_DELTA && m_tDesc.m_tTF.m_eCodec!=Codec_e::BASE_DELTA, "invalid integer stream codec" );
+	CHECK_DATA ( (m_tDesc.m_tRows.m_eCodec!=Codec_e::BASE_DELTA && m_tDesc.m_tRows.m_eCodec!=Codec_e::INLINE_HITS) && (m_tDesc.m_tFields.m_eCodec!=Codec_e::BASE_DELTA && m_tDesc.m_tFields.m_eCodec!=Codec_e::INLINE_HITS) && (m_tDesc.m_tTF.m_eCodec!=Codec_e::BASE_DELTA && m_tDesc.m_tTF.m_eCodec!=Codec_e::INLINE_HITS), "invalid integer stream codec" );
 
 	m_uEnd = Get(d.data()+24,8);
 	m_uNext = uOffset+TERM_HEADER_SIZE;
@@ -373,6 +375,16 @@ bool ReaderValidation_c::ReadHitRefs ( std::string & sError )
 		return false;
 
 	std::fill_n ( m_dHitRefs.begin(), m_tLeaf.m_uCount, 0 );
+	if ( m_tDesc.m_bPositions && m_tDesc.m_tHitRefs.m_eCodec==Codec_e::INLINE_HITS )
+	{
+		if ( !ReadInlineHitRefs<true> ( tData, m_tLeaf.m_uCount, m_tLeaf.m_bShort, m_dHitRefs.data(), Frame, sError ) )
+			return Fail ( sError, "invalid inline posting hit references" );
+
+		m_dLoaded[3] = true;
+		++m_dDecodeCounts[3];
+		return true;
+	}
+
 	if ( m_tLeaf.m_bShort )
 	{
 		if ( m_tDesc.m_bPositions && !ShortHitRefs<true> ( tData, m_tLeaf.m_uCount, m_dHitRefs.data(), sError ) )
@@ -475,6 +487,10 @@ bool ReaderValidation_c::Validate ( std::string & sError )
 {
 	if ( !ReadRows(sError) || !ReadFields(sError) || !ReadTF(sError) || !ReadHitRefs(sError) )
 		return false;
+
+	for ( unsigned i=0; m_tDesc.m_bPositions && i<m_tLeaf.m_uCount; ++i )
+		if ( (m_dHitRefs[i] & INLINE_HIT) && (m_dTF[i]!=1 || (uint32_t(m_dHitRefs[i])>>24)>=m_tDesc.m_uFields) )
+			return Fail ( sError, "inline hit frequency/field mismatch" );
 
 	return true;
 }

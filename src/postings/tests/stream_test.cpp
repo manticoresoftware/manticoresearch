@@ -8,6 +8,7 @@
 
 #include "stream.h"
 #include "shortlist.h"
+#include "hitrefs.h"
 #include "streamvalidation.h"
 #include <algorithm>
 #include <cstdlib>
@@ -284,9 +285,194 @@ static void TestAdjacentTerms()
 }
 
 
+static void CheckInlineCorruption ( Bytes_t tData, unsigned uCount, bool bShort )
+{
+	auto fnFrame = [] ( StreamDesc_t tStream, Bytes_t & tFrame, uint32_t * pValues, size_t iCount, std::string & sError )
+	{
+		if ( tFrame.m_iSize<4 )
+			return false;
+
+		uint32_t uBytes = 0;
+		for ( unsigned i=0; i<4; ++i )
+			uBytes |= uint32_t(tFrame.m_pData[i])<<(i*8);
+
+		if ( uBytes>tFrame.m_iSize-4 )
+			return false;
+
+		IntegerDesc_t tDesc;
+		Bytes_t tInts { tFrame.m_pData+4, uBytes };
+		if ( !InspectIntegers ( tStream, tInts, tDesc, sError ) || tDesc.m_uCount!=iCount || !DecodeIntegersInto ( tStream, tInts, pValues, iCount, sError ) )
+			return false;
+
+		tFrame.m_pData += 4+uBytes;
+		tFrame.m_iSize -= 4+uBytes;
+		return true;
+	};
+
+	uint64_t dRefs[MAX_VALUES];
+	std::string sError;
+	for ( size_t i=0; i<tData.m_iSize; ++i )
+		Check ( !ReadInlineHitRefs<true> ( {tData.m_pData,i}, uCount, bShort, dRefs, fnFrame, sError ) );
+
+	std::vector<uint8_t> dExtra ( tData.m_pData, tData.m_pData+tData.m_iSize );
+	dExtra.push_back(0);
+	Check ( !ReadInlineHitRefs<true> ( {dExtra.data(),dExtra.size()}, uCount, bShort, dRefs, fnFrame, sError ) );
+}
+
+
+static void TestInlineBitmap()
+{
+	std::array<uint8_t,40> dBits;
+	for ( unsigned uOffset=0; uOffset<8; ++uOffset )
+		for ( unsigned uBytes=0; uBytes<=32; ++uBytes )
+		{
+			unsigned uExpected = 0;
+			for ( unsigned i=0; i<uBytes; ++i )
+			{
+				dBits[uOffset+i] = uint8_t(i*73+uOffset*31);
+				for ( unsigned j=0; j<8; ++j )
+					uExpected += (dBits[uOffset+i]>>j)&1;
+			}
+
+			Check ( bitmap::CountBytes ( dBits.data()+uOffset, uBytes )==uExpected );
+		}
+}
+
+
+static void TestInlineValues()
+{
+	auto fnNoFrame = [] ( StreamDesc_t, Bytes_t &, uint32_t *, size_t, std::string & ) { return false; };
+	std::string sError;
+	for ( uint32_t uHit : {1u,127u,128u,16383u,16384u,2097151u,2097152u,268435455u,268435456u,UINT32_MAX} )
+	{
+		std::vector<uint8_t> dData {uint8_t(HitRefMode_e::ALL_INLINE)};
+		uint32_t uValue = uHit;
+		do
+		{
+			uint8_t uByte = uint8_t(uValue&127);
+			uValue >>= 7;
+			dData.push_back ( uByte | (uValue ? 128 : 0) );
+		} while ( uValue );
+
+		uint64_t uChecked, uTrusted;
+		Check ( ReadInlineHitRefs<true> ( {dData.data(),dData.size()}, 1, true, &uChecked, fnNoFrame, sError ) );
+		Check ( ReadInlineHitRefs<false> ( {dData.data(),dData.size()}, 1, true, &uTrusted, fnNoFrame, sError ) );
+		Check ( uChecked==(INLINE_HIT | uHit) && uTrusted==uChecked );
+		CheckInlineCorruption ( {dData.data(),dData.size()}, 1, true );
+	}
+
+	const auto uInlineMode = uint8_t(HitRefMode_e::ALL_INLINE);
+	for ( const std::vector<uint8_t> & dData : std::vector<std::vector<uint8_t>> { {uInlineMode,0}, {uInlineMode,128,0}, {uInlineMode,129,0}, {uInlineMode,128,128,128,128,16}, {uInlineMode,128,128,128,128,128,1}, {uInlineMode,255,255,255,255,255} } )
+	{
+		uint64_t uHit;
+		Check ( !ReadInlineHitRefs<true> ( {dData.data(),dData.size()}, 1, true, &uHit, fnNoFrame, sError ) );
+	}
+}
+
+
+static void TestInline ( unsigned n, unsigned k, bool bMapped, bool bWide, bool bHigh )
+{
+	Memory_c tMemory, tHits;
+	tMemory.m_bMapped = bMapped;
+	Writer_c tWriter ( tMemory, &tHits );
+	TermDesc_t tDesc;
+	tDesc.m_uFields = bWide ? 256 : 1;
+	tDesc.m_tHitRefs = {Codec_e::INLINE_HITS};
+	std::string sError;
+	Check ( tWriter.Begin ( tDesc, sError ) );
+
+	std::vector<Posting_t> dPostings;
+	for ( unsigned i=0; i<n; ++i )
+	{
+		Posting_t t;
+		t.m_uRow = i*3;
+		t.m_uTF = i%256<k ? 1 : 2;
+		unsigned f = bWide ? i%256 : 0;
+		t.m_dFields[f/32] = 1U<<(f%32);
+		t.m_uHitRef = t.m_uTF==1 ? INLINE_HIT | (uint64_t(f)<<24) | ((i&1) ? (1U<<23) : 0) | (i%449+1) : (bHigh ? uint64_t(1)<<35 : 4096)+i*20;
+		dPostings.push_back(t);
+		Check ( tWriter.Add ( t, sError ) );
+	}
+
+	Check ( tWriter.Finish(sError) );
+
+	Reader_c tReader(tMemory);
+	ReaderValidation_c tChecked(tMemory);
+	Check ( tReader.Open ( 1, sError ) && tChecked.Open ( 1, sError ) );
+	unsigned uRead = 0;
+	while ( true )
+	{
+		Check ( tReader.Next ( 0, sError ) && tChecked.Next ( 0, sError ) );
+		if ( tReader.IsEOF() )
+			break;
+
+		Check ( tReader.ReadHitRefs(sError) && !tReader.GetDecodeCounts()[2] );
+		Check ( tChecked.Validate(sError) );
+		const auto & tLeaf = tReader.GetLeaf();
+		for ( unsigned i=0; i<tLeaf.m_uCount; ++i, ++uRead )
+		{
+			uint64_t uRef = tReader.GetHitRefs()[i];
+			Check ( uRef==tChecked.GetHitRefs()[i] );
+			const auto & t = dPostings[uRead];
+			if ( t.m_uTF!=1 || (uRef & INLINE_HIT) )
+				Check ( uRef==t.m_uHitRef );
+			else
+			{
+				Check ( uRef<tHits.m_dData.size() );
+				uint32_t uHit = 0;
+				uint8_t uByte;
+				do
+				{
+					uByte = tHits.m_dData[uRef++];
+					uHit = (uHit<<7) | (uByte&127);
+				} while ( uByte&128 );
+
+				Check ( uHit==uint32_t(t.m_uHitRef) && tHits.m_dData[uRef]==0 );
+			}
+		}
+
+		// Verify the selected modes and reject an unknown mode.
+		unsigned uOffset = unsigned(tLeaf.m_uOffset+tLeaf.m_uHeaderSize);
+		for ( unsigned c=0; c<3; ++c )
+			uOffset += tLeaf.m_dSizes[c];
+
+		if ( !bWide && !bHigh && !bMapped )
+			CheckInlineCorruption ( {tMemory.m_dData.data()+uOffset,tLeaf.m_dSizes[3]}, tLeaf.m_uCount, tLeaf.m_bShort );
+
+		if ( n==256 && !bWide && !bHigh && !bMapped )
+		{
+			auto eMode = HitRefMode_e(tMemory.m_dData[uOffset]);
+			if ( !k || k==1 || k==2 )
+				Check ( eMode==HitRefMode_e::ALL_EXTERNAL );
+
+			if ( k==256 )
+				Check ( eMode==HitRefMode_e::ALL_INLINE );
+
+			if ( k==192 )
+				Check ( eMode==HitRefMode_e::MIXED );
+
+			tMemory.m_dData[uOffset] = 3;
+			ReaderValidation_c tBad(tMemory);
+			Check ( tBad.Open ( 1, sError ) && tBad.Next ( 0, sError ) && !tBad.ReadHitRefs(sError) );
+			tMemory.m_dData[uOffset] = uint8_t(eMode);
+		}
+	}
+
+	Check ( uRead==n );
+}
+
+
 int main()
 {
+	TestInlineBitmap();
+	TestInlineValues();
 	TestAdjacentTerms();
+	for ( unsigned n : {1u,2u,16u,17u,127u,128u,129u,255u,256u,257u,513u} )
+		for ( unsigned k : {0u,1u,2u,8u,16u,32u,64u,127u,128u,129u,192u,255u,256u} )
+			for ( bool bMapped : {false,true} )
+				for ( bool bWide : {false,true} )
+					for ( bool bHigh : {false,true} )
+						TestInline ( n, k, bMapped, bWide, bHigh );
 
 	for ( auto eCodec : {Codec_e::FOR,Codec_e::PFOR,Codec_e::VARINT} )
 		for ( unsigned n : {1U,2U,3U,4U,7U,8U,15U,16U,17U,127U,128U,129U,255U,256U,257U,1025U} )

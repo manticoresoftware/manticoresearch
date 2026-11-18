@@ -19,7 +19,7 @@ struct AVX2Traits_t
 	using Vec_t = __m256i;
 	static constexpr size_t WORDS = 8;
 	static Vec_t Zero() { return _mm256_setzero_si256(); }
-	static Vec_t Load ( const DWORD * p ) { return _mm256_loadu_si256 ( reinterpret_cast<const Vec_t *>(p) ); }
+	static Vec_t Load ( const void * p ) { return _mm256_loadu_si256 ( reinterpret_cast<const Vec_t *>(p) ); }
 	static void Store ( DWORD * p, Vec_t u ) { _mm256_storeu_si256 ( reinterpret_cast<Vec_t *>(p), u ); }
 	template<Op_e OP> static Vec_t Apply ( Vec_t a, Vec_t b )
 	{

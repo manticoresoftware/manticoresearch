@@ -8,6 +8,7 @@
 
 #include "stream.h"
 #include "shortlist.h"
+#include "hitrefs.h"
 #include <algorithm>
 #include <cassert>
 #include <cstring>
@@ -135,10 +136,58 @@ bool Frame ( StreamDesc_t tStream, Bytes_t & tData, uint32_t * pValues, size_t i
 	return true;
 }
 
+
+// External bookmarks retain the base-relative block or short-list encoding.
+bool EncodeExternalRefs ( const uint64_t * pRefs, unsigned uCount, bool bShort, std::vector<uint8_t> & dOutput, std::string & sError )
+{
+	assert(uCount);
+	uint64_t uBase = *std::min_element ( pRefs, pRefs+uCount );
+	if ( bShort )
+	{
+		AppendShortValue ( dOutput, uBase );
+		if ( uCount>1 )
+			for ( unsigned i=0; i<uCount; ++i )
+				AppendShortValue ( dOutput, pRefs[i]-uBase );
+
+		return true;
+	}
+
+	uint64_t uMax = *std::max_element ( pRefs, pRefs+uCount );
+	unsigned uParts = uMax-uBase>UINT32_MAX ? 2 : 1;
+	Append ( dOutput, uBase, 8 );
+	Append ( dOutput, uParts-1, 1 );
+
+	alignas(16) std::array<uint32_t,MAX_VALUES> dValues;
+	for ( unsigned part=0; part<uParts; ++part )
+	{
+		for ( unsigned i=0; i<uCount; ++i )
+			dValues[i] = uint32_t((pRefs[i]-uBase)>>(32*part));
+
+		if ( !AddFrame ( {Codec_e::PFOR}, dValues.data(), uCount, dOutput, sError ) )
+			return false;
+	}
+
+	return true;
 }
 
 
-Writer_c::Writer_c ( Output_i & tOutput ) : m_tOutput(tOutput) {}
+void AppendExternalHit ( std::vector<uint8_t> & dOutput, uint32_t uHit )
+{
+	unsigned uShift = 0;
+	for ( uint32_t u = uHit; u>=128; u >>= 7 )
+		uShift += 7;
+
+	for ( ; uShift; uShift -= 7 )
+		dOutput.push_back ( uint8_t((uHit>>uShift)&127) | 128 );
+
+	dOutput.push_back ( uint8_t(uHit&127) );
+	dOutput.push_back(0);
+}
+
+}
+
+
+Writer_c::Writer_c ( Output_i & tOutput, Output_i * pHits ) : m_tOutput(tOutput), m_pHits(pHits) {}
 
 
 bool Writer_c::Begin ( const TermDesc_t & tDesc, std::string & sError )
@@ -162,7 +211,7 @@ bool Writer_c::Begin ( const TermDesc_t & tDesc, std::string & sError )
 bool Writer_c::Add ( const Posting_t & tPosting, std::string & sError )
 {
 	assert ( m_bOpen && tPosting.m_uRow!=UINT32_MAX && (!m_bHaveRows || tPosting.m_uRow>m_uLast) && tPosting.m_uTF );
-	assert ( !m_tDesc.m_bPositions || (tPosting.m_uHitRef && tPosting.m_uHitRef<=INT64_MAX) );
+	assert ( !m_tDesc.m_bPositions || (tPosting.m_uHitRef && (tPosting.m_uHitRef<=INT64_MAX || (m_tDesc.m_tHitRefs.m_eCodec==Codec_e::INLINE_HITS && tPosting.m_uTF==1 && !(tPosting.m_uHitRef & ~(INLINE_HIT|uint64_t(UINT32_MAX))) && uint32_t(tPosting.m_uHitRef)))) );
 #ifndef NDEBUG
 	bool bFields = false;
 	for ( unsigned i=0; i<MAX_FIELDS; ++i )
@@ -222,13 +271,86 @@ bool Writer_c::EncodeHitRefs ( std::vector<uint8_t> & dOutput, std::string & sEr
 	return true;
 }
 
+// Compare actual reference bytes plus omitted hitlist bytes before choosing a leaf mode.
+bool Writer_c::PrepareHitRefs ( bool bShort, std::vector<uint8_t> & dOutput, std::string & sError )
+{
+	if ( !m_tDesc.m_bPositions )
+		return true;
+
+	if ( m_tDesc.m_tHitRefs.m_eCodec!=Codec_e::INLINE_HITS )
+	{
+		if ( !bShort )
+			return EncodeHitRefs ( dOutput, sError );
+
+		std::array<uint64_t,MAX_VALUES> dRefs;
+		for ( size_t i=0; i<m_iCount; ++i )
+			dRefs[i] = m_dPostings[i].m_uHitRef;
+
+		return EncodeExternalRefs ( dRefs.data(), unsigned(m_iCount), true, dOutput, sError );
+	}
+
+	std::array<uint64_t,MAX_VALUES> dExternal, dAll;
+	std::array<uint8_t,MAX_VALUES/8> dBitmap {};
+	std::vector<uint8_t> dInline, dHits;
+	unsigned uExternal = 0;
+	for ( size_t i=0; i<m_iCount; ++i )
+	{
+		uint64_t uRef = m_dPostings[i].m_uHitRef;
+		if ( uRef & INLINE_HIT )
+		{
+			assert(m_pHits);
+			dBitmap[i/8] |= 1U<<(i%8);
+			AppendShortValue ( dInline, uint32_t(uRef) );
+			dAll[i] = m_pHits->GetPos()+dHits.size();
+			AppendExternalHit ( dHits, uint32_t(uRef) );
+		} else
+			dAll[i] = dExternal[uExternal++] = uRef;
+	}
+
+	if ( uExternal==m_iCount )
+	{
+		dOutput.push_back(uint8_t(HitRefMode_e::ALL_EXTERNAL));
+		return EncodeExternalRefs ( dAll.data(), unsigned(m_iCount), bShort, dOutput, sError );
+	}
+
+	// Build the candidate .spd hit-reference section, starting with its mode byte:
+	// ALL_INLINE: [mode] [inline values]
+	// MIXED: [mode] [bitmap] [inline byte length] [inline values] [external offsets]
+	dOutput.push_back ( uint8_t(uExternal ? HitRefMode_e::MIXED : HitRefMode_e::ALL_INLINE) );
+	if ( uExternal )
+	{
+		// Mixed-mode selection bitmap: one bit per posting, set for inline hits.
+		dOutput.insert ( dOutput.end(), dBitmap.begin(), dBitmap.begin()+(m_iCount+7)/8 );
+		// Two-byte little-endian length of the inline values that follow.
+		Append ( dOutput, dInline.size(), 2 );
+	}
+
+	// Packed single-hit values encoded as varints, in posting order.
+	dOutput.insert ( dOutput.end(), dInline.begin(), dInline.end() );
+	// Mixed mode ends with encoded .spp offsets for the external postings.
+	if ( uExternal && !EncodeExternalRefs ( dExternal.data(), uExternal, bShort, dOutput, sError ) )
+		return false;
+
+	std::vector<uint8_t> dFallback {uint8_t(HitRefMode_e::ALL_EXTERNAL)};
+	if ( !EncodeExternalRefs ( dAll.data(), unsigned(m_iCount), bShort, dFallback, sError ) )
+		return false;
+
+	if ( dOutput.size()>=dFallback.size()+dHits.size() )
+	{
+		dOutput.swap(dFallback);
+		if ( !m_pHits->Write ( Bytes(dHits), sError ) )
+			return false;
+	}
+
+	return true;
+}
+
 
 bool Writer_c::WriteShort ( std::string & sError )
 {
 	std::array<std::vector<uint8_t>,COLUMNS> dColumns;
 	unsigned uSingleField = SingleField ( m_dPostings.data(), unsigned(m_iCount), m_tDesc.m_uFields );
 	uint32_t uMaxTF = 0, uPrevious = 0;
-	uint64_t uBase = m_dPostings[0].m_uHitRef;
 	bool bConstantTF = true;
 	for ( size_t i=0; i<m_iCount; ++i )
 	{
@@ -237,7 +359,6 @@ bool Writer_c::WriteShort ( std::string & sError )
 		uPrevious = t.m_uRow;
 		uMaxTF = std::max ( uMaxTF, t.m_uTF );
 		bConstantTF &= t.m_uTF==m_dPostings[0].m_uTF;
-		uBase = std::min ( uBase, t.m_uHitRef );
 	}
 
 	if ( uSingleField==MAX_FIELDS )
@@ -249,13 +370,8 @@ bool Writer_c::WriteShort ( std::string & sError )
 		for ( size_t i=0; i<m_iCount; ++i )
 			AppendShortValue ( dColumns[2], m_dPostings[i].m_uTF );
 
-	if ( m_tDesc.m_bPositions )
-	{
-		AppendShortValue ( dColumns[3], uBase );
-		if ( m_iCount>1 )
-			for ( size_t i=0; i<m_iCount; ++i )
-				AppendShortValue ( dColumns[3], m_dPostings[i].m_uHitRef-uBase );
-	}
+	if ( !PrepareHitRefs ( true, dColumns[3], sError ) )
+		return false;
 
 	Leaf_t tLeaf;
 	tLeaf.m_uOffset = m_uStart;
@@ -271,7 +387,7 @@ bool Writer_c::WriteShort ( std::string & sError )
 	std::array<uint8_t,SHORT_HEADER_SIZE> dHeader {};
 	std::memcpy ( dHeader.data(), "PSS1", 4 );
 	dHeader[6] = uint8_t(m_iCount);
-	dHeader[7] = m_tDesc.m_bPositions;
+	dHeader[7] = m_tDesc.m_bPositions | (m_tDesc.m_tHitRefs.m_eCodec==Codec_e::INLINE_HITS ? 2 : 0);
 	Put ( dHeader.data()+8, m_tDesc.m_uFields, 2 );
 	Put ( dHeader.data()+10, uSingleField, 2 );
 	Put ( dHeader.data()+12, uMaxTF, 4 );
@@ -339,7 +455,7 @@ bool Writer_c::Flush ( std::string & sError )
 	if ( !std::all_of ( dValues.begin(), dValues.begin()+m_iCount, [uMaxTF] ( uint32_t uTF ) { return uTF==uMaxTF; } ) && !AddFrame ( m_tDesc.m_tTF, dValues.data(), m_iCount, dColumns[2], sError ) )
 		return false;
 
-	if ( !EncodeHitRefs ( dColumns[3], sError ) )
+	if ( !PrepareHitRefs ( false, dColumns[3], sError ) )
 		return false;
 
 	Leaf_t tLeaf;
@@ -432,6 +548,7 @@ bool Reader_c::Open ( uint64_t uOffset, std::string & sError )
 	{
 		m_tDesc = {};
 		m_tDesc.m_bPositions = d[7]&1;
+		m_tDesc.m_tHitRefs = { (d[7]&2) ? Codec_e::INLINE_HITS : Codec_e::BASE_DELTA };
 		m_tDesc.m_uFields = uint16_t(Get(d.data()+8,2));
 		m_tLeaf.m_bShort = true;
 		m_tLeaf.m_uOffset = uOffset;
@@ -448,7 +565,7 @@ bool Reader_c::Open ( uint64_t uOffset, std::string & sError )
 			uBytes += m_tLeaf.m_dSizes[i];
 		}
 
-		if ( !ShortCheck<false> ( !(d[7]&~1U) && m_tDesc.m_uFields && m_tDesc.m_uFields<=MAX_FIELDS && m_tLeaf.m_uCount && m_tLeaf.m_uCount<=SHORT_LIST_MAX && m_tLeaf.m_uMaxTF && uBytes==m_tLeaf.m_uBytes && uBytes<=m_tInput.GetSize()-uOffset && m_tLeaf.m_dSizes[0] && (m_tLeaf.m_uSingleField==MAX_FIELDS ? m_tLeaf.m_dSizes[1]!=0 : m_tLeaf.m_uSingleField<m_tDesc.m_uFields && !m_tLeaf.m_dSizes[1]) && bool(m_tLeaf.m_dSizes[3])==m_tDesc.m_bPositions, sError ) )
+		if ( !ShortCheck<false> ( !(d[7]&~3U) && m_tDesc.m_uFields && m_tDesc.m_uFields<=MAX_FIELDS && m_tLeaf.m_uCount && m_tLeaf.m_uCount<=SHORT_LIST_MAX && m_tLeaf.m_uMaxTF && uBytes==m_tLeaf.m_uBytes && uBytes<=m_tInput.GetSize()-uOffset && m_tLeaf.m_dSizes[0] && (m_tLeaf.m_uSingleField==MAX_FIELDS ? m_tLeaf.m_dSizes[1]!=0 : m_tLeaf.m_uSingleField<m_tDesc.m_uFields && !m_tLeaf.m_dSizes[1]) && bool(m_tLeaf.m_dSizes[3])==m_tDesc.m_bPositions, sError ) )
 			return Fail ( sError, "invalid short posting header" );
 
 		m_uEnd = uOffset+uBytes;
@@ -474,7 +591,7 @@ bool Reader_c::Open ( uint64_t uOffset, std::string & sError )
 			return false;
 		}
 
-	assert ( m_tDesc.m_tRows.m_eCodec!=Codec_e::BASE_DELTA && m_tDesc.m_tFields.m_eCodec!=Codec_e::BASE_DELTA && m_tDesc.m_tTF.m_eCodec!=Codec_e::BASE_DELTA );
+	assert ( (m_tDesc.m_tRows.m_eCodec!=Codec_e::BASE_DELTA && m_tDesc.m_tRows.m_eCodec!=Codec_e::INLINE_HITS) && (m_tDesc.m_tFields.m_eCodec!=Codec_e::BASE_DELTA && m_tDesc.m_tFields.m_eCodec!=Codec_e::INLINE_HITS) && (m_tDesc.m_tTF.m_eCodec!=Codec_e::BASE_DELTA && m_tDesc.m_tTF.m_eCodec!=Codec_e::INLINE_HITS) );
 
 	m_uEnd = Get(d.data()+24,8);
 	m_uNext = uOffset+TERM_HEADER_SIZE;
@@ -762,6 +879,16 @@ bool Reader_c::ReadHitRefs ( std::string & sError )
 		return false;
 
 	std::fill_n ( m_dHitRefs.begin(), m_tLeaf.m_uCount, 0 );
+	if ( m_tDesc.m_bPositions && m_tDesc.m_tHitRefs.m_eCodec==Codec_e::INLINE_HITS )
+	{
+		if ( !ReadInlineHitRefs<false> ( tData, m_tLeaf.m_uCount, m_tLeaf.m_bShort, m_dHitRefs.data(), Frame, sError ) )
+			return Fail ( sError, "invalid inline posting hit references" );
+
+		m_dLoaded[3] = true;
+		++m_dDecodeCounts[3];
+		return true;
+	}
+
 	if ( m_tLeaf.m_bShort )
 	{
 		if ( m_tDesc.m_bPositions && !ShortHitRefs<false> ( tData, m_tLeaf.m_uCount, m_dHitRefs.data(), sError ) )

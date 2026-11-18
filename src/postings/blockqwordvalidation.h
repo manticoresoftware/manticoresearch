@@ -56,6 +56,7 @@ private:
 	SphOffset_t	m_iStart = 0;
 	SphOffset_t	m_iNext = 0;
 	unsigned	m_iOrdinal = 0;
+	DWORD		m_uInlineHit = 0;
 	bool		m_bHitEOF = true;
 	bool		m_bOpen = false;
 	bool		m_bEOF = false;

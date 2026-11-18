@@ -3514,7 +3514,7 @@ CSphHitBuilder::CSphHitBuilder ( const CSphIndexSettings & tSettings, const CSph
 {
 	m_iPostingFields = iFields;
 	if ( tSettings.m_uPostingsFormat )
-		m_pBlockWriter = std::make_unique<postings::DiskWriter_c>(m_wrDoclist);
+		m_pBlockWriter = std::make_unique<postings::DiskWriter_c> ( m_wrDoclist, m_wrHitlist );
 
 	m_dLastKeyword[0] = '\0';
 	HitReset();
@@ -3643,6 +3643,12 @@ void CSphHitBuilder::DoclistEndEntry ( Hitpos_t uLastPos )
 				m_bError = true;
 				return;
 			}
+		}
+
+		if ( m_uLastDocHits==1 && uLastPos!=EMPTY_HIT )
+		{
+			m_wrHitlist.SeekTo(m_tPosting.m_uHitRef);
+			m_tPosting.m_uHitRef = postings::INLINE_HIT | uLastPos;
 		}
 
 		m_tPosting.m_uTF = m_uLastDocHits;

@@ -5333,6 +5333,7 @@ int ExtOr_c::MergeFlatDocs()
 
 const ExtDoc_t * ExtOr_c::GetDocsChunk()
 {
+	// The flat path merges term chunks directly, skipping intermediate OR nodes.
 	if ( !m_dTerms.empty() )
 		return ReturnDocsChunk ( MergeFlatDocs(), "or" );
 
@@ -5341,6 +5342,7 @@ const ExtDoc_t * ExtOr_c::GetDocsChunk()
 	const ExtDoc_t * pDocL = m_pDocL;
 	const ExtDoc_t * pDocR = m_pDocR;
 
+	// Refill each child when its chunk ends. Reserve the last output slot for the row ID sentinel.
 	while ( iDoc<MAX_BLOCK_DOCS-1 )
 	{
 		if ( !HasDocs(pDocL) )
@@ -5357,35 +5359,46 @@ const ExtDoc_t * ExtOr_c::GetDocsChunk()
 				break;
 		}
 
-		if ( !HasDocs(pDocL) && !HasDocs(pDocR) )
-			break;
-
-		ExtDoc_t & tNewDoc = m_dDocs[iDoc];
-
-		// merge lists while we can, copy tail while if we can not
-		if ( HasDocs(pDocL) && HasDocs(pDocR) )
+		if ( !pDocL || !pDocR )
 		{
-			if ( pDocL->m_tRowID==pDocR->m_tRowID )
-			{
-				tNewDoc = *pDocL;
-				tNewDoc.m_uDocFields = pDocL->m_uDocFields | pDocR->m_uDocFields; // not necessary
-				tNewDoc.m_fTFIDF = pDocL->m_fTFIDF + pDocR->m_fTFIDF;
-				pDocL++;
-				pDocR++;
-			}
-			else if ( pDocL->m_tRowID<pDocR->m_tRowID )
-				tNewDoc = *pDocL++;
-			else
-				tNewDoc = *pDocR++;
-		}
-		else if ( HasDocs(pDocL) )
-			tNewDoc = *pDocL++;
-		else
-			tNewDoc = *pDocR++;
+			if ( !pDocL && !pDocR )
+				break;
 
-		iDoc++;
+			// Only one child has rows left, so its remaining rows are already in output order.
+			const ExtDoc_t * & pTail = pDocL ? pDocL : pDocR;
+			do
+				m_dDocs[iDoc++] = *pTail++;
+			while ( iDoc<MAX_BLOCK_DOCS-1 && HasDocs(pTail) );
+
+			continue;
+		}
+
+		// Copy consecutive rows from the leading child while they precede the other child's next row.
+		// The INVALID_ROWID sentinel at the end of each input chunk stops either run.
+		do
+		{
+			if ( pDocL->m_tRowID<pDocR->m_tRowID )
+			{
+				do
+					m_dDocs[iDoc++] = *pDocL++;
+				while ( iDoc<MAX_BLOCK_DOCS-1 && pDocL->m_tRowID<pDocR->m_tRowID );
+			} else if ( pDocR->m_tRowID<pDocL->m_tRowID )
+			{
+				do
+					m_dDocs[iDoc++] = *pDocR++;
+				while ( iDoc<MAX_BLOCK_DOCS-1 && pDocR->m_tRowID<pDocL->m_tRowID );
+			} else
+			{
+				// Both children matched this row. Emit it once with their combined fields and score.
+				ExtDoc_t & tDoc = m_dDocs[iDoc++];
+				tDoc = *pDocL++;
+				tDoc.m_uDocFields |= pDocR->m_uDocFields;
+				tDoc.m_fTFIDF += pDocR++->m_fTFIDF;
+			}
+		} while ( iDoc<MAX_BLOCK_DOCS-1 && HasDocs(pDocL) && HasDocs(pDocR) );
 	}
 
+	// The output can fill midway through an input chunk. Resume at the first unconsumed row on each side.
 	m_pDocL = pDocL;
 	m_pDocR = pDocR;
 

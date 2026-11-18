@@ -1,6 +1,5 @@
 ––– comment –––
-Regression for #5095: a full shutdown must allow bootstrap without contacting stopped peers.
-
+Regression for #5095: after a full shutdown the last stopped node bootstraps with --new-cluster / --new-cluster-force without contacting stopped peers, with and without auth
 ––– input –––
 export INSTANCE=1
 ––– output –––
@@ -21,101 +20,21 @@ export CLUSTER_NAME=bootstrap_restart
 export INSTANCE=3
 ––– output –––
 ––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+for p in 2306 3306; do mysql -h0 -P$p -e "debug wait ${CLUSTER_NAME} like 'state' option 'timeout'=60\G" | grep Value; done
+––– output –––
+Value: synced
+Value: synced
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE bootstrap_restart_rt (id bigint, title text)" && mysql -h0 -P1306 -e "ALTER CLUSTER ${CLUSTER_NAME} ADD bootstrap_restart_rt" && mysql -h0 -P1306 -e "INSERT INTO ${CLUSTER_NAME}:bootstrap_restart_rt VALUES (1, 'before shutdown')"
+––– output –––
+––– input –––
+for p in 2306 3306; do mysql -h0 -P$p -e "debug wait ${CLUSTER_NAME} status 2 like 'state' option 'timeout'=60\G" | grep Value; done
+––– output –––
+Value: 2
+Value: 2
 ––– comment –––
-Wait for a primary, synced cluster of the expected size on every running node.
-––– input –––
-dump_cluster_diagnostics() {
-    echo "=== Cluster ${CLUSTER_NAME} diagnostics ==="
-    for port in 1306 2306 3306; do
-        echo "--- Port $port: replication status ---"
-        timeout 5 mysql -N -B -h0 -P"$port" -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_%'" 2>&1 || true
-        echo "--- Port $port: replicated table count ---"
-        timeout 5 mysql -N -B -h0 -P"$port" -e "SELECT COUNT(*) FROM bootstrap_restart_rt" 2>&1 || true
-    done
-    for node in 1 2 3; do
-        echo "--- Node $node: last 80 searchd.log lines ---"
-        if [ -f "/var/log/manticore-$node/searchd.log" ]; then
-            tail -n 80 "/var/log/manticore-$node/searchd.log"
-        else
-            echo "searchd.log missing"
-        fi
-        echo "--- Node $node: grastate.dat ---"
-        local state_file
-        state_file=$(find "/var/log/manticore-$node" -name grastate.dat -print -quit 2>/dev/null)
-        if [ -n "$state_file" ]; then
-            cat "$state_file"
-        else
-            echo "grastate.dat missing"
-        fi
-    done
-}
-cluster_ready() {
-    local port="$1" expected_size="$2" output values
-    output=$(timeout 5 mysql -h0 -P"$port" -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_%'\G" 2>/dev/null) || return 1
-    values=$(awk -v prefix="cluster_${CLUSTER_NAME}_" '
-        $1 == "Counter:" { key = $2 }
-        $1 == "Value:" {
-            if (key == prefix "status") status = $2
-            if (key == prefix "size") size = $2
-            if (key == prefix "node_state") state = $2
-        }
-        END { print status, size, state }
-    ' <<< "$output")
-    [ "$values" = "primary $expected_size synced" ]
-}
-wait_cluster() {
-    local expected_size="$1"
-    shift
-    local deadline=$((SECONDS+120))
-    local ready port
-    while [ "$SECONDS" -lt "$deadline" ]; do
-        ready=1
-        for port in "$@"; do
-            cluster_ready "$port" "$expected_size" || { ready=0; break; }
-        done
-        if [ "$ready" -eq 1 ]; then
-            echo "Cluster synced with $expected_size node(s)"
-            return 0
-        fi
-        sleep 1
-    done
-    echo "ERROR: cluster did not become primary/synced with $expected_size node(s)" >&2
-    dump_cluster_diagnostics >&2
-    return 1
-}
-check_rows() {
-    local deadline=$((SECONDS+60))
-    local port output ready
-    while [ "$SECONDS" -lt "$deadline" ]; do
-        ready=1
-        for port in "$@"; do
-            output=$(timeout 5 mysql -h0 -P"$port" -e "SELECT COUNT(*) AS cnt FROM bootstrap_restart_rt\G" 2>/dev/null) || { ready=0; break; }
-            grep -Eq '^[[:space:]]*cnt:[[:space:]]*1[[:space:]]*$' <<< "$output" || { ready=0; break; }
-        done
-        if [ "$ready" -eq 1 ]; then
-            echo "Data intact on $# node(s)"
-            return 0
-        fi
-        sleep 1
-    done
-    echo "ERROR: replicated row missing on one or more nodes" >&2
-    dump_cluster_diagnostics >&2
-    return 1
-}
-––– output –––
-––– input –––
-wait_cluster 3 1306 2306 3306 || exit 1
-––– output –––
-Cluster synced with 3 node(s)
-––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE bootstrap_restart_rt (id bigint, title text);" && mysql -h0 -P1306 -e "ALTER CLUSTER ${CLUSTER_NAME} ADD bootstrap_restart_rt;" && mysql -h0 -P1306 -e "INSERT INTO ${CLUSTER_NAME}:bootstrap_restart_rt VALUES (1, 'before shutdown');" || { dump_cluster_diagnostics >&2; exit 1; }
-––– output –––
-––– input –––
-check_rows 1306 2306 3306 || exit 1
-––– output –––
-Data intact on 3 node(s)
-––– comment –––
-Shut down all nodes cleanly, with node 1 stopped last.
+Full shutdown, node 1 last: only node 1 is safe to bootstrap
 ––– input –––
 export INSTANCE=3
 ––– output –––
@@ -129,23 +48,22 @@ export INSTANCE=1
 ––– output –––
 ––– block: ../base/replication/stop-searchd –––
 ––– input –––
-state_file=$(find /var/log/manticore-1 -name grastate.dat -print -quit); [ -n "$state_file" ] && grep -Eq '^safe_to_bootstrap:[[:space:]]*1[[:space:]]*$' "$state_file" && echo "Last node is safe to bootstrap" || { echo 'ERROR: invalid bootstrap state' >&2; dump_cluster_diagnostics >&2; exit 1; }
+for n in 1 2 3; do grep -h safe_to_bootstrap $(find /var/log/manticore-$n -name grastate.dat); done
 ––– output –––
-Last node is safe to bootstrap
+safe_to_bootstrap: 1
+safe_to_bootstrap: 0
+safe_to_bootstrap: 0
 ––– comment –––
---new-cluster must bootstrap node 1 while nodes 2 and 3 are still offline.
+--new-cluster on node 1 starts the cluster while nodes 2 and 3 are offline; they rejoin with a normal start
 ––– input –––
 export INSTANCE=1
 ––– output –––
 ––– block: ../base/replication/start-searchd-new-cluster –––
 ––– input –––
-wait_cluster 1 1306 || exit 1
+mysql -h0 -P1306 -e "debug wait ${CLUSTER_NAME} like 'state' option 'timeout'=60\G" | grep Value; mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_size'\G" | grep Value
 ––– output –––
-Cluster synced with 1 node(s)
-––– input –––
-check_rows 1306 || exit 1
-––– output –––
-Data intact on 1 node(s)
+Value: synced
+  Value: 1
 ––– input –––
 export INSTANCE=2
 ––– output –––
@@ -155,15 +73,19 @@ export INSTANCE=3
 ––– output –––
 ––– block: ../base/replication/start-searchd-precach –––
 ––– input –––
-wait_cluster 3 1306 2306 3306 || exit 1
+for p in 2306 3306; do mysql -h0 -P$p -e "debug wait ${CLUSTER_NAME} like 'state' option 'timeout'=60\G" | grep Value; done; mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_size'\G" | grep Value
 ––– output –––
-Cluster synced with 3 node(s)
+Value: synced
+Value: synced
+  Value: 3
 ––– input –––
-check_rows 1306 2306 3306 || exit 1
+for p in 1306 2306 3306; do mysql -h0 -P$p -e "SELECT COUNT(*) c FROM bootstrap_restart_rt\G" | grep c:; done
 ––– output –––
-Data intact on 3 node(s)
+c: 1
+c: 1
+c: 1
 ––– comment –––
-Repeat the full shutdown and deliberately clear safe_to_bootstrap to test --new-cluster-force.
+Full shutdown again; --new-cluster-force bootstraps node 1 even with safe_to_bootstrap cleared
 ––– input –––
 export INSTANCE=3
 ––– output –––
@@ -177,20 +99,13 @@ export INSTANCE=1
 ––– output –––
 ––– block: ../base/replication/stop-searchd –––
 ––– input –––
-state_file=$(find /var/log/manticore-1 -name grastate.dat -print -quit); [ -n "$state_file" ] && grep -Eq '^safe_to_bootstrap:[[:space:]]*1[[:space:]]*$' "$state_file" && sed -i 's/^safe_to_bootstrap:[[:space:]]*1[[:space:]]*$/safe_to_bootstrap: 0/' "$state_file" && grep -Eq '^safe_to_bootstrap:[[:space:]]*0[[:space:]]*$' "$state_file" && echo "Bootstrap guard cleared" || { echo 'ERROR: invalid bootstrap state' >&2; dump_cluster_diagnostics >&2; exit 1; }
-––– output –––
-Bootstrap guard cleared
-––– input –––
-stdbuf -oL searchd --new-cluster-force -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null
+sed -i 's/^safe_to_bootstrap: 1$/safe_to_bootstrap: 0/' $(find /var/log/manticore-1 -name grastate.dat); stdbuf -oL searchd --new-cluster-force -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null
 ––– output –––
 ––– input –––
-wait_cluster 1 1306 || exit 1
+mysql -h0 -P1306 -e "debug wait ${CLUSTER_NAME} like 'state' option 'timeout'=60\G" | grep Value; mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_size'\G" | grep Value
 ––– output –––
-Cluster synced with 1 node(s)
-––– input –––
-check_rows 1306 || exit 1
-––– output –––
-Data intact on 1 node(s)
+Value: synced
+  Value: 1
 ––– input –––
 export INSTANCE=2
 ––– output –––
@@ -200,13 +115,113 @@ export INSTANCE=3
 ––– output –––
 ––– block: ../base/replication/start-searchd-precach –––
 ––– input –––
-wait_cluster 3 1306 2306 3306 || exit 1
+for p in 2306 3306; do mysql -h0 -P$p -e "debug wait ${CLUSTER_NAME} like 'state' option 'timeout'=60\G" | grep Value; done; mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_size'\G" | grep Value
 ––– output –––
-Cluster synced with 3 node(s)
+Value: synced
+Value: synced
+  Value: 3
 ––– input –––
-check_rows 1306 2306 3306 || exit 1
+for p in 1306 2306 3306; do mysql -h0 -P$p -e "SELECT COUNT(*) c FROM bootstrap_restart_rt\G" | grep c:; done
 ––– output –––
-Data intact on 3 node(s)
+c: 1
+c: 1
+c: 1
+––– comment –––
+Same bootstrap with auth = 1: the cluster user comes from the local config, not from stopped peers
 ––– input –––
-mysql -h0 -P1306 -e "DELETE CLUSTER ${CLUSTER_NAME};" && mysql -h0 -P1306 -e "DROP TABLE IF EXISTS bootstrap_restart_rt;" && mysql -h0 -P2306 -e "DROP TABLE IF EXISTS bootstrap_restart_rt;" && mysql -h0 -P3306 -e "DROP TABLE IF EXISTS bootstrap_restart_rt;" || { dump_cluster_diagnostics >&2; exit 1; }
+mysql -h0 -P1306 -e "DELETE CLUSTER ${CLUSTER_NAME}"; for n in 1 2 3; do mysql -h0 -P${n}306 -e "DROP TABLE bootstrap_restart_rt"; done
 ––– output –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+for n in 1 2 3; do : > /var/log/manticore-$n/searchd.log; done; printf '[client]\nuser=admin\npassword=adminpass\n' > ~/.my.cnf; export CLUSTER_NAME=bootstrap_restart_auth
+––– output –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach-with-auth –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach-with-auth –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach-with-auth –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE USER 'repluser' IDENTIFIED BY 'repluser1234'" > /dev/null && mysql -h0 -P1306 -e "GRANT replication ON * TO 'repluser'"; for n in 2 3; do cp /var/log/manticore-1/auth.json /var/log/manticore-$n/auth.json; mysql -h0 -P${n}306 -e "RELOAD AUTH"; done
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE bootstrap_restart_rt (id bigint, title text)" && mysql -h0 -P1306 -e "CREATE CLUSTER ${CLUSTER_NAME} 'repluser' AS user" && mysql -h0 -P1306 -e "ALTER CLUSTER ${CLUSTER_NAME} ADD bootstrap_restart_rt" && mysql -h0 -P1306 -e "INSERT INTO ${CLUSTER_NAME}:bootstrap_restart_rt VALUES (1, 'before shutdown')"; for n in 2 3; do mysql -h0 -P${n}306 -e "JOIN CLUSTER ${CLUSTER_NAME} AT '127.0.0.1:1312' 'repluser' AS user"; done
+––– output –––
+––– input –––
+for p in 2306 3306; do mysql -h0 -P$p -e "debug wait ${CLUSTER_NAME} like 'state' option 'timeout'=60\G" | grep Value; done
+––– output –––
+Value: synced
+Value: synced
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+stdbuf -oL searchd --new-cluster -c /tmp/searchd-with-flexible-ports-auth-1.conf > /dev/null; mysql -h0 -P1306 -e "debug wait ${CLUSTER_NAME} like 'state' option 'timeout'=60\G" | grep Value; mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_size'\G" | grep Value
+––– output –––
+Value: synced
+  Value: 1
+––– input –––
+for n in 2 3; do stdbuf -oL searchd -c /tmp/searchd-with-flexible-ports-auth-$n.conf > /dev/null; done; for p in 2306 3306; do mysql -h0 -P$p -e "debug wait ${CLUSTER_NAME} like 'state' option 'timeout'=60\G" | grep Value; done; mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_size'\G" | grep Value
+––– output –––
+Value: synced
+Value: synced
+  Value: 3
+––– comment –––
+The stored cluster user still works for cluster commands after the bootstrap
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER ${CLUSTER_NAME} UPDATE nodes" && mysql -h0 -P1306 -e "INSERT INTO ${CLUSTER_NAME}:bootstrap_restart_rt VALUES (2, 'after bootstrap')"
+––– output –––
+––– input –––
+for p in 2306 3306; do mysql -h0 -P$p -e "debug wait ${CLUSTER_NAME} status 3 like 'state' option 'timeout'=60\G" | grep Value; done; for p in 1306 2306 3306; do mysql -h0 -P$p -e "SELECT COUNT(*) c FROM bootstrap_restart_rt\G" | grep c:; done
+––– output –––
+Value: 3
+Value: 3
+c: 2
+c: 2
+c: 2
+––– comment –––
+Full shutdown, node 1 last: --new-cluster on node 2 (safe_to_bootstrap: 0) is still refused
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+stdbuf -oL searchd --new-cluster -c /tmp/searchd-with-flexible-ports-auth-2.conf > /dev/null; mysql -h0 -P2306 -e "debug wait ${CLUSTER_NAME} like 'state' option 'timeout'=5\G" | grep Value; grep -c "It may not be safe to bootstrap the cluster from this node" /var/log/manticore-2/searchd.log; mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_status'\G" | grep Value
+––– output –––
+Value: closed
+1
+  Value: recovery-required

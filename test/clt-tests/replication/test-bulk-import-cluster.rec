@@ -222,4 +222,17 @@ A=$(tail -n +$((L3+1)) /var/log/manticore-3/searchd.log); chk() { echo "$A" | gr
 ––– output –––
 yes: IST refused on files seqno
 yes: rejoin attempt 1
+––– comment –––
+A table with exceptions (#5102): the loading node builds the chunk with the exceptions file of the table, every receiver loads the delivered chunk with the file of its own copy of the table, and the exception applies on every node
+––– input –––
+echo 'C++ => cplusplus' > /tmp/bc_ex.txt; mysql -h0 -P1306 -e "CREATE TABLE te (title text, v int) exceptions='/tmp/bc_ex.txt'"; mysql -h0 -P1306 -e "ALTER CLUSTER v1 ADD te"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SET bulk_import=te; INSERT INTO v1:te (id,title,v) VALUES (1,'C++ code',1),(2,'plain code',2); COMMIT"; echo "rc $?"; source /tmp/bc.sh; lcwait; for n in 1 2 3; do echo "node $n: count=$(m $n 'SELECT COUNT(*) FROM te') cplusplus=$(m $n "SELECT id FROM te WHERE MATCH('cplusplus')" | xargs)"; done
+––– output –––
+rc 0
+node 1: count=2 cplusplus=1
+node 2: count=2 cplusplus=1
+node 3: count=2 cplusplus=1
 ––– block: ../base/replication/node-starts –––

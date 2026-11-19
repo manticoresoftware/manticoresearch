@@ -152,7 +152,8 @@ private:
 	StoredQuerySharedPtrVecSharedPtr_t	m_pQueries GUARDED_BY ( m_tLock );
 	OpenHashTable_T<int64_t, int>		m_hQueries GUARDED_BY ( m_tLock ); // QUID -> query
 	int64_t							m_iGeneration GUARDED_BY ( m_tLock ) { 0 }; // eliminate ABA race on insert/delete
-	mutable RwLock_t				m_tLock;
+	// Binlog commit/flush can suspend and resume on another OS thread while this lock is held.
+	mutable Coro::RWLock_c			m_tLock;
 
 	CSphFixedVector<StoredQueryDesc_t>	m_dLoadedQueries { 0 }; // temporary, just descriptions
 	CSphSchema						m_tMatchSchema;
@@ -1628,7 +1629,7 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	int64_t iRamUse = 0;
 	int 	iMaxStack = 0;
 	{
-		ScRL_t rLock { m_tLock };
+		SccRL_t rLock { m_tLock };
 		iRamUse = m_hQueries.GetLengthBytes();
 		iRamUse += m_dHitlessWords.GetLengthBytes64() + m_dLoadedQueries.GetLengthBytes64();
 		iRamUse += m_pQueries->GetLengthBytes64 ();
@@ -1720,7 +1721,7 @@ public:
 std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError )
 {
 	{
-		ScRL_t tLockHash { m_tLock };
+		SccRL_t tLockHash { m_tLock };
 		if ( !CanBeAdded ( tArgs, sError ))
 			return nullptr;
 	}
@@ -1984,7 +1985,7 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 		{
 			// for delete by tags we need snapshot of the current queries
 			{
-				ScRL_t rLock ( m_tLock );
+				SccRL_t rLock ( m_tLock );
 				dElems = GetStoredUnl();
 				iLimit = m_pQueries->GetLimit();
 			}
@@ -2005,7 +2006,7 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 		// for both deletion and addition we need hash and snapshot
 		OpenHashTable_T<int64_t, int> hQueries { 0 };
 		{
-			ScRL_t rLock ( m_tLock );
+			SccRL_t rLock ( m_tLock );
 			if ( iLimit<0 )
 			{
 				dElems = GetStoredUnl();
@@ -2078,7 +2079,7 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 			}
 		}
 
-		ScWL_t wLock ( m_tLock );
+		SccWL_t wLock ( m_tLock );
 		if ( dElems.Generation() != m_iGeneration )
 			continue;
 
@@ -2499,7 +2500,7 @@ void PercolateIndex_c::PostSetupUnl()
 
 void PercolateIndex_c::PostSetup () EXCLUDES ( m_tLock )
 {
-	ScWL_t wLock ( m_tLock );
+	SccWL_t wLock ( m_tLock );
 	PostSetupUnl();
 }
 
@@ -2906,7 +2907,7 @@ void PercolateIndex_c::SaveMeta ( bool bShutdown )
 
 bool PercolateIndex_c::Truncate ( CSphString & sError, Truncate_e eAction )
 {
-	ScWL_t wLock ( m_tLock );
+	SccWL_t wLock ( m_tLock );
 
 	m_hQueries.Reset ( 256 );
 	m_pQueries = new CSphVector<StoredQuerySharedPtr_t>;
@@ -3013,7 +3014,7 @@ bool PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 	m_iMaxCodepointLength = m_pTokenizer->GetMaxCodepointLength();
 	SetupQueryTokenizer();
 
-	ScWL_t wLock ( m_tLock ); // ensure nothing will be changed during reconfigure pass.
+	SccWL_t wLock ( m_tLock ); // ensure nothing will be changed during reconfigure pass.
 
 	m_dLoadedQueries.Reset ( m_pQueries->GetLength() );
 	ARRAY_FOREACH ( i, m_dLoadedQueries )
@@ -3369,7 +3370,7 @@ SharedPQSlice_t PercolateIndex_c::GetStoredUnl () const REQUIRES_SHARED ( m_tLoc
 
 SharedPQSlice_t PercolateIndex_c::GetStored () const EXCLUDES ( m_tLock )
 {
-	ScRL_t rLock ( m_tLock );
+	SccRL_t rLock ( m_tLock );
 	return GetStoredUnl();
 }
 

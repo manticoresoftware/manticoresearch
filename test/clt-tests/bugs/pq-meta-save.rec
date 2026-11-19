@@ -1,0 +1,17 @@
+––– comment –––
+PQ meta save. Rules committed while FLUSH RAMCHUNK saves the table must survive a crash: the saved
+meta and the TID reported to binlog must be the TID of the saved rules, not a later one.
+––– block: ../base/start-searchd –––
+––– input –––
+manticore-load --quiet --port=9306 --init="CREATE TABLE pq (body text) type='pq'" --load="INSERT INTO pq(id,query) VALUES (<increment>,'alpha beta gamma delta epsilon')" --batch-size=1000 --threads=1 --total=30000 > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+rm -f /tmp/pq-acked /tmp/pq-stop; (id=100000; while [ ! -f /tmp/pq-stop ]; do id=$((id+1)); mysql -h0 -P9306 -e "INSERT INTO pq(id,query) VALUES ($id,'zeta $id')" && echo $id >> /tmp/pq-acked; done) & sleep 0.3; mysql -h0 -P9306 -e "FLUSH RAMCHUNK pq"; touch /tmp/pq-stop; wait; sleep 1; pkill -9 searchd; sleep 1; pkill -9 searchd; echo killed
+––– output –––
+killed
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -NB -e "SELECT id FROM pq WHERE id>100000 AND id<1000000 LIMIT 100000 OPTION max_matches=100000" | grep -oE '[0-9]+' | sort > /tmp/pq-present; sort /tmp/pq-acked | comm -23 - /tmp/pq-present | wc -l
+––– output –––
+0

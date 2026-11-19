@@ -97,7 +97,7 @@ public:
 	bool BindAccum ( RtAccum_t * pAccExt, CSphString * pError = nullptr ) override;
 	TokenizerRefPtr_c CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 	void SaveMeta ( bool bShutdown = false ) EXCLUDES ( m_tLock );
-	void SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown = false );
+	void SaveMetaSnapshot ( const SharedPQSlice_t& dStored, int64_t iTID, bool bShutdown = false );
 
 	enum class LOAD_E { ParseError_e, GeneralError_e, Ok_e };
 	LOAD_E LoadMetaJson ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
@@ -2494,7 +2494,7 @@ void PercolateIndex_c::PostSetupUnl()
 
 	// still need index files for index just created from config
 	if ( !m_bHasFiles )
-		SaveMeta ( SharedPQSlice_t ( m_pQueries ) );
+		SaveMetaSnapshot ( SharedPQSlice_t ( m_pQueries ), m_iTID );
 
 }
 
@@ -2821,7 +2821,8 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 
 void operator<< ( JsonEscapedBuilder& tOut, const StoredQueryDesc_t& tQuery );
 
-void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown )
+// iTID must be the TID of dStored: binlog replay skips every txn up to it
+void PercolateIndex_c::SaveMetaSnapshot ( const SharedPQSlice_t& dStored, int64_t iTID, bool bShutdown )
 {
 	// sanity check
 	if ( m_iLockFD<0 || IsSaveDisabled() )
@@ -2863,7 +2864,7 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 	if ( m_pFieldFilter )
 		m_pFieldFilter->GetSettings(tFieldFilterSettings);
 	sNewMeta.NamedVal ( "field_filter_settings", tFieldFilterSettings );
-	sNewMeta.NamedVal ( "tid", m_iTID );
+	sNewMeta.NamedVal ( "tid", iTID );
 
 	{
 		sNewMeta.Named ( "pqs" );
@@ -2894,15 +2895,23 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 	SaveMutableSettings ( m_tMutableSettings, GetFilename ( SPH_EXT_SETTINGS ) );
 
 	// notify binlog after file saved
-	Binlog::NotifyIndexFlush ( m_iTID, GetName(), (Binlog::Shutdown_e)bShutdown, Binlog::NoSave );
-	m_iSavedTID = m_iTID;
+	Binlog::NotifyIndexFlush ( iTID, GetName(), (Binlog::Shutdown_e)bShutdown, Binlog::NoSave );
+	m_iSavedTID = iTID;
 	m_tmSaved = sphMicroTimer();
 }
 
 
 void PercolateIndex_c::SaveMeta ( bool bShutdown )
 {
-	SaveMeta ( GetStored(), bShutdown );
+	// commits change the queries and m_iTID under the write lock, so take both under one read lock
+	SharedPQSlice_t dStored;
+	int64_t iTID;
+	{
+		SccRL_t rLock ( m_tLock );
+		dStored = GetStoredUnl();
+		iTID = m_iTID;
+	}
+	SaveMetaSnapshot ( dStored, iTID, bShutdown );
 }
 
 bool PercolateIndex_c::Truncate ( CSphString & sError, Truncate_e eAction )
@@ -2915,7 +2924,7 @@ bool PercolateIndex_c::Truncate ( CSphString & sError, Truncate_e eAction )
 	// update and save meta
 	// current TID will be saved, so replay will properly skip preceding txns
 	// FIXME!!! however it should be replicated to cluster maybe with TOI
-	SaveMeta ( SharedPQSlice_t ( m_pQueries ) );
+	SaveMetaSnapshot ( SharedPQSlice_t ( m_pQueries ), m_iTID );
 
 	// allow binlog to unlink now-redundant data files
 	Binlog::NotifyIndexFlush ( m_iTID, GetName (), Binlog::NoShutdown, eAction==TRUNCATE ? Binlog::ForceSave : Binlog::DropTable );

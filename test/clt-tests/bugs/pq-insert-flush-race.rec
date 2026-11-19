@@ -54,7 +54,7 @@ rm "$tmp/running"
 wait "$flush_pid" || fail 'FLUSH RAMCHUNK failed or timed out'
 flush_pid=''
 [[ -f "$tmp/flush.count" ]] && [[ $(wc -l < "$tmp/flush.count") -ge 2 ]] || fail 'too few successful flushes'
-count=$(timeout 10 mysql -N -B -h0 -P9306 -e 'SELECT COUNT(*) FROM pq_flush_race') || fail 'COUNT timed out'
+count=$(timeout 10 mysql -N -B -h0 -P9306 -e 'SELECT COUNT(*) FROM pq_flush_race' | grep -oE '[0-9]+' | head -n 1) || fail 'COUNT timed out'
 [[ "$count" == 2000 ]] || fail "expected 2000 rules, got $count"
 timeout 10 mysql -h0 -P9306 -e 'FLUSH RAMCHUNK pq_flush_race' >"$tmp/final.log" 2>&1 || fail 'final FLUSH failed'
 echo 'PQ INSERT/FLUSH: ok'

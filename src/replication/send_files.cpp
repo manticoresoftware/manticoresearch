@@ -13,6 +13,7 @@
 #include "send_files.h"
 
 #include "searchdha.h"
+#include "fileutils.h"
 
 #include <optional>
 
@@ -345,4 +346,133 @@ uint64_t SyncSrc_t::CalculateNeededBytes ( const CSphBitvec & dNeededChunks ) co
 	}
 	
 	return uTotalBytes;
+}
+
+void RemoveFiles ( const VecTraits_T<CSphString> & dFiles )
+{
+	for ( const auto & sFile : dFiles )
+	{
+		if ( sFile.IsEmpty() || !sphFileExists ( sFile.cstr() ) )
+			continue;
+		if ( ::unlink ( sFile.cstr() ) )
+			sphWarning ( "failed to unlink file %s, error %s (%d)", sFile.cstr(), strerrorm ( errno ), errno );
+	}
+}
+
+struct ScopedFilesRemoval_t: public ISphNoncopyable
+{
+	explicit ScopedFilesRemoval_t ( VecTraits_T<CSphString>* pFiles )
+		: m_pFiles ( pFiles )
+	{}
+	~ScopedFilesRemoval_t()
+	{
+		if ( m_pFiles )
+			RemoveFiles ( *m_pFiles );
+	}
+	VecTraits_T<CSphString>* m_pFiles { nullptr };
+};
+
+bool ReserveFiles ( const VecTraits_T<CSphString> & dFilesRef, const VecTraits_T<FileChunks_t> & dChunks, const CSphBitvec & dMatched, StrVec_t & dFilesNew, CSphString & sError )
+{
+	assert ( dFilesRef.GetLength()==dChunks.GetLength() );
+	dFilesNew.Resize ( dFilesRef.GetLength() );
+	ScopedFilesRemoval_t tCleanup ( &dFilesNew );
+	ARRAY_FOREACH ( iFile, dFilesRef )
+	{
+		if ( dMatched.BitGet ( iFile ) )
+			continue;
+
+		dFilesNew[iFile].SetSprintf ( "%s.new", dFilesRef[iFile].cstr() );
+		const CSphString & sFile = dFilesNew[iFile];
+		const FileChunks_t & tFile = dChunks[iFile];
+		CSphAutofile tOut ( sFile, SPH_O_NEW, sError, false );
+		if ( tOut.GetFD()<0 )
+			return false;
+
+		int64_t iLen = sphSeek ( tOut.GetFD(), tFile.m_iFileSize, SEEK_SET );
+		if ( iLen!=tFile.m_iFileSize )
+		{
+			if ( iLen<0 )
+				sError.SetSprintf ( "error: %d '%s'", errno, strerrorm ( errno ) );
+			else
+				sError.SetSprintf ( "error, expected: " INT64_FMT ", got " INT64_FMT, tFile.m_iFileSize, iLen );
+			return false;
+		}
+	}
+	tCleanup.m_pFiles = nullptr;
+	return true;
+}
+
+RollbackFilesGuard_t::~RollbackFilesGuard_t()
+{
+	assert ( m_tFiles.m_dOld.GetLength() == m_tFiles.m_dRef.GetLength() );
+	ARRAY_FOREACH ( i, m_tFiles.m_dOld )
+	{
+		if ( sph::rename ( m_tFiles.m_dOld[i].cstr(), m_tFiles.m_dRef[i].cstr() ) != 0 )
+			sphWarning ( "rollback rename %s to %s failed, error %s (%d)", m_tFiles.m_dOld[i].cstr(), m_tFiles.m_dRef[i].cstr(), strerrorm ( errno ), errno );
+	}
+}
+
+void RemoveStagedFiles ( const MergeState_t & tMerge )
+{
+	StrVec_t dRemove;
+	ARRAY_FOREACH ( iFile, tMerge.m_dFilesNew )
+		if ( !tMerge.m_dMergeMask.BitGet ( iFile ) )
+			dRemove.Add ( tMerge.m_dFilesNew[iFile] );
+	RemoveFiles ( dRemove );
+}
+
+bool RotateFiles ( const MergeState_t & tMerge, FilesTrait_t & tFilesGuard, CSphString & sError )
+{
+	int iMatched = 0;
+	for ( int i = 0; i < tMerge.m_dFilesNew.GetLength(); i++ )
+		iMatched += ( tMerge.m_dMergeMask.BitGet ( i ) ? 1 : 0 );
+
+	// all matched files - no .new files these should be rotated at joiner
+	// using joiner files as is
+	if ( iMatched == tMerge.m_dFilesNew.GetLength() )
+		return true;
+
+	// rename index files to old
+	StrVec_t dFilesRef2Old;
+	StrVec_t dFilesOld;
+
+	// rename new to index files
+	StrVec_t dFilesNew;
+	StrVec_t dFilesNew2Ref;
+
+	for ( int iFile = 0; iFile < tMerge.m_dFilesNew.GetLength(); iFile++ )
+	{
+		// keep joiner file as is if whole file matched
+		if ( tMerge.m_dMergeMask.BitGet ( iFile ) )
+			continue;
+
+		const CSphString& sNameNew = tMerge.m_dFilesNew[iFile];
+		const CSphString& sNameRef = tMerge.m_dFilesRef[iFile];
+
+		assert ( sphFileExists ( sNameNew.cstr() ) );
+		dFilesNew.Add ( sNameNew );
+		dFilesNew2Ref.Add ( sNameRef );
+
+		if ( sphFileExists ( sNameRef.cstr(), nullptr ) )
+		{
+			dFilesRef2Old.Add ( sNameRef );
+			dFilesOld.Add().SetSprintf ( "%s.old", sNameRef.cstr() );
+		}
+	}
+
+	if ( !RenameWithRollback ( dFilesRef2Old, dFilesOld, sError ) )
+		return false;
+
+	if ( !RenameWithRollback ( dFilesNew, dFilesNew2Ref, sError ) )
+	{
+		CSphString sRollbackError;
+		RenameFiles ( dFilesOld, dFilesRef2Old, sRollbackError );
+		return false;
+	}
+
+	tFilesGuard.m_dOld.SwapData ( dFilesOld );
+	tFilesGuard.m_dRef.SwapData ( dFilesRef2Old );
+
+	return true;
 }

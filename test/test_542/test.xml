@@ -1,119 +1,227 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>KNN rescore candidates with explicit max_matches</name>
+<name>single-term count(*) fast path</name>
 
 <requires>
-	<knn/>
 	<force-rt/>
+	<columnar/>
 </requires>
 
 <skip_indexer/>
-<skip_db/>
 
 <config>
 searchd
 {
-	<searchd_settings/>
+	<searchd_Settings/>
 	data_dir = <data_path path="data0"/>
 }
 </config>
 
-<custom_test><![CDATA[
-$connection = ConnectQL();
-if ( $connection===false )
-	throw new RuntimeException ( 'Cannot connect to searchd' );
+<queries>
 
-$execute = function ( string $sql ) use ( $connection ): void {
-	if ( $connection->query($sql)!==true )
-		throw new RuntimeException ( "$sql: {$connection->error}" );
-};
+<!-- every fast query is followed by its slow twin: count(*) with a second aggregate never takes the fast path, both must agree -->
 
-$selectIds = function ( string $sql ) use ( $connection ): array {
-	$result = $connection->query($sql);
-	if ( $result===false )
-		throw new RuntimeException ( "$sql: {$connection->error}" );
-	$ids = array_column ( $result->fetch_all(MYSQLI_ASSOC), 'id' );
-	$result->free();
-	return $ids;
-};
+<sphinxql>
+	create table t ( title text, body text, gid integer ) morphology='none';
+	insert into t ( id, title, body, gid ) values ( 1, 'error alpha', 'beta', 1 ), ( 2, 'alpha', 'error beta', 1 ), ( 3, 'error', 'error', 2 ), ( 4, 'gamma', 'delta', 2 ), ( 5, 'alpha error', 'error error error', 3 );
 
-$results = array();
-$checkIds = function ( string $label, array $expected, array $actual, int $count ) use ( &$results ): void {
-	sort ( $expected, SORT_NUMERIC );
-	sort ( $actual, SORT_NUMERIC );
-	$results[$label] = count($expected)===$count && count($actual)===$count && $expected===$actual;
-};
+	<!-- single term over all fields: fast -->
+	select count(*) from t where match('error'); show meta;
+	select count(*), max(gid) from t where match('error'); show meta;
+	select count(*) from t where match('@* error'); show meta like 'index';
+	select count(*) from t where match('@(title,body) error'); show meta like 'index';
 
-// Hash coordinates give the same pseudo-random fixture on every PHP version without changing the global RNG.
-$vector = function ( int $id ): string {
-	$coordinates = unpack ( 'n*', hash ( 'sha256', "knn-rescore:$id", true ) );
-	$values = array();
-	foreach ( $coordinates as $coordinate )
-		$values[] = sprintf ( '%.7f', ($coordinate-32768)/32768 );
-	return '(' . implode ( ',', $values ) . ')';
-};
+	<!-- field subset: regular path -->
+	select count(*) from t where match('@body error'); show meta;
+	select count(*), max(gid) from t where match('@body error'); show meta;
+	select count(*) from t where match('@title error'); show meta like 'index';
 
-$rows = array();
-$shards = array ( array(), array() );
-for ( $id = 1; $id<=2000; $id++ )
-{
-	$row = "($id," . $vector($id) . ')';
-	$rows[] = $row;
-	$shards[$id%2][] = $row;
-}
-$anchor = $vector(2001);
+	<!-- not a single plain term: regular path -->
+	select count(*) from t where match('"error"'); show meta like 'index';
+	select count(*) from t where match('error alpha'); show meta like 'index';
+	select count(*) from t where match('error | gamma'); show meta like 'index';
+	select count(*) from t where match('-error'); show meta like 'index';
+	select count(*) from t where match('^error'); show meta like 'index';
+	select count(*) from t where match('@title[1] error'); show meta like 'index';
 
-global $sd_address, $sd_port;
-foreach ( array ( '1bit', 'none' ) as $quantization )
-{
-	$settings = $quantization==='none' ? '' : " quantization='$quantization'";
-	foreach ( array ( 'rescore_full', 'rescore_s1', 'rescore_s2' ) as $table )
-		$execute ( "CREATE TABLE $table (vec float_vector knn_type='hnsw' knn_dims='16' hnsw_similarity='cosine'$settings)" );
+	<!-- query shape: regular path -->
+	select count(*) from t where match('error') and gid=1; show meta like 'index';
+	select gid, count(*) from t where match('error') group by gid order by gid asc; show meta like 'index';
+	select count(*) as c from t where match('error') having c>3; show meta like 'index';
+	select count(*), count(distinct gid) from t where match('error'); show meta like 'index';
+	select id, count(*) from t where match('error'); show meta like 'index';
+	select count(*) from t where match('error') option cutoff=1; show meta like 'index';
 
-	foreach ( array ( 'rescore_full' => $rows, 'rescore_s1' => $shards[0], 'rescore_s2' => $shards[1] ) as $table => $data )
-	{
-		foreach ( array_chunk ( $data, 200 ) as $batch )
-			$execute ( "INSERT INTO $table (id,vec) VALUES " . implode ( ',', $batch ) );
-		// RAM vectors already have exact distances; flush so this exercises the HNSW candidate queue.
-		$execute ( "FLUSH RAMCHUNK $table" );
-	}
+	<!-- missing word: zero, fast -->
+	select count(*) from t where match('nonexistent'); show meta;
+	select count(*), max(gid) from t where match('nonexistent'); show meta;
+</sphinxql>
 
-	$execute ( "CREATE TABLE rescore_local TYPE='distributed' local='rescore_s1' local='rescore_s2'" );
-	$execute ( "CREATE TABLE rescore_agent TYPE='distributed' agent='$sd_address:$sd_port:rescore_s1' agent='$sd_address:$sd_port:rescore_s2'" );
-	$execute ( "CREATE TABLE rescore_remote TYPE='distributed' agent='$sd_address:$sd_port:rescore_full'" );
+<!-- kills: RAM segment, disk chunk, mixed, merged -->
+<sphinxql>
+	delete from t where id=3;
+	select count(*) from t where match('error'); show meta;
+	select count(*), max(gid) from t where match('error'); show meta;
 
-	foreach ( array ( 100, 400, 1000 ) as $k )
-	{
-		$idsByTable = array();
-		foreach ( array ( 'rescore_full', 'rescore_local', 'rescore_agent', 'rescore_remote' ) as $table )
-		{
-			$sql = "SELECT id, knn_dist() FROM $table WHERE knn(vec,$k,$anchor,{ef=2000,oversampling=3.0,rescore=1,early_termination=0}) ORDER BY knn_dist() ASC, id ASC LIMIT $k";
-			$uncapped = $selectIds($sql);
-			$idsByTable[$table] = $uncapped;
-			$checkIds ( "$quantization $table k=$k", $uncapped, $selectIds ( "$sql OPTION max_matches=$k" ), $k );
-			if ( $table==='rescore_agent' )
-				$checkIds ( "$quantization local/agent k=$k", $idsByTable['rescore_local'], $uncapped, $k );
-			if ( $table==='rescore_remote' )
-				$checkIds ( "$quantization direct/remote k=$k", $idsByTable['rescore_full'], $uncapped, $k );
-		}
-	}
+	flush ramchunk t;
+	select count(*) from t where match('error'); show meta;
+	select count(*), max(gid) from t where match('error'); show meta;
 
-	foreach ( array ( 'rescore_full', 'rescore_local', 'rescore_agent', 'rescore_remote' ) as $table )
-	{
-		$sql = "SELECT id, knn_dist() FROM $table WHERE knn(vec,100,$anchor,{ef=2000,oversampling=3.0,rescore=1,early_termination=0}) ORDER BY knn_dist() ASC, id ASC";
-		$uncapped = $selectIds ( "$sql LIMIT 100" );
-		$checkIds ( "$quantization $table result cap", array_slice ( $uncapped, 0, 25 ), $selectIds ( "$sql LIMIT 100 OPTION max_matches=25" ), 25 );
-		$checkIds ( "$quantization $table offset cap", array_slice ( $uncapped, 10, 15 ), $selectIds ( "$sql LIMIT 10,100 OPTION max_matches=25" ), 15 );
+	insert into t ( id, title, body, gid ) values ( 6, 'x', 'error', 4 ), ( 7, 'error', 'y', 4 );
+	select count(*) from t where match('error'); show meta;
+	select count(*), max(gid) from t where match('error'); show meta;
 
-		$sql = "SELECT id, knn_dist() FROM $table WHERE knn(vec,100,$anchor,{ef=2000,oversampling=3.0,rescore=0,early_termination=0}) ORDER BY knn_dist() ASC, id ASC LIMIT 100";
-		$checkIds ( "$quantization $table rescore=0", $selectIds($sql), $selectIds ( "$sql OPTION max_matches=100" ), 100 );
-	}
+	delete from t where id=1;
+	select count(*) from t where match('error'); show meta;
+	select count(*), max(gid) from t where match('error'); show meta;
 
-	foreach ( array ( 'rescore_local', 'rescore_agent', 'rescore_remote', 'rescore_full', 'rescore_s1', 'rescore_s2' ) as $table )
-		$execute ( "DROP TABLE $table" );
-}
-$connection->close();
-]]></custom_test>
+	delete from t where id=7;
+	select count(*) from t where match('error'); show meta;
+	select count(*), max(gid) from t where match('error'); show meta;
 
+	flush ramchunk t;
+	optimize table t option sync=1, cutoff=1;
+	select count(*) from t where match('error'); show meta;
+	select count(*), max(gid) from t where match('error'); show meta;
+</sphinxql>
+
+<!-- morphology, exact forms, wildcards, expand_keywords -->
+<sphinxql>
+	create table tm ( body text ) morphology='stem_en' index_exact_words='1' min_prefix_len='3';
+	insert into tm ( id, body ) values ( 1, 'errors' ), ( 2, 'error' ), ( 3, 'erroring' ), ( 4, 'other' );
+	select count(*) from tm where match('errors'); show meta;
+	select count(*), max(id) from tm where match('errors'); show meta;
+	select count(*) from tm where match('=errors'); show meta;
+	select count(*), max(id) from tm where match('=errors'); show meta;
+	select count(*) from tm where match('err*'); show meta;
+	select count(*), max(id) from tm where match('err*'); show meta;
+	select count(*) from tm where match('error') option expand_keywords=1; show meta;
+	select count(*), max(id) from tm where match('error') option expand_keywords=1; show meta;
+</sphinxql>
+
+<!-- hitless words and columnar storage -->
+<sphinxql>
+	create table th ( body text ) morphology='none' hitless_words='all';
+	insert into th ( id, body ) values ( 1, 'error error' ), ( 2, 'error' ), ( 3, 'other' );
+	select count(*) from th where match('error'); show meta;
+	select count(*), max(id) from th where match('error'); show meta;
+
+	create table tc ( body text, gid integer ) morphology='none' engine='columnar';
+	insert into tc ( id, body, gid ) values ( 1, 'error', 1 ), ( 2, 'error', 2 ), ( 3, 'other', 3 );
+	select count(*) from tc where match('error'); show meta;
+	select count(*), max(gid) from tc where match('error'); show meta;
+</sphinxql>
+
+<!-- rankless count: any tree, filters allowed; every fast query is followed by its slow twin -->
+<sphinxql>
+	create table tr ( title text, body text, gid integer, ts bigint ) morphology='none' min_infix_len='3';
+	insert into tr ( id, title, body, gid, ts ) values
+		( 1, 'error alpha', 'beta cache', 1, 100 ),
+		( 2, 'alpha', 'error beta failed', 1, 200 ),
+		( 3, 'error', 'error charge', 2, 300 ),
+		( 4, 'gamma', 'delta connection', 2, 400 ),
+		( 5, 'alpha error', 'error error error charge cache', 3, 500 ),
+		( 6, 'failed order', 'order failed', 3, 600 ),
+		( 7, 'place order', 'failed to place order', 4, 700 ),
+		( 8, 'connection refused', 'error failed charge cache', 4, 800 );
+
+	select count(*) from tr where match('error failed'); show meta;
+	select count(*), max(gid) from tr where match('error failed'); show meta;
+	select count(*) from tr where match('error failed charge cache'); show meta like 'index';
+	select count(*), max(gid) from tr where match('error failed charge cache'); show meta like 'index';
+	select count(*) from tr where match('error | gamma'); show meta;
+	select count(*), max(gid) from tr where match('error | gamma'); show meta;
+	select count(*) from tr where match('connection | order | delta | cache'); show meta like 'index';
+	select count(*), max(gid) from tr where match('connection | order | delta | cache'); show meta like 'index';
+	select count(*) from tr where match('"error failed charge cache"/2'); show meta like 'index';
+	select count(*), max(gid) from tr where match('"error failed charge cache"/2'); show meta like 'index';
+	select count(*) from tr where match('error -cache'); show meta like 'index';
+	select count(*), max(gid) from tr where match('error -cache'); show meta like 'index';
+	select count(*) from tr where match('(error | failed) -charge'); show meta like 'index';
+	select count(*), max(gid) from tr where match('(error | failed) -charge'); show meta like 'index';
+	select count(*) from tr where match('"place order"'); show meta;
+	select count(*), max(gid) from tr where match('"place order"'); show meta;
+	select count(*) from tr where match('"failed to place order"'); show meta like 'index';
+	select count(*), max(gid) from tr where match('"failed to place order"'); show meta like 'index';
+	select count(*) from tr where match('"failed order"~3'); show meta like 'index';
+	select count(*), max(gid) from tr where match('"failed order"~3'); show meta like 'index';
+	select count(*) from tr where match('error NEAR/2 charge'); show meta like 'index';
+	select count(*), max(gid) from tr where match('error NEAR/2 charge'); show meta like 'index';
+	select count(*) from tr where match('failed &lt;&lt; order'); show meta like 'index';
+	select count(*), max(gid) from tr where match('failed &lt;&lt; order'); show meta like 'index';
+	select count(*) from tr where match('"failed to place order" | charge'); show meta like 'index';
+	select count(*), max(gid) from tr where match('"failed to place order" | charge'); show meta like 'index';
+	select count(*) from tr where match('^error'); show meta like 'index';
+	select count(*), max(gid) from tr where match('^error'); show meta like 'index';
+	select count(*) from tr where match('@title[1] error'); show meta like 'index';
+	select count(*), max(gid) from tr where match('@title[1] error'); show meta like 'index';
+	select count(*) from tr where match('@body error'); show meta like 'index';
+	select count(*), max(gid) from tr where match('@body error'); show meta like 'index';
+	select count(*) from tr where match('error MAYBE charge'); show meta like 'index';
+	select count(*), max(gid) from tr where match('error MAYBE charge'); show meta like 'index';
+
+	<!-- expansions -->
+	select count(*) from tr where match('err*'); show meta like 'index';
+	select count(*), max(gid) from tr where match('err*'); show meta like 'index';
+	select count(*) from tr where match('*tion'); show meta like 'index';
+	select count(*), max(gid) from tr where match('*tion'); show meta like 'index';
+	select count(*) from tr where match('*nnec*'); show meta like 'index';
+	select count(*), max(gid) from tr where match('*nnec*'); show meta like 'index';
+	select count(*) from tr where match('error') option expand_keywords=1; show meta like 'index';
+	select count(*), max(gid) from tr where match('error') option expand_keywords=1; show meta like 'index';
+
+	<!-- filters: evaluated inside the count walk -->
+	select count(*) from tr where match('error') and gid=1; show meta;
+	select count(*), max(gid) from tr where match('error') and gid=1; show meta;
+	select count(*) from tr where match('error failed') and gid between 1 and 3; show meta like 'index';
+	select count(*), max(gid) from tr where match('error failed') and gid between 1 and 3; show meta like 'index';
+	select count(*) from tr where match('error') and ts between 250 and 650; show meta like 'index';
+	select count(*), max(gid) from tr where match('error') and ts between 250 and 650; show meta like 'index';
+	select count(*) from tr where match('error | failed') and gid=4 and ts&gt;=800; show meta like 'index';
+	select count(*), max(gid) from tr where match('error | failed') and gid=4 and ts&gt;=800; show meta like 'index';
+
+	<!-- weight filter needs ranking: regular path -->
+	select count(*) from tr where match('error failed') and weight()&gt;0; show meta like 'index';
+	select count(*), max(gid) from tr where match('error failed') and weight()&gt;0; show meta like 'index';
+
+	<!-- kills: RAM, then disk chunk, mixed, merged -->
+	delete from tr where id=5;
+	select count(*) from tr where match('error failed'); show meta;
+	select count(*), max(gid) from tr where match('error failed'); show meta;
+	select count(*) from tr where match('error'); show meta;
+	select count(*), max(gid) from tr where match('error'); show meta;
+	<!-- keep executor shares independent of CPU count and pseudo-sharding -->
+	flush ramchunk tr;
+	select count(*) from tr where match('error failed') option threads=1; show meta;
+	select count(*), max(gid) from tr where match('error failed'); show meta;
+	insert into tr ( id, title, body, gid, ts ) values ( 9, 'x', 'error failed', 5, 900 ), ( 10, 'error', 'y', 5, 1000 );
+	delete from tr where id=2;
+	select count(*) from tr where match('error failed') option threads=1; show meta;
+	select count(*), max(gid) from tr where match('error failed'); show meta;
+	<!-- the dictionary path on RAM and the rankless path on the disk chunk; the index shares depend on the pseudo-shard count, so only the stats are checked -->
+	select count(*) from tr where match('error'); show meta like 'docs%';
+	select count(*), max(gid) from tr where match('error'); show meta like 'docs%';
+	delete from tr where id=10;
+	<!-- window counting on disk and rankless counting in RAM have shard-dependent index shares; compare counts and term stats -->
+	select count(*) from tr where match('error | failed'); show meta like 'docs%';
+	select count(*), max(gid) from tr where match('error | failed'); show meta like 'docs%';
+	flush ramchunk tr;
+	optimize table tr option sync=1, cutoff=1;
+	select count(*) from tr where match('error failed') option threads=1; show meta;
+	select count(*), max(gid) from tr where match('error failed'); show meta;
+	select count(*) from tr where match('error') and gid=1; show meta like 'index';
+	select count(*), max(gid) from tr where match('error') and gid=1; show meta like 'index';
+</sphinxql>
+
+<!-- zones need the ranker: regular path -->
+<sphinxql>
+	create table tz ( body text ) morphology='none' html_strip='1' index_zones='h1';
+	insert into tz ( id, body ) values ( 1, '&lt;h1&gt;error&lt;/h1&gt; failed' ), ( 2, 'error &lt;h1&gt;failed&lt;/h1&gt;' );
+	select count(*) from tz where match('ZONE:h1 error'); show meta like 'index';
+	select count(*), max(id) from tz where match('ZONE:h1 error'); show meta like 'index';
+	select count(*) from tz where match('error failed'); show meta like 'index';
+</sphinxql>
+
+</queries>
 </test>

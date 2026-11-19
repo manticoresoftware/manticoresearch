@@ -199,3 +199,61 @@ mysql -h0 -P9306 -e "CREATE TABLE rt_src_shared2 (id BIGINT, title TEXT) stopwor
 if [ "$(grep -l 'swshareduniq' /var/lib/manticore/rt_dst_shared/stopwords_chunk*.txt | wc -l)" -eq 1 ]; then echo OK_SHARED_DEDUP_MULTI_SRC; else echo FAIL_SHARED_DEDUP_MULTI_SRC; fi
 ––– output –––
 OK_SHARED_DEDUP_MULTI_SRC
+––– comment –––
+Case G: plain mode, three plain tables with exceptions attached one after another to an RT table
+with the same exceptions: the attach keeps the exceptions file info of the RT table, so the next
+attach finds the same tokenizer settings, also after a restart
+––– input –––
+mkdir -p /tmp/attach_exc; echo 'C++ => cplusplus' > /tmp/attach_exc/ex.txt; for p in 1 2 3; do echo "$p,C++ row $p" > /tmp/attach_exc/p$p.csv; done
+cat > /tmp/attach_exc/plain.conf <<'EOF'
+searchd {
+  listen = 19306:mysql41
+  log = /tmp/attach_exc/searchd.log
+  pid_file = /tmp/attach_exc/searchd.pid
+  binlog_path = /tmp/attach_exc
+}
+source p1 {
+  type = csvpipe
+  csvpipe_command = cat /tmp/attach_exc/p1.csv
+  csvpipe_field = title
+}
+source p2 : p1 {
+  csvpipe_command = cat /tmp/attach_exc/p2.csv
+}
+source p3 : p1 {
+  csvpipe_command = cat /tmp/attach_exc/p3.csv
+}
+table p1 {
+  type = plain
+  source = p1
+  path = /tmp/attach_exc/p1
+  exceptions = /tmp/attach_exc/ex.txt
+}
+table p2 : p1 {
+  source = p2
+  path = /tmp/attach_exc/p2
+}
+table p3 : p1 {
+  source = p3
+  path = /tmp/attach_exc/p3
+}
+table rt_exc {
+  type = rt
+  path = /tmp/attach_exc/rt
+  rt_field = title
+  exceptions = /tmp/attach_exc/ex.txt
+}
+EOF
+indexer --quiet --config /tmp/attach_exc/plain.conf --all > /dev/null && echo indexed
+––– output –––
+indexed
+––– input –––
+searchd --config /tmp/attach_exc/plain.conf > /dev/null; mysql -h0 -P19306 -e "ATTACH TABLE p1 TO TABLE rt_exc; ATTACH TABLE p2 TO TABLE rt_exc"
+––– output –––
+––– input –––
+searchd --config /tmp/attach_exc/plain.conf --stopwait > /dev/null; searchd --config /tmp/attach_exc/plain.conf > /dev/null; mysql -h0 -P19306 -e "ATTACH TABLE p3 TO TABLE rt_exc"
+––– output –––
+––– input –––
+mysql -h0 -P19306 --skip-table --batch --raw --skip-column-names -e "SELECT id FROM rt_exc WHERE MATCH('cplusplus') ORDER BY id ASC" | xargs; searchd --config /tmp/attach_exc/plain.conf --stopwait > /dev/null
+––– output –––
+1 2 3

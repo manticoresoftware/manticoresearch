@@ -431,8 +431,8 @@ struct FileAccessSettings_t : public SettingsWriter_c
 {
 	FileAccess_e	m_eAttr = FileAccess_e::MMAP_PREREAD;
 	FileAccess_e	m_eBlob = FileAccess_e::MMAP_PREREAD;
-	FileAccess_e	m_eDoclist = FileAccess_e::FILE;
-	FileAccess_e	m_eHitlist = FileAccess_e::FILE;
+	FileAccess_e	m_eDoclist = FileAccess_e::MMAP;
+	FileAccess_e	m_eHitlist = FileAccess_e::MMAP;
 	FileAccess_e	m_eDict = FileAccess_e::MMAP_PREREAD;
 	FileAccess_e	m_eColumnar = FileAccess_e::MMAP;
 	FileAccess_e	m_eSecondary = FileAccess_e::FILE;

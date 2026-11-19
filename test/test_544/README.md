@@ -4,9 +4,9 @@
 
 The 60 checks compare ID sets and row counts within each table layout, with and without explicit `max_matches`: a single RT table, two local shards, and both layouts accessed through loopback binary API agents. The single remote shard has 2,000 rows so candidate truncation at 1,000 is observable. `k=100,400,1000` covers `R=300,1200,3000`, including an explicit cap equal to `DEFAULT_MAX_MATCHES`. Additional checks cover result caps, OFFSET, and `rescore=0`. Local and agent results must also agree for these single-chunk shards.
 
-`model.bin` contains the expected boolean invariants in UberTest's serialized custom-test format. It does not contain daemon-generated reference IDs. `test/CMakeLists.txt` discovers the new `test_542` directory automatically; no registration change is needed. Do not regenerate the model to accept a failure.
+`model.bin` contains the expected boolean invariants in UberTest's serialized custom-test format. It does not contain daemon-generated reference IDs. `test/CMakeLists.txt` discovers the new `test_544` directory automatically; no registration change is needed. Do not regenerate the model to accept a failure.
 
-Changed source files: `src/queuecreator.cpp`, `src/knnmisc.cpp`, `src/knnmisc.h`. Added files: `test/test_542/test.xml`, `test/test_542/model.bin`, `test/test_542/manual.sql`, `test/test_542/README.md`.
+Changed source files: `src/queuecreator.cpp`, `src/knnmisc.cpp`, `src/knnmisc.h`. Added files: `test/test_544/test.xml`, `test/test_544/model.bin`, `test/test_544/manual.sql`, `test/test_544/README.md`.
 
 ## Semantics and remaining boundary
 
@@ -44,13 +44,13 @@ docker run --rm --pull=never --network=none \
   bash -euo pipefail -c '
     mysqladmin --wait=60 --silent ping
     exec php ubertest.php --ctest --strict-verbose --no-demo --rt \
-      -u test -b /bins/ -t /results/ -tt /results/ t 542
+      -u test -b /bins/ -t /results/ -tt /results/ t 544
   '
 ```
 
 The supplied dev2 logs confirm `ALL OK`, `EXIT=0`, and zero skips on the fixed build (7.06 seconds). The pre-fix run against image `sha256:bf6be4b043a864f720ee43c97bf823a1c8f824468f4b180bb5413a6fbb485aca` failed subtest 1 with `EXIT=1` and zero skips (5.08 seconds): 17 of the 60 boolean checks were false, all for `1bit rescore_*` cases. These cover all four layouts at `k=100` and `k=400`, the full table at `k=1000`, and result/offset caps in all four layouts. All unquantized checks, local/agent and direct/remote comparisons, and `rescore=0` checks were true. The pre-fix read-only-filesystem warnings concern diagnostic diff files and do not cause the recorded boolean mismatches.
 
-The runs used `run542.sh` and `run542_old.sh` with the CI runner image above. The negative-control script extracts modules from the old image; identical module binaries across the two runs were not established. The exact mismatch list, scripts, and log provenance accompany the PR text. Repeat with `t 298 515 517 541 542` to check neighboring quantization, result-window, distributed, and hybrid cases; those broader runs remain unverified here.
+The runs used `run542.sh` and `run542_old.sh` with the CI runner image above. The negative-control script extracts modules from the old image; identical module binaries across the two runs were not established. The exact mismatch list, scripts, and log provenance accompany the PR text. Repeat with `t 298 515 517 541 544` to check neighboring quantization, result-window, distributed, and hybrid cases; those broader runs remain unverified here.
 
 ## Plain SQL manual recall check
 
@@ -60,7 +60,7 @@ Start an isolated container on dev2:
 
 ```sh
 docker run -d --rm --pull=never --network=none --name knn-rescore-manual \
-  -v "$HOME/kbd/manticoresearch/test/test_542:/fixture:ro" kbd:dev
+  -v "$HOME/kbd/manticoresearch/test/test_544:/fixture:ro" kbd:dev
 docker exec knn-rescore-manual mysqladmin --protocol=tcp -h127.0.0.1 -P9306 --wait=60 --silent ping
 docker exec knn-rescore-manual sh -ec 'mysql --protocol=tcp -h127.0.0.1 -P9306 < /fixture/manual.sql'
 docker stop knn-rescore-manual

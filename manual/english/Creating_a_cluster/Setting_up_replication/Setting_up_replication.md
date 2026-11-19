@@ -61,6 +61,10 @@ The `nodes` option is a list of address:port pairs for all the nodes in the clus
 
 The `options` option allows you to pass additional options directly to the Galera replication plugin, as described in the [Galera Documentation Parameters](https://galeracluster.com/library/documentation/galera-parameters.html)
 
+## Upgrading a cluster
+
+> **Breaking change:** Starting with the version that supports [bulk import into a replicated table](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import-into-a-replicated-table), a node keeps a different marker of the last change of the cluster's table files, and a node of an earlier version cannot work in one cluster with it. A rolling upgrade is not supported: make sure that all nodes of the cluster are synced, stop all of them, upgrade them, and start the cluster again as after a [full restart](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md).
+
 ## Write statements
 
 <!-- example write statements 1 -->

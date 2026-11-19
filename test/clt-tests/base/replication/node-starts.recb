@@ -1,0 +1,8 @@
+––– comment –––
+Every node started once (one 'forked ok' of the watchdog), its process was never killed by a signal ('killed dirtily', also an abort of the replication provider, which leaves no crash dump) and it wrote no crash dump: no node crashed and came back by a restart
+––– input –––
+for n in 1 2 3; do L=/var/log/manticore-$n/searchd.log; echo "node $n starts=$(grep -c 'watchdog: main process .* forked ok' $L) killed=$(grep -c 'killed dirtily' $L) dumps=$(grep -c 'CRASH DUMP' $L)"; done
+––– output –––
+node 1 starts=1 killed=0 dumps=0
+node 2 starts=1 killed=0 dumps=0
+node 3 starts=1 killed=0 dumps=0

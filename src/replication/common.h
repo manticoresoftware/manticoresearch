@@ -23,7 +23,9 @@ bool ClusterDelete ( const CSphString& sCluster );
 
 // command at remote node for CLUSTER_SYNCED to pick up received indexes and notify Galera that sst received
 struct ClusterSyncedRequest_t;
-bool ClusterSynced ( const ClusterSyncedRequest_t& tCmd );
+struct ClusterSyncedReply_t;
+// false only when the request can not be handled (unknown cluster); a refusal goes into the reply and into the cluster error
+bool ClusterSynced ( const ClusterSyncedRequest_t& tCmd, ClusterSyncedReply_t& tReply, const char* szClient );
 
 // cluster state this node sees
 enum class ClusterState_e

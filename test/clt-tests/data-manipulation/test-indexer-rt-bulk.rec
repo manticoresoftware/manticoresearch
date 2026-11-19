@@ -58,3 +58,57 @@ SQL
 reply=$(printf '%s\n' '{"insert":{"table":"BULK_IMPORT_CASE","id":2,"doc":{"title":"HTTP mixed case","gid":12}}}' | curl -sS -X POST 'http://localhost:9308/bulk?bulk_import=BuLk_ImPoRt_CaSe' -H 'Content-Type: application/x-ndjson' --data-binary @-); rows=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id,title,gid FROM bulk_import_case" | sort -n); expected=$(printf '1\tSQL mixed case\t11\n2\tHTTP mixed case\t12'); if printf '%s' "$reply" | grep -q '"errors":false' && [ "$rows" = "$expected" ]; then echo BULK_IMPORT_CASE_INSENSITIVE_OK; else printf 'FAIL_BULK_IMPORT_CASE reply=%s rows=%s\n' "$reply" "$rows"; fi
 ––– output –––
 BULK_IMPORT_CASE_INSENSITIVE_OK
+––– block: ../base/bulk-import-helpers –––
+––– comment –––
+A load builds its chunk with the external files of the table (#5102): stopwords, wordforms in
+two files, exceptions and hitless_words. A load into a non-empty and into an empty table keeps the settings and keywords of
+the table, also after a restart, the chunk embeds no files as the table does not (its meta keeps
+no embedded_limit), and loaded rows match the same queries as inserted ones.
+––– input –––
+printf 'the\nand\n' > /tmp/bulk_sw.txt; printf 'walking > walk\n' > /tmp/bulk_wf1.txt; printf 'ran > run\nwordform01999 > base01999\n' > /tmp/bulk_wf2.txt; printf 'C++ => cplusplus\n' > /tmp/bulk_ex.txt; printf 'man\n' > /tmp/bulk_hl.txt
+for t in bulk_ext bulk_ext_empty; do mysql -h0 -P9306 -e "DROP TABLE IF EXISTS $t; CREATE TABLE $t (title TEXT) stopwords='/tmp/bulk_sw.txt' wordforms='/tmp/bulk_wf1.txt /tmp/bulk_wf2.txt' exceptions='/tmp/bulk_ex.txt' hitless_words='/tmp/bulk_hl.txt'"; done
+––– output –––
+––– input –––
+source /tmp/bi.sh; for t in bulk_ext bulk_ext_empty; do bi_save $t 'the walking and ran C++ wordform01999 man'; done; bi_sql "CALL KEYWORDS('the walking and ran C++ wordform01999 man','bulk_ext')"
+––– output –––
+2	walking	walk
+4	ran	run
+5	cplusplus	cplusplus
+6	wordform01999	base01999
+7	man	man
+––– input –––
+source /tmp/bi.sh; bi_sql "INSERT INTO bulk_ext (id,title) VALUES (1,'the walking man'),(2,'she ran and ran'),(3,'C++ and wordform01999')"; for t in bulk_ext bulk_ext_empty; do bi_load $t "(id,title) VALUES (11,'the walking man'),(12,'she ran and ran'),(13,'C++ and wordform01999')"; bi_same $t; done
+––– output –––
+bulk_ext state kept
+bulk_ext_empty state kept
+––– input –––
+source /tmp/bi.sh; for q in walk the cplusplus base01999 man; do echo "$q: [$(bi_ids bulk_ext $q)] [$(bi_ids bulk_ext_empty $q)]"; done
+––– output –––
+walk: [1 11] [11]
+the: [] []
+cplusplus: [3 13] [13]
+base01999: [3 13] [13]
+man: [1 11] [11]
+––– comment –––
+A table with exceptions takes more loads: the attach keeps the exceptions file info of the table,
+so the next chunk has the same tokenizer settings, also after a restart.
+––– input –––
+source /tmp/bi.sh; for t in bulk_ext bulk_ext_empty; do bi_load $t "(id,title) VALUES (21,'C++ and walking')"; bi_same $t; done
+––– output –––
+bulk_ext state kept
+bulk_ext_empty state kept
+––– block: ../base/start-searchd –––
+––– input –––
+source /tmp/bi.sh; grep -c 'differs from the original' /var/log/manticore/searchd.log; cat /var/lib/manticore/bulk_ext*/bulk_ext*.meta | grep -c 'embedded_limit'; for t in bulk_ext bulk_ext_empty; do bi_same $t; done
+––– output –––
+0
+0
+bulk_ext state kept
+bulk_ext_empty state kept
+––– input –––
+source /tmp/bi.sh; for t in bulk_ext bulk_ext_empty; do bi_load $t "(id,title) VALUES (31,'C++ and walking')"; bi_same $t; echo "$t: [$(bi_ids $t 'cplusplus walk')]"; done
+––– output –––
+bulk_ext state kept
+bulk_ext: [21 31]
+bulk_ext_empty state kept
+bulk_ext_empty: [21 31]

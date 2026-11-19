@@ -20,7 +20,10 @@ struct IndexerRtBulkFile_t
 
 CSphString GetIndexerRtBulkRoot ( const RtIndex_i & tRt );
 
-std::unique_ptr<CSphIndex> LoadIndexerRtBulkChunk ( const CSphString & sPath, CSphString & sError );
+// takes the common and indexer options of the main config for the indexer children; call after sphConfigureCommon
+void ConfigureIndexerRtBulk ( const CSphConfig & hConf );
+
+std::unique_ptr<CSphIndex> LoadIndexerRtBulkChunk ( const CSphString & sPath, const CSphString & sTable, CSphString & sError );
 
 bool PrepareStagingRoot ( const CSphString & sRoot, CSphString & sError );
 

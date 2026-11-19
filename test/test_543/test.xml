@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>terms aggregations over mixed numeric JSON arrays</name>
+<skip_indexer/>
+<requires><http/><force-rt/></requires>
+<config>
+searchd
+{
+    <searchd_settings/>
+    data_dir = <data_path path="data0"/>
+}
+</config>
+<httpqueries>
+<!-- Native /bulk receives both JSON objects and serialized JSON attributes. -->
+<query endpoint="sql?mode=raw" method="post">CREATE TABLE json_mixed_numeric_facets (j JSON)</query>
+<query endpoint="json/bulk" content="application/x-ndjson">
+{"insert":{"table":"json_mixed_numeric_facets","id":1,"doc":{"j":{"a":[0.946,1,5]}}}}
+{"insert":{"table":"json_mixed_numeric_facets","id":2,"doc":{"j":{"a":[0.946,1.0,5.0]}}}}
+{"insert":{"table":"json_mixed_numeric_facets","id":3,"doc":{"j":"{\"a\":[0.946,1.0,5.0]}"}}}
+{"insert":{"table":"json_mixed_numeric_facets","id":4,"doc":{"j":{"a":[1,5,10]}}}}
+{"insert":{"table":"json_mixed_numeric_facets","id":5,"doc":{"j":{"a":[0.946,2.5]}}}}
+{"insert":{"table":"json_mixed_numeric_facets","id":6,"doc":{"j":{"a":[0.946,1,2147483648]}}}}
+{"insert":{"table":"json_mixed_numeric_facets","id":7,"doc":{"j":{"a":[0.946,1,"five"]}}}}
+</query>
+<!-- Compare mixed int/double arrays with homogeneous int/double arrays. -->
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":1}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":2}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":3}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":4}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":5}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":6}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":7}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<!-- Cross-document bucket counts, and the non-emulated multi-aggregation path. -->
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"in":{"id":[1,2]}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":1}},"aggs":{"v":{"terms":{"field":"j.a","size":10}},"ids":{"terms":{"field":"id","size":10}}}}</query>
+<!-- Repeat on a disk chunk. -->
+<query endpoint="sql?mode=raw" method="post">FLUSH RAMCHUNK json_mixed_numeric_facets</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":1}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":2}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":3}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":6}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":7}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"in":{"id":[1,2]}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":1}},"aggs":{"v":{"terms":{"field":"j.a","size":10}},"ids":{"terms":{"field":"id","size":10}}}}</query>
+<query endpoint="sql?mode=raw" method="post">DROP TABLE json_mixed_numeric_facets</query>
+</httpqueries>
+</test>

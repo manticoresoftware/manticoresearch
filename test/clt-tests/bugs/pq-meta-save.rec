@@ -1,9 +1,15 @@
 ––– comment –––
-PQ meta save. Rules committed while FLUSH RAMCHUNK saves the table must survive a crash: the saved
-meta and the TID reported to binlog must be the TID of the saved rules, not a later one.
+PQ meta save. Concurrent FLUSH RAMCHUNK must save one at a time: parallel saves wrote the same
+meta.new, a failed rename of the settings file killed the daemon and the meta could stay broken.
+Rules committed while FLUSH RAMCHUNK saves the table must survive a crash: the saved meta and the
+TID reported to binlog must be the TID of the saved rules, not a later one.
 ––– block: ../base/start-searchd –––
 ––– input –––
 manticore-load --quiet --port=9306 --init="CREATE TABLE pq (body text) type='pq'" --load="INSERT INTO pq(id,query) VALUES (<increment>,'alpha beta gamma delta epsilon')" --batch-size=1000 --threads=1 --total=30000 > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+rm -f /tmp/pq-stop; for w in 1 2 3 4; do (id=$((w*1000000)); while [ ! -f /tmp/pq-stop ]; do id=$((id+1)); mysql -h0 -P9306 -e "INSERT INTO pq(id,query) VALUES ($id,'zeta $id')" 2>/dev/null; done) & done; for i in $(seq 20); do p=(); for f in 1 2 3; do mysql -h0 -P9306 -e "FLUSH RAMCHUNK pq" 2>/dev/null & p+=($!); done; wait "${p[@]}"; done; touch /tmp/pq-stop; wait; grep -cE 'failed to rename|CRASH' /var/log/manticore/searchd.log
 ––– output –––
 0
 ––– input –––

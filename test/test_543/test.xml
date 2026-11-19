@@ -27,7 +27,7 @@ searchd
 		<var name="fld" delimiter=",">(<i/>,'needle common')</var>
 	</repeat>
 <sphinxql>
-	create table issue5085 (body string attribute indexed);
+	create table issue5085 (body text indexed);
 	insert into issue5085 values <fld/>;
 	flush ramchunk issue5085;
 	SET GLOBAL qcache_max_bytes=16777216;

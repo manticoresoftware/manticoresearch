@@ -1,0 +1,63 @@
+––– comment –––
+Regression for PQ INSERT hanging when it overlaps FLUSH RAMCHUNK.
+Concurrent INSERT sessions contend for the binlog while the PQ lock is held.
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS pq_flush_race; CREATE TABLE pq_flush_race (body text, meta json) type='pq'"; echo $?
+––– output –––
+0
+––– input –––
+bash <<'BASH'
+set -euo pipefail
+tmp=$(mktemp -d)
+flush_pid=''
+writer_pids=()
+cleanup() {
+    for pid in "${writer_pids[@]}" "$flush_pid"; do
+        if [[ -n "$pid" ]]; then kill "$pid" 2>/dev/null || true; fi
+    done
+    rm -rf "$tmp"
+}
+fail() {
+    echo "PQ INSERT/FLUSH failed: $1"
+    for log in "$tmp"/*.log; do
+        [[ -f "$log" ]] && { echo "$(basename "$log"):"; tail -n 12 "$log"; }
+    done
+    exit 1
+}
+trap cleanup EXIT
+query=$(printf 'alpha beta gamma delta epsilon zeta %.0s' {1..100})
+touch "$tmp/running"
+(
+    while [[ -e "$tmp/running" ]]; do
+        timeout 10 mysql -h0 -P9306 -e 'FLUSH RAMCHUNK pq_flush_race' >"$tmp/flush.log" 2>&1 || exit 1
+        echo . >>"$tmp/flush.count"
+        sleep 0.02
+    done
+) &
+flush_pid=$!
+for worker in 0 1 2 3; do
+    (
+        for ((i=1; i<=500; i++)); do
+            id=$((worker*500+i))
+            printf "INSERT INTO pq_flush_race(id,query) VALUES (%d,'%s rule_%d');\n" "$id" "$query" "$id"
+            sleep 0.005
+        done
+    ) | timeout 90 mysql -h0 -P9306 -N -B >"$tmp/insert_$worker.log" 2>&1 &
+    writer_pids+=("$!")
+done
+for pid in "${writer_pids[@]}"; do
+    wait "$pid" || fail 'an INSERT worker failed or timed out'
+done
+writer_pids=()
+rm "$tmp/running"
+wait "$flush_pid" || fail 'FLUSH RAMCHUNK failed or timed out'
+flush_pid=''
+[[ -f "$tmp/flush.count" ]] && [[ $(wc -l < "$tmp/flush.count") -ge 2 ]] || fail 'too few successful flushes'
+count=$(timeout 10 mysql -N -B -h0 -P9306 -e 'SELECT COUNT(*) FROM pq_flush_race') || fail 'COUNT timed out'
+[[ "$count" == 2000 ]] || fail "expected 2000 rules, got $count"
+timeout 10 mysql -h0 -P9306 -e 'FLUSH RAMCHUNK pq_flush_race' >"$tmp/final.log" 2>&1 || fail 'final FLUSH failed'
+echo 'PQ INSERT/FLUSH: ok'
+BASH
+––– output –––
+PQ INSERT/FLUSH: ok

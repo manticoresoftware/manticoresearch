@@ -35,12 +35,12 @@ searchd
 	SET GLOBAL qcache_ttl_sec=180;
 
 	<!-- Cache the full result in a single thread. -->
-	SELECT id FROM issue5085 WHERE MATCH('needle common') ORDER BY id ASC LIMIT 200 OPTION threads_ex='+1';SHOW META;;
+	SELECT id FROM issue5085 WHERE MATCH('needle common') ORDER BY id ASC LIMIT 200 OPTION threads_ex='1+1';SHOW META;;
 	show status like 'qcache_cached_queries';
 	show status like 'qcache_hits';
 
 	<!-- Each pseudo-shard must see only its own rowids from the same cache. -->
-	set global threads_ex='+4';
+	set global threads_ex='4+4';
 	SELECT id FROM issue5085 WHERE MATCH('needle common') ORDER BY id ASC LIMIT 200; SHOW META;;
 	show status like 'qcache_hits';
 

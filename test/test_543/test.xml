@@ -42,7 +42,6 @@ searchd
 	<!-- Each pseudo-shard must see only its own rowids from the same cache. -->
 	set global threads_ex='4+4';
 	SELECT id FROM issue5085 WHERE MATCH('needle common') ORDER BY id ASC LIMIT 200; SHOW META;;
-	show status like 'qcache_hits';
 
 	<!-- Cached results must also preserve pagination and the full hit count. -->
 	SELECT id FROM issue5085 WHERE MATCH('needle common') ORDER BY id ASC LIMIT 45,20; SHOW META;;

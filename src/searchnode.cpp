@@ -1218,6 +1218,7 @@ class ExtWindowBool_T final : public WindowNode_i
 	{
 		std::unique_ptr<ISphQword>			m_pWord;
 		std::unique_ptr<PostingWindow_i>	m_pCursor;
+		std::unique_ptr<XQKeyword_t>		m_pPackedWord;
 		RowID_t								m_tNext = INVALID_ROWID;
 		DWORD								m_uFields = 0;
 	};
@@ -1239,6 +1240,14 @@ public:
 		ARRAY_FOREACH ( i, m_dTerms )
 		{
 			auto & tTerm = m_dTerms[i];
+			tTerm.m_uFields = dLeaves[i].m_uFields;
+			if ( dLeaves[i].m_pWord->m_pPayload )
+			{
+				tTerm.m_pPackedWord = std::make_unique<XQKeyword_t>(*dLeaves[i].m_pWord);
+				SetupPackedTerm ( tTerm, tSetup );
+				continue;
+			}
+
 			tTerm.m_pWord.reset ( CreateQueryWord ( *dLeaves[i].m_pWord, tSetup ) );
 			if ( IS_AND || dLeaves.GetLength()==1 )
 				if ( tTerm.m_pWord->m_iDocs && int64_t(tTerm.m_pWord->m_iDocs)*32<tSetup.m_pIndex->GetStats().m_iTotalDocuments )
@@ -1257,8 +1266,7 @@ public:
 						return; // repeated terms require hit-count semantics
 					}
 
-			tTerm.m_uFields = dLeaves[i].m_uFields;
-			tTerm.m_pCursor = tTerm.m_pWord->CreatePostingWindow ( dLeaves[i].m_uFields, CursorContext() );
+			tTerm.m_pCursor = tTerm.m_pWord->CreatePostingWindow ( tTerm.m_uFields, CursorContext() );
 		}
 
 		if constexpr ( IS_AND )
@@ -1355,6 +1363,7 @@ public:
 		m_pStats = tSetup.m_pStats;
 		m_bStopped = false;
 		m_iSingleTerm = -1;
+		m_bOrPositioned = false;
 		m_tWindow.m_pRows = nullptr;
 		m_tWindow.m_iRows = 0;
 		m_tBounds = m_tInitialBounds;
@@ -1366,6 +1375,13 @@ public:
 
 		for ( auto & tTerm : m_dTerms )
 		{
+			if ( tTerm.m_pPackedWord )
+			{
+				SetupPackedTerm ( tTerm, tSetup );
+				tTerm.m_tNext = INVALID_ROWID;
+				continue;
+			}
+
 			tTerm.m_pWord->Reset();
 			const bool bHasDocs = tSetup.QwordSetup ( tTerm.m_pWord.get() );
 			tTerm.m_pCursor->Reset ( bHasDocs, CursorContext() );
@@ -1395,7 +1411,7 @@ public:
 			tInfo.m_iQueryPos = tWord.m_iAtomPos;
 			tInfo.m_fIDF = -1.0f;
 			tInfo.m_fBoost = tWord.m_fBoost;
-			tInfo.m_bExpanded = false;
+			tInfo.m_bExpanded = tWord.m_bExpanded;
 			tInfo.m_bExcluded = false;
 			hWords.Add ( tInfo, tWord.m_sWord );
 		}
@@ -1491,11 +1507,21 @@ private:
 	RowID_t					m_dSingleRows[128];
 	int						m_iSingleTerm = -1;
 	uint64_t				m_uSingleEnd = 0;
+	bool					m_bOrPositioned = false;
 	bool					m_bStopped = false;
 	bool					m_bDense = true;
 	int						m_iAtomPos = 0;
 	int64_t					m_iMaxTimer;
 	const int64_t &			m_iCheckTimePoint { Threads::Coro::GetNextTimePointUS() };
+
+	void SetupPackedTerm ( Term_t & tTerm, const ISphQwordSetup & tSetup )
+	{
+		// Packed qwords advance across several doclists. Reopen the first one on reset.
+		tTerm.m_pCursor.reset();
+		tTerm.m_pWord.reset ( CreateQueryWord ( *tTerm.m_pPackedWord, tSetup ) );
+		tTerm.m_pCursor = CreatePackedExpansionWindow ( *tTerm.m_pWord, tTerm.m_uFields, CursorContext() );
+	}
+
 
 	bool CheckInterrupted()
 	{
@@ -1664,15 +1690,20 @@ private:
 		RowID_t tFirst = INVALID_ROWID;
 		for ( auto & tTerm : m_dTerms )
 		{
-			const auto tResult = tTerm.m_pCursor->AdvanceTo(m_tBounds.m_tMinRowID);
-			tTerm.m_tNext = tResult.m_tNext;
-			m_bStopped |= tResult.m_bStopped;
-			if ( m_bStopped )
-				return INVALID_ROWID;
+			// After the first window, each cursor already reports its next row or EOF.
+			if ( !m_bOrPositioned || tTerm.m_tNext<m_tBounds.m_tMinRowID )
+			{
+				const auto tResult = tTerm.m_pCursor->AdvanceTo(m_tBounds.m_tMinRowID);
+				tTerm.m_tNext = tResult.m_tNext;
+				m_bStopped |= tResult.m_bStopped;
+				if ( m_bStopped )
+					return INVALID_ROWID;
+			}
 
 			tFirst = Min ( tFirst, tTerm.m_tNext );
 		}
 
+		m_bOrPositioned = true;
 		return tFirst;
 	}
 
@@ -1872,7 +1903,7 @@ using ExtWindowQuorum_c = ExtWindowBool_T<false,true>;
 // boolean parents have already been propagated by the parser; like Create(),
 // use each leaf's effective mask (a nested explicit spec can override it).
 template<bool IS_AND>
-static bool CollectWindowLeaves ( const XQNode_t * pNode, CSphVector<typename ExtWindowBool_T<IS_AND>::Leaf_t> & dLeaves, int iDepth=0 )
+static bool CollectWindowLeaves ( const XQNode_t * pNode, CSphVector<typename ExtWindowBool_T<IS_AND>::Leaf_t> & dLeaves, bool bAllowExpanded=false, int iDepth=0 )
 {
 	if ( !pNode || iDepth>64 || pNode->m_bVirtuallyPlain || pNode->m_bNotWeighted || pNode->m_iAtomPos!=-1
 		|| pNode->m_dSpec.m_iFieldMaxPos || pNode->m_dSpec.m_bZoneSpan || !pNode->m_dSpec.m_dZones.IsEmpty() )
@@ -1884,7 +1915,7 @@ static bool CollectWindowLeaves ( const XQNode_t * pNode, CSphVector<typename Ex
 			return false;
 
 		for ( const auto * pChild : pNode->dChildren() )
-			if ( !CollectWindowLeaves<IS_AND> ( pChild, dLeaves, iDepth+1 ) )
+			if ( !CollectWindowLeaves<IS_AND> ( pChild, dLeaves, bAllowExpanded, iDepth+1 ) )
 				return false;
 
 		return true;
@@ -1894,8 +1925,8 @@ static bool CollectWindowLeaves ( const XQNode_t * pNode, CSphVector<typename Ex
 
 	for ( const auto & tWord : pNode->dWords() )
 	{
-		if ( dLeaves.GetLength()==32 || tWord.m_bFieldStart || tWord.m_bFieldEnd || tWord.m_pPayload
-			|| tWord.m_bExpanded || tWord.m_bExcluded || tWord.m_bRegex || tWord.m_iBlendedGroup!=-1 || tWord.m_sWord.IsEmpty() )
+		if ( dLeaves.GetLength()==32 || tWord.m_bFieldStart || tWord.m_bFieldEnd || ( !bAllowExpanded && ( tWord.m_bExpanded || tWord.m_pPayload ) )
+			|| tWord.m_bExcluded || tWord.m_bRegex || tWord.m_iBlendedGroup!=-1 || tWord.m_sWord.IsEmpty() )
 			return false;
 
 		dLeaves.Add ( { &tWord, pNode->m_dSpec.m_dFieldMask.GetMask32() } );
@@ -1931,7 +1962,7 @@ WindowNode_i * CreateWindowOrCountNode ( const XQNode_t * pNode, const ISphQword
 		return nullptr;
 
 	CSphVector<ExtWindowOr_c::Leaf_t> dLeaves;
-	if ( !CollectWindowLeaves<false> ( pNode, dLeaves ) || dLeaves.GetLength()<2 )
+	if ( !CollectWindowLeaves<false> ( pNode, dLeaves, true ) || dLeaves.GetLength()<2 )
 		return nullptr;
 
 	return new ExtWindowOr_c ( dLeaves, tSetup, pBounds );

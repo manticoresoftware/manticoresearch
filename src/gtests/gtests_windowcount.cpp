@@ -397,6 +397,69 @@ TEST ( WindowCount, BufferedUnionHintsResetAndBounds )
 	} );
 }
 
+TEST ( WindowCount, PackedExpansionUnionsUnorderedDoclists )
+{
+	Threads::CallCoroutine ( [] {
+		WindowTestSetup_c tSetup;
+		CSphString sError;
+		CSphDictSettings tDictSettings;
+		tDictSettings.SetDictFormat ( DictFormat_e::CRC );
+
+		auto pTok = Tokenizer::Detail::CreateUTF8Tokenizer();
+		auto pDict = sphCreateDictionaryCRC ( tDictSettings, nullptr, pTok, "packed-or", false, 32, nullptr, sError );
+		ASSERT_TRUE(pDict) << sError.cstr();
+		tSetup.SetDict(pDict);
+
+		auto pIndex = sphCreateIndexPhrase ( "packed-or", "unused-window-index" );
+		tSetup.m_pIndex = pIndex.get();
+		tSetup.m_dAlpha = { { 1, 1 }, { 4096, 1 }, { 5000, 2 } };
+		// Two doclists in one payload. Row 4095 passes the field check only in the second.
+		tSetup.m_dBeta = { { 3, 1 }, { 4095, 2 }, { 4096, 1 }, { 9000, 1 },
+			{ 2, 2 }, { 3, 1 }, { 4095, 1 }, { INVALID_ROWID-1, 1 } };
+
+		ISphSubstringPayload tPayload;
+		XQLimitSpec_t tSpec;
+		tSpec.m_bFieldSpec = true;
+		tSpec.m_dFieldMask.Assign32(1);
+
+		XQNode_t tRoot(tSpec);
+		tRoot.SetOp(SPH_QUERY_OR);
+		for ( const char * sWord : { "alpha", "beta" } )
+		{
+			XQKeyword_t tWord ( sWord, 1 );
+			tWord.m_bExpanded = true;
+			if ( tWord.m_sWord=="beta" )
+				tWord.m_pPayload = &tPayload;
+
+			auto * pLeaf = new XQNode_t(tSpec);
+			pLeaf->AddDirtyWord(tWord);
+			tRoot.AddNewChild(pLeaf);
+		}
+
+		std::unique_ptr<QueryNode_i> pNode ( CreateWindowOrCountNode ( &tRoot, tSetup, nullptr ) );
+		ASSERT_TRUE(pNode);
+		const std::vector<RowID_t> dExpected { 1, 3, 4095, 4096, 9000, INVALID_ROWID-1 };
+		EXPECT_EQ ( ReadWindows(*pNode), dExpected );
+
+		ExtQwordsHash_t hWords;
+		pNode->GetQwords(hWords);
+		ASSERT_TRUE ( hWords("beta") );
+		EXPECT_TRUE ( hWords["beta"].m_bExpanded );
+		EXPECT_EQ ( hWords["beta"].m_iDocs, 5 );
+
+		tSetup.m_dBeta = { { 4097, 1 }, { 5, 1 }, { 4096, 2 } };
+		pNode->Reset(tSetup);
+		pNode->SetRowidBoundaries ( { 5, 4097 } );
+		EXPECT_EQ ( ReadWindows(*pNode), ( std::vector<RowID_t> { 5, 4096, 4097 } ) );
+
+		tRoot.dChildren()[0]->WithWords ( [] ( auto & dWords ) { dWords[0].m_bExpanded = false; } );
+		pNode.reset ( CreateWindowOrCountNode ( &tRoot, tSetup, nullptr ) );
+		ASSERT_TRUE(pNode);
+		EXPECT_EQ ( ReadWindows(*pNode), ( std::vector<RowID_t> { 1, 5, 4096, 4097 } ) );
+	} );
+}
+
+
 TEST ( WindowCount, SingleClauseRowsMixedWithBitmaps )
 {
 	Threads::CallCoroutine ( [] {

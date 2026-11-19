@@ -15,7 +15,10 @@
 
 namespace
 {
-class BufferedPostingWindow_c final : public PostingWindow_i
+constexpr int POSTING_BATCH_SIZE = 128;
+
+
+class BufferedPostingWindow_c final : public PostingWindowBase_c
 {
 public:
 	BufferedPostingWindow_c ( ISphQword & tWord, DWORD uFields, const PostingWindowContext_t & tContext )
@@ -40,17 +43,6 @@ public:
 			const DWORD uOffset = tRow-tWindow.m_tBase;
 			pBits[uOffset>>5] |= DWORD(1)<<(uOffset&31);
 		} );
-	}
-
-	PostingWindowResult_t FillAnd ( const PostingWindow_t & tWindow, DWORD * pBits ) override
-	{
-		// Keep per-word intersection work out of the scalar posting loop.
-		DWORD dScratch[PostingWindow_t::WORDS] = {};
-		auto tResult = FillOr ( tWindow, dScratch );
-		const int iWords = int ( (tWindow.m_uEnd-tWindow.m_tBase+31)/32 );
-		bitmap::And ( pBits, pBits, dScratch, iWords );
-		tResult.m_iRows = int ( bitmap::Count ( pBits, iWords ) );
-		return tResult;
 	}
 
 	PostingWindowResult_t ReadRows ( const PostingWindow_t & tWindow, RowID_t * pRows, int iCapacity ) override
@@ -85,7 +77,7 @@ private:
 	ISphQword &				m_tWord;
 	const DWORD				m_uFields;
 	PostingWindowContext_t	m_tContext;
-	QwordDoc_t				m_dBatch[128];
+	QwordDoc_t				m_dBatch[POSTING_BATCH_SIZE];
 	int						m_iPos = 0;
 	int						m_iLength = 0;
 	bool					m_bEOF = false;
@@ -128,8 +120,8 @@ private:
 			}
 
 			m_iPos = 0;
-			m_iLength = m_tWord.GetNextDocs ( m_dBatch, 128 );
-			m_bEOF = m_iLength<128;
+			m_iLength = m_tWord.GetNextDocs ( m_dBatch, POSTING_BATCH_SIZE );
+			m_bEOF = m_iLength<POSTING_BATCH_SIZE;
 			if ( m_tContext.m_pStats )
 				m_tContext.m_pStats->m_iFetchedDocs += m_iLength;
 		}
@@ -192,6 +184,125 @@ private:
 		return Result(iRows);
 	}
 };
+
+
+// Presents the matching rows from a packed expansion as one sorted posting stream.
+class PackedExpansionWindow_c final : public PostingWindowBase_c
+{
+public:
+							PackedExpansionWindow_c ( ISphQword & tWord, DWORD uFields, const PostingWindowContext_t & tContext );
+
+	PostingWindowResult_t	AdvanceTo ( RowID_t tMin ) final;
+	PostingWindowResult_t	FillOr ( const PostingWindow_t & tWindow, DWORD * pBits ) final;
+	PostingWindowResult_t	ReadRows ( const PostingWindow_t & tWindow, RowID_t * pRows, int iCapacity ) final;
+	PostingProbeResult_t	Probe ( RowID_t tRow ) final;
+	void					Reset ( bool bHasDocs, const PostingWindowContext_t & tContext ) final;
+
+private:
+	ISphQword &			m_tWord;			// Reads the constituent terms' doclists one after another.
+	const DWORD			m_uFields;			// Query field mask. A posting qualifies if any selected field matches.
+	std::vector<RowID_t> m_dRows;			// Sorted, unique row IDs matching the field mask after Reset completes.
+	size_t				m_iPos = 0;			// Index of the first unread row in m_dRows.
+	bool				m_bStopped = false;	// Reset was interrupted while reading the packed doclists.
+
+	PostingWindowResult_t	Result ( int iRows=0 ) const;
+};
+
+
+PackedExpansionWindow_c::PackedExpansionWindow_c ( ISphQword & tWord, DWORD uFields, const PostingWindowContext_t & tContext )
+	: m_tWord(tWord)
+	, m_uFields(uFields)
+{
+	Reset ( tWord.m_iDocs!=0, tContext );
+}
+
+
+void PackedExpansionWindow_c::Reset ( bool bHasDocs, const PostingWindowContext_t & tContext )
+{
+	m_iPos = 0;
+	m_bStopped = false;
+	m_dRows.clear();
+	if ( !bHasDocs )
+		return;
+
+	m_tWord.SetPayloadRequirements ( false, false );
+
+	QwordDoc_t dBatch[POSTING_BATCH_SIZE];
+	int iDocs;
+	do
+	{
+		if ( tContext.m_fnContinue && !tContext.m_fnContinue(tContext.m_pContext) )
+		{
+			m_bStopped = true;
+			return;
+		}
+
+		iDocs = m_tWord.GetNextDocs ( dBatch, POSTING_BATCH_SIZE );
+		if ( tContext.m_pStats )
+			tContext.m_pStats->m_iFetchedDocs += iDocs;
+
+		for ( int i=0; i<iDocs; ++i )
+			if ( dBatch[i].m_uFields & m_uFields )
+				m_dRows.push_back ( dBatch[i].m_tRowID );
+	}
+	while ( iDocs==POSTING_BATCH_SIZE );
+
+	// Each doclist is sorted, but the next one can start at a lower row ID. Sort for forward traversal.
+	// Several expanded terms can match the same row. Keep one entry so ReadRows emits it once.
+	std::sort ( m_dRows.begin(), m_dRows.end() );
+	m_dRows.erase ( std::unique ( m_dRows.begin(), m_dRows.end() ), m_dRows.end() );
+	if ( !m_dRows.empty() )
+		m_tWord.m_iDocs = int(m_dRows.size()); // same field-filtered DF as the expanded payload node
+}
+
+
+PostingWindowResult_t PackedExpansionWindow_c::Result ( int iRows ) const
+{
+	return { m_iPos<m_dRows.size() ? m_dRows[m_iPos] : INVALID_ROWID, iRows, m_bStopped };
+}
+
+
+PostingWindowResult_t PackedExpansionWindow_c::AdvanceTo ( RowID_t tMin )
+{
+	if ( m_iPos<m_dRows.size() && m_dRows[m_iPos]<tMin )
+		m_iPos = std::lower_bound ( m_dRows.begin()+m_iPos, m_dRows.end(), tMin )-m_dRows.begin();
+
+	return Result();
+}
+
+
+PostingWindowResult_t PackedExpansionWindow_c::FillOr ( const PostingWindow_t & tWindow, DWORD * pBits )
+{
+	AdvanceTo ( tWindow.m_tMin );
+
+	const size_t iStart = m_iPos;
+	while ( m_iPos<m_dRows.size() && m_dRows[m_iPos]<tWindow.m_uEnd )
+	{
+		const DWORD uBit = m_dRows[m_iPos++]-tWindow.m_tBase;
+		pBits[uBit>>5] |= DWORD(1) << ( uBit & 31 );
+	}
+
+	return Result ( int(m_iPos-iStart) );
+}
+
+
+PostingWindowResult_t PackedExpansionWindow_c::ReadRows ( const PostingWindow_t & tWindow, RowID_t * pRows, int iCapacity )
+{
+	AdvanceTo(tWindow.m_tMin);
+
+	int iRows = 0;
+	while ( iRows<iCapacity && m_iPos<m_dRows.size() && m_dRows[m_iPos]<tWindow.m_uEnd )
+		pRows[iRows++] = m_dRows[m_iPos++];
+
+	return Result(iRows);
+}
+
+
+PostingProbeResult_t PackedExpansionWindow_c::Probe ( RowID_t tRow )
+{
+	auto tResult = AdvanceTo(tRow);
+	return { tResult, tRow!=INVALID_ROWID && tResult.m_tNext==tRow };
+}
 }
 
 
@@ -208,7 +319,25 @@ std::unique_ptr<PostingWindow_i> CreateBufferedPostingWindow ( ISphQword & tWord
 }
 
 
-PostingWindowResult_t PostingWindow_i::FillAndNot ( const PostingWindow_t & tWindow, DWORD * pBits )
+std::unique_ptr<PostingWindow_i> CreatePackedExpansionWindow ( ISphQword & tWord, DWORD uFields, const PostingWindowContext_t & tContext )
+{
+	return std::make_unique<PackedExpansionWindow_c> ( tWord, uFields, tContext );
+}
+
+
+PostingWindowResult_t PostingWindowBase_c::FillAnd ( const PostingWindow_t & tWindow, DWORD * pBits )
+{
+	// Keep per-word intersection work out of the scalar posting loop.
+	DWORD dScratch[PostingWindow_t::WORDS] = {};
+	auto tResult = FillOr ( tWindow, dScratch );
+	const int iWords = int ( (tWindow.m_uEnd-tWindow.m_tBase+31)/32 );
+	bitmap::And ( pBits, pBits, dScratch, iWords );
+	tResult.m_iRows = int ( bitmap::Count ( pBits, iWords ) );
+	return tResult;
+}
+
+
+PostingWindowResult_t PostingWindowBase_c::FillAndNot ( const PostingWindow_t & tWindow, DWORD * pBits )
 {
 	DWORD dExcluded[PostingWindow_t::WORDS] {};
 	auto tResult = FillOr ( tWindow, dExcluded );

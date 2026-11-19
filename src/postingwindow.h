@@ -71,8 +71,8 @@ public:
 
 	// Remove exact matches in [min,end), clearing bits outside that interval.
 	// EOF leaves remaining candidates intact; interruption clears the output.
-	// Returns the surviving bit count. The default uses FillOr and a scratch bitmap.
-	virtual PostingWindowResult_t FillAndNot ( const PostingWindow_t & tWindow, DWORD * pBits );
+	// Returns the surviving bit count.
+	virtual PostingWindowResult_t FillAndNot ( const PostingWindow_t & tWindow, DWORD * pBits ) = 0;
 
 	// Output is sorted and unique. May stop at capacity before reaching end;
 	// next identifies where to resume. Capacity must be positive.
@@ -86,7 +86,16 @@ public:
 	virtual void Reset ( bool bHasDocs, const PostingWindowContext_t & tContext ) = 0;
 };
 
+// Implements intersection and exclusion using a scratch bitmap populated by FillOr.
+class PostingWindowBase_c : public PostingWindow_i
+{
+public:
+	PostingWindowResult_t FillAnd ( const PostingWindow_t & tWindow, DWORD * pBits ) override;
+	PostingWindowResult_t FillAndNot ( const PostingWindow_t & tWindow, DWORD * pBits ) override;
+};
+
 std::unique_ptr<PostingWindow_i> CreateBufferedPostingWindow ( ISphQword & tWord, DWORD uFields, const PostingWindowContext_t & tContext );
+std::unique_ptr<PostingWindow_i> CreatePackedExpansionWindow ( ISphQword & tWord, DWORD uFields, const PostingWindowContext_t & tContext );
 
 // The current leaf remains available until Prepare advances into another leaf.
 struct PostingLeaf_t

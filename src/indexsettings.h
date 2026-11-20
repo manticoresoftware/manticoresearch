@@ -352,6 +352,7 @@ class CSphIndexSettings : public CSphSourceSettings, public DocstoreSettings_t
 {
 public:
 	ESphHitFormat	m_eHitFormat = SPH_HIT_FORMAT_PLAIN;
+	DWORD			m_uPostingsFormat = 0; ///< immutable table component: 0=legacy, 1=block
 	bool			m_bHtmlStrip = false;
 	CSphString		m_sHtmlIndexAttrs;
 	CSphString		m_sHtmlRemoveElements;
@@ -604,6 +605,9 @@ void operator<< ( JsonEscapedBuilder& tOut, const CSphIndexSettings& tIndexSetti
 
 void		SaveTokenizerSettings ( JsonEscapedBuilder& tOut, const TokenizerRefPtr_c& pTokenizer, int iEmbeddedLimit );
 void		SaveDictionarySettings ( JsonEscapedBuilder& tOut, const DictRefPtr_c& pDict, bool bForceWordDict, int iEmbeddedLimit );
+
+bool		SetDefaultPostingsFormat ( const CSphString & sFormat );
+const char * GetDefaultPostingsFormat();
 
 void		SetDefaultAttrEngine ( AttrEngine_e eEngine );
 AttrEngine_e GetDefaultAttrEngine();

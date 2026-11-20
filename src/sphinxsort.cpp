@@ -100,7 +100,17 @@ public:
 	}
 
 	bool	IsGroupby () const final										{ return false; }
-	const CSphMatch * GetWorst() const final								{ return m_dIData.IsEmpty() ? nullptr : Root(); }
+
+
+	const CSphMatch * GetWorst ( bool * pFull = nullptr ) const final
+	{
+		if ( pFull )
+			*pFull = m_iSize>0 && Used()==m_iSize;
+
+		return IsEmpty() ? nullptr : Root();
+	}
+
+
 	bool	Push ( const CSphMatch & tEntry ) final							{ return PushT ( tEntry, [this] ( CSphMatch & tTrg, const CSphMatch & tMatch ) { m_pSchema->CloneMatch ( tTrg, tMatch ); }); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final
 	{
@@ -344,6 +354,19 @@ public:
 
 	bool	IsGroupby () const final	{ return false; }
 	int		GetLength () final			{ return Min ( Used(), m_iSize ); }
+
+
+	const CSphMatch * GetWorst ( bool * pFull = nullptr ) const final
+	{
+		// Existing callers expect no fixed worst element from a K-buffer.
+		if ( !pFull )
+			return nullptr;
+
+		*pFull = m_iSize>0 && Used()>=m_iSize && m_pWorst;
+		return *pFull ? m_pWorst : nullptr;
+	}
+
+
 	bool	Push ( const CSphMatch & tEntry ) override	{  return PushT ( tEntry, [this] ( CSphMatch & tTrg, const CSphMatch & tMatch ) { m_pSchema->CloneMatch ( tTrg, tMatch ); }); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) override
 	{

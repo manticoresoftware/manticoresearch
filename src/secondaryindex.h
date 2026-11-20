@@ -78,6 +78,9 @@ private:
 	CSphVector<IndexInfo_t> m_dIndexes;
 };
 
+// Create an SI iterator for values >= the sort threshold (DESC) or <= it (ASC). Use SI only when the range matches at most 1/8 of the chunk rows.
+std::unique_ptr<RowidIterator_i> CreateSortBoundIterator ( const SIContainer_c & tSI, const CSphString & sAttr, SphAttr_t tValue, bool bDescending, RowID_t tRows, bool & bSelected );
+
 struct RowIdBoundaries_t;
 
 RowidIterator_i *	CreateIteratorIntersect ( CSphVector<RowidIterator_i*> & dIterators, const RowIdBoundaries_t * pBoundaries );

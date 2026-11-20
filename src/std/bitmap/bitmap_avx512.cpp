@@ -19,7 +19,7 @@ struct AVX512Traits_t
 	using Vec_t = __m512i;
 	static constexpr size_t WORDS = 16;
 	static Vec_t Zero() { return _mm512_setzero_si512(); }
-	static Vec_t Load ( const DWORD * p ) { return _mm512_loadu_si512(p); }
+	static Vec_t Load ( const void * p ) { return _mm512_loadu_si512(p); }
 	static void Store ( DWORD * p, Vec_t u ) { _mm512_storeu_si512 ( p, u ); }
 	template<Op_e OP> static Vec_t Apply ( Vec_t a, Vec_t b )
 	{

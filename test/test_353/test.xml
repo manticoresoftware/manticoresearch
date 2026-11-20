@@ -4,6 +4,8 @@
 <name>ALTER vs killlist_target</name>
 
 <requires>
+	<!-- Checks settings/SHOW CREATE output for the legacy default. -->
+	<legacy_format/>
 <non-rt/>
 </requires>
 

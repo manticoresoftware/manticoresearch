@@ -3,6 +3,8 @@
 <name>issue 3661: columnar alter add stored attr</name>
 
 <requires>
+	<!-- Full-text field ALTER is not supported for block postings. -->
+	<legacy_format/>
 	<force-rt/>
 	<columnar/>
 </requires>

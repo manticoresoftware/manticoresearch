@@ -2,7 +2,9 @@
 <test>
 <name>alter after daemon hard kill</name>
 
-<requires><watchdog/></requires>
+<requires>
+	<!-- Checks settings/SHOW CREATE output for the legacy default. -->
+	<legacy_format/><watchdog/></requires>
 <skip_indexer/>
 
 <config>

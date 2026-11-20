@@ -808,3 +808,15 @@ When the bundle package or [manticore-language-packs](https://github.com/mantico
   - [cppjieba](https://github.com/manticoresoftware/cppjieba) master dict files: `hmm_model.utf8`, `idf.utf8`, `stop_words.utf8`, `user.dict.utf8` (from `cppjieba/master/dict/`).
   - [jieba](https://github.com/manticoresoftware/jieba) extra dict: `dict.txt.big` from `extra_dict/`, installed as `jieba.dict.utf8`.
 - **Copyright / license:** Same as cppjieba (MIT License; see cppjieba section above). The jieba extra dictionary is from the manticoresoftware/jieba repository (fork of the jieba project); for that repository’s license, see its LICENSE file.
+
+## FastPFOR packing kernels
+
+Source: `src/postings/fastpfor/`, pinned to Manticore FastPFor commit
+`5f6b7df8f0dba402bb616a81ca510bfeb04c42ce`.
+Repository: https://github.com/manticoresoftware/FastPFor
+
+Copyright Daniel Lemire. License: [Apache-2.0](./fastpfor-license).
+Selected upstream files are included unchanged except LF line normalization;
+original notices and AUTHORS are retained alongside PROVENANCE.json.
+The daemon adapter and portable reference implementation are separate files.
+This integration uses the portable reference on ARM and does not incorporate SIMDe.

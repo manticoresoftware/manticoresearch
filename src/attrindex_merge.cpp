@@ -98,6 +98,7 @@ public:
 	bool FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t & tBuildHeader );
 };
 
+
 bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex )
 {
 	auto sSPA = GetTmpFilename ( pDstIndex, SPH_EXT_SPA );
@@ -166,6 +167,7 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 	m_tResultRowID = 0;
 	return true;
 }
+
 
 template <bool WITH_BLOB, bool WITH_STRIDE, bool WITH_DOCSTORE, bool WITH_SI, bool PURE_COLUMNAR, bool WITH_UUID>
 bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap )

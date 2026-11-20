@@ -1133,6 +1133,42 @@ private:
 
 /////////////////////////////////////////////////////////////////////
 
+std::unique_ptr<RowidIterator_i> CreateSortBoundIterator ( const SIContainer_c & tSI, const CSphString & sAttr, SphAttr_t tValue, bool bDescending, RowID_t tRows, bool & bSelected )
+{
+	bSelected = false;
+	common::Filter_t tFilter;
+	tFilter.m_sName = sAttr.cstr();
+	tFilter.m_eType = common::FilterType_e::RANGE;
+	tFilter.m_iMinValue = tValue;
+	tFilter.m_iMaxValue = tValue;
+	tFilter.m_bLeftUnbounded = !bDescending;
+	tFilter.m_bRightUnbounded = bDescending;
+
+	uint32_t uCount = 0;
+	CSphString sError, sWarning;
+	if ( !tSI.CalcCount ( uCount, tFilter, tRows, sError ) || uCount>tRows/8 )
+		return {};
+
+	std::vector<common::BlockIterator_i *> dIterators;
+	if ( !tSI.CreateIterators ( dIterators, tFilter, nullptr, tRows, uCount, -1, false, sWarning, sError ) )
+	{
+		for ( auto * pIterator : dIterators )
+			delete pIterator;
+
+		return {};
+	}
+
+	bSelected = true;
+	if ( dIterators.empty() )
+		return {};
+
+	if ( dIterators.size()==1 )
+		return std::unique_ptr<RowidIterator_i> ( CreateIteratorWrapper ( dIterators[0], nullptr ) );
+
+	return std::make_unique<RowidIterator_Union_T<common::BlockIterator_i,false>> ( dIterators.data(), int(dIterators.size()) );
+}
+
+
 class SIIteratorCreator_c
 {
 public:

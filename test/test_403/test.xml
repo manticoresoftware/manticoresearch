@@ -3,6 +3,8 @@
 
 <name>configless vs stopwords</name>
 <requires>
+	<!-- Checks settings/SHOW CREATE output for the legacy default. -->
+	<legacy_format/>
 	<force-rt/>
 </requires>
 <skip_indexer/>

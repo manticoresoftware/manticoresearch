@@ -152,6 +152,8 @@ Integer. Specifies the maximum number of matches to process. If not set, Mantico
 
 When Manticore cannot determine the exact count of matching documents, the `total_relation` field in the query [meta information](../Node_info_and_management/SHOW_META.md#SHOW-META) will show `gte`, which stands for **Greater Than or Equal to**. This indicates that the actual count of matches is at least the reported `total_found` (in SQL) or `hits.total` (in JSON). When the count is exact, `total_relation` will display `eq`.
 
+For supported full-text queries on block-format disk chunks sorted by a direct integer or timestamp attribute, an unset `cutoff` also permits competitive pruning. Once the collector is full, candidates strictly worse than its retained sort boundary can be skipped before document collection or phrase verification. Equal keys remain eligible, including when further sort keys break ties. This preserves the requested top results; when candidates are skipped, `total_found` is a lower bound (`total_relation: gte`). Set `OPTION cutoff=0` to disable this pruning and count all matches. Grouping, joins, unsupported collectors and query shapes use their existing execution paths.
+
 Note: Using `cutoff` in aggregation queries is not recommended because it can produce inaccurate or incomplete results.
 
 <!-- request Example -->

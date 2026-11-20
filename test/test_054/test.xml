@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>quorum</name>
-<requires><non-rt/></requires>
+<requires>
+	<!-- Exercises CRC dictionaries, which block postings do not support. -->
+	<legacy_format/><non-rt/></requires>
 
 <config>
 indexer

@@ -19,7 +19,7 @@ struct SSSE3Traits_t
 	using Vec_t = __m128i;
 	static constexpr size_t WORDS = 4;
 	static Vec_t Zero() { return _mm_setzero_si128(); }
-	static Vec_t Load ( const DWORD * p ) { return _mm_loadu_si128 ( reinterpret_cast<const Vec_t *>(p) ); }
+	static Vec_t Load ( const void * p ) { return _mm_loadu_si128 ( reinterpret_cast<const Vec_t *>(p) ); }
 	static void Store ( DWORD * p, Vec_t u ) { _mm_storeu_si128 ( reinterpret_cast<Vec_t *>(p), u ); }
 	template<Op_e OP> static Vec_t Apply ( Vec_t a, Vec_t b )
 	{

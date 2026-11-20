@@ -3,6 +3,11 @@
 
 <name>persist uservars</name>
 
+<requires>
+	<!-- Exercises CRC dictionaries, which block postings do not support. -->
+	<legacy_format/>
+</requires>
+
 <config>
 indexer
 {

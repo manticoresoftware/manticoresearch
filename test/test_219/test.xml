@@ -2,6 +2,8 @@
 <test>
 
 <requires>
+	<!-- Checks settings/SHOW CREATE output for the legacy default. -->
+	<legacy_format/>
 <lemmatizer_base/>
 </requires>
 

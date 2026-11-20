@@ -10,6 +10,7 @@ a four-threaded query must not replay that result in every pseudo-shard.
 
 	<requires>
 		<force-rt/>
+		<legacy_format/>
 	</requires>
 	<skip_indexer/>
 

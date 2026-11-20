@@ -2,6 +2,8 @@
 <Test>
   <Name>SphinxQL: additional stuff over rt index, non-columnar</Name>
 	<requires>
+	<!-- Checks settings/SHOW CREATE output for the legacy default. -->
+	<legacy_format/>
 		<force-rt/>
 		<non-columnar/>
 	</requires>

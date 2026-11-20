@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Test>
   <Name>prefix_fields/infix_fields (part 4)</Name>
-  <requires><non-rt/></requires>
+  <requires>
+	<!-- Exercises CRC dictionaries, which block postings do not support. -->
+	<legacy_format/><non-rt/></requires>
 
   <Config>
 indexer

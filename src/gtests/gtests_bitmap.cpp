@@ -81,6 +81,38 @@ TEST_P ( Bitmap, TailsAndAlignment )
 		}
 }
 
+TEST_P ( Bitmap, ByteTailsAndAlignment )
+{
+	const auto * p = bitmap::GetOperations(GetParam());
+	if ( !p )
+		GTEST_SKIP();
+
+	std::mt19937 tRandom(2777);
+	std::vector<uint8_t> dBytes(321);
+	for ( auto & u : dBytes )
+		u = uint8_t(tRandom());
+
+	for ( size_t iOffset=0; iOffset<64; ++iOffset )
+	{
+		uint64_t uExpected = 0;
+		for ( size_t n=0; n<=257; ++n )
+		{
+			if ( n )
+				uExpected += ReferenceCount(dBytes[iOffset+n-1]);
+
+			SCOPED_TRACE ( ::testing::Message() << "bytes=" << n << " offset=" << iOffset );
+			EXPECT_EQ ( p->m_fnCountBytes ( dBytes.data()+iOffset, n ), uExpected );
+		}
+	}
+
+	for ( uint8_t u : { uint8_t(0), uint8_t(255), uint8_t(85), uint8_t(128) } )
+	{
+		std::vector<uint8_t> dLong ( 65539, u );
+		EXPECT_EQ ( p->m_fnCountBytes ( dLong.data(), dLong.size() ), dLong.size()*ReferenceCount(u) );
+	}
+}
+
+
 TEST_P ( Bitmap, PatternsAndLongInputs )
 {
 	const auto * p = bitmap::GetOperations(GetParam());
@@ -97,6 +129,7 @@ TEST_P ( Bitmap, Empty )
 	const auto * p = bitmap::GetOperations(GetParam());
 	if ( !p ) GTEST_SKIP();
 	CheckOperations ( *p, nullptr, nullptr, 0 );
+	EXPECT_EQ ( p->m_fnCountBytes ( nullptr, 0 ), 0u );
 	p->m_fnAnd ( nullptr, nullptr, nullptr, 0 );
 	p->m_fnOr ( nullptr, nullptr, nullptr, 0 );
 	p->m_fnXor ( nullptr, nullptr, nullptr, 0 );
@@ -135,6 +168,13 @@ TEST_P ( Bitmap, GuardPage )
 			p->m_fnXor ( a, a, a, n );
 			p->m_fnAndNot ( a, a, a, n );
 		}
+	if ( bProtected )
+		for ( size_t n=1; n<=129; ++n )
+		{
+			auto * pBytes = pMemory+nPage-n;
+			std::fill_n ( pBytes, n, uint8_t(0xa5) );
+			EXPECT_EQ ( p->m_fnCountBytes ( pBytes, n ), 4*n );
+		}
 #if defined(_WIN32)
 	VirtualFree ( pMemory, 0, MEM_RELEASE );
 #else
@@ -156,6 +196,8 @@ TEST ( BitmapDispatch, SelectionAndWrappers )
 	const DWORD a[] = { 0x55555555, 0xffffffff }, b[] = { 0xaaaaaaaa, 0xffffffff };
 	DWORD d[2];
 	EXPECT_EQ ( bitmap::Count ( a, 2 ), 48u );
+	EXPECT_EQ ( bitmap::CountBytes ( reinterpret_cast<const uint8_t *>(a), sizeof(a) ), 48u );
+	EXPECT_EQ ( bitmap::CountBytes ( nullptr, 0 ), 0u );
 	EXPECT_EQ ( bitmap::CountAnd ( a, b, 2 ), 32u );
 	EXPECT_EQ ( bitmap::CountOr ( a, b, 2 ), 64u );
 	EXPECT_EQ ( bitmap::CountXor ( a, b, 2 ), 32u );

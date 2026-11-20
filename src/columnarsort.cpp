@@ -306,6 +306,8 @@ public:
 
 	void	SetColumnar ( columnar::Columnar_i * pColumnar ) override;
 	int64_t	GetTotalCount() const override									{ return m_pSorter->GetTotalCount(); }
+	// Pending batches can only improve the threshold already retained by the sorter.
+	const CSphMatch * GetWorst ( bool * pFull = nullptr ) const override	{ return m_pSorter->GetWorst(pFull); }
 
 	void	SetFilteredAttrs ( const sph::StringSet & hAttrs, bool bAddDocid ) override { m_pSorter->SetFilteredAttrs ( hAttrs, bAddDocid ); }
 	void	TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch, bool bFinalizeSorters ) override;

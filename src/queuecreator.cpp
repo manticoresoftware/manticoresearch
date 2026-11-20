@@ -2824,8 +2824,7 @@ int QueueCreator_c::ReduceOrIncreaseMaxMatches() const
 	assert ( !m_bGotGroupby );
 	if ( m_tQuery.HasKnn() )
 	{
-		// Explicit max_matches caps results, but exact rescore needs the full candidate pool first.
-		if ( m_tQuery.m_bExplicitMaxMatches && !CanRescoreKNN() )
+		if ( m_tQuery.m_bExplicitMaxMatches )
 			return Max ( m_tSettings.m_iMaxMatches, 1 );
 
 		int64_t iWindow = m_tQuery.m_iLimit<0
@@ -2981,8 +2980,7 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	{
 		// rows the client can see must carry the exact distance even when the window is wider than k*oversampling
 		int64_t iWindow = m_tQuery.m_iLimit<0 ? iMaxMatches : int64_t ( m_tQuery.m_iLimit ) + m_tQuery.m_iOffset;
-		int iResultLimit = m_tQuery.m_bExplicitMaxMatches ? Max ( m_tSettings.m_iMaxMatches, 1 ) : iMaxMatches;
-		pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.SingleKnnSettings(), m_eMatchFunc, iWindow, iResultLimit, m_tSettings.m_bBlobAttrsLocked );
+		pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.SingleKnnSettings(), m_eMatchFunc, iWindow, m_tSettings.m_bBlobAttrsLocked );
 		if ( !pSorter )
 			return nullptr;
 	}

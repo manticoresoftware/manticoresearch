@@ -1,0 +1,62 @@
+––– comment –––
+Regression: gh-5073 — a node that listens on all interfaces and sets
+node_address (the usual Docker bridge network setup) joins the cluster as
+node_address:port. Buddy built its own node id from the listen line only,
+got the container address, never picked up the sharding tasks queued for
+node_address:port, and CREATE TABLE ended with "Waiting timeout exceeded."
+Both nodes run in this container: listen = 0.0.0.0, node_address = 127.0.0.1.
+
+––– input –––
+for i in 1 2; do mkdir -p /var/log/manticore-$i && echo -e "searchd {\n\tlisten = 0.0.0.0:${i}306:mysql41\n\tlisten = 0.0.0.0:${i}312\n\tlisten = 0.0.0.0:${i}308:http\n\tnode_address = 127.0.0.1\n\tlog = /var/log/manticore-$i/searchd.log\n\tquery_log = /var/log/manticore-$i/query.log\n\tpid_file = /var/log/manticore-$i/searchd.pid\n\tdata_dir = /var/log/manticore-$i\n\tserver_id = $i\n}" > /tmp/node-address-$i.conf; done
+––– output –––
+––– input –––
+for i in 1 2; do stdbuf -oL searchd -c /tmp/node-address-$i.conf > /dev/null; if timeout 30 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-$i/searchd.log); then echo "Buddy $i started!"; else echo 'Timeout or failed!'; cat /var/log/manticore-$i/searchd.log; fi; done
+––– output –––
+Buddy 1 started!
+Buddy 2 started!
+––– comment –––
+The test proves nothing if the container resolves its own name to node_address
+––– input –––
+[ "$(hostname -i)" != "127.0.0.1" ] && echo "container address differs from node_address"
+––– output –––
+container address differs from node_address
+––– input –––
+mysql -h0 -P1306 -e "create cluster c"; mysql -h0 -P2306 -e "join cluster c at '127.0.0.1:1312'"; echo $?
+––– output –––
+0
+––– comment –––
+The daemon names both nodes by node_address, not by the listen address
+––– input –––
+mysql -h0 -P1306 -e "show status like 'cluster_c_nodes_view'\G" | grep -o '127.0.0.1:[12]312' | sort | xargs
+––– output –––
+127.0.0.1:1312 127.0.0.1:2312
+––– input –––
+mysql -h0 -P1306 -e "create table c:t(id bigint) shards='2' rf='2' timeout='60'"; echo $?
+––– output –––
+0
+––– comment –––
+Buddy registers each node under the same id the daemon uses; a node adds its row on its own heartbeat, so wait for both
+––– input –––
+node_ids() { mysql -h0 -P1306 -e "select \`key\` from system.sharding_state limit 100" | grep -o 'node:[0-9.:]*' | sort; }; for n in $(seq 1 30); do [ "$(node_ids | wc -l)" -eq 2 ] && break; sleep 1; done; node_ids
+––– output –––
+node:127.0.0.1:1312
+node:127.0.0.1:2312
+––– input –––
+for i in 1 2; do echo "#{$i}"; mysql -h0 -P${i}306 -e "show create table t option force=1\G" | awk '/^Create Table:/{p=1} p' | xargs; done
+––– output –––
+#{1}
+Create Table: CREATE TABLE t ( id bigint ) type=shard agent=127.0.0.1:1312:system.t_s0|127.0.0.1:2312:system.t_s0[retry_count=2,ha_strategy=noerrors] agent=127.0.0.1:1312:system.t_s1|127.0.0.1:2312:system.t_s1[retry_count=2,ha_strategy=noerrors]
+#{2}
+Create Table: CREATE TABLE t ( id bigint ) type=shard agent=127.0.0.1:1312:system.t_s0|127.0.0.1:2312:system.t_s0[retry_count=2,ha_strategy=noerrors] agent=127.0.0.1:1312:system.t_s1|127.0.0.1:2312:system.t_s1[retry_count=2,ha_strategy=noerrors]
+––– input –––
+mysql -h0 -P1306 -e "insert into t(id) values (1),(2),(3),(4),(5)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P2306 -e "select count(*) from t"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        5 |
++----------+

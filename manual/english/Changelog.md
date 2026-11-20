@@ -1,6 +1,6 @@
 # Changelog
 
-## Version 32.1.2
+## Version 32.1.3
 **Released**: November 20th 2026
 
 This release adds direct-to-disk bulk import for real-time, sharded, and replicated tables, including concurrent shared loads; improves KNN, hybrid, and full-text search performance; expands auto-embedding and diagnostics capabilities; and fixes issues with replication, query correctness, data integrity, packaging, and shutdown. See the cluster upgrade notes below before upgrading from an older version.
@@ -15,7 +15,7 @@ The replication protocol has changed, so **rolling upgrades are not supported**:
 
 1. Check that all nodes are synchronized, stop writes, and back up your data.
 2. Stop all nodes **one at a time**, waiting for each to shut down cleanly. Remember which one stopped last.
-3. Upgrade all nodes to 32.1.2 while they are stopped. Prevent automatic restarts during the upgrade.
+3. Upgrade all nodes to 32.1.3 while they are stopped. Prevent automatic restarts during the upgrade.
 4. Start the **last stopped node first** with `manticore_new_cluster` (systemd) or `searchd --new-cluster`, then start the others normally. Wait for all nodes to synchronize before resuming writes.
 
 If the cluster shut down unexpectedly, use the [cluster recovery guide](Creating_a_cluster/Setting_up_replication/Cluster_recovery.md#All-nodes-crashed) instead.
@@ -55,6 +55,7 @@ If the cluster shut down unexpectedly, use the [cluster recovery guide](Creating
 
 ### Bug Fixes
 
+* 🪲 [v32.1.3](https://github.com/manticoresoftware/manticoresearch/tree/32.1.3) [PR #5121](https://github.com/manticoresoftware/manticoresearch/pull/5121) Updated Executor to 1.4.9, bringing PHP 8.5.13 security fixes.
 * 🪲 [v32.1.2](https://github.com/manticoresoftware/manticoresearch/tree/32.1.2) [Issue #5073](https://github.com/manticoresoftware/manticoresearch/issues/5073) Updated Buddy to 4.4.11 to use the configured `node_address` when building sharding node IDs, fixing replicated sharded-table creation timing out in Docker bridge networks.
 * 🪲 [v32.1.1](https://github.com/manticoresoftware/manticoresearch/tree/32.1.1) [Issue #5107](https://github.com/manticoresoftware/manticoresearch/issues/5107) Fixed Debian packages installing internal `.bundle_*` dependency metadata files into the filesystem root; the files remain available at build time but are excluded from the package payload.
 * 🪲 [v32.1.0](https://github.com/manticoresoftware/manticoresearch/tree/32.1.0) [Commit](https://github.com/manticoresoftware/manticoresearch/commit/839d6c4c2f9dfb28cd32311aa1a0b050044a0f3f) Fixed `ATTACH TABLE` losing the table's external exceptions-file metadata, which also affected subsequent bulk-indexed chunks.

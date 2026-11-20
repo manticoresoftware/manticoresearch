@@ -32,6 +32,7 @@
 #include "auth/auth_proto_http.h"
 #include "netfetch.h"
 #include "indexer_rt_bulk.h"
+#include "coro_stack.h"
 
 static bool g_bLogBadHttpReq = env_exists ( "MANTICORE_LOG_HTTP_BAD_REQ" ); // log content of bad http requests, ruled by this env variable
 static int g_iLogHttpData = env_long ( "MANTICORE_LOG_HTTP_DATA" ).value_or(0); // verbose logging of http data, ruled by this env variable
@@ -2966,9 +2967,9 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 
 	// cJSON limits nesting to 1000 levels, so JSON handlers use a 1 MiB stack.
 	// Revisit this size if the parser or its nesting limit changes.
-	// Continue may run on another OS thread, so preserve the crash-query context.
-	auto fnProcess = Threads::WithCopiedCrashQuery ( [&] { tRes.m_bOk = pHandler->Process(); } );
-	Threads::Coro::Continue ( bJsonEndpoint ? 1024 * 1024 : -1, std::move ( fnProcess ) );
+	const int iStackForCjson = 1024 * 1024;
+	const int iRequiredStack = bJsonEndpoint ? ((iStackForCjson>Threads::DEFAULT_CORO_STACK_SIZE)?iStackForCjson:-1):-1;
+	tRes.m_bOk = Threads::Coro::ContinueBool ( iRequiredStack, [&pHandler] { return pHandler->Process(); } );
 	tRes.m_sError = pHandler->GetError();
 	tRes.m_eReplyHttpCode = pHandler->GetStatusCode();
 	// error with status code 403 Forbidden should not route into buddy

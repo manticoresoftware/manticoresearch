@@ -16,6 +16,7 @@
 #include "api_reply_stream.h"
 #include "digest_sha1.h"
 #include "recv_state.h"
+#include "cluster_bulk_chunk.h"
 
 
 void operator<< ( ISphOutputBuffer& tOut, const ClusterIndexAddLocalRequest_t& tReq )
@@ -24,6 +25,7 @@ void operator<< ( ISphOutputBuffer& tOut, const ClusterIndexAddLocalRequest_t& t
 	tOut.SendString ( tReq.m_sIndex.cstr() );
 	tOut.SendByte ( (BYTE)tReq.m_eIndex );
 	tOut.SendByte ( tReq.m_bSendFilesSuccess );
+	tOut.SendUint64 ( tReq.m_uBulkChunkId );
 }
 
 StringBuilder_c& operator<< ( StringBuilder_c& tOut, const ClusterIndexAddLocalRequest_t& tReq )
@@ -32,6 +34,7 @@ StringBuilder_c& operator<< ( StringBuilder_c& tOut, const ClusterIndexAddLocalR
 	tOut << "index:" << tReq.m_sIndex;
 	tOut << "type:" << (BYTE)tReq.m_eIndex;
 	tOut << "SendFilesSuccess:" << tReq.m_bSendFilesSuccess;
+	tOut << "bulk_import chunk:" << tReq.m_uBulkChunkId;
 	return tOut;
 }
 
@@ -41,20 +44,9 @@ void operator>> ( MemInputBuffer_c& tIn, ClusterIndexAddLocalRequest_t& tReq )
 	tReq.m_sIndex = tIn.GetString();
 	tReq.m_eIndex = (IndexType_e)tIn.GetByte();
 	tReq.m_bSendFilesSuccess = !!tIn.GetByte();
+	tReq.m_uBulkChunkId = tIn.GetUint64();
 }
 
-
-struct FilesTrait_t
-{
-	StrVec_t m_dOld;
-	StrVec_t m_dRef;
-
-	void Reset()
-	{
-		m_dOld.Reset();
-		m_dRef.Reset();
-	}
-};
 
 struct ScopedState_t
 {
@@ -65,35 +57,13 @@ struct ScopedState_t
 	uint64_t m_uState = 0;
 };
 
-struct RollbackFilesGuard_t
-{
-	RollbackFilesGuard_t() = default;
-	~RollbackFilesGuard_t()
-	{
-		assert ( m_tFiles.m_dOld.GetLength() == m_tFiles.m_dRef.GetLength() );
-		ARRAY_FOREACH ( i, m_tFiles.m_dOld )
-		{
-			if ( sph::rename ( m_tFiles.m_dOld[i].cstr(), m_tFiles.m_dRef[i].cstr() ) != 0 )
-				sphWarning ( "rollback rename %s to %s failed, error %s (%d)", m_tFiles.m_dOld[i].cstr(), m_tFiles.m_dRef[i].cstr(), strerrorm ( errno ), errno );
-		}
-	}
-
-	FilesTrait_t m_tFiles;
-};
-
 static void RemoveFiles ( const sph::StringSet& hActiveFiles, const VecTraits_T<CSphString>& dFiles )
 {
+	StrVec_t dRemove;
 	for ( const auto& sFile : dFiles )
-	{
-		if ( hActiveFiles[sFile] )
-			continue;
-
-		if ( !sphFileExists ( sFile.cstr() ) )
-			continue;
-
-		if ( ::unlink ( sFile.cstr() ) )
-			sphWarning ( "failed to unlink file %s, error %s (%d)", sFile.cstr(), strerrorm ( errno ), errno );
-	}
+		if ( !hActiveFiles[sFile] )
+			dRemove.Add ( sFile );
+	RemoveFiles ( dRemove );
 }
 
 static void RemoveFiles ( const FilesTrait_t& tIndexFiles, const StrVec_t& dRenamedOld )
@@ -104,81 +74,6 @@ static void RemoveFiles ( const FilesTrait_t& tIndexFiles, const StrVec_t& dRena
 
 	RemoveFiles ( hActiveFiles, tIndexFiles.m_dOld );
 	RemoveFiles ( hActiveFiles, dRenamedOld );
-}
-
-static void RemoveStagedFiles ( const MergeState_t& tMerge )
-{
-	for ( int iFile = 0; iFile < tMerge.m_dFilesNew.GetLength(); iFile++ )
-	{
-		if ( tMerge.m_dMergeMask.BitGet ( iFile ) )
-			continue;
-
-		const CSphString& sFile = tMerge.m_dFilesNew[iFile];
-		if ( sFile.IsEmpty() )
-			continue;
-
-		if ( !sphFileExists ( sFile.cstr() ) )
-			continue;
-
-		if ( ::unlink ( sFile.cstr() ) )
-			sphWarning ( "failed to unlink file %s, error %s (%d)", sFile.cstr(), strerrorm ( errno ), errno );
-	}
-}
-
-static bool RotateFiles ( const std::unique_ptr<MergeState_t>& pState, FilesTrait_t& tFilesGuard )
-{
-	assert ( pState );
-	int iMatched = 0;
-	for ( int i = 0; i < pState->m_dFilesNew.GetLength(); i++ )
-		iMatched += ( pState->m_dMergeMask.BitGet ( i ) ? 1 : 0 );
-
-	// all matched files - no .new files these should be rotated at joiner
-	// using joiner files as is
-	if ( iMatched == pState->m_dFilesNew.GetLength() )
-		return true;
-
-	// rename index files to old
-	StrVec_t dFilesRef2Old;
-	StrVec_t dFilesOld;
-
-	// rename new to index files
-	StrVec_t dFilesNew;
-	StrVec_t dFilesNew2Ref;
-
-	for ( int iFile = 0; iFile < pState->m_dFilesNew.GetLength(); iFile++ )
-	{
-		// keep joiner file as is if whole file matched
-		if ( pState->m_dMergeMask.BitGet ( iFile ) )
-			continue;
-
-		const CSphString& sNameNew = pState->m_dFilesNew[iFile];
-		const CSphString& sNameRef = pState->m_dFilesRef[iFile];
-
-		assert ( sphFileExists ( sNameNew.cstr() ) );
-		dFilesNew.Add ( sNameNew );
-		dFilesNew2Ref.Add ( sNameRef );
-
-		if ( sphFileExists ( sNameRef.cstr(), nullptr ) )
-		{
-			dFilesRef2Old.Add ( sNameRef );
-			dFilesOld.Add().SetSprintf ( "%s.old", sNameRef.cstr() );
-		}
-	}
-
-	TLS_MSG_STRING ( sError );
-	if ( !RenameWithRollback ( dFilesRef2Old, dFilesOld, sError ) )
-		return false;
-
-	if ( !RenameWithRollback ( dFilesNew, dFilesNew2Ref, sError ) )
-	{
-		RenameFiles ( dFilesOld, dFilesRef2Old, sError );
-		return false;
-	}
-
-	tFilesGuard.m_dOld.SwapData ( dFilesOld );
-	tFilesGuard.m_dRef.SwapData ( dFilesRef2Old );
-
-	return true;
 }
 
 // load index from disk files for cluster use
@@ -243,12 +138,15 @@ static bool LoadIndex ( const CSphString & sIndexPath, IndexType_e eIndexType, c
 // command at remote node for CLUSTER_INDEX_ADD_LOCAL to check sha1 of index file matched and load index into daemon
 static bool AddReceivedIndex ( const ClusterIndexAddLocalRequest_t& tAddCmd )
 {
+	if ( tAddCmd.m_uBulkChunkId )
+		return tAddCmd.m_bSendFilesSuccess ? PrepareBulkChunk ( tAddCmd ) : AbortBulkChunk ( tAddCmd );
+
 	uint64_t uKey = DoubleStringKey ( tAddCmd.m_sCluster, tAddCmd.m_sIndex );
 	if ( !RecvState::HasState ( uKey ) )
 		return TlsMsg::Err ( "missed writer state at joiner node for cluster '%s' table '%s'", tAddCmd.m_sCluster.cstr(), tAddCmd.m_sIndex.cstr() );
 
 	ScopedState_t tStateGuard ( uKey );
-	std::unique_ptr<MergeState_t> pMerge { RecvState::GetState ( uKey ).Flush () };
+	std::unique_ptr<MergeState_t> pMerge { RecvState::GetState ( uKey )->Flush () };
 
 	if ( tAddCmd.m_eIndex!=IndexType_e::PERCOLATE && tAddCmd.m_eIndex!=IndexType_e::RT )
 		return TlsMsg::Err ( "unsupported type '%s' in index '%s'", GetIndexTypeName ( tAddCmd.m_eIndex ), tAddCmd.m_sIndex.cstr() );
@@ -261,7 +159,8 @@ static bool AddReceivedIndex ( const ClusterIndexAddLocalRequest_t& tAddCmd )
 
 	sphLogDebugRpl ( "rotating table '%s' content from %s", tAddCmd.m_sIndex.cstr(), pMerge->m_sIndexPath.cstr() );
 	RollbackFilesGuard_t tFilesGuard;
-	if ( !RotateFiles ( pMerge, tFilesGuard.m_tFiles ) )
+	TLS_MSG_STRING ( sError );
+	if ( !RotateFiles ( *pMerge, tFilesGuard.m_tFiles, sError ) )
 		return false;
 
 	// verify whole index only in case debug replication

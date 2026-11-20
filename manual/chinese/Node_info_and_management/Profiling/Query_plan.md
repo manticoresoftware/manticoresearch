@@ -1,5 +1,16 @@
 # 查询计划
 
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS hn_small;
+CREATE TABLE hn_small(comment_text text);
+INSERT INTO hn_small(id,comment_text) VALUES
+(1,'dog story'),
+(2,'cat story'),
+(3,'dog and cat'),
+(4,'bird story');
+-->
 <!-- example SHOW PLAN -->
 
 `SHOW PLAN` SQL 语句和 `"plan": N` JSON 接口选项显示查询执行计划。该计划在实际执行过程中生成并存储，因此对于 SQL 而言，在运行该语句之前，当前会话必须启用剖析功能。这可以通过执行 `SET profiling=1` 语句来完成。
@@ -17,18 +28,6 @@ SQL 模式下返回两个项目：
 <!-- intro -->
 ##### SQL：
 <!-- request SQL -->
-
-<!--
-以下示例的数据：
-
-DROP TABLE IF EXISTS hn_small;
-CREATE TABLE hn_small(comment_text text);
-INSERT INTO hn_small(id,comment_text) VALUES
-(1,'dog story'),
-(2,'cat story'),
-(3,'dog and cat'),
-(4,'bird story');
--->
 
 ```sql
 set profiling=1;
@@ -113,14 +112,6 @@ POST /search
 
 <!-- end -->
 
-<!-- example SHOW PLAN EXPANSION -->
-
-有时，评估后的查询树可能与原始树有很大不同，由于扩展和其他转换。
-
-<!-- intro -->
-##### SQL：
-<!-- request SQL -->
-
 <!--
 以下示例的数据：
 
@@ -132,6 +123,13 @@ INSERT INTO forum(id,title,content) VALUES
 (711653,'wayyy forward','hey there'),
 (711654,'way point','hey there');
 -->
+<!-- example SHOW PLAN EXPANSION -->
+
+在某些情况下，由于展开和其他转换，评估后的查询树可能与原始查询树大不相同。
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
 
 ```sql
 SET profiling=1;

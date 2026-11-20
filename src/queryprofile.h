@@ -51,7 +51,8 @@ class CSphSchema;
 	SPH_QUERY_STATE ( EVAL_GETFIELD,"eval_getfield" ) \
 	SPH_QUERY_STATE ( SNIPPET,		"eval_snippet" ) \
 	SPH_QUERY_STATE ( EVAL_UDF,		"eval_udf" ) \
-	SPH_QUERY_STATE ( TABLE_FUNC,	"table_func" )
+	SPH_QUERY_STATE ( TABLE_FUNC,	"table_func" ) \
+	SPH_QUERY_STATE ( FAST_COUNT,	"fast_count" )
 
 
 /// possible query states, used for profiling

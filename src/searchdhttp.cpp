@@ -32,6 +32,7 @@
 #include "auth/auth_proto_http.h"
 #include "netfetch.h"
 #include "indexer_rt_bulk.h"
+#include "searchd_shard_bulk.h"
 #include "coro_stack.h"
 
 static bool g_bLogBadHttpReq = env_exists ( "MANTICORE_LOG_HTTP_BAD_REQ" ); // log content of bad http requests, ruled by this env variable
@@ -2524,7 +2525,21 @@ private:
 			return FinishShared ( SharedBulkResult_e::PRECONDITION, 0, m_eHttpCode );
 
 		const CSphString * pShared = m_tOptions ( "shared" );
-		SharedBulkRequest_c tRequest ( sTable, pShared ? *pShared : CSphString(), m_tOptions.Exists ( "shared_join" ) );
+		const CSphString sShared = pShared ? *pShared : CSphString();
+		const bool bJoin = m_tOptions.Exists ( "shared_join" );
+		if ( AsShard ( GetDistr ( sTable ).Ptr() ) )
+		{
+			ShardBulkRequest_c tRequest ( sTable, sShared, bJoin );
+			return ProcessSharedRequest ( tRequest );
+		}
+
+		SharedBulkRequest_c tRequest ( sTable, sShared, bJoin );
+		return ProcessSharedRequest ( tRequest );
+	}
+
+	template<typename REQUEST>
+	bool ProcessSharedRequest ( REQUEST & tRequest )
+	{
 		tRequest.Begin();
 		auto eResult = SharedBulkResult_e::STAGED;
 		int iCurLine = 0;
@@ -2587,7 +2602,16 @@ private:
 
 	static bool IsShared ( const OptionsHash_t & tOptions )
 	{
-		return tOptions.Exists ( "shared" ) || tOptions.Exists ( "shared_join" );
+		if ( tOptions.Exists ( "shared" ) || tOptions.Exists ( "shared_join" ) )
+			return true;
+
+		const CSphString * pTable = tOptions ( "bulk_import" );
+		if ( !pTable )
+			return false;
+
+		CSphString sTable = *pTable;
+		sTable.ToLower();
+		return AsShard ( GetDistr ( sTable ).Ptr() )!=nullptr;
 	}
 
 	static bool IsGroupOpen ( const BulkTxnState_t & tTxnState )

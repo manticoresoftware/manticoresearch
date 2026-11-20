@@ -35,7 +35,8 @@ resolve_grafana_image_tag() {
 
 start_grafana_container() {
     local image_tag="$1"
-    docker run -d --name "$GRAFANA_CONTAINER"         --network "$NETWORK_NAME"         -e GF_SECURITY_ADMIN_PASSWORD="$GRAFANA_PASSWORD"         "grafana/grafana:${image_tag}" > /tmp/grafana-docker-run.log 2>&1
+    # The database is disposable; avoid slow nested-overlay fsyncs during migrations.
+    docker run -d --name "$GRAFANA_CONTAINER"         --network "$NETWORK_NAME"         --tmpfs /var/lib/grafana:rw,size=256m,uid=472,gid=0,mode=0755         -e GF_SECURITY_ADMIN_PASSWORD="$GRAFANA_PASSWORD"         "grafana/grafana:${image_tag}" > /tmp/grafana-docker-run.log 2>&1
 }
 
 # Cleanup function (only removes Grafana container, keeps Manticore and network for reuse)
@@ -77,8 +78,9 @@ if ! start_grafana_container "${VERSION}.0"; then
 fi
 
 # Wait for Grafana to be ready
-timeout 60 bash -c "until docker logs $GRAFANA_CONTAINER 2>&1 | grep -q 'HTTP Server Listen'; do sleep 1; done" || {
+timeout 180 bash -c "until docker exec $GRAFANA_CONTAINER wget -qO- http://localhost:3000/api/health > /dev/null 2>&1; do sleep 1; done" || {
     echo "✗ Error: Grafana failed to start" >&2
+    docker logs --tail 30 "$GRAFANA_CONTAINER" >&2
     cleanup
     exit 1
 }
@@ -524,6 +526,22 @@ timeout 300 bash /tmp/grafana-single-test.sh 13.2
 ✓ ORDER BY works
 ✓ WHERE clause works
 ✓ Grafana version 13.2 tested successfully
+––– input –––
+timeout 300 bash /tmp/grafana-single-test.sh 13.3
+––– output –––
+>>> Testing Grafana version: 13.3
+✓ Manticore Search available
+✓ Grafana 13.3 started successfully
+✓ Grafana API accessible
+✓ Data source created successfully
+✓ information_schema.tables check passed
+✓ Table discovery query works
+✓ Query execution via Grafana API works
+✓ AVG aggregation works
+✓ GROUP BY query works
+✓ ORDER BY works
+✓ WHERE clause works
+✓ Grafana version 13.3 tested successfully
 ––– input –––
 rm -f /tmp/grafana-single-test.sh
 ––– output –––

@@ -421,7 +421,8 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 	tParsed.m_bWasFullText = HasFulltext ( pRoot );
 
 	XQLimitSpec_t tLimitSpec;
-	pRoot = tBuilder.FixupTree ( pRoot, tLimitSpec, pMorphFields, IsAllowOnlyNot() );
+	bool bNotOnlyAllowed = IsAllowOnlyNot() || ( pQuery && pQuery->m_bNotOnlyAllowed );
+	pRoot = tBuilder.FixupTree ( pRoot, tLimitSpec, pMorphFields, bNotOnlyAllowed );
 	if ( tBuilder.IsError() )
 	{
 		tBuilder.Cleanup();
@@ -2114,6 +2115,7 @@ static bool ParseJsonBulkImportDoc ( const JsonObj_c & tRoot, const CSphString &
 {
 	tStmt.m_sIndex = sTable;
 	tStmt.m_tQuery.m_sIndexes = sTable;
+	tStmt.m_bBulkImportDoc = true;
 	sStmt = "insert";
 	if ( !ParseDocId ( tRoot, false, tDocId, sError ) )
 		return false;

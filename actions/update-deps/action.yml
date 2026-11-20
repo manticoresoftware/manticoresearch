@@ -75,9 +75,11 @@ runs:
     - name: Determine branch and target
       id: branch
       shell: bash
+      env:
+        SOURCE_BRANCH: ${{ github.head_ref }}
       run: |
         echo "branch=update-${{ inputs.name }}-version" >> $GITHUB_OUTPUT
-        echo "source_branch=${{ github.head_ref }}" >> $GITHUB_OUTPUT
+        printf 'source_branch=%s\n' "$SOURCE_BRANCH" >> "$GITHUB_OUTPUT"
         echo "target=main" >> $GITHUB_OUTPUT
 
     - name: Prepare update version branch
@@ -98,25 +100,27 @@ runs:
     - name: Check and merge source branch
       if: steps.branch.outputs.source_branch != ''
       shell: bash
+      env:
+        SOURCE_BRANCH: ${{ steps.branch.outputs.source_branch }}
       run: |
         cd manticoresearch
         # Check if the source branch exists in current repository
-        if git ls-remote --exit-code origin ${{ steps.branch.outputs.source_branch }}; then
-          echo "Source branch ${{ steps.branch.outputs.source_branch }} found in current repository"
+        if git ls-remote --exit-code --heads origin "refs/heads/$SOURCE_BRANCH"; then
+          echo "Source branch $SOURCE_BRANCH found in current repository"
 
-          git fetch origin ${{ steps.branch.outputs.source_branch }}
-          git cherry-pick origin/${{ steps.branch.outputs.source_branch }}
+          git fetch origin "refs/heads/$SOURCE_BRANCH"
+          git cherry-pick "origin/$SOURCE_BRANCH"
           if [ $? -eq 0 ]; then
-            echo "Successfully cherry-picked changes from ${{ steps.branch.outputs.source_branch }}"
+            echo "Successfully cherry-picked changes from $SOURCE_BRANCH"
             git push -u origin ${{ steps.branch.outputs.branch }}
-            git push origin :${{ steps.branch.outputs.source_branch }}
+            git push origin ":refs/heads/$SOURCE_BRANCH"
           else
             echo "Cherry-pick failed. Manual intervention required."
             git cherry-pick --abort
             exit 1
           fi
         else
-          echo "Source branch ${{ steps.branch.outputs.source_branch }} not found in current repository"
+          echo "Source branch $SOURCE_BRANCH not found in current repository"
         fi
         cd ..
 
@@ -141,9 +145,9 @@ runs:
           semver_new=$(echo "$version_string" | grep -o '^[0-9][0-9.]*')
         fi
         
-        # Check if semver versions are the same
-        if [ "${{ steps.commit.outputs.semver_original }}" = "$semver_new" ]; then
-          echo "Semver versions are the same ($semver_new), skipping update"
+        # Compare the full build version, not just SemVer.
+        if [ "${{ steps.commit.outputs.original_version }}" = "$version_string" ]; then
+          echo "Full version is unchanged ($version_string), skipping update"
           echo "version_string=${version_string// /-}" >> $GITHUB_OUTPUT
           echo "semver_new=$semver_new" >> $GITHUB_OUTPUT
           echo "skip_update=true" >> $GITHUB_OUTPUT
@@ -189,11 +193,17 @@ runs:
         semver_original="${{ steps.commit.outputs.semver_original }}"
         semver_new="${{ steps.deps.outputs.semver_new }}"
         
-        # Updated title to include version change information
-        title="🆕 Update ${name} version from ${semver_original} to ${semver_new}"
-        commit="Bump ${name} version from ${semver_original} to ${semver_new}"
+        # Use the exact build identity when the semantic version stays the same.
         body_path=$(mktemp)
-        echo "Update [${name}](${repo_url}) version from ${semver_original} to ${semver_new} which includes:" > "$body_path"
+        if [ "$semver_original" = "$semver_new" ]; then
+          title="🆕 Update ${name} build to ${version_string}"
+          commit="Bump ${name} build to ${version_string}"
+          echo "Update [${name}](${repo_url}) build to ${version_string} which includes:" > "$body_path"
+        else
+          title="🆕 Update ${name} version from ${semver_original} to ${semver_new}"
+          commit="Bump ${name} version from ${semver_original} to ${semver_new}"
+          echo "Update [${name}](${repo_url}) version from ${semver_original} to ${semver_new} which includes:" > "$body_path"
+        fi
         echo >> "$body_path"
         echo "$changes" >> "$body_path"
 

@@ -337,6 +337,22 @@ uint64_t Filter_StringColumnar_T<MULTI>::GetStringHash ( RowID_t tRowID ) const
 
 //////////////////////////////////////////////////////////////////////////
 
+// ANY() / ALL() over a string list match the words of the string, as the row-wise tags filters do
+class Filter_StringTagsColumnar_c : public ColumnarFilter_c
+{
+public:
+			Filter_StringTagsColumnar_c ( const CSphString & sAttrName, bool bAll ) : ColumnarFilter_c ( sAttrName ), m_bAll ( bAll ) {}
+
+	void	SetRefString ( const CSphString * pRef, int iCount ) final	{ m_tTags.SetTags ( pRef, iCount ); }
+	bool	Eval ( const CSphMatch & tMatch ) const final				{ return m_tTags.Match ( GetValue ( tMatch.m_tRowID ), m_bAll ); }
+
+private:
+	StringTags_c	m_tTags;
+	bool			m_bAll;
+};
+
+//////////////////////////////////////////////////////////////////////////
+
 class FilterStringCmpColumnar_c : public ColumnarFilter_c
 {
 public:
@@ -696,7 +712,11 @@ static std::unique_ptr<ISphFilter> CreateColumnarFilterPlain ( int iAttr, const 
 		else
 			return std::make_unique<FilterStringCmpColumnar_c> ( sAttrName, eCollation, tSettings.m_bExclude, tSettings.m_eStrCmpDir );
 
-	case SPH_FILTER_STRING_LIST:return std::make_unique<Filter_StringColumnar_T<true>> ( sAttrName, eCollation, !tSettings.m_bExclude );
+	case SPH_FILTER_STRING_LIST:
+		if ( tSettings.m_eMvaFunc!=SPH_MVAFUNC_NONE )
+			return std::make_unique<Filter_StringTagsColumnar_c> ( sAttrName, tSettings.m_eMvaFunc==SPH_MVAFUNC_ALL );
+
+		return std::make_unique<Filter_StringColumnar_T<true>> ( sAttrName, eCollation, !tSettings.m_bExclude );
 
 	default:
 		assert ( 0 && "Unhandled columnar filter type" );

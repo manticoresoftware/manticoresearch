@@ -38,6 +38,8 @@
 #include "replication/cluster_binlog.h"
 #include "replication/cluster_sst_progress.h"
 #include "replication/cluster_check_node.h"
+#include "replication/cluster_bulk_chunk.h"
+#include "indexer_rt_bulk.h"
 
 #if !_WIN32
 // MAC-specific header
@@ -64,6 +66,8 @@ inline static bool IsSyncedOrDonor ( ClusterState_e eState ) noexcept
 enum class BOOTSTRAP_E : bool {NO,YES};
 enum class PrepareMode_e : bool { STARTUP, RUNTIME };
 
+static void StartClusterRejoin ( const CSphString & sCluster );
+
 // cluster related data
 struct ReplicationCluster_t final : public Wsrep::Cluster_i, ClusterBinlogData_c
 {
@@ -82,6 +86,11 @@ public:
 
 	bool m_bUserRequest { false }; // indicates, if cluster is joining by user request (i.e. stmt 'join ...')
 	std::atomic<bool>		m_bExiting { false };
+	std::atomic<bool>		m_bRejoinNeeded { false }; // IST refused on a files seqno mismatch, rejoin by SST once the receiver ends
+	std::atomic<int>		m_iRejoinAttempts { 0 }; // rejoin attempts after an IST refusal, reset once synced
+	std::shared_ptr<Threads::Coro::Waitable_T<bool>> m_pOnDestroyed; // set by a rejoin that replaced this object
+	std::atomic<bool>		m_bGaleraStateErased { false }; // Galera files erased by a forced SST and not synced since: Galera here can not ask for IST
+	bool					m_bFilesSeqNoReset = false; // under the index lock: files seqno reset to 0, applied commands keep it 0 until a SST
 
 	// state variables cached from Galera
 	int64_t					m_iConfID = 0;
@@ -107,7 +116,7 @@ public:
 		m_sUser = std::move ( tDesc.m_sUser );
 		m_dClusterNodes = std::move ( tDesc.m_dClusterNodes );
 		m_tOptions = std::move ( tDesc.m_tOptions );
-		m_iClusterEpoch = tDesc.m_iClusterEpoch;
+		m_iFilesSeqNo = tDesc.m_iFilesSeqNo;
 		m_bSelfBootstrapOnStartup = tDesc.m_bSelfBootstrapOnStartup;
 		m_pSstProgress = CreateProgress();
 	}
@@ -154,6 +163,11 @@ public:
 		sOldUser = m_sUser;
 		m_sUser = sNewUser;
 		return true;
+	}
+	void SetUserSnapshot ( const CSphString & sUser ) EXCLUDES ( m_tUserLock )
+	{
+		sph::Spinlock_lock tUserLock { m_tUserLock };
+		m_sUser = sUser;
 	}
 	void RollbackUserSnapshot ( const CSphString & sExpectedCurrent, const CSphString & sRollbackUser ) EXCLUDES ( m_tUserLock )
 	{
@@ -582,12 +596,10 @@ void ReplicationCluster_t::ChangeView ( const Wsrep::ViewInfo_t* pView, const ch
 void ReplicationCluster_t::SetSynced()
 {
 	SetState ( ClusterState_e::SYNCED );
+	m_iRejoinAttempts.store ( 0, std::memory_order_release );
+	m_bGaleraStateErased.store ( false, std::memory_order_release );
 	if ( IsPrimary() )
-	{
 		RplBinlog()->OnClusterSynced ( *this );
-		if ( m_iClusterEpoch==0 )
-			WithWlockedIndexes ( [this] ( auto &, auto & ) { m_iClusterEpoch = 1; } );
-	}
 
 	sphLogDebugRpl ( "synced cluster '%s', gtid %s", m_sName.cstr(), Wsrep::Gtid2Str ( m_tGtid ).cstr() );
 }
@@ -607,7 +619,9 @@ bool ReplicationCluster_t::DonateSST ( CSphString sJoiner, const Wsrep::GlobalTi
 		tGtid.m_iSeqNo = Wsrep::WRONG_SEQNO;
 	}
 
-	m_pProvider->SstSent ( tGtid, bOk );
+	// on shutdown a failed SST is not reported: Galera aborts the joiner on such a report; the donor just leaves the group
+	if ( bOk || !sphInterrupted() )
+		m_pProvider->SstSent ( tGtid, bOk );
 
 	sphLogDebugRpl ( "donate cluster %s to %s, gtid %s, bypass %d, done %d", m_sName.cstr(), sJoiner.cstr(), Wsrep::Gtid2Str ( tGtid ).cstr(), (int)bBypass, (int)bOk );
 	return bOk;
@@ -623,6 +637,11 @@ void ReplicationCluster_t::OnRecvFinished ( bool bSuccess )
 {
 	SetState ( bSuccess ? ClusterState_e::CLOSED : ClusterState_e::DESTROYED );
 	m_bWorkerActive.SetValueAndNotifyAll ( false );
+
+	// IST refused on the files seqno, or a rejoin by SST broke: rejoin by a separate task, not from this callback
+	bool bMarked = m_bRejoinNeeded.exchange ( false, std::memory_order_acq_rel );
+	if ( !bSuccess && ( bMarked || m_iRejoinAttempts.load ( std::memory_order_acquire )>0 ) && !IsExiting() && !sphInterrupted() )
+		StartClusterRejoin ( m_sName );
 }
 
 void ReplicationCluster_t::AbortSST()
@@ -667,6 +686,8 @@ ReplicationCluster_t::~ReplicationCluster_t()
 	sphLogDebugRpl ( "deleting provider of cluster %s", m_sName.cstr() );
 	SafeDelete ( m_pProvider );
 	sphLogDebugRpl ( "cluster '%s' finished, cluster deleted", m_sName.scstr() );
+	if ( m_pOnDestroyed )
+		m_pOnDestroyed->SetValueAndNotifyAll ( true );
 }
 
 // add 'RPL' flag - i.e., that we're working in replication
@@ -786,12 +807,14 @@ static bool Replicate ( const ReplicateKeys_t & tKeys, const VecTraits_T<BYTE>& 
 }
 
 // replicate serialized data into cluster in TotalOrderIsolation mode and call commit monitor along
-static bool ReplicateTOI ( const ReplicateKeys_t & tKeys, const VecTraits_T<BYTE> & tQueries, Wsrep::Writeset_i & tWriteSet, CommitMonitor_c && tMonitor )
+static bool ReplicateTOI ( const ReplicateKeys_t & tKeys, const VecTraits_T<BYTE> & tQueries, Wsrep::Writeset_i & tWriteSet, CommitMonitor_c && tMonitor, ReplicationCommand_t & tCmd )
 {
 	bool bOk = tWriteSet.ToExecuteStart ( tKeys.m_dHashes, tQueries );
 	sphLogDebugRpl ( "replicating TOI %d, seq " INT64_FMT, (int)bOk, tWriteSet.LastSeqno() );
 	if ( !bOk )
 		return false;
+
+	tCmd.m_iOrderSeqNo = tWriteSet.LastSeqno();
 
 	// FIXME!!! can not fail TOI transaction
 	tMonitor.CommitTOI();
@@ -1034,7 +1057,7 @@ CSphVector<ClusterDesc_t> ReplicationCollectClusters ()  EXCLUDES ( g_tClustersL
 		tDesc.m_bSelfBootstrapOnStartup = tSnapshot.m_bSelfBootstrapOnStartup;
 		pCluster->WithRlockedIndexes ( [&tDesc,pCluster] ( const auto & hIndexes )
 		{
-			tDesc.m_iClusterEpoch = pCluster->m_iClusterEpoch;
+			tDesc.m_iFilesSeqNo = pCluster->m_iFilesSeqNo;
 			for ( const auto & tIndex : hIndexes )
 				tDesc.m_hIndexes.Add ( tIndex.first );
 		} );
@@ -1165,7 +1188,8 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc ) NO_THREAD_SAFETY_ANALYSIS
 
 	const ReplicationCommand_t & tCmd = *tAcc.m_dCmd[0];
 	bool bCmdCluster = ( tAcc.m_dCmd.GetLength()==1
-		&& ( tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_ADD || tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_DROP || tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_UPDATE_USER ) );
+		&& ( tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_ADD || tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_DROP || tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_UPDATE_USER
+			|| tCmd.m_eCommand==ReplCmd_e::BULK_IMPORT_ATTACH ) );
 	if ( bCmdCluster )
 	{
 		if ( tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_ADD && !CheckIndexesExists ( tCmd.m_sIndex ) )
@@ -1460,12 +1484,17 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 		case ReplCmd_e::CLUSTER_ALTER_DROP:
 			bTOI = true;
 			tKeys.AddKeys ( 1, false )[0] = uIndex;
-			tWriter.PutUint64 ( tCmd.m_iClusterEpoch );
 			break;
 			
 		case ReplCmd_e::CLUSTER_ALTER_UPDATE_USER:
 			bTOI = true;
 			tKeys.AddKeys ( 1, false )[0] = sphFNV64 ( tCmdCluster.m_sCluster.cstr() );
+			break;
+
+		case ReplCmd_e::BULK_IMPORT_ATTACH:
+			bTOI = true;
+			tKeys.AddKeys ( 1, false )[0] = uIndex;
+			tWriter.PutUint64 ( tCmd.m_uBulkChunkId );
 			break;
 
 		case ReplCmd_e::RT_TRX:
@@ -1502,7 +1531,7 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 	bool bReplicated = false;
 	if ( bTOI )
 	{
-		bReplicated = ReplicateTOI ( tKeys, dBufQueries, *pWriteSet, std::move ( tMonitor ) );
+		bReplicated = ReplicateTOI ( tKeys, dBufQueries, *pWriteSet, std::move ( tMonitor ), *tAcc.m_dCmd[0] );
 	} else
 	{
 		bReplicated = Replicate ( tKeys, dBufQueries, *pWriteSet, std::move ( tMonitor ), bUpdate, tAcc.IsReplace () );
@@ -1574,6 +1603,31 @@ bool HandleCmdReplicateUpdate ( RtAccum_t & tAcc, CSphString & sWarning, int & i
 	return HandleCmdReplicateImpl ( tAcc, nullptr, &sWarning, &iUpdated );
 }
 
+// an applied command whose replay needs table files: a node that missed it can not catch up by IST; the caller holds the
+// write lock of the table list and saves the config
+static void SetFilesSeqNo ( ReplicationCluster_t & tCluster, int64_t iSeqNo )
+{
+	assert ( iSeqNo>0 );
+	if ( !tCluster.m_bFilesSeqNoReset )
+		tCluster.m_iFilesSeqNo = iSeqNo;
+}
+
+// a node that could not apply a command needing table files: 0 differs from the cluster value, so the node joins by SST next time;
+// commands applied later do not change it while this object lives, only a received SST sets the donor value
+bool ResetClusterFilesSeqNo ( const CSphString & sCluster )
+{
+	auto pCluster = ClusterByName ( sCluster );
+	if ( !pCluster )
+		return false;
+
+	pCluster->WithWlockedIndexes ( [&pCluster] ( auto &, auto & )
+	{
+		pCluster->m_iFilesSeqNo = 0;
+		pCluster->m_bFilesSeqNoReset = true;
+	});
+	TLS_MSG_STRING ( sError );
+	return SaveConfigInt ( sError );
+}
 
 bool SetIndexesClusterTOI ( const ReplicationCommand_t * pCmd )
 {
@@ -1603,7 +1657,7 @@ bool SetIndexesClusterTOI ( const ReplicationCommand_t * pCmd )
 				hIndexes.Add ( sIndex );
 				hIndexesLoaded.Delete ( sIndex );
 			}
-			pCluster->m_iClusterEpoch = tCmd.m_iClusterEpoch;
+			SetFilesSeqNo ( *pCluster, tCmd.m_iOrderSeqNo );
 		});
 
 	} else
@@ -1615,16 +1669,65 @@ bool SetIndexesClusterTOI ( const ReplicationCommand_t * pCmd )
 		{
 			for ( const CSphString & sIndex : dIndexes )
 				hIndexes.Delete ( sIndex );
-			pCluster->m_iClusterEpoch = tCmd.m_iClusterEpoch;
+			SetFilesSeqNo ( *pCluster, tCmd.m_iOrderSeqNo );
 		});
 	}
 
 	TLS_MSG_STRING ( sError );
 	bool bSaved = SaveConfigInt ( sError );
 
-	sphLogDebugRpl ( "SetIndexesClusterTOI finished '%s' for cluster '%s': epoch " INT64_FMT ", indexes '%s' > '%s', error: %s", ( tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_ADD ? "add" : "drop" ), pCluster->m_sName.cstr(), tCmd.m_iClusterEpoch, tCmd.m_sIndex.cstr(), Vec2Str ( pCluster->GetIndexes() ).cstr(), sError.scstr() );
+	int64_t iFilesSeqNo = pCluster->WithRlockedIndexes ( [&pCluster] ( const auto & ) { return pCluster->m_iFilesSeqNo; } );
+	sphLogDebugRpl ( "SetIndexesClusterTOI finished '%s' for cluster '%s': command seqno " INT64_FMT ", files seqno " INT64_FMT ", indexes '%s' > '%s', error: %s", ( tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_ADD ? "add" : "drop" ), pCluster->m_sName.cstr(), tCmd.m_iOrderSeqNo, iFilesSeqNo, tCmd.m_sIndex.cstr(), Vec2Str ( pCluster->GetIndexes() ).cstr(), sError.scstr() );
 
 	return bSaved;
+}
+
+// The bulk_import attach command, the same on every node. A table out of the cluster is skipped everywhere; a local
+// failure leaves files seqno 0 on this node, so it joins by SST next time.
+bool AttachBulkChunkTOI ( const ReplicationCommand_t & tCmd )
+{
+	assert ( tCmd.m_eCommand==ReplCmd_e::BULK_IMPORT_ATTACH );
+	BulkChunkAttach_t tLocal;
+	BulkChunkAttach_t & tResult = tCmd.m_pBulkChunkAttach ? *tCmd.m_pBulkChunkAttach : tLocal;
+	const int64_t tmStart = sphMicroTimer();
+
+	auto pCluster = ClusterByName ( tCmd.m_sCluster );
+	if ( !pCluster )
+	{
+		tResult.m_eResult = BulkChunkAttach_e::FAILED;
+		tResult.m_sError = TlsMsg::szError();
+		return false;
+	}
+
+	bool bInCluster = pCluster->WithRlockedIndexes ( [&tCmd] ( const auto & hIndexes ) { return hIndexes[tCmd.m_sIndex]; } );
+	if ( !bInCluster )
+	{
+		DropBulkChunk ( tCmd.m_sCluster, tCmd.m_sIndex, tCmd.m_uBulkChunkId );
+		tResult.m_eResult = BulkChunkAttach_e::SKIPPED;
+		sphLogDebugRpl ( "bulk_import chunk " UINT64_FMT " of table '%s': skipped, the table is not in cluster '%s'", tCmd.m_uBulkChunkId, tCmd.m_sIndex.cstr(), tCmd.m_sCluster.cstr() );
+		return true;
+	}
+
+	CSphString sError;
+	if ( !AttachBulkChunk ( tCmd.m_sCluster, tCmd.m_sIndex, tCmd.m_uBulkChunkId, sError ) )
+	{
+		sphWarning ( "cluster '%s': bulk_import chunk " UINT64_FMT " of table '%s' was not attached on this node, files seqno set to 0: %s", tCmd.m_sCluster.cstr(), tCmd.m_uBulkChunkId, tCmd.m_sIndex.cstr(), sError.cstr() );
+		if ( !ResetClusterFilesSeqNo ( tCmd.m_sCluster ) )
+			sphWarning ( "cluster '%s': failed to save files seqno 0: %s", tCmd.m_sCluster.cstr(), TlsMsg::szError() );
+		tResult.m_eResult = BulkChunkAttach_e::FAILED;
+		tResult.m_sError = sError;
+		return TlsMsg::Err ( "%s", sError.cstr() );
+	}
+
+	// a failed save keeps the previous value in the config, a restart then goes by SST as well
+	pCluster->WithWlockedIndexes ( [&] ( auto &, auto & ) { SetFilesSeqNo ( *pCluster, tCmd.m_iOrderSeqNo ); } );
+	if ( !SaveConfigInt ( sError ) )
+		sphWarning ( "cluster '%s': failed to save files seqno " INT64_FMT ": %s", tCmd.m_sCluster.cstr(), tCmd.m_iOrderSeqNo, sError.cstr() );
+
+	tResult.m_eResult = BulkChunkAttach_e::ATTACHED;
+	int64_t iFilesSeqNo = pCluster->WithRlockedIndexes ( [&pCluster] ( const auto & ) { return pCluster->m_iFilesSeqNo; } );
+	sphLogDebugRpl ( "bulk_import chunk " UINT64_FMT " of table '%s': attached in %.3f sec, command seqno " INT64_FMT ", files seqno " INT64_FMT, tCmd.m_uBulkChunkId, tCmd.m_sIndex.cstr(), ( sphMicroTimer()-tmStart ) / 1000000.0f, tCmd.m_iOrderSeqNo, iFilesSeqNo );
+	return true;
 }
 
 bool SetClusterUserTOI ( const ReplicationCommand_t * pCmd )
@@ -1678,7 +1781,7 @@ static bool ValidateUpdate ( const ReplicationCommand_t & tCmd )
 }
 
 // load indexes received from another node or existed already into daemon
-static bool ReplicatedIndexes ( const VecTraits_T<CSphString> & dIndexes, const CSphString & sCluster, int64_t iClusterEpoch ) EXCLUDES ( g_tClustersLock )
+static bool ReplicatedIndexes ( const VecTraits_T<CSphString> & dIndexes, const CSphString & sCluster, int64_t iFilesSeqNo ) EXCLUDES ( g_tClustersLock )
 {
 	assert ( ReplicationEnabled() );
 
@@ -1689,9 +1792,7 @@ static bool ReplicatedIndexes ( const VecTraits_T<CSphString> & dIndexes, const 
 	if ( !pCluster )
 		return false;
 
-	if ( iClusterEpoch==0 )
-		iClusterEpoch = 1;
-	sphLogDebugRpl ( "ReplicatedIndexes '%s': current epoch " INT64_FMT ", current indexes '%s' -> received epoch " INT64_FMT ", indexes '%s'", sCluster.cstr(), pCluster->m_iClusterEpoch, Vec2Str ( pCluster->GetIndexes() ).cstr(), iClusterEpoch, Vec2Str ( dIndexes ).cstr() );
+	sphLogDebugRpl ( "ReplicatedIndexes '%s': current files seqno " INT64_FMT ", current indexes '%s' -> received files seqno " INT64_FMT ", indexes '%s'", sCluster.cstr(), pCluster->m_iFilesSeqNo, Vec2Str ( pCluster->GetIndexes() ).cstr(), iFilesSeqNo, Vec2Str ( dIndexes ).cstr() );
 
 	if ( !CanReplaceIndexes ( sCluster, dIndexes ) )
 		return false;
@@ -1723,7 +1824,8 @@ static bool ReplicatedIndexes ( const VecTraits_T<CSphString> & dIndexes, const 
 			hIndexes.Add ( sIndex );
 		});
 
-		pCluster->m_iClusterEpoch = iClusterEpoch;
+		pCluster->m_iFilesSeqNo = iFilesSeqNo;
+		pCluster->m_bFilesSeqNoReset = false;
 	});
 
 	TLS_MSG_STRING ( sError );
@@ -1823,7 +1925,7 @@ static ReplicationCluster_t* MakeClusterOffline ( ClusterDesc_t tDesc )
 }
 
 static void ForceSst ( ReplicationCluster_t & tCluster );
-static bool CheckForceSst ( const ReplicationCluster_t & tCluster, int64_t iRemoteEpoch );
+static bool CheckForceSst ( const ReplicationCluster_t & tCluster, int64_t iRemoteFilesSeqNo );
 
 static bool PrepareNodesAndInitCluster ( ReplicationCluster_t & tCluster, BOOTSTRAP_E eBootStrap, PrepareMode_e ePrepareMode, bool bKeepClusterNodes = false )
 {
@@ -1843,14 +1945,14 @@ static bool PrepareNodesAndInitCluster ( ReplicationCluster_t & tCluster, BOOTST
 	{
 		if ( ePrepareMode==PrepareMode_e::STARTUP )
 		{
-			CSphString sRemoteUser;
-			int64_t iRemoteEpoch = 0;
-			if ( !CheckRemotesVersions ( tCluster, sRemoteUser, &iRemoteEpoch ) )
+			CSphString sRemoteUser = tCluster.GetUserSnapshot(); // kept when no remote node is listed
+			int64_t iRemoteFilesSeqNo = 0;
+			if ( !CheckRemotesVersions ( tCluster, sRemoteUser, &iRemoteFilesSeqNo ) )
 				return false;
-			tCluster.m_sUser = sRemoteUser;
+			tCluster.SetUserSnapshot ( sRemoteUser );
 
-			bool bForceSst = CheckForceSst ( tCluster, iRemoteEpoch );
-			sphLogDebugRpl ( "startup SST guard for '%s': local epoch " INT64_FMT ", remote epoch " INT64_FMT ", force sst %d", tCluster.m_sName.cstr(), tCluster.m_iClusterEpoch, iRemoteEpoch, (int)bForceSst );
+			bool bForceSst = CheckForceSst ( tCluster, iRemoteFilesSeqNo );
+			sphLogDebugRpl ( "startup SST guard for '%s': local files seqno " INT64_FMT ", remote files seqno " INT64_FMT ", force sst %d", tCluster.m_sName.cstr(), tCluster.m_iFilesSeqNo, iRemoteFilesSeqNo, (int)bForceSst );
 
 			if ( bForceSst )
 				ForceSst ( tCluster );
@@ -1984,7 +2086,16 @@ static bool PrepareClusterStartupMode ( ReplicationCluster_t & tCluster, RplBoot
 		return true;
 	}
 
-	CSphString sRemoteUser;
+	// A bootstrap node starts alone: no remote donor for version, user and auth checks.
+	// It keeps the stored nodes: nodes that start after it get the node list from it.
+	if ( eBs!=RplBootstrap_e::OFF )
+	{
+		tMode.m_bKeepClusterNodes = true;
+		return true;
+	}
+
+	// keep the stored user when no remote node is listed
+	CSphString sRemoteUser = tCluster.GetUserSnapshot();
 	if ( !CheckRemotesVersions ( tCluster, sRemoteUser ) )
 	{
 		CSphString sRemoteError = TlsMsg::szError();
@@ -1992,10 +2103,9 @@ static bool PrepareClusterStartupMode ( ReplicationCluster_t & tCluster, RplBoot
 		return false;
 	}
 
-	tCluster.m_sUser = sRemoteUser;
+	tCluster.SetUserSnapshot ( sRemoteUser );
 
-	// need to fetch auth from all other nodes only for non leader
-	if ( eBs==RplBootstrap_e::OFF && !GetRemotesAuth ( tCluster ) )
+	if ( !GetRemotesAuth ( tCluster ) )
 	{
 		CSphString sAuthError = TlsMsg::szError();
 		TlsMsg::Err ( "auth failed: %s", sAuthError.cstr() );
@@ -2003,6 +2113,213 @@ static bool PrepareClusterStartupMode ( ReplicationCluster_t & tCluster, RplBoot
 	}
 
 	return true;
+}
+
+static bool StartOfflineCluster ( ReplicationCluster_t & tCluster, RplBootstrap_e eBs )
+{
+	ClusterStartupMode_t tMode;
+	if ( !PrepareClusterStartupMode ( tCluster, eBs, tMode ) )
+		return false;
+
+	if ( !PrepareNodesAndInitCluster ( tCluster, tMode.m_eBootStrap, PrepareMode_e::STARTUP, tMode.m_bKeepClusterNodes ) )
+		return false;
+
+	if ( !tCluster.Connect ( tMode.m_eBootStrap ) )
+		return false;
+
+	tCluster.StartListen();
+	return true;
+}
+
+static constexpr int g_iMaxRejoinAttempts = 2;
+
+static void AppendClusterError ( ReplicationCluster_t & tCluster, Str_t sError )
+{
+	ScopedMutex_t tErrorLock ( tCluster.m_tErrorLock );
+	if ( tCluster.m_sError.GetLength()>1024 )
+		tCluster.m_sError.Rewind();
+	tCluster.m_sError << sError;
+}
+
+static ClusterDesc_t CopyClusterDesc ( const ReplicationCluster_t & tCluster )
+{
+	ClusterDesc_t tDesc;
+	tDesc.m_sName = tCluster.m_sName;
+	tDesc.m_sPath = tCluster.m_sPath;
+	tDesc.m_sUser = tCluster.GetUserSnapshot();
+	tDesc.m_dClusterNodes = tCluster.m_dClusterNodes;
+	tCluster.WithRlockedIndexes ( [&tDesc, &tCluster] ( const auto & hIndexes )
+	{
+		tDesc.m_iFilesSeqNo = tCluster.m_iFilesSeqNo;
+		for ( const auto & tIndex : hIndexes )
+			tDesc.m_hIndexes.Add ( tIndex.first );
+	} );
+	tCluster.WithRlockedOptions ( [&tDesc] ( const auto & tOptions ) { tDesc.m_tOptions = tOptions; } );
+	return tDesc;
+}
+
+enum class Rejoin_e { STARTED, FAILED, DROPPED };
+
+// one rejoin attempt: replace the cluster object by a new one built from its description and start it by full SST
+static Rejoin_e RejoinClusterOnce ( const CSphString & sCluster, int iAttempt ) EXCLUDES ( g_tClustersLock )
+{
+	Threads::ScopedCoroMutex_t tClusterLock { g_tClusterOpsLock };
+	TlsMsg::ResetErr();
+
+	ReplicationClusterRefPtr_c pOld = ClusterByName ( sCluster, nullptr );
+	if ( sphInterrupted() || !pOld || pOld->IsExiting() )
+		return Rejoin_e::DROPPED;
+
+	sphWarning ( "cluster '%s': rejoin by SST, attempt %d of %d", sCluster.cstr(), iAttempt, g_iMaxRejoinAttempts );
+
+	// the old provider stays with the old object and dies with it
+	pOld->DisconnectAndDeleteProvider();
+	pOld->m_bWorkerActive.Wait ( [] ( bool bWorking ) { return !bWorking; } );
+
+	// parameters of CREATE/JOIN CLUSTER and the tables; the files seqno comes from the donor, the port is taken after the old object dies
+	ClusterDesc_t tDesc = CopyClusterDesc ( *pOld );
+	tDesc.m_iFilesSeqNo = 0;
+	if ( tDesc.m_dClusterNodes.IsEmpty() )
+	{
+		// an empty node list would bootstrap a new cluster
+		TlsMsg::Err ( "no nodes to rejoin" );
+		pOld->SetState ( ClusterState_e::CLOSED );
+		return Rejoin_e::FAILED;
+	}
+
+	sph::StringSet hIndexes = tDesc.m_hIndexes;
+	CSphRefcountedPtr<ReplicationCluster_t> pNew { new ReplicationCluster_t ( std::move ( tDesc ) ) };
+	pNew->WithWlockedIndexes ( [&hIndexes] ( auto & hNewIndexes, auto & ) { for ( const auto & tIndex : hIndexes ) hNewIndexes.Add ( tIndex.first ); } );
+	pNew->m_iRejoinAttempts.store ( iAttempt, std::memory_order_release );
+
+	auto pDestroyed = std::make_shared<Threads::Coro::Waitable_T<bool>> ( false );
+	pOld->m_pOnDestroyed = pDestroyed;
+	{
+		Threads::SccWL_t tLock ( g_tClustersLock );
+		if ( sphInterrupted() || !g_hClusters.Exists ( sCluster ) || g_hClusters[sCluster]!=pOld )
+			return Rejoin_e::DROPPED;
+
+		g_hClusters.Delete ( sCluster );
+		g_hClusters.Add ( pNew, sCluster );
+	}
+	pOld = nullptr;
+
+	// the old provider writes into the same cluster directory; wait until it is freed
+	if ( !pDestroyed->WaitVoidForMs ( [&pDestroyed] { return pDestroyed->GetValue(); }, ReplicationSstQueryTimeout() ) )
+	{
+		TlsMsg::Err ( "previous cluster object still in use" );
+		pNew->SetState ( ClusterState_e::CLOSED );
+		return Rejoin_e::FAILED;
+	}
+
+	if ( sphInterrupted() )
+		return Rejoin_e::DROPPED;
+
+	pNew->m_tPort = PortRange::AcquirePort();
+	if ( !pNew->m_tPort.IsValid() )
+	{
+		TlsMsg::Err ( "no replication ports available" );
+		pNew->SetState ( ClusterState_e::CLOSED );
+		return Rejoin_e::FAILED;
+	}
+
+	ForceSst ( *pNew );
+	if ( !StartOfflineCluster ( *pNew, RplBootstrap_e::OFF ) )
+	{
+		// the provider stays with the object, the next attempt replaces the object
+		pNew->DisconnectAndDeleteProvider();
+		pNew->m_bWorkerActive.Wait ( [] ( bool bWorking ) { return !bWorking; } );
+		pNew->SetState ( ClusterState_e::CLOSED );
+		return Rejoin_e::FAILED;
+	}
+
+	// shutdown could drop the cluster list meanwhile
+	bool bInList = false;
+	{
+		Threads::SccRL_t tLock ( g_tClustersLock );
+		bInList = g_hClusters.Exists ( sCluster ) && g_hClusters[sCluster]==pNew;
+	}
+	if ( !bInList )
+	{
+		pNew->DisconnectAndDeleteProvider();
+		return Rejoin_e::DROPPED;
+	}
+
+	sphLogDebugRpl ( "cluster '%s' rejoin started, attempt %d", sCluster.cstr(), iAttempt );
+	return Rejoin_e::STARTED;
+}
+
+static void GiveUpClusterRejoin ( const CSphString & sCluster, const CSphString & sLastError ) EXCLUDES ( g_tClustersLock )
+{
+	Threads::ScopedCoroMutex_t tClusterLock { g_tClusterOpsLock };
+	auto pCluster = ClusterByName ( sCluster, nullptr );
+	if ( !pCluster )
+		return;
+
+	CSphString sError;
+	sError.SetSprintf ( "rejoin by SST failed %d times: %s", g_iMaxRejoinAttempts, sLastError.cstr() );
+	sphWarning ( "cluster '%s': %s", sCluster.cstr(), sError.cstr() );
+	pCluster->SetState ( ClusterState_e::CLOSED );
+	AppendClusterError ( *pCluster, FromStr ( sError ) );
+}
+
+static void CoRejoinCluster ( const CSphString & sCluster ) EXCLUDES ( g_tClustersLock )
+{
+	int iAttempt = 0;
+	CSphString sLastError;
+	{
+		auto pCluster = ClusterByName ( sCluster, nullptr );
+		if ( !pCluster )
+			return;
+		iAttempt = pCluster->m_iRejoinAttempts.load ( std::memory_order_acquire ) + 1;
+		if ( iAttempt>1 )
+		{
+			// the previous attempt started and its state transfer broke
+			ScopedMutex_t tErrorLock ( pCluster->m_tErrorLock );
+			sLastError = pCluster->m_sError.cstr();
+		}
+	}
+
+	while ( true )
+	{
+		if ( iAttempt>g_iMaxRejoinAttempts )
+		{
+			GiveUpClusterRejoin ( sCluster, sLastError.IsEmpty() ? CSphString ( "state transfer failed" ) : sLastError );
+			return;
+		}
+
+		if ( iAttempt>1 )
+			Threads::Coro::SleepMsec ( ReplicationRetryDelay() );
+
+		switch ( RejoinClusterOnce ( sCluster, iAttempt ) )
+		{
+		case Rejoin_e::STARTED:
+		case Rejoin_e::DROPPED:
+			return;
+		case Rejoin_e::FAILED:
+			sLastError = TlsMsg::MoveToString();
+			sphWarning ( "cluster '%s': rejoin attempt %d failed: %s", sCluster.cstr(), iAttempt, sLastError.cstr() );
+			{
+				auto pCluster = ClusterByName ( sCluster, nullptr );
+				if ( pCluster )
+					AppendClusterError ( *pCluster, FromStr ( sLastError ) );
+			}
+			++iAttempt;
+			break;
+		}
+	}
+}
+
+static void StartClusterRejoin ( const CSphString & sCluster )
+{
+	Threads::StartJob ( [sCluster] () { CoRejoinCluster ( sCluster ); } );
+}
+
+// the rejoin disconnects the live provider itself; its receiver then ends with success and starts nothing more
+void RejoinClusterBySst ( const CSphString & sCluster )
+{
+	sphWarning ( "cluster '%s': a command failed on this node only, rejoining by SST", sCluster.cstr() );
+	StartClusterRejoin ( sCluster );
 }
 
 // called from ReplicationServiceStart - see below
@@ -2019,30 +2336,14 @@ static void CoReplicationServiceStart ( RplBootstrap_e eBs ) EXCLUDES ( g_tClust
 		TlsMsg::ResetErr();
 		auto& sName = tCluster.first;
 		auto& pCluster = tCluster.second;
-		ClusterStartupMode_t tMode;
 
-		if ( !PrepareClusterStartupMode ( *pCluster, eBs, tMode ) )
+		if ( !StartOfflineCluster ( *pCluster, eBs ) )
 		{
 			PreserveFailedCluster ( tCluster, iFailedClusters );
 			continue;
 		}
 
-		if ( !PrepareNodesAndInitCluster ( *pCluster, tMode.m_eBootStrap, PrepareMode_e::STARTUP, tMode.m_bKeepClusterNodes ) )
-		{
-			PreserveFailedCluster ( tCluster, iFailedClusters );
-			continue;
-		}
-
-		// check indexes valid
-		if ( !pCluster->Connect ( tMode.m_eBootStrap ) )
-		{
-			PreserveFailedCluster ( tCluster, iFailedClusters );
-			continue;
-		}
-
-		pCluster->StartListen();
 		++iStartedClusters;
-
 		sphLogDebugRpl ( "'%s' cluster, gtid %s starting", sName.cstr(), Wsrep::Gtid2Str ( pCluster->m_tGtid ).cstr() );
 	}
 	if ( !g_hClusters.IsEmpty() && iStartedClusters==0 && iFailedClusters )
@@ -2498,6 +2799,7 @@ static void ClusterDetachLocal ( const ReplicationClusterRefPtr_c & pCluster ) E
 
 	StrVec_t dClusterIndexes = pCluster->GetIndexes();
 	pCluster->WithRlockedIndexes ( [] ( const auto& hIndexes ) { for_each ( hIndexes, [] ( const auto& tIndex ) { AssignClusterToIndex ( tIndex.first, "" ); } ); } );
+	ForgetClusterBulkChunkSessions ( sCluster );
 	RplBinlog()->OnClusterDelete ( sCluster, dClusterIndexes );
 }
 
@@ -2658,13 +2960,13 @@ bool ClusterGetDonorMeta ( const CSphString & sCluster, CSphString & sUser ) EXC
 	return true;
 }
 
-int64_t ClusterGetRemoteEpoch ( const CSphString & sCluster ) EXCLUDES ( g_tClustersLock )
+int64_t ClusterGetRemoteFilesSeqNo ( const CSphString & sCluster ) EXCLUDES ( g_tClustersLock )
 {
 	auto pCluster = ClusterByName ( sCluster );
 	if ( !pCluster || !pCluster->IsPrimary() || pCluster->GetState() != ClusterState_e::SYNCED )
 		return 0;
 
-	return pCluster->m_iClusterEpoch;
+	return pCluster->m_iFilesSeqNo;
 }
 
 static bool HasNotReadyNodes ( ReplicationClusterRefPtr_c pCluster )
@@ -2681,13 +2983,140 @@ static bool HasNotReadyNodes ( ReplicationClusterRefPtr_c pCluster )
 static bool ClusterAlterDrop ( const CSphString & sCluster, const VecTraits_T<CSphString> & dIndexes )
 {
 	RtAccum_t tAcc;
-	auto pCluster = ClusterByName ( sCluster );
-	if ( !pCluster )
+	tAcc.AddCommand ( ReplCmd_e::CLUSTER_ALTER_DROP, Vec2Str ( dIndexes ), sCluster );
+	return HandleCmdReplicate ( tAcc );
+}
+
+static bool HasNode ( const VecTraits_T<CSphString> & dNodes, const CSphString & sNode )
+{
+	return dNodes.any_of ( [&sNode] ( const CSphString & sItem ) { return sItem==sNode; } );
+}
+
+static bool CheckBulkChunkCancelled()
+{
+	CSphString sError;
+	if ( !CheckIndexerRtBulkCancelled ( sError ) )
 		return false;
 
-	ReplicationCommand_t * pDropCmd = tAcc.AddCommand ( ReplCmd_e::CLUSTER_ALTER_DROP, Vec2Str ( dIndexes ), sCluster );
-	pDropCmd->m_iClusterEpoch = ( pCluster->m_iClusterEpoch + 1 );
-	return HandleCmdReplicate ( tAcc );
+	TlsMsg::Err ( sError );
+	return true;
+}
+
+// Deliver the chunk files of repl-<id>/ to the other nodes once none of them is a donor or joining, then attach the chunk
+// on every node by one command. A retry delivers only to the nodes that came meanwhile; the nodes that left get
+// the abort of the chunk. The cluster object is taken anew at every step, so a rejoin of this node does not wait for the delivery.
+void ReplicateBulkImportChunk ( const CSphString & sCluster, const CSphString & sTable, uint64_t uId, const StrVec_t & dFiles, BulkChunkAttach_t & tResult ) EXCLUDES ( g_tClustersLock )
+{
+	TlsMsg::ResetErr();
+	const int64_t tmStart = sphMicroTimer();
+	const int iRetryCount = ReplicationRetryCount() * 2;
+	const int iRetryDelay = ReplicationRetryDelay() * 2;
+
+	CSphString sUser;
+	StrVec_t dSent; // the nodes that keep the chunk prepared
+
+	auto fnAbortSent = [&] ( const VecTraits_T<CSphString> & dNodes )
+	{
+		VecAgentDesc_t dDesc = GetDescAPINodes ( dNodes, Resolve_e::SLOW );
+		AbortBulkChunkOnNodes ( sCluster, sUser, sTable, uId, dDesc );
+	};
+
+	auto fnFail = [&]
+	{
+		tResult.m_eResult = BulkChunkAttach_e::NOT_APPLIED;
+		tResult.m_sError = TlsMsg::MoveToString();
+		if ( !dSent.IsEmpty() )
+			fnAbortSent ( dSent );
+		TlsMsg::ResetErr();
+	};
+
+	int iAttempt = 0;
+	while ( true )
+	{
+		if ( CheckBulkChunkCancelled() )
+			return fnFail();
+
+		StrVec_t dNodes;
+		{
+			auto pCluster = ClusterByName ( sCluster );
+			if ( !pCluster || !pCluster->IsHealthy() )
+				return fnFail();
+
+			if ( HasNotReadyNodes ( pCluster ) )
+			{
+				if ( ++iAttempt>=iRetryCount )
+				{
+					TlsMsg::Err ( "cluster '%s' has some nodes not ready for %.3f seconds", sCluster.cstr(), ( sphMicroTimer()-tmStart ) / 1000000.0f );
+					return fnFail();
+				}
+				sphLogDebugRpl ( "bulk_import chunk " UINT64_FMT " of table '%s': cluster '%s' has some nodes not ready, will wait for %d seconds before retry %d", uId, sTable.cstr(), sCluster.cstr(), iRetryDelay / 1000, iAttempt );
+				Threads::Coro::SleepMsec ( iRetryDelay );
+				continue;
+			}
+			dNodes = pCluster->FilterViewNodesByProto ( Proto_e::SPHINX, false );
+			sUser = pCluster->GetUserSnapshot();
+		}
+
+		StrVec_t dLeft, dNew;
+		for ( const CSphString & sNode : dSent )
+			if ( !HasNode ( dNodes, sNode ) )
+				dLeft.Add ( sNode );
+		for ( const CSphString & sNode : dNodes )
+			if ( !HasNode ( dSent, sNode ) )
+				dNew.Add ( sNode );
+
+		if ( !dLeft.IsEmpty() )
+		{
+			fnAbortSent ( dLeft );
+			TlsMsg::ResetErr();
+			for ( const CSphString & sNode : dLeft )
+				dSent.RemoveValue ( sNode );
+		}
+
+		if ( !dNew.IsEmpty() )
+		{
+			VecAgentDesc_t dDesc = GetDescAPINodes ( dNew, Resolve_e::SLOW );
+			if ( TlsMsg::HasErr() )
+				return fnFail();
+
+			// a failed delivery has already aborted the chunk at dNew
+			if ( !dDesc.IsEmpty() && !ReplicateBulkChunkToNodes ( sCluster, sUser, sTable, uId, dFiles, dDesc ) )
+				return fnFail();
+			for ( const CSphString & sNode : dNew )
+				dSent.Add ( sNode );
+		}
+
+		// the nodes might change during the delivery
+		auto pCluster = ClusterByName ( sCluster );
+		if ( !pCluster )
+			return fnFail();
+		auto dNewNodes = pCluster->FilterViewNodesByProto ( Proto_e::SPHINX, false );
+		if ( !HasNotReadyNodes ( pCluster ) && dNewNodes.GetLength()==dNodes.GetLength() && dNewNodes.all_of ( [&dNodes] ( const CSphString & sNode ) { return HasNode ( dNodes, sNode ); } ) )
+			break;
+
+		sphLogDebugRpl ( "bulk_import chunk " UINT64_FMT " of table '%s': nodes of cluster '%s' changed during the delivery, retry in %d seconds", uId, sTable.cstr(), sCluster.cstr(), iRetryDelay / 1000 );
+		pCluster = nullptr;
+		Threads::Coro::SleepMsec ( iRetryDelay );
+	}
+
+	if ( CheckBulkChunkCancelled() )
+		return fnFail();
+
+	const int64_t tmCommand = sphMicroTimer();
+	sphLogDebugRpl ( "bulk_import chunk " UINT64_FMT " of table '%s': delivered to %d nodes in %.3f sec, attach command", uId, sTable.cstr(), dSent.GetLength(), ( tmCommand-tmStart ) / 1000000.0f );
+
+	RtAccum_t tAcc;
+	ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplCmd_e::BULK_IMPORT_ATTACH, sTable, sCluster );
+	pCmd->m_uBulkChunkId = uId;
+	pCmd->m_pBulkChunkAttach = &tResult;
+	HandleCmdReplicate ( tAcc );
+
+	// not ordered: no node attached the chunk, every node drops it
+	if ( tResult.m_eResult==BulkChunkAttach_e::NOT_APPLIED )
+		return fnFail();
+
+	sphLogDebugRpl ( "bulk_import chunk " UINT64_FMT " of table '%s': attach command finished in %.3f sec, result %d", uId, sTable.cstr(), ( sphMicroTimer()-tmCommand ) / 1000000.0f, (int)tResult.m_eResult );
+	TlsMsg::ResetErr();
 }
 
 // FIXME!!! refactor to use same code as SendClusterIndexes
@@ -2836,7 +3265,6 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const VecTraits_T<CSp
 	RtAccum_t tAcc;
 	ReplicationCommand_t * pAddCmd = tAcc.AddCommand ( ReplCmd_e::CLUSTER_ALTER_ADD, Vec2Str ( dIndexes ), sCluster );
 	pAddCmd->m_bCheckIndex = false;
-	pAddCmd->m_iClusterEpoch = ( pCluster->m_iClusterEpoch + 1 );
 	
 	bAdded = HandleCmdReplicate ( tAcc );
 	sphLogDebugRpl ( "alter '%s' %s index '%s'", pCluster->m_sName.cstr(), ( bAdded ? "added" : "failed to add" ), Vec2Str ( dIndexes ).cstr() );
@@ -2987,11 +3415,22 @@ bool SendClusterIndexes ( ReplicationCluster_t * pCluster, const CSphString & sN
 	ClusterSyncedRequest_t tSyncedRequest;
 	tSyncedRequest.m_sCluster = pCluster->m_sName;
 	tSyncedRequest.m_tGtid = tStateID;
-	tSyncedRequest.m_iClusterEpoch = pCluster->m_iClusterEpoch;
+	tSyncedRequest.m_iFilesSeqNo = pCluster->m_iFilesSeqNo;
 	tSyncedRequest.m_dIndexes = dIndexes;
+	tSyncedRequest.m_bIst = bBypass;
 
 	if ( bBypass )
 		return SendClusterSynced ( dDesc, tSyncedRequest, pCluster->m_sUser );
+
+	// a node that did not attach a bulk_import chunk waits for its own rejoin: its tables lack the chunk, so it must not donate them
+	bool bFilesSeqNoReset = pCluster->WithRlockedIndexes ( [&pCluster] ( const auto & ) { return pCluster->m_bFilesSeqNoReset; } );
+	if ( bFilesSeqNoReset )
+	{
+		tSyncedRequest.m_bSendFilesSuccess = false;
+		tSyncedRequest.m_sMsg = "the donor did not attach a bulk_import chunk and leaves the cluster, join again";
+		SendClusterSynced ( dDesc, tSyncedRequest, pCluster->GetUserSnapshot() );
+		return TlsMsg::Err ( "refused to donate SST to '%s': %s", sNode.cstr(), tSyncedRequest.m_sMsg.cstr() );
+	}
 
 	AT_SCOPE_EXIT ([&pCluster] { pCluster->m_pSstProgress->Finish(); } );
 	pCluster->m_pSstProgress->Init ( SstProgress_i::Role_e::DONOR );
@@ -3046,17 +3485,67 @@ bool SendClusterIndexes ( ReplicationCluster_t * pCluster, const CSphString & sN
 	}
 
 	tSyncedRequest.m_dIndexes = dIndexes;
-	tSyncedRequest.m_iClusterEpoch = pCluster->m_iClusterEpoch;
+	tSyncedRequest.m_iFilesSeqNo = pCluster->m_iFilesSeqNo;
 	tSyncedRequest.m_bSendFilesSuccess = bSentOk;
 	tSyncedRequest.m_sMsg = TlsMsg::MoveToString();
+	// on shutdown a request to the agents never completes
+	if ( sphInterrupted() )
+		return TlsMsg::Err ( "daemon shutdown" );
 	bool bSyncOk = SendClusterSynced ( dDesc, tSyncedRequest, pCluster->m_sUser );
 	return bSentOk && bSyncOk;
 }
 
-// callback at remote node for CLUSTER_SYNCED to pick up received indexes then call Galera sst_received
-bool ClusterSynced ( const ClusterSyncedRequest_t & tCmd ) EXCLUDES ( g_tClustersLock )
+// the reason goes into the cluster error at once: JOIN CLUSTER and the next rejoin attempt read it when the receiver ends,
+// so a branch that cancels the transfer refuses before the cancel
+static void RefuseClusterSynced ( const ClusterSyncedRequest_t & tCmd, ClusterSyncedReply_t & tReply, Str_t sReason, const char * szClient )
 {
-	sphLogDebugRpl ( "join sync '%s', gtid %s, epoch " INT64_FMT ", sent %s, tables %d, %s", tCmd.m_sCluster.cstr(), Wsrep::Gtid2Str ( tCmd.m_tGtid ).cstr(), tCmd.m_iClusterEpoch, ( tCmd.m_bSendFilesSuccess ? "ok" : "failed" ), tCmd.m_dIndexes.GetLength(), tCmd.m_sMsg.scstr() );
+	tReply.m_bAccepted = false;
+	tReply.m_sReason = CSphString ( sReason );
+	ReportClusterError ( tCmd.m_sCluster, tReply.m_sReason, szClient, E_CLUSTER::SYNCED );
+}
+
+// callback at remote node for CLUSTER_SYNCED to pick up received indexes then call Galera sst_received
+bool ClusterSynced ( const ClusterSyncedRequest_t & tCmd, ClusterSyncedReply_t & tReply, const char * szClient ) EXCLUDES ( g_tClustersLock )
+{
+	sphLogDebugRpl ( "join sync '%s', gtid %s, files seqno " INT64_FMT ", sent %s, tables %d, ist %d, %s", tCmd.m_sCluster.cstr(), Wsrep::Gtid2Str ( tCmd.m_tGtid ).cstr(), tCmd.m_iFilesSeqNo, ( tCmd.m_bSendFilesSuccess ? "ok" : "failed" ), tCmd.m_dIndexes.GetLength(), (int)tCmd.m_bIst, tCmd.m_sMsg.scstr() );
+
+	auto pCluster = ClusterByName ( tCmd.m_sCluster );
+	if ( !pCluster )
+		return false;
+
+	// a cluster object replaced by a rejoin has no provider until it starts
+	if ( !pCluster->m_pProvider )
+	{
+		RefuseClusterSynced ( tCmd, tReply, FROMS ( "cluster is not started" ), szClient );
+		return true;
+	}
+
+	if ( tCmd.m_bIst )
+	{
+		// Galera here lost its state to a forced SST and can not ask for IST: a late donor retry of an earlier join
+		if ( pCluster->m_bGaleraStateErased.load ( std::memory_order_acquire ) )
+		{
+			RefuseClusterSynced ( tCmd, tReply, FROMS ( "stale IST request, the node state was erased for SST" ), szClient );
+			return true;
+		}
+
+		// the node missed a command whose replay needs table files: IST can not bring it, rejoin by full SST
+		int64_t iLocalFilesSeqNo = pCluster->m_iFilesSeqNo;
+		if ( iLocalFilesSeqNo!=tCmd.m_iFilesSeqNo )
+		{
+			CSphString sReason;
+			sReason.SetSprintf ( "files seqno " INT64_FMT " differs from donor files seqno " INT64_FMT " on IST, rejoining by SST", iLocalFilesSeqNo, tCmd.m_iFilesSeqNo );
+
+			// mark and refuse before the cancel: the receiver ends right after it and checks the mark
+			pCluster->m_bRejoinNeeded.store ( true, std::memory_order_release );
+			RefuseClusterSynced ( tCmd, tReply, FromStr ( sReason ), szClient );
+			Wsrep::GlobalTid_t tCancelGtid = tCmd.m_tGtid;
+			tCancelGtid.m_iSeqNo = Wsrep::WRONG_SEQNO;
+			pCluster->m_pProvider->SstReceived ( tCancelGtid, -ECANCELED );
+			pCluster->m_bWorkerActive.WaitForMs ( [] ( bool bActive ) { return !bActive; }, ReplicationSstQueryTimeout() );
+			return true;
+		}
+	}
 
 	if ( !tCmd.m_bSendFilesSuccess )
 	{
@@ -3070,11 +3559,7 @@ bool ClusterSynced ( const ClusterSyncedRequest_t & tCmd ) EXCLUDES ( g_tCluster
 	bool bValid = ( tCmd.m_bSendFilesSuccess && tCmd.m_tGtid != tGtid );
 
 	if ( bValid )
-		bValid &= ReplicatedIndexes ( tCmd.m_dIndexes, tCmd.m_sCluster, tCmd.m_iClusterEpoch );
-
-	auto pCluster = ClusterByName ( tCmd.m_sCluster );
-	if ( !pCluster )
-		return false;
+		bValid &= ReplicatedIndexes ( tCmd.m_dIndexes, tCmd.m_sCluster, tCmd.m_iFilesSeqNo );
 
 	tGtid = tCmd.m_tGtid;
 	int iRes = 0;
@@ -3082,10 +3567,18 @@ bool ClusterSynced ( const ClusterSyncedRequest_t & tCmd ) EXCLUDES ( g_tCluster
 	{
 		tGtid.m_iSeqNo = Wsrep::WRONG_SEQNO;
 		iRes = -ECANCELED;
+		CSphString sReason = TlsMsg::HasErr() ? TlsMsg::szError() : "state transfer refused";
+		RefuseClusterSynced ( tCmd, tReply, FromStr ( sReason ), szClient );
 	}
 
 	pCluster->m_pProvider->SstReceived ( tGtid, iRes );
-	return bValid;
+	if ( !bValid )
+	{
+		// reply after this node left the group: a failed transfer the donor reports while the joiner is still
+		// in the group makes Galera here abort ("Will never receive state")
+		pCluster->m_bWorkerActive.WaitForMs ( [] ( bool bActive ) { return !bActive; }, ReplicationSstQueryTimeout() );
+	}
+	return true;
 }
 
 // validate that SphinxQL statement could be run for this cluster:index 
@@ -3335,15 +3828,10 @@ void ForceSst ( ReplicationCluster_t & tCluster )
 	CleanClusterFiles ( sClusterPath );
 	RplBinlog()->InvalidateCluster ( tCluster.m_sName );
 	tCluster.m_tGtid = {};
+	tCluster.m_bGaleraStateErased.store ( true, std::memory_order_release );
 }
 
-bool CheckForceSst ( const ReplicationCluster_t & tCluster, int64_t iRemoteEpoch )
+bool CheckForceSst ( const ReplicationCluster_t & tCluster, int64_t iRemoteFilesSeqNo )
 {
-	if ( tCluster.m_iClusterEpoch == 0 )
-		return true;
-
-	if ( iRemoteEpoch == 0 )
-		return true;
-
-	return iRemoteEpoch != tCluster.m_iClusterEpoch;
+	return iRemoteFilesSeqNo!=tCluster.m_iFilesSeqNo;
 }

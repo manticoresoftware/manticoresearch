@@ -142,6 +142,8 @@ Empty set (0.00 sec)
 <!-- example any_json -->
 `ANY(cond FOR var IN json.array)` applies to JSON arrays and returns 1 if the condition is true for any element in the array and 0 otherwise. `cond` is a general expression that can also use `var` as the current value of an array element within itself.
 
+Note: when the JSON attribute has [secondary indexes](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#json_secondary_indexes), a filter on `ANY()` whose `cond` compares `var` with constants can be answered from the secondary index. The secondary index does not tell an array from a single value, so it also returns documents where the key holds a single value that matches `cond`, while without the secondary index `ANY()` returns 0 for them. If the key holds single values in some documents and arrays in others, use `IN()` (which treats a single value as a one-element array either way) or the `/*+ NO_SecondaryIndex(json['key']) */` hint.
+
 <!-- request ANY() with json -->
 ```sql
 select *, ANY(x>5 AND x<10 FOR x IN j.ar) from tbl

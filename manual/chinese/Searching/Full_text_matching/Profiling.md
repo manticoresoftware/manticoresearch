@@ -60,7 +60,7 @@ SHOW PLAN;
 * `children`：存在的任何子节点
 * `max_field_pos`：字段内的最大位置
 
-关键字节点还将额外包括：
+ 关键字节点还将额外包括：
 
 * `word`：转换后的关键字。
 * `querypos`：此关键字在查询中的位置。
@@ -504,15 +504,6 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- end -->
 
-
-<!-- example SHOW PLAN EXPANSION -->
-
-在某些情况下，由于扩展和其他转换，评估后的查询树可能与原始查询树有显著差异。
-
-<!-- intro -->
-##### SQL:
-<!-- request SQL -->
-
 <!--
 以下示例的数据：
 
@@ -524,6 +515,13 @@ INSERT INTO forum(id,title,content) VALUES
 (711653,'wayyy title','hey content'),
 (711654,'way title','hey content');
 -->
+<!-- example SHOW PLAN EXPANSION -->
+
+在某些情况下，由于展开和其他转换，评估后的查询树可能与原始查询树存在显著差异。
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
 
 ```sql
 SET profiling=1;

@@ -505,6 +505,11 @@ XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed,
 	if ( !pNode )
 		return nullptr;
 
+	// SCAN is the only legal empty leaf (see XQNode_t::Check); it is spawned at the end of FixupTree,
+	// so only a repeated FixupTree (JSON query_string) gets here with it
+	if ( pNode->GetOp()==SPH_QUERY_SCAN )
+		return pNode;
+
 	// sweep plain node
 	if ( !pNode->dWords().IsEmpty() )
 	{

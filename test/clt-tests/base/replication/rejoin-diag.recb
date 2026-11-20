@@ -1,0 +1,12 @@
+––– comment –––
+Helpers for the rejoin cases, with the CI diagnostics: a write (rj_q) or a wait (rj_wait) that fails prints the cluster state of every node (node_state, last_committed, indexes, last_error, or no answer) and the searchd.log tail of the nodes of the step; on success they print nothing
+––– input –––
+cat > /tmp/rj.sh <<'EOF'
+rj_v() { timeout 2 mysql -h0 -P$1 -e "SHOW STATUS LIKE 'cluster_v1_$2'\G" 2>/dev/null | sed -n 's/^ *Value: //p'; }
+rj_all() { local p; for p in $1; do [ "$(rj_v $p $2)" = "$3" ] || return 1; done; }
+rj_diag() { local n s p; echo "--- cluster state"; for n in 1 2 3; do s=$(timeout 2 mysql -h0 -P${n}306 -e "SHOW STATUS LIKE 'cluster_v1_%'\G" 2>&1) || { echo "node $n: no answer"; continue; }; echo "node $n: $(echo "$s" | awk '/Counter:/{n=$2} /Value:/{sub(/^ *Value: /,""); if (n~/_(node_state|last_committed|indexes|last_error)$/) printf "%s=%s; ", substr(n,12), $0}')"; done; for p in $1; do echo "--- searchd.log of node ${p:0:1}"; grep -v -e ' DEBUG: ' -e 'delegated user' -e 'last message repeated' /var/log/manticore-${p:0:1}/searchd.log | tail -n 40; done; }
+rj_q() { local r rc; r=$(timeout 60 mysql -h0 -P$1 -e "$2" 2>&1); rc=$?; [ $rc = 0 ] && return 0; echo "$r"; rj_diag $1; return $rc; }
+rj_wait() { timeout $2 bash -c 'source /tmp/rj.sh; until eval "$1"; do sleep 0.5; done' _ "$3" && return 0; echo "wait timed out: $3"; rj_diag "$1"; return 1; }
+EOF
+source /tmp/rj.sh
+––– output –––

@@ -91,11 +91,26 @@ struct CreateFilterContext_t
 	bool						m_bAddKNNDistFilter = false;	///< join the knn guard onto the chain: docs without a vector must not match a knn query
 };
 
+/// string tags for ANY() / ALL() over a string list: a string matches when any / every listed tag is one of its words
+class StringTags_c
+{
+public:
+	void	SetTags ( const CSphString * pRef, int iCount );
+	bool	Match ( ByteBlob_t tStr, bool bAll ) const;
+
+private:
+	CSphVector<uint64_t>			m_dTags;
+	mutable CSphVector<uint64_t>	m_dMatchTags;
+};
+
 std::unique_ptr<ISphFilter> sphCreateFilter ( const CSphFilterSettings &tSettings, const CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning);
 std::unique_ptr<ISphFilter> sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const CSphString & sAttrName, const ISphSchema & tSchema, CSphString & sError );
 std::unique_ptr<ISphFilter> sphJoinFilters ( std::unique_ptr<ISphFilter>, std::unique_ptr<ISphFilter> );
 
 bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphString & sWarning );
+
+// Requires stable chunk attributes/SI for the lifetime of the query using the reduced filter list.
+bool FilterCoversIndex ( const CSphFilterSettings & tFilter, const CreateFilterContext_t & tCtx, const DWORD * pMin, const DWORD * pMax );
 
 void FormatFilterQL ( const CSphFilterSettings & tFilter, StringBuilder_c & tBuf, int iCompactIN );
 void FormatFiltersQL ( const VecTraits_T<CSphFilterSettings> & dFilters, const VecTraits_T<FilterTreeItem_t> & dFilterTree, StringBuilder_c & tBuf, int iCompactIN=5 );
@@ -170,8 +185,8 @@ inline bool EvalBlockRangeAny ( T tMin1, T tMax1, T tMin2, T tMax2 )
 	if_const ( OPEN_RIGHT )
 		return HAS_EQUAL_MIN ? ( tMax1>=tMin2 ) : ( tMax1>tMin2 );
 
-	auto bMinOk = HAS_EQUAL_MIN ? ( tMin1<=tMax2 ) : ( tMin1<tMax2 );
-	auto bMaxOk = HAS_EQUAL_MAX ? ( tMax1>=tMin2 ) : ( tMax1>tMin2 );
+	auto bMinOk = HAS_EQUAL_MAX ? ( tMin1<=tMax2 ) : ( tMin1<tMax2 );
+	auto bMaxOk = HAS_EQUAL_MIN ? ( tMax1>=tMin2 ) : ( tMax1>tMin2 );
 
 	return bMinOk && bMaxOk;
 }
@@ -283,6 +298,10 @@ struct MvaEvalAll_c
 	template<typename T>
 	static inline bool Eval ( const VecTraits_T<T> & dMvas, SphAttr_t tValue )
 	{
+		// an empty MVA does not match ALL(), as in the list and range checks
+		if ( dMvas.IsEmpty() )
+			return false;
+
 		for ( T tMVA : dMvas )
 			if ( tMVA!=tValue )
 				return false;

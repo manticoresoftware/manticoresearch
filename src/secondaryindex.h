@@ -56,15 +56,23 @@ public:
 	bool		CalcCount ( uint32_t & uCount, const common::Filter_t & tFilter, uint32_t uMaxValues, CSphString & sError ) const;
 	uint32_t	GetNumIterators ( const common::Filter_t & tFilter ) const;
 	bool		IsEnabled ( const CSphString & sAttr ) const;
+	bool		GetAttrType ( const CSphString & sAttr, common::AttrType_e & eType ) const;
 	void		GetIndexAttrInfo ( std::vector<SI::IndexAttrInfo_t> & dInfo ) const;
 	void		ClearCache();
 
 	RowIteratorsWithEstimates_t CreateSecondaryIndexIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff, bool bUseSICache, CSphString & sWarning ) const;
 
 private:
+	struct AttrType_t
+	{
+		CSphString			m_sName;
+		common::AttrType_e	m_eType;
+	};
+
 	struct IndexInfo_t
 	{
 		std::unique_ptr<SI::Index_i>	m_pIndex;
+		CSphFixedVector<AttrType_t>		m_dAttrTypes {0};	// sorted by name; json keys get their column type per chunk
 	};
 
 	CSphVector<IndexInfo_t> m_dIndexes;

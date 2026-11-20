@@ -3,7 +3,7 @@ export INSTANCE=1
 ––– output –––
 ––– block: ../base/replication/start-searchd-precach –––
 ––– input –––
-mysql -h0 -P1306 -e "SHOW SETTINGS;" | grep -v "searchd.threads"
+mysql -h0 -P1306 -e "SHOW SETTINGS;" | grep -v -e "searchd.threads" -e "searchd.watchdog"
 ––– output –––
 +----------------------------+------------------------------------------------------------+
 | Setting_name               | Value                                                      |

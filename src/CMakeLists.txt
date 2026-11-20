@@ -57,7 +57,7 @@ add_subdirectory ( indexing_sources )
 add_library ( lmanticore STATIC sphinx.cpp sphinxutils.cpp
 		sphinxsort.cpp sortsetup.cpp sphinxexpr.cpp sphinxfilter.cpp sphinxsearch.cpp sphinxrt.cpp accumulator.cpp uuid_docid.cpp
 		sphinxjson.cpp sphinxaot.cpp sphinxplugin.cpp sphinxudf.c sphinxqcache.cpp 
-		attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp json/cJSON_test.c sphinxpq.cpp
+		attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp postingwindow.cpp fastcount.cpp diskqword.cpp json/cJSON_test.c sphinxpq.cpp
 		global_idf.cpp docstore.cpp lz4/lz4.c lz4/lz4hc.c snippetfunctor.cpp snippetindex.cpp
 		snippetstream.cpp snippetpassage.cpp threadutils.cpp sphinxversion.cpp datareader.cpp
 		indexformat.cpp indexsettings.cpp fileutils.cpp threads_detached.cpp hazard_pointer.cpp
@@ -71,6 +71,29 @@ add_library ( lmanticore STATIC sphinx.cpp sphinxutils.cpp
 		aggrexpr.cpp joinsorter.cpp queuecreator.cpp exprgeodist.cpp exprremap.cpp exprdocstore.cpp schematransform.cpp
 		attr_embedding.cpp embeddingutils.cpp hybridexecutor.cpp
 		sortergroup.cpp sortertraits.cpp sorterprecalc.cpp querycontext.cpp skip_cache.cpp jsonsi.cpp sorterscroll.cpp )
+
+# Avoid JCC boundary penalties in the ranking loops without changing the required ISA.
+if ( CMAKE_CXX_COMPILER_ID MATCHES "Clang" )
+	include ( CheckCXXSourceCompiles )
+	include ( CheckCXXCompilerFlag )
+	check_cxx_source_compiles ( "
+#if !defined(__x86_64__) && !defined(__i386__) && !defined(_M_X64) && !defined(_M_IX86)
+#error Not an x86 target
+#endif
+int main() { return 0; }" SEARCH_TARGET_X86 )
+	if ( SEARCH_TARGET_X86 )
+		set ( SEARCH_BRANCH_ALIGNMENT_FLAG "-mbranches-within-32B-boundaries" )
+		if ( MSVC )
+			set ( SEARCH_BRANCH_ALIGNMENT_FLAG "/clang:${SEARCH_BRANCH_ALIGNMENT_FLAG}" )
+		endif ()
+
+		check_cxx_compiler_flag ( "${SEARCH_BRANCH_ALIGNMENT_FLAG}" SEARCH_HAVE_BRANCH_ALIGNMENT )
+		if ( SEARCH_HAVE_BRANCH_ALIGNMENT )
+			set_property ( SOURCE sphinxsearch.cpp APPEND PROPERTY COMPILE_OPTIONS "${SEARCH_BRANCH_ALIGNMENT_FLAG}" )
+		endif ()
+		unset ( SEARCH_BRANCH_ALIGNMENT_FLAG )
+	endif ()
+endif ()
 
 if (WIN32)
 target_link_libraries ( lmanticore PRIVATE dbghelp AdvAPI32 ShLwApi )
@@ -141,7 +164,7 @@ target_compile_definitions ( lextra INTERFACE BOOST_ALL_NO_LIB=1 )
 set ( HEADERS sphinxfilter.h sphinxint.h sphinxpq.h sphinxrt.h
 		sphinxsort.h sphinxutils.h sphinxexpr.h sphinx.h sphinxjson.h sphinxplugin.h sphinxqcache.h
 		sphinxsearch.h sphinxstd.h sphinxudf.h lz4/lz4.h lz4/lz4hc.h http/http_parser.h secondaryindex.h
-		searchnode.h killlist.h attribute.h accumulator.h uuid_docid.h global_idf.h event.h threadutils.h threadutils_impl.h
+		searchnode.h fastcount.h diskqword.h killlist.h attribute.h accumulator.h uuid_docid.h global_idf.h event.h threadutils.h threadutils_impl.h
 		hazard_pointer.h task_info.h mini_timer.h collation.h histogram.h sortsetup.h
 		indexsettings.h columnarlib.h fileio.h memio.h memio_impl.h queryprofile.h columnarfilter.h columnargrouper.h fileutils.h
 		libutils.h conversion.h columnarsort.h sortcomp.h binlog_defs.h binlog.h ${MANTICORE_BINARY_DIR}/config/config.h
@@ -159,7 +182,7 @@ set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h search
 		client_session.h compressed_zstd_mysql.h docs_collector.h index_rotator.h config_reloader.h searchdhttp.h timeout_queue.h
 		netpoll.h pollable_event.h netfetch.h searchdbuddy.h sphinxql_second.h sphinxql_extra.h sphinxjsonquery.h
 		frontendschema.h debug_cmds.h dynamic_idx.h sphinxexcerpt.h querystats.h
-		searchd_shard.h
+		searchd_shard.h searchd_shard_bulk.h
 		facetutils.h
 		auth/auth.h auth/auth_common.h auth/auth_proto_http.h auth/auth_proto_mysql.h auth/auth_proto_api.h digest_sha256.h auth/auth_perms.h auth/gcm_nonce.h auth/auth_log.h )
 
@@ -203,7 +226,7 @@ add_library ( lsearchd OBJECT searchdha.cpp api_reply_stream.cpp http/http_parse
 		sphinxql_debug.cpp sphinxql_second.cpp stackmock.cpp docs_collector.cpp index_rotator.cpp config_reloader.cpp netpoll.cpp
 		pollable_event.cpp netfetch.cpp searchdbuddy.cpp searchdhttpcompat.cpp sphinxql_extra.cpp searchdreplication.cpp sphinxjsonquery.cpp
 		frontendschema.cpp compressed_http.cpp debug_cmds.cpp jsonqueryfilter.cpp dynamic_idx.cpp sphinxexcerpt.cpp searchdexpr.cpp querystats.cpp
-		searchd_shard.cpp
+		searchd_shard.cpp searchd_shard_bulk.cpp
 		facetutils.cpp
 		auth/auth.cpp auth/auth_common.cpp auth/auth_proto_http.cpp auth/auth_proto_mysql.cpp auth/auth_proto_api.cpp auth/auth_perms.cpp auth/gcm_nonce.cpp auth/auth_log.cpp auth/auth_bootstrap.cpp)
 		

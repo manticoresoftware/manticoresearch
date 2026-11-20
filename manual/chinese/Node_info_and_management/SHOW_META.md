@@ -1221,6 +1221,16 @@ POST /sql?mode=raw -d "SELECT count(*) FROM taxi1 WHERE tip_amount = 5; SHOW MET
 
 <!-- end -->
 
+同一个 `index` 变量还会报告带有 `MATCH()` 子句的 `SELECT COUNT(*)` 是否在未进行排序的情况下完成：
+
+* `fulltext:FastCount` - 对所有已索引字段中的单个普通词项直接从词典计数，无需读取倒排列表。此方式要求分块中没有已删除的行，也不能包含属性过滤条件。
+* `fulltext:RanklessCount` - 遍历全文树并直接统计匹配文档，无需排序或构建匹配结果。属性过滤条件会在遍历过程中应用。需要排序器的查询（例如包含区域或 `WEIGHT()` 过滤条件的查询）仍会走常规路径。
+
+* `fulltext:WindowOrCount` - 磁盘 OR 计数执行器按窗口统计匹配行；对于单子句范围，它使用位图并集或直接的行批次，同时检查已删除的行并应用属性过滤条件。此功能默认启用；内部 `MANTICORE_WINDOW_OR=0` 基准测试设置会将其禁用。
+* `fulltext:WindowAndCount` - 磁盘 AND 计数执行器在候选项较密集时使用位图求交来处理普通词项子句，在候选项变得稀疏后再检查其余子句。稀疏前导词和不受支持的树结构会继续使用 `RanklessCount`。二级索引封装器也会报告 `RanklessCount`。
+
+百分比表示使用该路径的磁盘分块和 RAM 段所占的比例。包含已删除行的分块无法使用词典 `FastCount`；它们会使用 `RanklessCount`，或者对于符合条件的磁盘布尔计数，使用 `WindowOrCount` 或 `WindowAndCount`。
+
 ## SHOW META 用于 PQ 表
 
 <!-- example show meta PQ -->

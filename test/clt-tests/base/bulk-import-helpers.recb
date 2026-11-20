@@ -1,0 +1,13 @@
+––– comment –––
+Helpers for bulk_import cases (searchd on 9306): bi_sql <statement> prints raw rows; bi_load <table> "<columns> VALUES <rows>" runs one SQL bulk_import load; bi_save <table> <text> keeps SHOW TABLE SETTINGS and CALL KEYWORDS of the text, and bi_same <table> prints "<table> state kept" when they did not change, else both; bi_ids <table> <query> prints the ids that MATCH the query; bi_child_opts <table> prints the common and indexer sections of the config of the open load's indexer child
+––– input –––
+cat > /tmp/bi.sh <<'EOF'
+bi_sql() { mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "$1"; }
+bi_load() { mysql -h0 -P9306 -e "SET bulk_import=$1; INSERT INTO $1 $2; COMMIT; SET bulk_import=0;"; }
+bi_state() { bi_sql "SHOW TABLE $1 SETTINGS; CALL KEYWORDS('$(cat /tmp/bi_$1.kw)','$1')"; }
+bi_save() { printf '%s' "$2" > /tmp/bi_$1.kw; bi_state "$1" > /tmp/bi_$1.state; }
+bi_same() { [ "$(bi_state "$1")" = "$(cat /tmp/bi_$1.state)" ] && echo "$1 state kept" || { echo "FAIL $1 state:"; bi_state "$1"; }; }
+bi_ids() { bi_sql "SELECT id FROM $1 WHERE MATCH('$2') ORDER BY id ASC" | xargs; }
+bi_child_opts() { sed -n '/^common {/,/^}/p;/^indexer {/,/^}/p' /var/lib/manticore/$1/$1.indexer-rt-bulk/*/indexer.conf; }
+EOF
+––– output –––

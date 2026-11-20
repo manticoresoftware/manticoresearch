@@ -1,5 +1,16 @@
 # План запроса
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS hn_small;
+CREATE TABLE hn_small(comment_text text);
+INSERT INTO hn_small(id,comment_text) VALUES
+(1,'dog story'),
+(2,'cat story'),
+(3,'dog and cat'),
+(4,'bird story');
+-->
 <!-- example SHOW PLAN -->
 
 SQL-запрос `SHOW PLAN` и опция JSON-интерфейса `"plan": N` отображают план выполнения запроса. План генерируется и сохраняется во время фактического выполнения, поэтому в случае SQL профилирование должно быть включено в текущей сессии **до** выполнения этого запроса. Это можно сделать с помощью запроса `SET profiling=1`.
@@ -17,18 +28,6 @@ SQL-запрос `SHOW PLAN` и опция JSON-интерфейса `"plan": N`
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
-
-<!--
-data for the following example:
-
-DROP TABLE IF EXISTS hn_small;
-CREATE TABLE hn_small(comment_text text);
-INSERT INTO hn_small(id,comment_text) VALUES
-(1,'dog story'),
-(2,'cat story'),
-(3,'dog and cat'),
-(4,'bird story');
--->
 
 ```sql
 set profiling=1;
@@ -113,14 +112,6 @@ POST /search
 
 <!-- end -->
 
-<!-- example SHOW PLAN EXPANSION -->
-
-В некоторых случаях вычисленное дерево запроса может значительно отличаться от исходного из-за расширений и других преобразований.
-
-<!-- intro -->
-##### SQL:
-<!-- request SQL -->
-
 <!--
 data for the following example:
 
@@ -132,6 +123,13 @@ INSERT INTO forum(id,title,content) VALUES
 (711653,'wayyy forward','hey there'),
 (711654,'way point','hey there');
 -->
+<!-- example SHOW PLAN EXPANSION -->
+
+В некоторых случаях дерево запроса после анализа может значительно отличаться от исходного из-за раскрытия выражений и других преобразований.
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
 
 ```sql
 SET profiling=1;

@@ -963,8 +963,9 @@ void WaitQueue_c::SuspendAndWait ( sph::Spinlock_lock& tLock, Worker_c* pActive 
 {
 	WakerInQueue_c w { pActive->CreateWaker() };
 	m_Slist.push_back ( w );
-	// suspend this fiber
-	pActive->YieldWith ( [&tLock]() NO_THREAD_SAFETY_ANALYSIS { tLock.unlock(); } );
+	// suspend this fiber. Another thread may resume it as soon as the queue is unlocked, so the lock on its stack is
+	// released before the unlock: unique_lock::unlock() would write to that stack after it
+	pActive->YieldWith ( [&tLock]() NO_THREAD_SAFETY_ANALYSIS { tLock.release()->unlock(); } );
 	assert ( !w.is_linked() );
 }
 

@@ -1,0 +1,41 @@
+––– comment –––
+Three nodes in cluster v1 with empty RT tables t_s0 and t_s1, the shards of a shard table t that /tmp/bs.sh creates on node 1 by hand: wrap <nodes of t_s0> <nodes of t_s1> lists the mirrors of each shard in that order with ha_strategy=roundrobin, so the first call that picks a mirror (the load or an ordinary write) gets the first node of the list. Only the node that sent an attach command answers its client; the other nodes show the rows and the files seqno first and move last_committed after the command, so st waits up to 10 s until the synced nodes have the same last_committed.
+––– input –––
+cat > /tmp/bs.sh <<'EOF'
+m() { mysql --skip-table --batch --raw --skip-column-names -h0 -P${1}306 -e "$2" 2>&1; }
+v() { m $1 "SHOW STATUS LIKE 'cluster_v1_$2'" | awk '{print $2}'; }
+ml() { local t=$1 s= n; shift; for n in "$@"; do s="$s|127.0.0.1:${n}312:$t"; done; echo "${s#|}[ha_strategy=roundrobin]"; }
+wrap() { m 1 "DROP TABLE IF EXISTS t; CREATE TABLE t (title text, v int) type='shard' agent='$(ml t_s0 $1)' agent='$(ml t_s1 $2)'"; }
+gen() { for ((i=$1; i<=$2; i++)); do printf '{"insert":{"table":"t","id":%d,"doc":{"title":"title %d","v":%d}}}\n' "$i" "$i" "$i"; done; }
+post() { curl -sS -X POST "http://localhost:${1}308/bulk?bulk_import=t" -H 'Content-Type: application/x-ndjson' --data-binary @"$2" -w ' HTTP %{http_code}\n'; }
+commit() { printf '\n' > /tmp/commit.ndjson; post $1 /tmp/commit.ndjson; }
+vals() { local i s=; for ((i=$1; i<=$2; i++)); do s="$s($i,'title $i',$i),"; done; echo "${s%,}"; }
+seqno() { grep -o '"files_seqno":[0-9-]*' /var/log/manticore-$1/manticore.json | cut -d: -f2; }
+repl() { find /var/log/manticore-$1 -maxdepth 3 -name 'repl-*' -printf '%f\n' | sed -nE 's/^repl-([0-9]+)(\..*)?$/\1/p' | sort -u | wc -l; }
+pools() { echo "pools:" $(ps -eo args | grep '[i]ndexer_rt_bulk_chunk' | grep -o 'manticore-[0-9]/t_s[0-9]' | sort); }
+prepared() { echo "node $1 prepared:" $(grep -E "bulk_import chunk [0-9]+ of table 't_s[01]': prepared on [0-9] nodes" /var/log/manticore-$1/searchd.log | grep -o "t_s[01]': prepared on [0-9]" | sort | sed "s/': prepared on /:/"); }
+sum() { local x=$(m $1 "SELECT SUM(v) FROM $2"); [[ "$x" =~ ^[0-9]+$ ]] || x=0; echo $x; }
+vt() { timeout 2 mysql --skip-table --batch --raw --skip-column-names -h0 -P${1}306 -e "SHOW STATUS LIKE 'cluster_v1_$2'" 2>/dev/null | awk '{print $2}'; }
+lcsame() { local n s=; for n in 1 2 3; do [ "$(vt $n node_state)" = synced ] && s="$s $(vt $n last_committed)"; done; [ "$(echo $s | tr ' ' '\n' | sort -u | wc -l)" -le 1 ]; }
+lcwait() { local k; for k in $(seq 100); do lcsame && return 0; sleep 0.1; done; return 1; }
+st() { lcwait; for n in 1 2 3; do echo "node $n: $(v $n node_state) s0=$(m $n 'SELECT COUNT(*) FROM t_s0') s1=$(m $n 'SELECT COUNT(*) FROM t_s1') sum=$(( $(sum $n t_s0) + $(sum $n t_s1) )) last_committed=$(v $n last_committed) files_seqno=$(seqno $n) repl=$(repl $n)"; done; }
+EOF
+echo ok
+––– output –––
+ok
+––– input –––
+for i in 1 2 3; do export INSTANCE=$i; mkdir -p /var/{run,lib,log}/manticore-$i; stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; done; for i in 1 2 3; do timeout 30 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-$i/searchd.log) && echo "node $i started"; done
+––– output –––
+node 1 started
+node 2 started
+node 3 started
+––– input –––
+mysql -h0 -P1306 -e "CREATE CLUSTER v1"; for n in 2 3; do mysql -h0 -P${n}306 -e "JOIN CLUSTER v1 AT '127.0.0.1:1312'"; done; mysql -h0 -P1306 -e "CREATE TABLE t_s0 (title text, v int); CREATE TABLE t_s1 (title text, v int)"; mysql -h0 -P1306 -e "ALTER CLUSTER v1 ADD t_s0"; mysql -h0 -P1306 -e "ALTER CLUSTER v1 ADD t_s1"; echo $?
+––– output –––
+0
+––– input –––
+source /tmp/bs.sh; lcwait; for n in 1 2 3; do echo "node $n $(v $n node_state) $(v $n indexes) $(seqno $n)"; done
+––– output –––
+node 1 synced t_s0,t_s1 #!/[0-9]+/!#
+node 2 synced t_s0,t_s1 #!/[0-9]+/!#
+node 3 synced t_s0,t_s1 #!/[0-9]+/!#

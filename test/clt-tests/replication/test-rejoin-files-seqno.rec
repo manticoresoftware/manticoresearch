@@ -1,0 +1,145 @@
+Rejoin of a node by the cluster files seqno, three cases on one cluster: a node stopped cleanly catches up by IST; a node paused with SIGSTOP misses ALTER CLUSTER ADD, refuses IST on the files seqno and rejoins by full SST without a restart; a node that misses ALTER CLUSTER ADD and can not receive the added table gives up after two attempts, the cluster stays closed with the reason, the daemon keeps running. Every check of the node 3 log reads only the lines of its own case.
+––– block: ../base/replication/rejoin-setup –––
+––– comment –––
+Clean restart: node 3 stops cleanly and misses one write; after the restart Galera takes its position from grastate.dat and asks for IST, the node accepts it: no refusal, no abort by Galera, no full SST
+––– input –––
+export INSTANCE=3; stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; echo "stopped $?"; L3=$(wc -l < /var/log/manticore-3/searchd.log)
+––– output –––
+stopped 0
+––– input –––
+rj_q 1306 "INSERT INTO v1:t0 (id,title,v) VALUES (2,'b',2)"; echo $?; LC=$(mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_v1_last_committed'\G" | awk '/Value:/{print $2}'); echo "last_committed $LC"
+––– output –––
+0
+last_committed 3
+––– input –––
+export INSTANCE=3; stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; echo "started $?"
+––– output –––
+started 0
+––– input –––
+rj_wait 3306 90 '[ "$(rj_v 3306 node_state)" = synced ] && [ "$(rj_v 3306 last_committed)" = 3 ]'; echo "synced $?"
+––– output –––
+synced 0
+––– input –––
+echo "t0 $(mysql -h0 -P3306 -N -e "SELECT id FROM t0" | grep -Eo "[0-9]+" | sort -n | xargs)"
+––– output –––
+t0 1 2
+––– comment –––
+Log of node 3 after the restart: Galera starts from the saved position 2, the donor sends IST from it and the node accepts it; no stale refusal, no abort, no full SST
+––– input –––
+A=$(tail -n +$((L3+1)) /var/log/manticore-3/searchd.log); chk() { echo "$A" | grep -q -- "$2" && echo "yes: $1" || echo "no: $1"; }; chk 'saved position' 'End state: [0-9a-f-]*:2 '; chk 'IST chosen' 'State gap can be likely serviced using IST'; chk 'IST join sync seqno 2' "join sync 'v1', gtid [^ ]*:2, files seqno 1, sent ok, tables 1, ist 1"; chk 'IST received' 'IST received: [0-9a-f-]*:3'; chk 'stale IST' 'stale IST request'; chk 'abort' 'Will never receive state'; echo "full SST $(echo "$A" | grep -c "join sync 'v1', .*, ist 0,")"
+––– output –––
+yes: saved position
+yes: IST chosen
+yes: IST join sync seqno 2
+yes: IST received
+no: stale IST
+no: abort
+full SST 0
+––– comment –––
+Missed ALTER CLUSTER ADD: node 3 is paused and misses ALTER CLUSTER ADD t1 and two writes; on resume Galera gives it IST, the donor sends CLUSTER_SYNCED with files seqno 4 (its ALTER CLUSTER ADD), node 3 has 1, refuses and rejoins by full SST without a restart
+––– block: ../base/replication/rejoin-pause-node3 –––
+––– input –––
+L3=$(wc -l < /var/log/manticore-3/searchd.log); rj_q 1306 "CREATE TABLE t1 (title text, v int)" && rj_q 1306 "INSERT INTO t1 (id,title,v) VALUES (1,'x',1)" && rj_q 1306 "ALTER CLUSTER v1 ADD t1"; echo $?
+––– output –––
+0
+––– input –––
+rj_q 1306 "INSERT INTO v1:t0 (id,title,v) VALUES (3,'c',3)" && rj_q 1306 "INSERT INTO v1:t1 (id,title,v) VALUES (2,'y',2)"; echo $?
+––– output –––
+0
+––– input –––
+rj_wait "1306 2306" 60 'rj_all "1306 2306" last_committed 6'; for p in 1306 2306; do echo "$p $(mysql -h0 -P$p -e "SHOW STATUS LIKE 'cluster_v1_indexes'\G" | awk '/Value:/{print $2}') $(mysql -h0 -P$p -e "SHOW STATUS LIKE 'cluster_v1_last_committed'\G" | awk '/Value:/{print $2}')"; done
+––– output –––
+1306 #!/(t0,t1|t1,t0)/!# 6
+2306 #!/(t0,t1|t1,t0)/!# 6
+––– input –––
+kill -CONT $P3; echo "node 3 resumed"
+––– output –––
+node 3 resumed
+––– input –––
+rj_wait 3306 60 '[ "$(rj_v 3306 node_state)" = synced ] && [ "$(rj_v 3306 last_committed)" = 6 ]'; echo "synced $?"
+––– output –––
+synced 0
+––– input –––
+for v in node_state status indexes last_committed; do echo "$v $(mysql -h0 -P3306 -e "SHOW STATUS LIKE 'cluster_v1_$v'\G" | awk '/Value:/{print $2}')"; done
+––– output –––
+node_state synced
+status primary
+indexes #!/(t0,t1|t1,t0)/!#
+last_committed 6
+––– comment –––
+The same daemon process serves the rows written while it was away, including the table added by ALTER CLUSTER ADD
+––– input –––
+kill -0 $P3 && echo alive; for t in t0 t1; do echo "$t $(mysql -h0 -P3306 -N -e "SELECT id FROM $t" | grep -Eo "[0-9]+" | sort -n | xargs)"; done
+––– output –––
+alive
+t0 1 2 3
+t1 1 2
+––– comment –––
+Evidence from the node 3 log of this case: IST refused on the files seqno, one rejoin attempt, full SST from the donor position, no crash and no restart
+––– input –––
+A=$(tail -n +$((L3+1)) /var/log/manticore-3/searchd.log); chk() { echo "$A" | grep -q -- "$2" && echo "yes: $1" || echo "no: $1"; }; chk 'IST chosen' 'State gap can be likely serviced using IST'; chk 'IST refused on files seqno' "files seqno 1 differs from donor files seqno 4 on IST"; chk 'rejoin attempt 1' "rejoin by SST, attempt 1 of 2"; chk 'SST join sync seqno 6' "join sync 'v1', gtid [^ ]*:6, files seqno 4, sent ok, tables 2, ist 0"; echo "crash dumps $(echo "$A" | grep -c 'CRASH DUMP') restarts $(echo "$A" | grep -c 'watchdog: main process .* forked ok')"
+––– output –––
+yes: IST chosen
+yes: IST refused on files seqno
+yes: rejoin attempt 1
+yes: SST join sync seqno 6
+crash dumps 0 restarts 0
+––– input –––
+rj_wait "1306 2306" 60 'rj_all "1306 2306" node_state synced'; for p in 1306 2306; do echo "$p $(mysql -h0 -P$p -e "SHOW STATUS LIKE 'cluster_v1_node_state'\G" | awk '/Value:/{print $2}')"; done
+––– output –––
+1306 synced
+2306 synced
+––– comment –––
+Attempts exhausted (last, it leaves the cluster on node 3 closed): node 3 misses ALTER CLUSTER ADD t2 and a regular file where it would create the t2 directory makes every SST of t2 to node 3 fail; both rejoin attempts fail, the cluster stays closed with the reason in last_error, the daemon keeps running
+––– block: ../base/replication/rejoin-pause-node3 –––
+––– input –––
+L3=$(wc -l < /var/log/manticore-3/searchd.log); rj_q 1306 "CREATE TABLE t2 (title text, v int)" && rj_q 1306 "INSERT INTO t2 (id,title,v) VALUES (1,'x',1)" && rj_q 1306 "ALTER CLUSTER v1 ADD t2"; echo $?
+––– output –––
+0
+––– input –––
+touch /var/log/manticore-3/t2; kill -CONT $P3; echo "node 3 resumed"
+––– output –––
+node 3 resumed
+––– input –––
+rj_wait 3306 90 'rj_v 3306 last_error | grep -q "failed 2 times"'; echo "gave up $?"
+––– output –––
+gave up 0
+––– input –––
+for v in node_state indexes; do echo "$v $(mysql -h0 -P3306 -e "SHOW STATUS LIKE 'cluster_v1_$v'\G" | awk '/Value:/{print $2}')"; done; kill -0 $P3 && echo alive
+––– output –––
+node_state closed
+indexes #!/(t0,t1|t1,t0)/!#
+alive
+––– input –––
+A=$(tail -n +$((L3+1)) /var/log/manticore-3/searchd.log); chk() { echo "$A" | grep -q -- "$2" && echo "yes: $1" || echo "no: $1"; }; chk 'IST refused on files seqno' "files seqno 4 differs from donor files seqno 7 on IST"; chk 'attempt 1' "rejoin by SST, attempt 1 of 2"; chk 'attempt 2' "rejoin by SST, attempt 2 of 2"; chk 'SST 1 started' "rejoin started, attempt 1"; chk 'SST 2 started' "rejoin started, attempt 2"; chk 'gave up' "rejoin by SST failed 2 times"; echo "attempts $(echo "$A" | grep -c 'rejoin by SST, attempt') crash dumps $(echo "$A" | grep -c 'CRASH DUMP') restarts $(echo "$A" | grep -c 'watchdog: main process .* forked ok')"
+––– output –––
+yes: IST refused on files seqno
+yes: attempt 1
+yes: attempt 2
+yes: SST 1 started
+yes: SST 2 started
+yes: gave up
+attempts 2 crash dumps 0 restarts 0
+––– input –––
+rj_wait "1306 2306" 60 'rj_all "1306 2306" node_state synced'; for p in 1306 2306; do echo "$p $(mysql -h0 -P$p -e "SHOW STATUS LIKE 'cluster_v1_node_state'\G" | awk '/Value:/{print $2}')"; done
+––– output –––
+1306 synced
+2306 synced
+––– comment –––
+The closed cluster keeps its tables readable on node 3; last_error carries the reason
+––– input –––
+mysql -h0 -P3306 -e "SHOW STATUS LIKE 'cluster_v1_last_error'\G" | grep -o "rejoin by SST failed 2 times: .*" | cut -c1-200
+––– output –––
+rejoin by SST failed 2 times: #!/.+/!#
+––– input –––
+echo "t0 $(mysql -h0 -P3306 -N -e "SELECT id FROM t0" | grep -Eo "[0-9]+" | sort -n | xargs)"
+––– output –––
+t0 1 2 3
+––– comment –––
+Node 3 started twice (the first start and the clean restart), no process was killed by a signal and none wrote a crash dump
+––– input –––
+for n in 1 2 3; do L=/var/log/manticore-$n/searchd.log; echo "node $n starts=$(grep -c 'watchdog: main process .* forked ok' $L) killed=$(grep -c 'killed dirtily' $L) dumps=$(grep -c 'CRASH DUMP' $L)"; done
+––– output –––
+node 1 starts=1 killed=0 dumps=0
+node 2 starts=1 killed=0 dumps=0
+node 3 starts=2 killed=0 dumps=0

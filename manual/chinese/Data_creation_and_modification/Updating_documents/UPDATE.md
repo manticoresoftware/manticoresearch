@@ -1,5 +1,12 @@
 # UPDATE
 
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, price float, enabled int);
+INSERT INTO products(id,title,price,enabled) VALUES (10,'doc ten',19.85,1),(1,'doc one',9.99,1);
+-->
 <!-- example update -->
 
 `UPDATE` 命令用于更改指定表中现有文档的[行式存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)属性值。请注意，您无法更新全文字段或列式存储属性的内容。如果有此需求，请使用 [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md)。
@@ -15,14 +22,6 @@ RT、PQ 和普通表均支持属性更新。只要属性存储在[行式存储](
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
-
-<!--
-data for the following example:
-
-DROP TABLE IF EXISTS products;
-CREATE TABLE products(title text, price float, enabled int);
-INSERT INTO products(id,title,price,enabled) VALUES (10,'doc ten',19.85,1),(1,'doc one',9.99,1);
--->
 
 ```sql
 UPDATE products SET enabled=0 WHERE id=10;
@@ -733,6 +732,12 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 
 <!-- end -->
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, data json);
+-->
 <!-- example full JSON update -->
 
 更新其他数据类型或更改 JSON 属性中的属性类型需要进行完整的 JSON 更新。
@@ -740,13 +745,6 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
-
-<!--
-data for the following example:
-
-DROP TABLE IF EXISTS products;
-CREATE TABLE products(title text, data json);
--->
 
 ```sql
 insert into products values (1,'title','{"tags":[1,2,3]}');

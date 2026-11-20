@@ -1,0 +1,54 @@
+––– comment –––
+Shared bulk_import into a sharded table that Buddy created with shards='4' rf='1' on one node: the
+physical shards live in the system database, every shard gets one child and one chunk,
+every row lands where an ordinary write routes its id. The daemon gets threads = 8 for any CPU
+count of the runner.
+––– input –––
+sed -i '/^searchd *{/a threads = 8' /etc/manticoresearch/manticore.conf
+––– output –––
+––– block: ../../base/start-searchd-with-buddy –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE bb (title TEXT, gid INT, price FLOAT, tags MULTI, j JSON) shards='4' rf='1'"; echo $?
+––– output –––
+0
+––– input –––
+cat > /tmp/bb.sh <<'EOF'
+sql() { mysql -h0 -P9306 --skip-table --batch --raw --skip-column-names -e "$1"; }
+post() { curl -sS -X POST "http://localhost:9308/bulk?bulk_import=bb&shared" -H 'Content-Type: application/x-ndjson' --data-binary @"$1" -w ' HTTP %{http_code}\n'; }
+commit() { printf '\n' > /tmp/commit.ndjson; post /tmp/commit.ndjson; }
+counts() { echo "$(sql "SELECT COUNT(*) FROM bb") = $(for t in 0 1 2 3; do sql "SELECT COUNT(*) FROM system.bb_s$t"; done | paste -sd+)"; }
+EOF
+––– output –––
+––– input –––
+source /tmp/bb.sh; for ((i=1; i<=4000; i++)); do printf '{"insert":{"table":"bb","id":%d,"doc":{"title":"doc %d","gid":%d,"price":%d.5,"tags":[%d,%d],"j":{"k":%d}}}}\n' $i $i $((i%7)) $i $i $((i+1)) $i; done > /tmp/bb.ndjson; post /tmp/bb.ndjson; echo "children=$(ps -eo args | grep -c '[i]ndexer_rt_bulk_chunk')"; counts
+––– output –––
+{"items":[],"current_line":4000,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+children=4
+0 = 0+0+0+0
+––– input –––
+source /tmp/bb.sh; commit; counts; echo "disk chunks: $(for t in 0 1 2 3; do sql "SELECT * FROM system.bb_s$t.@status" | wc -l; done | paste -sd' ')"; sql "SELECT COUNT(*), SUM(id), SUM(gid) FROM bb; SELECT id, title, gid, price, tags, j FROM bb WHERE id IN (1, 4000) ORDER BY id ASC"; echo "children=$(ps -eo args | grep -c '[i]ndexer_rt_bulk_chunk')"
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+4000 = 987+997+965+1051
+disk chunks: 1 1 1 1
+4000	8002000	11997
+1	doc 1	1	1.500000	1,2	{"k":1}
+4000	doc 4000	3	4000.500000	4000,4001	{"k":4000}
+children=0
+––– comment –––
+I1: REPLACE through the sharded table changes no count of any shard.
+––– input –––
+source /tmp/bb.sh; sql "REPLACE INTO bb (id, title, gid) VALUES (1,'r',0),(2,'r',0),(3,'r',0),(4,'r',0),(5,'r',0),(6,'r',0),(7,'r',0),(8,'r',0)"; counts
+––– output –––
+4000 = 987+997+965+1051
+––– comment –––
+PURGE BULK_IMPORT by the sharded table name cancels a load; a direct Shared request into a shard of
+an open load is refused.
+––– input –––
+source /tmp/bb.sh; for ((i=5001; i<=5040; i++)); do printf '{"insert":{"table":"bb","id":%d,"doc":{"title":"p %d","gid":1}}}\n' $i $i; done > /tmp/p.ndjson; post /tmp/p.ndjson; printf '%s\n' '{"title":"direct","gid":1}' | curl -sS -X POST "http://localhost:9308/bulk?bulk_import=system.bb_s0&shared" -H 'Content-Type: application/x-ndjson' --data-binary @- -w ' HTTP %{http_code}\n'; sql "PURGE BULK_IMPORT FROM TABLE bb OPTION clear_sessions=1"; echo "children=$(ps -eo args | grep -c '[i]ndexer_rt_bulk_chunk')"; commit; counts
+––– output –––
+{"items":[],"current_line":40,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"table 'system.bb_s0' is a target of a shared bulk_import into a shard table; load and commit it through the shard table","error_code":"shared_precondition","shared_state":"rejected"} HTTP 400
+children=0
+{"items":[],"current_line":1,"skipped_lines":1,"errors":true,"error":"no shared bulk_import into table 'bb' to commit","error_code":"shared_no_pool","shared_state":"no_pool"} HTTP 409
+4000 = 987+997+965+1051

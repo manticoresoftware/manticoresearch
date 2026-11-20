@@ -174,7 +174,7 @@ systemctl restart manticore-indexer
 * `-v` 显示 `indexer` 版本。
 
 ### Indexer 配置设置
-你也可以在 Manticore 配置文件的 `indexer` 部分配置 indexer 的行为：
+你还可以在 Manticore 配置文件的 `indexer` 部分配置索引器行为。对于[批量导入](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import)，`searchd` 也会将该部分中的 `mem_limit`、`write_buffer`、`max_iops`、`max_iosize` 和 `lemmatizer_cache` 传递给 `indexer` 进程：
 
 ```ini
 indexer {
@@ -215,7 +215,7 @@ max_iops = 40
 
 这是一个与 I/O 限流相关的选项。它限制每秒最大的 I/O 操作数（读或写）。值为 0 表示无限制。
 
-`indexer` 在构建表时可能会导致磁盘 I/O 突发高峰，限制其磁盘活动（以为同一台机器上的其他程序如 `searchd` 留出资源）可能会很有必要。I/O 限流通过强制在 `indexer` 执行的连续磁盘 I/O 操作之间存在最小保证延迟来实现。限制 I/O 可以帮助减轻构建期间对搜索性能的影响。此设置对其他类型的数据摄取（例如插入实时表）无效。
+在构建表时，`indexer` 可能会产生密集磁盘 I/O 的突发负载，因此可能需要限制其磁盘活动，并为同一台机器上运行的其他程序（例如 `searchd`）预留资源。I/O 限流可以实现这一点。它会强制要求 `indexer` 执行的连续磁盘 I/O 操作之间至少间隔一段保证的延迟。对 I/O 进行限流有助于减轻构建过程对搜索性能造成的影响。此设置对其他类型的数据导入无效，例如向实时表中插入数据；但[批量导入](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import)除外，因为它会使用 `indexer` 构建数据块。
 
 #### max_iosize
 

@@ -20,6 +20,7 @@
 #include "send_files.h"
 #include "recv_state.h"
 #include "api_reply_stream.h"
+#include "cluster_bulk_chunk.h"
 
 void GetArray ( StrVec_t& dBuf, InputBuffer_c& tIn )
 {
@@ -81,6 +82,20 @@ void SendArray ( const VecTraits_T<CSphString>& dBuf, ISphOutputBuffer& tOut )
 		tOut.SendString ( sVal.cstr() );
 }
 
+void SendSyncSrcLayout ( ISphOutputBuffer & tOut, const SyncSrc_t & tSrc )
+{
+	SendArray ( tSrc.m_dBaseNames, tOut );
+	SendArray ( tSrc.m_dChunks, tOut );
+	SendArray ( tSrc.m_dHashes, tOut );
+}
+
+void GetSyncSrcLayout ( InputBuffer_c & tIn, SyncSrc_t & tSrc )
+{
+	GetArray ( tSrc.m_dBaseNames, tIn );
+	GetArray ( tSrc.m_dChunks, tIn );
+	GetArray ( tSrc.m_dHashes, tIn );
+}
+
 void operator<< ( ISphOutputBuffer& tOut, const FileReserveRequest_t& tReq )
 {
 	tOut << (const ClusterRequest_t&) tReq;
@@ -88,12 +103,10 @@ void operator<< ( ISphOutputBuffer& tOut, const FileReserveRequest_t& tReq )
 	tOut.SendString ( tReq.m_sIndexFileName.cstr() );
 
 	assert ( tReq.m_pChunks );
-	const SyncSrc_t* pSrc = tReq.m_pChunks;
-	SendArray ( pSrc->m_dBaseNames, tOut );
-	SendArray ( pSrc->m_dChunks, tOut );
-	SendArray ( pSrc->m_dHashes, tOut );
+	SendSyncSrcLayout ( tOut, *tReq.m_pChunks );
 
 	tOut << tReq.m_tProgressCtx;
+	tOut.SendUint64 ( tReq.m_uBulkChunkId );
 }
 
 StringBuilder_c& operator<< ( StringBuilder_c& tOut, const FileReserveRequest_t& tReq )
@@ -103,7 +116,8 @@ StringBuilder_c& operator<< ( StringBuilder_c& tOut, const FileReserveRequest_t&
 		<< "index" << tReq.m_sIndex << "indexfilename" << tReq.m_sIndexFileName
 		<< "basenames:" << pSrc->m_dBaseNames.GetLength()
 		<< "chunks:" << pSrc->m_dChunks.GetLength()
-		<< "hashes:" << pSrc->m_dHashes.GetLength();
+		<< "hashes:" << pSrc->m_dHashes.GetLength()
+		<< "bulk_import chunk:" << tReq.m_uBulkChunkId;
 	return tOut;
 }
 
@@ -114,12 +128,10 @@ void operator>> ( InputBuffer_c& tIn, FileReserveRequest_t& tReq )
 	tReq.m_sIndexFileName = tIn.GetString();
 
 	assert ( tReq.m_pChunks );
-	SyncSrc_t* pSrc = tReq.m_pChunks;
-	GetArray ( pSrc->m_dBaseNames, tIn );
-	GetArray ( pSrc->m_dChunks, tIn );
-	GetArray ( pSrc->m_dHashes, tIn );
+	GetSyncSrcLayout ( tIn, *tReq.m_pChunks );
 
 	tIn >> tReq.m_tProgressCtx;
+	tReq.m_uBulkChunkId = tIn.GetUint64();
 }
 
 
@@ -162,31 +174,15 @@ bool IsReplicationFileName ( const CSphString & sName )
 }
 
 
-struct ScopedFilesRemoval_t: public ISphNoncopyable
-{
-	explicit ScopedFilesRemoval_t ( VecTraits_T<CSphString>* pFiles )
-		: m_pFiles ( pFiles )
-	{}
-	~ScopedFilesRemoval_t()
-	{
-		if ( m_pFiles )
-		{
-			for ( const CSphString& sFile : *m_pFiles )
-			{
-				if ( !sFile.IsEmpty() && sphFileExists ( sFile.cstr() ) )
-					::unlink ( sFile.cstr() );
-			}
-		}
-	}
-	VecTraits_T<CSphString>* m_pFiles { nullptr };
-};
-
 // command at remote node for CLUSTER_FILE_RESERVE to check
 // - file could be allocated on disk at table path and reserve disk space for a file
 // - or make sure that index has exact same index file, ie sha1 matched
 bool ClusterFileReserve ( const FileReserveRequest_t & tCmd, FileReserveReply_t & tRes )
 {
 	sphLogDebugRpl ( "reserve table '%s'", tCmd.m_sIndex.cstr() );
+
+	if ( tCmd.m_uBulkChunkId )
+		return ReserveBulkChunk ( tCmd, tRes );
 
 	if ( !CanReplaceIndex ( tCmd.m_sCluster, tCmd.m_sIndex ) )
 		return false;
@@ -279,37 +275,10 @@ bool ClusterFileReserve ( const FileReserveRequest_t & tCmd, FileReserveReply_t 
 			pProgressSst->AddComplete ( tFile.m_iFileSize );
 	}
 
-	StrVec_t dLocalPaths ( tRes.m_dRemotePaths.GetLength() );
-	ScopedFilesRemoval_t tFilesCleanup ( &dLocalPaths );
-
-	// create files these will be transferred from donor
-	ARRAY_FOREACH ( iFile, tRes.m_dRemotePaths )
-	{
-		// no need to create file for fully matched file
-		if ( tRes.m_dNodeChunksMask.BitGet ( iFile ) )
-			continue;
-
-		// file content from donor will be saved into a file with a '.new' extension
-		dLocalPaths[iFile].SetSprintf ( "%s.new", tRes.m_dRemotePaths[iFile].cstr() );
-		const CSphString& sFile = dLocalPaths[iFile];
-		const FileChunks_t& tFile = tCmd.m_pChunks->m_dChunks[iFile];
-
-		// need to create file with specific size
-		CSphString sError;
-		CSphAutofile tOut ( sFile, SPH_O_NEW, sError, false );
-		if ( tOut.GetFD()<0 )
-			return TlsMsg::Err ( sError );
-
-		int64_t iLen = sphSeek ( tOut.GetFD(), tFile.m_iFileSize, SEEK_SET );
-		if ( iLen!=tFile.m_iFileSize )
-		{
-			if ( iLen<0 )
-				return TlsMsg::Err ( "error: %d '%s'", errno, strerrorm ( errno ) );
-			return TlsMsg::Err ( "error, expected: " INT64_FMT ", got " INT64_FMT, tFile.m_iFileSize, iLen );
-		}
-	}
-
-	tFilesCleanup.m_pFiles = nullptr;
+	StrVec_t dLocalPaths;
+	TLS_MSG_STRING ( sError );
+	if ( !ReserveFiles ( tRes.m_dRemotePaths, tCmd.m_pChunks->m_dChunks, tRes.m_dNodeChunksMask, dLocalPaths, sError ) )
+		return false;
 	tRes.m_dRemotePaths.SwapData ( dLocalPaths );
 
 	uint64_t uKey = DoubleStringKey ( tCmd.m_sCluster, tCmd.m_sIndex );
@@ -318,7 +287,7 @@ bool ClusterFileReserve ( const FileReserveRequest_t & tCmd, FileReserveReply_t 
 		sphLogDebugRpl ( "ClusterFileReserve: stale state for %s %s, resetting", tCmd.m_sCluster.cstr(), tCmd.m_sIndex.cstr() );
 		RecvState::Free ( uKey );
 	}
-	RecvState::GetState ( uKey ).SetMerge ( *tCmd.m_pChunks, tRes, sLocalIndexPath, dLocalPaths );
+	RecvState::GetState ( uKey )->SetMerge ( *tCmd.m_pChunks, tRes, sLocalIndexPath, dLocalPaths );
 	return true;
 }
 

@@ -51,7 +51,7 @@ static const char* g_sCommands[SEARCHD_COMMAND_TOTAL] = {"command_search", "comm
 	"command_keywords", "command_persist", "command_status", "gap_6", "command_flushattrs", "command_sphinxql",
 	"command_ping", "command_delete", "command_set", "command_insert", "command_replace", "command_commit",
 	"command_suggest", "command_json", "command_callpq", "command_cluster", "command_getfield", "command_shard_write",
-	"command_optimize"};
+	"command_optimize", "command_shard_bulk"};
 
 const char * szCommand ( int eCmd)
 {

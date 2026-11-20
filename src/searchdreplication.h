@@ -85,9 +85,14 @@ bool AssignClusterToIndex ( const CSphString & sIndex, const CSphString & sClust
 bool AssignClusterToIndexes ( const VecTraits_T<CSphString> & dIndexes, const CSphString & sCluster );
 
 bool SetIndexesClusterTOI ( const ReplicationCommand_t * pCmd );
+bool ResetClusterFilesSeqNo ( const CSphString & sCluster );
 bool SetClusterUserTOI ( const ReplicationCommand_t * pCmd );
+bool AttachBulkChunkTOI ( const ReplicationCommand_t & tCmd );
+struct BulkChunkAttach_t;
+void RejoinClusterBySst ( const CSphString & sCluster ); // after a command that failed only on this node; the caller holds no cluster object
+void ReplicateBulkImportChunk ( const CSphString & sCluster, const CSphString & sTable, uint64_t uId, const StrVec_t & dFiles, BulkChunkAttach_t & tResult );
 bool ClusterGetDonorMeta ( const CSphString & sCluster, CSphString & sUser );
-int64_t ClusterGetRemoteEpoch ( const CSphString & sCluster );
+int64_t ClusterGetRemoteFilesSeqNo ( const CSphString & sCluster );
 
 CSphString WaitClusterReady ( const CSphString& sCluster, int64_t iTimeoutS );
 std::pair<int,CSphString> WaitClusterCommit ( const CSphString& sCluster, int iTxn, int64_t iTimeoutS );

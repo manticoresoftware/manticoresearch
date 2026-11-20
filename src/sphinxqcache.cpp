@@ -11,6 +11,7 @@
 //
 
 #include "sphinxqcache.h"
+#include "sphinxfilter.h"
 #include "exprtraits.h"
 #include "mini_timer.h"
 
@@ -65,6 +66,16 @@ protected:
 	RowID_t						m_uLastId = INVALID_ROWID;						///< docid delta decoder state
 	const CSphIndex *			m_pIndex;
 	CSphQueryContext *			m_pCtx;
+	RowIdBoundaries_t			m_tBoundaries;
+
+	bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult ) override
+	{
+		if ( eType!=EXTRA_SET_BOUNDARIES )
+			return false;
+
+		m_tBoundaries = *(const RowIdBoundaries_t*)ppResult;
+		return true;
+	}
 
 	void ResetImpl ( const ISphQwordSetup & tSetup ); // to avoid call real virtual Reset() from c-tr.
 
@@ -666,6 +677,10 @@ int QcacheRanker_c::GetMatches()
 			p += iWeightBytes;
 			if ( bIndexedWeights )
 				iWeight = m_pEntry->m_dWeights [ iWeight ];
+
+			// Pseudo-shards share the cached result set; keep only this shard's rowids.
+			if ( m_uLastId<m_tBoundaries.m_tMinRowID || m_uLastId>m_tBoundaries.m_tMaxRowID )
+				continue;
 
 			CSphMatch & m = m_dMatches[iRes];
 			m.m_tRowID = m_uLastId;

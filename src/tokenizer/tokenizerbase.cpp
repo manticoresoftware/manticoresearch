@@ -129,6 +129,7 @@ void CSphTokenizerBase::CloneBase ( const CSphTokenizerBase* pFrom, ESphTokenize
 		*m_pExc = *pFrom->m_pExc;
 	}
 	m_tSettings = pFrom->m_tSettings;
+	m_tSynFileInfo = pFrom->m_tSynFileInfo;
 	m_bHasBlend = pFrom->m_bHasBlend;
 	m_uBlendVariants = pFrom->m_uBlendVariants;
 	m_bBlendSkipPure = pFrom->m_bBlendSkipPure;

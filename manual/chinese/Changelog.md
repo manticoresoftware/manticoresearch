@@ -1,6 +1,6 @@
 # 更新日志
 
-## 32.1.2 版本
+## 32.1.3 版本
 **发布日期**：2026 年 11 月 20 日
 
 此版本为实时表、分片表和复制表新增直接写入磁盘的批量导入功能，包括并发共享加载；提升 KNN、混合搜索和全文搜索性能；扩展自动嵌入和诊断功能；并修复复制、查询正确性、数据完整性、打包和关闭流程相关问题。从旧版本升级前，请先查看下方的集群升级说明。
@@ -15,7 +15,7 @@
 
 1. 确认所有节点已同步，停止写入并备份数据。
 2. **逐个节点**停止服务，等待每个节点正常关闭。记住最后停止的是哪个节点。
-3. 在所有节点停止期间，将它们升级到 32.1.2。升级期间请禁止自动重启。
+3. 在所有节点停止期间，将它们升级到 32.1.3。升级期间请禁止自动重启。
 4. 使用 `manticore_new_cluster`（systemd）或 `searchd --new-cluster` **先启动最后停止的节点**，然后正常启动其他节点。等待所有节点完成同步后再恢复写入。
 
 如果集群意外关闭，请改用[集群恢复指南](Creating_a_cluster/Setting_up_replication/Cluster_recovery.md#All-nodes-crashed)。
@@ -55,6 +55,7 @@
 
 ### 错误修复
 
+* 🪲 [v32.1.3](https://github.com/manticoresoftware/manticoresearch/tree/32.1.3) [PR #5121](https://github.com/manticoresoftware/manticoresearch/pull/5121) 将 Executor 升级至 1.4.9，包含 PHP 8.5.13 的安全修复。
 * 🪲 [v32.1.2](https://github.com/manticoresoftware/manticoresearch/tree/32.1.2) [Issue #5073](https://github.com/manticoresoftware/manticoresearch/issues/5073) 将 Buddy 更新到 4.4.11，在构建分片节点 ID 时使用配置的 `node_address`，修复了 Docker bridge 网络中创建复制分片表超时的问题。
 * 🪲 [v32.1.1](https://github.com/manticoresoftware/manticoresearch/tree/32.1.1) [Issue #5107](https://github.com/manticoresoftware/manticoresearch/issues/5107) 修复 Debian 软件包将内部 `.bundle_*` 依赖元数据文件安装到文件系统根目录的问题；这些文件在构建时仍可用，但不会包含在软件包内容中。
 * 🪲 [v32.1.0](https://github.com/manticoresoftware/manticoresearch/tree/32.1.0) [Commit](https://github.com/manticoresoftware/manticoresearch/commit/839d6c4c2f9dfb28cd32311aa1a0b050044a0f3f) 修复 `ATTACH TABLE` 丢失表的外部 exceptions-file 元数据的问题，该问题也会影响后续批量索引的分片。

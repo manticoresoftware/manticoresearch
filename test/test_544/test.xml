@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>columnar competitive sort bounds</name>
+<requires>
+	<force-rt/>
+	<columnar/>
+	<secondary/>
+</requires>
+<skip_db/>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+	qcache_max_bytes = 0
+	auto_optimize = 0
+}
+</config>
+
+<queries>
+<sphinxql>CREATE TABLE t (body text, ts bigint, u integer, ts32 timestamp) engine='columnar' postings_format='block'</sphinxql>
+
+<!-- Each disk chunk starts with 128 high keys, followed by 8064 low keys.
+     Tied keys occur both within and across chunks. Every fourth row fails the phrase. -->
+<repeat count="2" vars="a b c d" init="1 2 3 4">
+	<var name="rows"/>
+	<repeat count="32" vars="ts u a b c d" init="10000 4294967295" inc="1 -1 4 4 4 4" skip="1">
+		<var name="rows" delimiter=",">(<a/>,'failed to cancel the order',<ts/>,<u/>,<u/>),(<b/>,'failed to place order',<ts/>,<u/>,<u/>),(<c/>,'failed to place order',<ts/>,<u/>,<u/>),(<d/>,'failed to place order',<ts/>,<u/>,<u/>)</var>
+	</repeat>
+	<sphinxql skip="1">INSERT INTO t (id,body,ts,u,ts32) VALUES <rows/></sphinxql>
+	<repeat count="63" skip="1">
+		<var name="rows"/>
+		<repeat count="32" vars="ts u a b c d" init="-16 0" inc="1 1 4 4 4 4" skip="1">
+			<var name="rows" delimiter=",">(<a/>,'failed to cancel the order',<ts/>,<u/>,<u/>),(<b/>,'failed to place order',<ts/>,<u/>,<u/>),(<c/>,'failed to place order',<ts/>,<u/>,<u/>),(<d/>,'failed to place order',<ts/>,<u/>,<u/>)</var>
+		</repeat>
+		<sphinxql skip="1">INSERT INTO t (id,body,ts,u,ts32) VALUES <rows/></sphinxql>
+	</repeat>
+	<sphinxql>FLUSH RAMCHUNK t</sphinxql>
+</repeat>
+
+<sphinxql>
+	DELETE FROM t WHERE id IN (2,3,4,6,7,8,10,11,12);
+	SELECT COUNT(*) FROM t;
+</sphinxql>
+
+<!-- Golden rows include the document ID, signed sort key and weight. -->
+<repeat var="match" delimiter=";" variants='failed;"failed to place order";failed | cancel;"failed to place order" | cancel'>
+	<repeat var="order" variants="ASC DESC">
+		<repeat var="ranker" variants="none proximity_bm25">
+			<repeat var="method" variants="pq kbuffer">
+				<repeat var="threads" variants="1 4">
+					<repeat var="hint" delimiter=";" variants=";/*+ NO_SECONDARYINDEX(ts) */">
+						<sphinxql>SELECT id,ts,weight() FROM t WHERE MATCH('<match/>') ORDER BY ts <order/>,id ASC LIMIT 7,20 OPTION ranker=<ranker/>,threads=<threads/>,sort_method=<method/> <hint/></sphinxql>
+					</repeat>
+				</repeat>
+			</repeat>
+		</repeat>
+	</repeat>
+</repeat>
+
+<!-- Check the selected pruning source and lower-bound reporting with a single worker. -->
+<repeat var="hint" delimiter=";" variants=";/*+ NO_SECONDARYINDEX(ts) */">
+	<sphinxql>SELECT id,ts FROM t WHERE MATCH('failed') ORDER BY ts DESC,id ASC LIMIT 1 OPTION threads=1,max_matches=1 <hint/>; SHOW META LIKE 'index'; SHOW META LIKE 'total_relation';</sphinxql>
+</repeat>
+
+<repeat var="key" variants="u ts32 id">
+	<repeat var="order" variants="ASC DESC">
+		<sphinxql>SELECT id,u,ts32 FROM t WHERE MATCH('failed | cancel') ORDER BY <key/> <order/>,id ASC LIMIT 7,20 OPTION threads=4 /*+ NO_SECONDARYINDEX(<key/>) */</sphinxql>
+	</repeat>
+</repeat>
+
+<!-- Signed endpoints and a direct sort alias, first in RAM and then on disk. -->
+<sphinxql>INSERT INTO t (id,body,ts) VALUES (20001,'failed to place order',9223372036854775807),(20002,'failed to place order',-9223372036854775808)</sphinxql>
+<repeat var="order" variants="ASC DESC">
+	<sphinxql>SELECT id,ts AS stamp FROM t WHERE MATCH('failed | place') ORDER BY stamp <order/>,id ASC LIMIT 20 OPTION threads=4</sphinxql>
+</repeat>
+<sphinxql>FLUSH RAMCHUNK t</sphinxql>
+<repeat var="order" variants="ASC DESC">
+	<sphinxql>SELECT id,ts AS stamp FROM t WHERE MATCH('failed | place') ORDER BY stamp <order/>,id ASC LIMIT 1 OPTION threads=1 /*+ NO_SECONDARYINDEX(ts) */</sphinxql>
+</repeat>
+<sphinxql>DROP TABLE t</sphinxql>
+</queries>
+</test>

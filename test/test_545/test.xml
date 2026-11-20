@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>postings format default and table overrides</name>
+
+<requires>
+	<non-rt/>
+</requires>
+<skip_db/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	postings_format = block
+}
+
+source src
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data.xml
+}
+
+index plain_default
+{
+	source = src
+	path = <data_path/>/plain_default
+}
+
+index plain_legacy : plain_default
+{
+	path = <data_path/>/plain_legacy
+	postings_format = legacy
+}
+
+index inherited_legacy : plain_legacy
+{
+	path = <data_path/>/inherited_legacy
+}
+
+index rt_default
+{
+	type = rt
+	path = <data_path/>/rt_default
+	rt_field = body
+}
+
+index rt_legacy : rt_default
+{
+	path = <data_path/>/rt_legacy
+	postings_format = legacy
+}
+</config>
+
+<queries><sphinxql>
+SHOW TABLE plain_default SETTINGS;
+SHOW TABLE plain_legacy SETTINGS;
+SHOW TABLE inherited_legacy SETTINGS;
+SHOW TABLE rt_default SETTINGS;
+SHOW TABLE rt_legacy SETTINGS;
+SELECT id FROM plain_default WHERE MATCH('hello') ORDER BY id ASC;
+SELECT id FROM plain_legacy WHERE MATCH('hello') ORDER BY id ASC;
+SELECT id FROM inherited_legacy WHERE MATCH('hello') ORDER BY id ASC;
+INSERT INTO rt_default VALUES (1,'hello world');
+INSERT INTO rt_legacy VALUES (1,'hello world');
+FLUSH RAMCHUNK rt_default;
+FLUSH RAMCHUNK rt_legacy;
+SELECT id FROM rt_default WHERE MATCH('hello');
+SELECT id FROM rt_legacy WHERE MATCH('hello');
+</sphinxql></queries>
+</test>

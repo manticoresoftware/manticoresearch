@@ -37,7 +37,7 @@ const CSphRowitem * CopyRow ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo,
 {
 	if ( iOldStride )
 		memcpy ( pTmpDocinfo, pDocinfo, iOldStride*sizeof(DWORD) );
-	return iOldStride ? pDocinfo + iOldStride : pDocinfo;
+	return pDocinfo + iOldStride;
 }
 
 
@@ -58,7 +58,7 @@ const CSphRowitem * CopyRowAttrByAttr ( const CSphRowitem * pDocinfo, DWORD * pT
 		sphSetRowAttr ( pTmpDocinfo, tNewAttr.m_tLocator, tValue );
 	}
 
-	return iOldStride ? pDocinfo + iOldStride : pDocinfo;
+	return pDocinfo + iOldStride;
 }
 
 
@@ -209,6 +209,7 @@ AddRemoveCtx_c::AddRemoveCtx_c ( const CSphSchema & tOldSchema, const CSphSchema
 	m_bHaveBlobs = m_iNumNewBlobs>0;
 
 	m_dAttrRow.Reset(m_iNewStride);
+	m_dAttrRow.ZeroVec();
 }
 
 
@@ -237,12 +238,6 @@ bool AddRemoveCtx_c::AddRowwiseAttr()
 
 		if ( !bKeepVal && !pNewAttr->m_tLocator.IsBlobAttr() )
 			sphSetRowAttr ( m_dAttrRow.Begin(), pNewAttr->m_tLocator, 0 );
-
-		if ( bBlob && !m_pOldBlobRowLocator )
-		{
-			assert ( m_pNewBlobRowLocator );
-			sphSetRowAttr ( m_dAttrRow.Begin(), m_pNewBlobRowLocator->m_tLocator, 0 );
-		}
 
 		if ( bBlob && !m_tMinMaxer.Alter_IsMinMax ( tRowID ) )
 		{

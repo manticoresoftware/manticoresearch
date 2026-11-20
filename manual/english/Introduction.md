@@ -25,6 +25,9 @@ Manticore Search can store vectors supplied by your machine learning models or [
 
 For long text, [automatic chunking](Searching/KNN.md#Chunking-strategies) can split each document into fixed-size, recursive, or sentence-based chunks and store their embeddings in a `float_vector_array`. Each chunk is searched independently, while the document appears once in the results and is scored by its closest chunk. The `mean` strategy instead averages the chunk embeddings into one vector, and the default `truncate` strategy preserves the previous single-vector behavior.
 
+#### Hybrid search
+[Hybrid search](Searching/Hybrid_search.md) combines full-text and vector (KNN) results in a single query using reciprocal rank fusion (RRF). SQL facets and JSON aggregations work on the combined result set.
+
 #### Conversational search
 Manticore Search supports [conversational search](Searching/Conversational_search.md) over existing vectorized tables. It retrieves the most relevant rows with KNN search, uses those rows together with conversation history as context for the LLM, and can answer through SQL `CALL CHAT` or the HTTP JSON `/search` endpoint.
 
@@ -66,6 +69,9 @@ The Manticore Search daemon is developed in C++, offering fast start times and e
 
 #### Real-Time inserts
 Newly added or updated documents can be immediately read.
+
+#### Bulk import
+[Direct-to-disk bulk import](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import) builds disk chunks for large batches without first staging the documents in RAM chunks. It works with local, sharded, and replicated real-time tables through SQL and HTTP. Shared HTTP bulk import can accept concurrent requests, and imported documents become visible when the batch is committed.
 
 #### Interactive courses for easy learning
 We offer [free interactive courses](https://play.manticoresearch.com/) to make learning effortless.

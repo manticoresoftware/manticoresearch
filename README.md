@@ -65,6 +65,7 @@ What distinguishes Manticore from other solutions is:
 * 🔐 **Built-in authentication and authorization** secure MySQL, HTTP/HTTPS, distributed remote agents, and replication-related operations with users, bearer tokens, and fine-grained permissions.
 * 🪶 **C++ performance and a small footprint**: Manticore Search starts quickly and uses around 40MB RSS for an empty instance.
 * ⚡ **Real-time inserts** make newly added or updated documents immediately accessible.
+* 📦 **Direct-to-disk bulk import** loads large batches into real-time tables, including sharded and replicated tables, by building disk chunks directly instead of staging the data in RAM chunks. It supports [SQL and HTTP](https://manual.manticoresearch.com/Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table#Bulk-import).
 * 🎓 **Interactive courses** at [play.manticoresearch.com](https://play.manticoresearch.com/) make learning easier.
 * 🔄 **Virtually synchronous multi-master replication** uses Galera and includes load balancing.
 * 🔗 **Data synchronization** supports sources such as MySQL, PostgreSQL, ODBC, XML, and CSV.
@@ -227,7 +228,7 @@ sudo apt install manticore
 ### Homebrew on macOS
 
 ```
-brew install manticoresoftware/tap/manticoresearch manticoresoftware/tap/manticore-extra
+brew install manticoresoftware/tap/manticore
 ```
 
 ### Windows

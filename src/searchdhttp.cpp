@@ -2948,20 +2948,14 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 	const bool bJsonEndpoint = [&] {
 		switch ( tRes.m_eEndpoint )
 		{
-		case EHTTP_ENDPOINT::JSON_SEARCH:
-		case EHTTP_ENDPOINT::JSON_INDEX:
-		case EHTTP_ENDPOINT::JSON_CREATE:
-		case EHTTP_ENDPOINT::JSON_INSERT:
-		case EHTTP_ENDPOINT::JSON_REPLACE:
-		case EHTTP_ENDPOINT::JSON_UPDATE:
-		case EHTTP_ENDPOINT::JSON_DELETE:
-		case EHTTP_ENDPOINT::JSON_BULK:
-		case EHTTP_ENDPOINT::PQ:
-		case EHTTP_ENDPOINT::ES_BULK:
-		case EHTTP_ENDPOINT::TOTAL:
-			return true;
-		default:
+		case EHTTP_ENDPOINT::INDEX:
+		case EHTTP_ENDPOINT::SQL:
+		case EHTTP_ENDPOINT::CLI:
+		case EHTTP_ENDPOINT::CLI_JSON:
+		case EHTTP_ENDPOINT::TOKEN:
 			return false;
+		default:
+			return true;
 		}
 	} ();
 

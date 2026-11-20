@@ -556,22 +556,27 @@ void CSphGrouperMulti<PRED,HAVE_COLUMNAR>::SpawnColumnarGroupers()
 		if ( !tAttr.IsColumnar() && !tAttr.IsColumnarExpr() )
 			continue;
 
+		// an alias of a columnar attr is an expression; the grouper needs the aliased column
+		CSphString sName = tAttr.m_sName;
+		if ( tAttr.IsColumnarExpr() )
+			tAttr.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sName );
+
 		switch ( tAttr.m_eAttrType )
 		{
 		case SPH_ATTR_STRING:
 		case SPH_ATTR_STRINGPTR:
-			m_dSingleKeyGroupers[i] = CreateGrouperColumnarString ( tAttr.m_sName, m_eCollation );
+			m_dSingleKeyGroupers[i] = CreateGrouperColumnarString ( sName, m_eCollation );
 			break;
 
 		case SPH_ATTR_UINT32SET:
 		case SPH_ATTR_UINT32SET_PTR:
 		case SPH_ATTR_INT64SET:
 		case SPH_ATTR_INT64SET_PTR:
-			m_dMultiKeyGroupers[i] = CreateGrouperColumnarMVA ( tAttr.m_sName, tAttr.m_eAttrType );
+			m_dMultiKeyGroupers[i] = CreateGrouperColumnarMVA ( sName, tAttr.m_eAttrType );
 			break;
 
 		default:
-			m_dSingleKeyGroupers[i] = CreateGrouperColumnarInt ( tAttr.m_sName, tAttr.m_eAttrType );
+			m_dSingleKeyGroupers[i] = CreateGrouperColumnarInt ( sName, tAttr.m_eAttrType );
 			break;
 		}
 	}
@@ -692,12 +697,8 @@ CSphGrouper * CreateGrouperStringExpr ( ISphExpr * pExpr, ESphCollation eCollati
 }
 
 
-CSphGrouper * CreateGrouperMulti ( CSphVector<CSphColumnInfo> dAttrs, VecRefPtrs_t<ISphExpr *> dJsonKeys, ESphCollation eCollation )
+CSphGrouper * CreateGrouperMulti ( const CSphVector<CSphColumnInfo> & dAttrs, VecRefPtrs_t<ISphExpr *> dJsonKeys, ESphCollation eCollation )
 {
-	for ( auto & tAttr : dAttrs )
-		if ( tAttr.IsColumnarExpr() )
-			tAttr.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &tAttr.m_sName );
-
 	bool bHaveColumnar = dAttrs.any_of ( []( auto & tAttr ){ return tAttr.IsColumnar() || tAttr.IsColumnarExpr(); } );
 	bool bAllColumnar = dAttrs.all_of ( []( auto & tAttr ){ return tAttr.IsColumnar() || tAttr.IsColumnarExpr(); } );
 

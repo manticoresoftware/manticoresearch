@@ -360,6 +360,11 @@ void GrouperColumnarMulti<HASH>::SpawnIterators()
 		const auto & tAttr = m_dAttrs[i];
 		assert ( tAttr.IsColumnar() || tAttr.IsColumnarExpr() );
 
+		// an alias of a columnar attr is an expression; the iterator needs the aliased column
+		CSphString sName = tAttr.m_sName;
+		if ( tAttr.IsColumnarExpr() )
+			tAttr.m_pExpr->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sName );
+
 		std::string sError; // fixme! report errors
 		if ( tAttr.m_eAttrType==SPH_ATTR_STRING || tAttr.m_eAttrType==SPH_ATTR_STRINGPTR )
 		{
@@ -367,11 +372,11 @@ void GrouperColumnarMulti<HASH>::SpawnIterators()
 			columnar::IteratorCapabilities_t tCapabilities;
 			tHints.m_bNeedStringHashes = m_eCollation==SPH_COLLATION_DEFAULT;
 
-			m_dIterators[i] = CreateColumnarIterator ( m_pColumnar, tAttr.m_sName.cstr(), sError, tHints, &tCapabilities );
+			m_dIterators[i] = CreateColumnarIterator ( m_pColumnar, sName.cstr(), sError, tHints, &tCapabilities );
 			m_dHaveStringHashes[i] = tCapabilities.m_bStringHashes;
 		}
 		else
-			m_dIterators[i] = CreateColumnarIterator ( m_pColumnar, tAttr.m_sName.cstr(), sError );
+			m_dIterators[i] = CreateColumnarIterator ( m_pColumnar, sName.cstr(), sError );
 	}
 }
 

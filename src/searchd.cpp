@@ -10327,7 +10327,7 @@ DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const Serv
 		}
 	}
 
-	auto pPlain = LoadIndexerRtBulkChunk ( sPath, sError );
+	auto pPlain = LoadIndexerRtBulkChunk ( sPath, sTable, sError );
 	if ( !pPlain )
 		return DiskAttachRes_e::NOT_ATTACHED;
 
@@ -10378,12 +10378,14 @@ DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const Serv
 }
 
 
-std::unique_ptr<CSphIndex> LoadIndexerRtBulkChunk ( const CSphString & sPath, CSphString & sError )
+// the chunk names the external files of sTable as the table does, so they are found as for its own disk chunks
+std::unique_ptr<CSphIndex> LoadIndexerRtBulkChunk ( const CSphString & sPath, const CSphString & sTable, CSphString & sError )
 {
 	auto pChunk = sphCreateIndexPhrase ( "indexer_rt_bulk_chunk", sPath );
 	sphLogDebugRpl ( "bulk_import chunk LoadIndexerRtBulkChunk '%s' object %p", sPath.cstr(), pChunk.get() );
 	StrVec_t dWarnings;
-	if ( pChunk->Prealloc ( false, nullptr, dWarnings ) )
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( sTable.cstr() );
+	if ( pChunk->Prealloc ( false, pFilenameBuilder.get(), dWarnings ) )
 		return pChunk;
 
 	sError.SetSprintf ( "failed loading bulk_import chunk: %s", pChunk->GetLastError().cstr() );
@@ -16651,23 +16653,22 @@ static void InitBanner()
 	g_sStatusVersion.SetSprintf ( "%s%s%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr(), sKNN.cstr(), sKNNEmb.cstr() );
 }
 
-static bool CheckSSL ( const CSphVector<ListenerDesc_t> & dListeners, bool bForced )
+// set up SSL once, before connections are served; no keys and no need for SSL is not an error
+static bool CheckSSL ( const CSphVector<ListenerDesc_t> & dListeners, bool bForced, bool bKeysConfigured )
 {
-	// check for SSL inited well
-	if ( !bForced && dListeners.none_of ([] ( const auto& tListener ) { return tListener.m_eProto==Proto_e::HTTPS; }) )
+	CSphString sError;
+	if ( CheckWeCanUseSSL ( &sError ) )
 		return true;
 
-	CSphString sError;
-	if ( !CheckWeCanUseSSL ( &sError ) )
-	{
-		if ( bForced )
-			sphFatal ( "SSL initialization failed but is required for Manticore Buddy: %s", sError.cstr() );
+	if ( bForced )
+		sphFatal ( "SSL initialization failed but is required for Manticore Buddy: %s", sError.cstr() );
 
+	if ( bKeysConfigured )
 		sphWarning ( "SSL init error: %s", sError.cstr() );
-		return false;
-	}
+	else if ( dListeners.any_of ( [] ( const auto & tListener ) { return tListener.m_eProto==Proto_e::HTTPS; } ) )
+		sphWarning ( "SSL init error: %s", sError.IsEmpty() ? "HTTPS listener requires ssl_cert and ssl_key" : sError.cstr() );
 
-	return true;
+	return false;
 }
 
 
@@ -17001,6 +17002,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	CheckSetCwd();
 	g_sConfigPath = sphGetCwd();
 	sphConfigureCommon ( hConf, FixPathAbsolute ); // this also inits plugins now
+	ConfigureIndexerRtBulk ( hConf );
 
 	if ( g_iMaxPacketSize<SPH_MIN_PACKET_SIZE || g_iMaxPacketSize>SPH_MAX_PACKET_SIZE )
 		sphFatal ( "max_packet_size out of bounds (128K..128M)" );
@@ -17074,7 +17076,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		if ( bForcedSsl )
 			ForceSsl();
 
-		bool bGotSSL = CheckSSL ( dListenerDescs, bForcedSsl );
+		bool bGotSSL = CheckSSL ( dListenerDescs, bForcedSsl, !sSslCert.IsEmpty() || !sSslKey.IsEmpty() );
 		if ( !bForcedSsl || !bGotSSL )
 			return;
 

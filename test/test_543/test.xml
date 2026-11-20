@@ -1,58 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
+
 <test>
-<name>Columnar aliases in multi-column GROUP BY (#5082)</name>
-<requires>
-    <force-rt/>
-    <columnar/>
-</requires>
-<skip_indexer/>
+<name>Regression for #5085: query cache must honor pseudo-shard rowid boundaries</name>
+<!--
+Use a plain table and force pseudo-sharding so the test does not depend on load
+or a full query cache. A single-threaded query first caches the complete result;
+a four-threaded query must not replay that result in every pseudo-shard.
+-->
+
+	<requires>
+		<force-rt/>
+	</requires>
+	<skip_indexer/>
 
 <config>
 searchd
 {
-    <searchd_settings/>
-    data_dir = <data_path/>
+	<searchd_settings/>
+	data_dir = <data_path/>
 }
 </config>
 
 <queries>
+	<var name="fld"/>
+	<repeat count="131" vars="i" init="1" inc="1">
+		<var name="fld" delimiter=",">(<i/>,'needle common')</var>
+	</repeat>
 <sphinxql>
-CREATE TABLE gh5082_columnar (s string attribute, b bool, c string attribute) engine='columnar';
-CREATE TABLE gh5082_mixed (s string attribute, b bool engine='columnar', c string attribute engine='columnar');
-INSERT INTO gh5082_columnar (id,s,b,c) VALUES (1,'a',1,'red'),(2,'a',0,'blue'),(3,'b',1,'red'),(4,'b',1,'red');
-INSERT INTO gh5082_mixed (id,s,b,c) VALUES (1,'a',1,'red'),(2,'a',0,'blue'),(3,'b',1,'red'),(4,'b',1,'red');
-SELECT s, b AS x, COUNT(*) AS n FROM gh5082_columnar GROUP BY s, x ORDER BY s ASC, x ASC;
-SELECT s, b AS x, COUNT(*) AS n FROM gh5082_columnar GROUP BY s, b ORDER BY s ASC, x ASC;
-SELECT s, b AS x, COUNT(*) AS n FROM gh5082_columnar GROUP BY x, s ORDER BY s ASC, x ASC;
-SELECT s, c AS x, COUNT(*) AS n FROM gh5082_columnar GROUP BY s, x ORDER BY s ASC, x ASC;
-SELECT s AS y, b AS x, COUNT(*) AS n FROM gh5082_columnar GROUP BY y, x ORDER BY y ASC, x ASC;
-SELECT s, b AS x, COUNT(*) AS n FROM gh5082_mixed GROUP BY s, x ORDER BY s ASC, x ASC;
-SELECT s, c AS x, COUNT(*) AS n FROM gh5082_mixed GROUP BY s, x ORDER BY s ASC, x ASC;
-FLUSH RAMCHUNK gh5082_columnar;
-FLUSH RAMCHUNK gh5082_mixed;
-SELECT s, b AS x, COUNT(*) AS n FROM gh5082_columnar GROUP BY s, x ORDER BY s ASC, x ASC;
-SELECT s, c AS x, COUNT(*) AS n FROM gh5082_columnar GROUP BY s, x ORDER BY s ASC, x ASC;
-SELECT s, b AS x, COUNT(*) AS n FROM gh5082_mixed GROUP BY s, x ORDER BY s ASC, x ASC;
-SELECT s, c AS x, COUNT(*) AS n FROM gh5082_mixed GROUP BY s, x ORDER BY s ASC, x ASC;
-INSERT INTO gh5082_columnar (id,s,b,c) VALUES (5,'a',1,'red'),(6,'c',0,'blue');
-INSERT INTO gh5082_mixed (id,s,b,c) VALUES (5,'a',1,'red'),(6,'c',0,'blue');
-SELECT s, b AS x, COUNT(*) AS n FROM gh5082_columnar GROUP BY s, x ORDER BY s ASC, x ASC OPTION threads=4;
-SELECT s, c AS x, COUNT(*) AS n FROM gh5082_mixed GROUP BY s, x ORDER BY s ASC, x ASC OPTION threads=4;
-FLUSH RAMCHUNK gh5082_columnar;
-FLUSH RAMCHUNK gh5082_mixed;
-SELECT s, b AS x, COUNT(*) AS n FROM gh5082_columnar GROUP BY s, x ORDER BY s ASC, x ASC OPTION threads=4;
-SELECT s, c AS x, COUNT(*) AS n FROM gh5082_columnar GROUP BY s, x ORDER BY s ASC, x ASC OPTION threads=4;
-SELECT s, b AS x, COUNT(*) AS n FROM gh5082_mixed GROUP BY s, x ORDER BY s ASC, x ASC OPTION threads=4;
-SELECT s, c AS x, COUNT(*) AS n FROM gh5082_mixed GROUP BY s, x ORDER BY s ASC, x ASC OPTION threads=4;
-INSERT INTO gh5082_columnar (id,s,b,c) VALUES (7,'',1,'red');
-FLUSH RAMCHUNK gh5082_columnar;
-INSERT INTO gh5082_columnar (id,s,b,c) VALUES (8,'',1,'red');
-SELECT s, b AS x, COUNT(*) AS n FROM gh5082_columnar WHERE id IN (7,8) GROUP BY s, x ORDER BY s ASC, x ASC OPTION threads=4;
-SELECT s, b AS x, COUNT(*) AS n FROM gh5082_columnar WHERE id IN (7,8) GROUP BY s, b ORDER BY s ASC, x ASC OPTION threads=4;
-FLUSH RAMCHUNK gh5082_columnar;
-SELECT s, b AS x, COUNT(*) AS n FROM gh5082_columnar WHERE id IN (7,8) GROUP BY s, x ORDER BY s ASC, x ASC OPTION threads=4;
-DROP TABLE gh5082_columnar;
-DROP TABLE gh5082_mixed;
+	create table issue5085 (body text indexed);
+	insert into issue5085 values <fld/>;
+	flush ramchunk issue5085;
+	SET GLOBAL qcache_max_bytes=16777216;
+	SET GLOBAL qcache_thresh_msec=0;
+	SET GLOBAL qcache_ttl_sec=180;
+
+	<!-- Cache the full result in a single thread. -->
+	SELECT id FROM issue5085 WHERE MATCH('needle common') ORDER BY id ASC LIMIT 200 OPTION threads_ex='1+1';SHOW META;;
+	show status like 'qcache_cached_queries';
+	show status like 'qcache_hits';
+
+	<!-- Each pseudo-shard must see only its own rowids from the same cache. -->
+	set global threads_ex='4+4';
+	SELECT id FROM issue5085 WHERE MATCH('needle common') ORDER BY id ASC LIMIT 200; SHOW META;;
+
+	<!-- Cached results must also preserve pagination and the full hit count. -->
+	SELECT id FROM issue5085 WHERE MATCH('needle common') ORDER BY id ASC LIMIT 45,20; SHOW META;;
+
+	drop table issue5085;
 </sphinxql>
 </queries>
+
 </test>

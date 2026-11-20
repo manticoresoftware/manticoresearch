@@ -20,6 +20,8 @@
 #include "searchd_shard_bulk.h"
 #include "searchd_shard.h"
 #include "searchdreplication.h"
+#include "searchdconfig.h"
+#include "sphinxplugin.h"
 #include "replication/cluster_bulk_chunk.h"
 
 #include <boost/version.hpp>
@@ -32,6 +34,7 @@
 #include <boost/process/v1/handles.hpp>
 #include <boost/process/v1/io.hpp>
 #include <boost/process/v1/pipe.hpp>
+#include <boost/process/v1/start_dir.hpp>
 #else
 #include <boost/process.hpp>
 #include <boost/process/extend.hpp>
@@ -320,6 +323,16 @@ public:
 		if ( !CreateStagingDir ( sRoot, m_sDir, sError ) )
 			return false;
 
+		// RT mode keeps the external files of a table (stopwords, wordforms, ...) in the table folder under bare
+		// names; the child runs there, so it reads them and its chunk keeps the same names as the table
+		CSphString sWorkDir = ".";
+		if ( IsConfigless() )
+		{
+			sWorkDir = RealPath ( GetPathOnly ( tRt.GetFilebase() ) );
+			if ( !IsPathAbsolute ( m_sDir ) )
+				m_sDir = RealPath ( m_sDir );
+		}
+
 		if ( !WriteIndexerRtBulkConfig ( tRt, m_sDir, m_dCsvAttrOrder, sError ) )
 			return false;
 
@@ -327,7 +340,7 @@ public:
 		if ( !GetIndexerPath ( sIndexer, sError ) )
 			return false;
 
-		return Launch ( sIndexer, GetFile ( "indexer.conf" ), GetFile ( "indexer.log" ), sError );
+		return Launch ( sIndexer, sWorkDir, GetFile ( "indexer.conf" ), GetFile ( "indexer.log" ), sError );
 	}
 
 	CSphString GetFile ( const char * szFile ) const
@@ -377,7 +390,7 @@ private:
 		m_sDir = "";
 	}
 
-	bool Launch ( const CSphString & sIndexer, const CSphString & sConfig, const CSphString & sOutput, CSphString & sError )
+	bool Launch ( const CSphString & sIndexer, const CSphString & sWorkDir, const CSphString & sConfig, const CSphString & sOutput, CSphString & sError )
 	{
 		assert ( !m_tChild.valid() );
 		m_sExecutable = sIndexer;
@@ -433,6 +446,7 @@ private:
 			(
 				sIndexer.cstr(),
 				boost::process::args ( dArgs ),
+				boost::process::start_dir ( sWorkDir.cstr() ),
 				boost::process::posix::fd.bind ( STDIN_FILENO, tSocketInput.native_source() ),
 				( boost::process::std_out & boost::process::std_err ) > sOutput.cstr(),
 				tLimitHandles,
@@ -486,6 +500,7 @@ private:
 		(
 			sIndexer.cstr(),
 			boost::process::args ( dArgs ),
+			boost::process::start_dir ( sWorkDir.cstr() ),
 			boost::process::std_in < m_tInput,
 			( boost::process::std_out & boost::process::std_err ) > sOutput.cstr(),
 			tLimitHandles,
@@ -1096,9 +1111,47 @@ bool ActivateIndexerRtBulk ( ClientSession_c & tSession, const CSphString & sTab
 }
 
 
-// Explicit indexer limits for the generated config; these are the indexer defaults.
-static const char * g_szIndexerRtBulkMemLimit = "128M";
-static const char * g_szIndexerRtBulkWriteBuffer = "1M";
+// The common and indexer sections of the generated config: the options of these sections of the main config that the
+// child uses, read at startup as searchd reads common. The other keys of the sections are left out, as the child
+// builds one csvpipe source and does not use them. Paths are absolute, as the child runs in the table folder; without
+// mem_limit and write_buffer the child gets the indexer defaults 128M and 1M.
+static CSphString g_sIndexerRtBulkSections;
+
+static void AddIndexerRtBulkOption ( StringBuilder_c & sOut, const char * szKey, const CSphString & sValue )
+{
+	sOut.Appendf ( "  %s = %s\n", szKey, EscapeIndexerRtBulkConfigPath ( sValue ).cstr() );
+}
+
+
+void ConfigureIndexerRtBulk ( const CSphConfig & hConf )
+{
+	const CSphConfigSection * pCommon = hConf("common") ? hConf["common"]("common") : nullptr;
+	const CSphConfigSection * pIndexer = hConf("indexer") ? hConf["indexer"]("indexer") : nullptr;
+	auto fnValue = [] ( const CSphConfigSection * pSection, const char * szKey ) { return pSection ? (*pSection)(szKey) : nullptr; };
+
+	StringBuilder_c sOut;
+	sOut << "common {\n";
+	AddIndexerRtBulkOption ( sOut, "lemmatizer_base", RealPath ( g_sLemmatizerBase ) );
+	if ( fnValue ( pCommon, "plugin_dir" ) )
+		AddIndexerRtBulkOption ( sOut, "plugin_dir", RealPath ( PluginGetDir() ) );
+	for ( const char * szKey : { "on_json_attr_error", "json_autoconv_numbers", "json_autoconv_keynames" } )
+		if ( const CSphVariant * pValue = fnValue ( pCommon, szKey ) )
+			AddIndexerRtBulkOption ( sOut, szKey, pValue->strval() );
+
+	// on_json_attr_error, json_autoconv_numbers and json_autoconv_keynames of the indexer section are left out:
+	// searchd reads them from common only, and so must the child to parse JSON as INSERT does
+	sOut << "}\n\nindexer {\n";
+	const std::pair<const char *, const char *> dIndexerKeys[] = { { "mem_limit", "128M" }, { "write_buffer", "1M" },
+		{ "max_iops", nullptr }, { "max_iosize", nullptr }, { "lemmatizer_cache", nullptr } };
+	for ( const auto & [szKey, szDefault] : dIndexerKeys )
+	{
+		const CSphVariant * pValue = fnValue ( pIndexer, szKey );
+		if ( pValue || szDefault )
+			AddIndexerRtBulkOption ( sOut, szKey, pValue ? pValue->strval() : CSphString ( szDefault ) );
+	}
+	sOut << "}\n\n";
+	g_sIndexerRtBulkSections = (CSphString)sOut;
+}
 
 
 static bool WriteIndexerRtBulkConfig ( const RtIndex_i & tRt, const CSphString & sDir, CSphVector<int> & dCsvAttrOrder, CSphString & sError )
@@ -1117,9 +1170,7 @@ static bool WriteIndexerRtBulkConfig ( const RtIndex_i & tRt, const CSphString &
 		return false;
 	}
 
-	CSphString sConfigLemmatizerBase = EscapeIndexerRtBulkConfigPath ( g_sLemmatizerBase );
-	fprintf ( fpConfig, "common {\n  lemmatizer_base = %s\n}\n\n", sConfigLemmatizerBase.cstr() );
-	fprintf ( fpConfig, "indexer {\n  mem_limit = %s\n  write_buffer = %s\n}\n\n", g_szIndexerRtBulkMemLimit, g_szIndexerRtBulkWriteBuffer );
+	fputs ( g_sIndexerRtBulkSections.cstr(), fpConfig );
 	const char * szPipeField = "csvpipe_field";
 	const char * szPipeFieldString = "csvpipe_field_string";
 	const char * szPipeAttrOrder = "csvpipe_attr_order";
@@ -1153,7 +1204,19 @@ static bool WriteIndexerRtBulkConfig ( const RtIndex_i & tRt, const CSphString &
 	fprintf ( fpConfig, "\n" );
 	CSphString sConfigIndex = EscapeIndexerRtBulkConfigPath ( sIndex );
 	fprintf ( fpConfig, "}\n\nindex indexer_rt_bulk_chunk {\n  type = plain\n  source = indexer_rt_bulk_source\n  path = %s\n", sConfigIndex.cstr() );
-	DumpSettingsCfg ( fpConfig, tRt, nullptr );
+	// the settings dump joins the wordforms files into one value, while a config takes one file per wordforms line
+	StringBuilder_c sSettings;
+	DumpSettings ( sSettings, tRt, nullptr );
+	for ( const CSphString & sLine : sphSplit ( sSettings.cstr(), "\n" ) )
+	{
+		if ( !sLine.Begins ( "wordforms = " ) )
+			fprintf ( fpConfig, "\t%s\n", sLine.cstr() );
+		else
+			for ( const CSphString & sFile : tRt.GetDictionary()->GetSettings().m_dWordforms )
+				fprintf ( fpConfig, "\twordforms = %s\n", sFile.cstr() );
+	}
+	// not in the dump: the chunk embeds the external files as the chunks of the table do (none in RT mode, 0)
+	fprintf ( fpConfig, "\tembedded_limit = %d\n", tRt.GetSettings().m_iEmbeddedLimit );
 	if ( tRt.GetSettings().m_dKNN.GetLength() )
 		fprintf ( fpConfig, "\n	knn = %s", FormatKNNConfigStr ( tRt.GetSettings().m_dKNN ).cstr() );
 	fprintf ( fpConfig, "\n}\n" );

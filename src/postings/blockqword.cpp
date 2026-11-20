@@ -72,11 +72,12 @@ bool BlockIndexQword_T<MAPPED>::Setup ( const DiskIndexQwordSetup_c * pSetup )
 
 
 template<bool MAPPED>
-void BlockIndexQword_T<MAPPED>::SeekDocReader ( SphOffset_t iPos, int iHint )
+void BlockIndexQword_T<MAPPED>::SeekDocReader ( SphOffset_t iPos, int iHint, const BYTE * pSingleton )
 {
 	ResetCursor();
 	m_iStart = m_iNext = iPos==1 ? postings::FILE_HEADER_SIZE : iPos;
-	if ( iPos>=0 )
+	m_pSingletonPayload = pSingleton;
+	if ( !pSingleton && iPos>=0 )
 		m_rdDoclist->SeekTo ( m_iStart, iHint );
 }
 
@@ -138,7 +139,7 @@ bool BlockIndexQword_T<MAPPED>::LoadLeaf ( RowID_t tMin )
 {
 	if ( !m_bOpen )
 	{
-		if ( !m_tReader.Open ( m_iStart, m_sError ) )
+		if ( !m_tReader.Open ( m_iStart, m_sError, m_pSingletonPayload ) )
 		{
 			Fail();
 			return false;

@@ -1100,6 +1100,7 @@ private:
 	std::unique_ptr<knn::KNN_i>	m_pKNN;
 	SIContainer_c				m_tSI;
 
+	bool SupportsMultiHitSingletons() const { return m_tSettings.m_uPostingsFormat && m_uVersion>=postings::MULTI_HIT_FORMAT_VERSION; }
 	DWORD						m_uVersion;				///< data files version
 	volatile bool				m_bPassedRead;
 	volatile bool				m_bPassedAlloc;
@@ -3699,7 +3700,7 @@ void CSphHitBuilder::DoclistEndList ()
 	if ( m_pBlockWriter )
 	{
 		m_tWord.m_iSkiplistOffset = (m_tWord.m_iDocs & HITLESS_DOC_MASK)>m_iSkiplistBlockSize ? m_wrSkiplist.GetPos() : 0;
-		m_bError |= !m_pBlockWriter->Finish ( m_wrSkiplist, m_tWord.m_iDoclistOffset, *m_pLastError );
+		m_bError |= !m_pBlockWriter->Finish ( m_wrSkiplist, m_tWord.m_iDoclistOffset, m_tWord.m_pSingletonPayload, *m_pLastError );
 		return;
 	}
 
@@ -3823,7 +3824,7 @@ void CSphHitBuilder::cidxHit ( AggregateHit_t * pHit )
 			// emit dict entry
 			m_tWord.m_uWordID = m_tLastHit.m_uWordID;
 			m_tWord.m_szKeyword = m_tLastHit.m_szKeyword;
-			m_tWord.m_iDoclistLength = m_tWord.m_iDoclistOffset<0 ? 0 : m_wrDoclist.GetPos()-m_tWord.m_iDoclistOffset;
+			m_tWord.m_iDoclistLength = (m_tWord.m_pSingletonPayload || m_tWord.m_iDoclistOffset<0) ? 0 : m_wrDoclist.GetPos()-m_tWord.m_iDoclistOffset;
 			if ( m_tWord.m_iDocs )
 				m_pDict->DictEntry ( m_tWord );
 
@@ -6458,6 +6459,7 @@ class CSphDictReader
 {
 public:
 	// current word
+	const BYTE *	m_pSingletonPayload = nullptr;
 	SphWordID_t		m_uWordID = 0;
 	SphOffset_t		m_iDoclistOffset = 0;
 	int				m_iDocs = 0;
@@ -6476,11 +6478,17 @@ private:
 	DictFormat_e	m_eDictFormat = DictFormat_e::CRC;
 	int				m_iCheckpoint = 1;
 
+	postings::SingletonReadBuffer_t m_dSingletonPayload {};
+	bool m_bMultiHitSingletons;
+
+	void			ReadKeywordPosting();
+
 public:
-	CSphDictReader ( int iSkiplistBlockSize, DictFormat_e eDictFormat )
+	CSphDictReader ( int iSkiplistBlockSize, DictFormat_e eDictFormat, bool bMultiHitSingletons )
 		: m_iSkiplistBlockSize ( iSkiplistBlockSize )
 		, m_dWord ( GetKeywordBufSize ( eDictFormat ) )
 		, m_eDictFormat ( eDictFormat )
+		, m_bMultiHitSingletons ( bMultiHitSingletons )
 	{
 		m_dWord[0] = '\0';
 	}
@@ -6563,10 +6571,8 @@ public:
 			m_iWordLen = iMatch+iDelta;
 			m_dWord[m_iWordLen] = '\0';
 
-			m_iDoclistOffset = m_pReader->UnzipOffset();
-			m_iDocs = m_pReader->UnzipInt();
-			m_iHits = m_pReader->UnzipInt();
-			postings::UnpackKeywordPosting ( m_iDoclistOffset, m_iDocs, m_iHits );
+			ReadKeywordPosting();
+
 			m_iHint = 0;
 			const int iLayoutDocs = m_iDocs & HITLESS_DOC_MASK;
 			if ( iLayoutDocs>=DOCLIST_HINT_THRESH )
@@ -6606,6 +6612,29 @@ public:
 
 	int GetCheckpoint() const { return m_iCheckpoint; }
 };
+
+
+template<bool WORDDICT>
+void CSphDictReader<WORDDICT>::ReadKeywordPosting()
+{
+	m_iDoclistOffset = m_pReader->UnzipOffset();
+	m_pSingletonPayload = nullptr;
+	if ( m_bMultiHitSingletons && m_iDoclistOffset==postings::MULTI_HIT_MARKER )
+	{
+		m_dSingletonPayload[0] = m_pReader->GetByte();
+		assert ( m_dSingletonPayload[0] && m_dSingletonPayload[0]<=postings::MAX_SINGLETON_PAYLOAD );
+
+		m_pReader->GetBytes ( m_dSingletonPayload.data()+1, m_dSingletonPayload[0] );
+		m_pSingletonPayload = m_dSingletonPayload.data();
+		m_iDocs = 1;
+		m_iHits = postings::SingletonTF(m_pSingletonPayload);
+	} else
+	{
+		m_iDocs = m_pReader->UnzipInt();
+		m_iHits = m_pReader->UnzipInt();
+		postings::UnpackKeywordPosting ( m_iDoclistOffset, m_iDocs, m_iHits );
+	}
+}
 
 
 std::unique_ptr<ISphFilter> CSphIndex_VLN::CreateMergeFilters ( const VecTraits_T<CSphFilterSettings> & dSettings ) const
@@ -6649,7 +6678,7 @@ namespace QwordIteration
 		tQword.m_uHitPosition = 0;
 		tQword.m_iHitlistPos = 0;
 
-		tQword.SeekDocReader ( tReader.m_iDoclistOffset, tReader.m_iHint );
+		tQword.SeekDocReader ( tReader.m_iDoclistOffset, tReader.m_iHint, tReader.m_pSingletonPayload );
 	}
 
 
@@ -6759,7 +6788,7 @@ private:
 
 bool CSphIndex_VLN::ConvertPostingWords ( CSphHitBuilder & tBuilder, CSphString & sError )
 {
-	CSphDictReader<true> tDict ( m_tSettings.m_iSkiplistBlockSize, m_pDict->GetSettings().GetDictFormat() );
+	CSphDictReader<true> tDict ( m_tSettings.m_iSkiplistBlockSize, m_pDict->GetSettings().GetDictFormat(), SupportsMultiHitSingletons() );
 	if ( !tDict.Setup ( GetFilename(SPH_EXT_SPI), m_tWordlist.GetWordsEnd(), m_tSettings.m_eHitless, sError ) )
 		return false;
 
@@ -6783,7 +6812,7 @@ bool CSphIndex_VLN::ConvertPostingWords ( CSphHitBuilder & tBuilder, CSphString 
 
 		pWord->ResetDecoderState();
 		pWord->m_bHasHitlist = tDict.m_bHasHitlist;
-		pWord->SeekDocReader ( tDict.m_iDoclistOffset, tDict.m_iHint );
+		pWord->SeekDocReader ( tDict.m_iDoclistOffset, tDict.m_iHint, tDict.m_pSingletonPayload );
 		AggregateHit_t tHit;
 		tHit.m_uWordID = tDict.m_uWordID;
 		tHit.m_szKeyword = tDict.GetWord();
@@ -6934,8 +6963,8 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 	static_assert ( QWORDDST::is_worddict::value == QWORDDST::is_worddict::value, "can't merge worddict with non-worddict" );
 
-	CSphDictReader<QWORDDST::is_worddict::value> tDstReader ( pDstIndex->GetSettings().m_iSkiplistBlockSize, pDstIndex->m_pDict->GetSettings().GetDictFormat() );
-	CSphDictReader<QWORDSRC::is_worddict::value> tSrcReader ( pSrcIndex->GetSettings().m_iSkiplistBlockSize, pSrcIndex->m_pDict->GetSettings().GetDictFormat() );
+	CSphDictReader<QWORDDST::is_worddict::value> tDstReader ( pDstIndex->GetSettings().m_iSkiplistBlockSize, pDstIndex->m_pDict->GetSettings().GetDictFormat(), pDstIndex->SupportsMultiHitSingletons() );
+	CSphDictReader<QWORDSRC::is_worddict::value> tSrcReader ( pSrcIndex->GetSettings().m_iSkiplistBlockSize, pSrcIndex->m_pDict->GetSettings().GetDictFormat(), pSrcIndex->SupportsMultiHitSingletons() );
 
 	/// compress means: I don't want true merge, I just want to apply deadrows and filter
 	bool bCompress = pDstIndex==pSrcIndex;
@@ -7144,8 +7173,8 @@ bool CSphIndex_VLN::MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, c
 		DataReaderFactoryPtr_c						m_tHits;
 		bool										m_bHasWord = false;
 
-		Source_t ( int iSkiplistBlockSize, DictFormat_e eDictFormat, int64_t iIndexId )
-			: m_tReader ( iSkiplistBlockSize, eDictFormat )
+		Source_t ( int iSkiplistBlockSize, DictFormat_e eDictFormat, int64_t iIndexId, bool bMultiHitSingletons )
+			: m_tReader ( iSkiplistBlockSize, eDictFormat, bMultiHitSingletons )
 			, m_tQword ( false, false, iIndexId )
 		{}
 	};
@@ -7156,7 +7185,7 @@ bool CSphIndex_VLN::MergeWordsN ( VecTraits_T<const CSphIndex_VLN *> dIndexes, c
 	for ( int i = 0; i < iSources; ++i )
 	{
 		const auto * pIndex = dIndexes[i];
-		dSources.Add ( std::make_unique<Source_t> ( pIndex->GetSettings().m_iSkiplistBlockSize, pIndex->m_pDict->GetSettings().GetDictFormat(), pIndex->GetIndexId() ) );
+		dSources.Add ( std::make_unique<Source_t> ( pIndex->GetSettings().m_iSkiplistBlockSize, pIndex->m_pDict->GetSettings().GetDictFormat(), pIndex->GetIndexId(), pIndex->SupportsMultiHitSingletons() ) );
 		auto * pSrc = dSources.Last().get();
 		pSrc->m_pIndex = pIndex;
 
@@ -7761,7 +7790,7 @@ bool CSphIndex_VLN::DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder *
 	CSphAutofile tDummy;
 	pHitBuilder->CreateIndexFiles ( pIndex->GetTmpFilename ( SPH_EXT_SPD ), pIndex->GetTmpFilename ( SPH_EXT_SPP ), pIndex->GetTmpFilename ( SPH_EXT_SPE ), false, 0, tDummy );
 
-	CSphDictReader<QWORD::is_worddict::value> tWordsReader ( pIndex->GetSettings().m_iSkiplistBlockSize, pIndex->m_pDict->GetSettings().GetDictFormat() );
+	CSphDictReader<QWORD::is_worddict::value> tWordsReader ( pIndex->GetSettings().m_iSkiplistBlockSize, pIndex->m_pDict->GetSettings().GetDictFormat(), pIndex->SupportsMultiHitSingletons() );
 	if ( !tWordsReader.Setup ( pIndex->GetFilename ( SPH_EXT_SPI ), pIndex->m_tWordlist.GetWordsEnd(), pIndex->m_tSettings.m_eHitless, sError ) )
 		return false;
 
@@ -9562,7 +9591,7 @@ bool DiskIndexQwordSetup_c::SetupWithWrd ( const DiskIndexQwordTraits_c& tWord, 
 	assert ( pBuf );
 	assert ( m_iSkiplistBlockSize>0 );
 
-	auto pCtx = CreateKeywordsBlockReader ( pBuf, m_iSkiplistBlockSize, pIndex->m_pDict->GetSettings().GetDictFormat() );
+	auto pCtx = CreateKeywordsBlockReader ( pBuf, m_iSkiplistBlockSize, pIndex->m_pDict->GetSettings().GetDictFormat(), pIndex->SupportsMultiHitSingletons() );
 	while ( pCtx->UnpackWord() )
 	{
 		// block is sorted
@@ -9637,7 +9666,9 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 
 	if ( m_bSetupReaders )
 	{
-		PrefetchDoclist ( tRes.m_iDoclistOffset, tRes.m_iDoclistHint );
+		if ( !tRes.m_pSingletonPayload )
+			PrefetchDoclist ( tRes.m_iDoclistOffset, tRes.m_iDoclistHint );
+
 		tWord.SetDocReader ( m_pDoclist );
 
 		// read in skiplist
@@ -9659,7 +9690,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 			}
 		}
 
-		tWord.SeekDocReader ( tRes.m_iDoclistOffset, tRes.m_iDoclistHint );
+		tWord.SeekDocReader ( tRes.m_iDoclistOffset, tRes.m_iDoclistHint, tRes.m_pSingletonPayload );
 		tWord.SetHitReader ( m_pHitlist );
 	}
 
@@ -10330,7 +10361,7 @@ void CSphIndex_VLN::DebugDumpDict ( FILE * fp, bool bDumpOnly )
 		fprintf ( fp, "keyword,docs,hits,offset\n" );
 
 	m_tWordlist.DebugPopulateCheckpoints();
-	auto pCtx = CreateKeywordsBlockReader ( nullptr, m_tSettings.m_iSkiplistBlockSize, m_pDict->GetSettings().GetDictFormat() );
+	auto pCtx = CreateKeywordsBlockReader ( nullptr, m_tSettings.m_iSkiplistBlockSize, m_pDict->GetSettings().GetDictFormat(), SupportsMultiHitSingletons() );
 	ARRAY_FOREACH ( i, m_tWordlist.m_dCheckpoints )
 	{
 		pCtx->Reset ( m_tWordlist.AcquireDict ( &m_tWordlist.m_dCheckpoints[i] ) );
@@ -10375,7 +10406,7 @@ bool CSphIndex_VLN::PreallocWordlist()
 	DictFormat_e eDictFormat = m_pDict->GetSettings().GetDictFormat();
 
 	// only checkpoint and wordlist infixes are actually read here; dictionary itself is just mapped
-	if ( !m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), eDictFormat, m_tSettings.m_iSkiplistBlockSize, m_sLastError ) )
+	if ( !m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), eDictFormat, m_tSettings.m_iSkiplistBlockSize, SupportsMultiHitSingletons(), m_sLastError ) )
 		return false;
 
 	if ( ( m_tWordlist.m_tBuf.GetLengthBytes()<=18 )!=( m_tWordlist.m_dCheckpoints.GetLength()==0 ) )
@@ -10833,7 +10864,7 @@ void CSphIndex_VLN::GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & 
 		return;
 
 	assert ( !tRes.m_pWordReader );
-	auto pReader = CreateKeywordsBlockReader ( m_tWordlist.m_tBuf.GetReadPtr(), m_tSettings.m_iSkiplistBlockSize, m_pDict->GetSettings().GetDictFormat() );
+	auto pReader = CreateKeywordsBlockReader ( m_tWordlist.m_tBuf.GetReadPtr(), m_tSettings.m_iSkiplistBlockSize, m_pDict->GetSettings().GetDictFormat(), SupportsMultiHitSingletons() );
 	tRes.m_pWordReader = pReader.get();
 	tRes.m_bHasExactDict = m_tSettings.m_bIndexExactWords;
 

@@ -121,7 +121,7 @@ bool BlockPostingWindow_T<MAPPED>::LoadLeaf ( RowID_t tMin )
 
 	if ( !m_bOpen )
 	{
-		if ( !m_tReader.Open ( m_tWord.m_iStart, m_tWord.m_sError ) )
+		if ( !m_tReader.Open ( m_tWord.m_iStart, m_tWord.m_sError, m_tWord.m_pSingletonPayload ) )
 			return false;
 
 		m_bOpen = true;

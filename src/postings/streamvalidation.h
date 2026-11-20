@@ -13,6 +13,8 @@
 namespace postings
 {
 
+bool CheckDictionarySingleton ( const uint8_t * pRecord, Posting_t & tPosting, bool bHasHitlist = true );
+
 // Checks framing and encoded payloads before decoding untrusted index data.
 class ReaderValidation_c
 {
@@ -20,6 +22,7 @@ public:
 	explicit ReaderValidation_c ( Input_i & tInput );
 
 	bool				Open ( uint64_t uOffset, std::string & sError );
+	bool				OpenDictionarySingleton ( const uint8_t * pRecord, std::string & sError );
 	bool				Next ( uint32_t uMinRow, std::string & sError );
 	bool				ReadRows ( std::string & sError );
 	bool				ReadFields ( std::string & sError );

@@ -4966,6 +4966,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 
 		SphOffset_t uDocpos = tWriterDocs.GetPos();
 		SphOffset_t iLocator = uDocpos;
+		const BYTE * pSingleton = nullptr;
 		SphOffset_t uLastHitpos = 0;
 		RowID_t tLastRowID = INVALID_ROWID;
 		RowID_t tSkiplistRowID = INVALID_ROWID;
@@ -5043,7 +5044,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 
 		// write skiplist
 		int64_t iSkiplistOff = tWriterSkips.GetPos();
-		if ( pBlockWriter && iDocs && !pBlockWriter->Finish ( tWriterSkips, iLocator, sError ) )
+		if ( pBlockWriter && iDocs && !pBlockWriter->Finish ( tWriterSkips, iLocator, pSingleton, sError ) )
 			return false;
 
 		for ( int i=1; i<dSkiplist.GetLength(); ++i )
@@ -5102,7 +5103,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 				else
 					tLastWord.PutDelta ( tWriterDict, pWord->m_sWord, pWord->m_iWordLen );
 
-				postings::WriteKeywordPosting ( tWriterDict, iLocator, iDocsCount, iHits );
+				postings::WriteKeywordPosting ( tWriterDict, iLocator, iDocsCount, iHits, pSingleton );
 			} else
 			{
 				assert ( pWord->m_uWordID!=uLastWordID );

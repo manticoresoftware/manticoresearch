@@ -29,8 +29,18 @@ static const int PREFETCH_DOCLIST_HEAD_BYTES = 64*1024;
 /// a doclist slice of an expanded term
 struct Slice64_t
 {
-	uint64_t	m_uOff;
+	union
+	{
+		uint64_t		m_uOff;
+		const BYTE *	m_pRecord;
+	};
 	int			m_iLen;
+
+	void SetDictionaryRecord ( const BYTE * p )	{ m_pRecord = p; m_iLen = DICTIONARY_RECORD; }
+	bool IsDictionaryRecord() const				{ return m_iLen==DICTIONARY_RECORD; }
+
+private:
+	static constexpr int DICTIONARY_RECORD = -2;
 };
 
 struct DiskSubstringPayload_t : public ISphSubstringPayload
@@ -153,7 +163,7 @@ public:
 		ResetDecoderState();
 	}
 
-	void		SeekDocReader ( SphOffset_t iPos, int iHint ) final	{ m_tDocs.SeekTo ( iPos, iHint ); }
+	void		SeekDocReader ( SphOffset_t iPos, int iHint, const BYTE * pSingleton = nullptr ) final	{ m_tDocs.SeekTo ( iPos, iHint ); }
 	void		SeekHitReader ( SphOffset_t iPos, int iHint ) final	{ m_tHits.SeekTo ( iPos, iHint ); }
 	SphOffset_t	GetDocReaderPos() const final						{ return m_tDocs.GetPos(); }
 	SphOffset_t	GetHitReaderPos() const final						{ return m_tHits.GetPos(); }
@@ -546,11 +556,11 @@ public:
 private:
 	void SetupReader ()
 	{
-		uint64_t uDocOff = m_pPayload->m_dDoclist[m_iDoclist].m_uOff;
-		int iHint = m_pPayload->m_dDoclist[m_iDoclist].m_iLen;
-		m_iDoclist++;
-
-		this->SeekDocReader ( uDocOff, iHint );
+		const auto & tSlice = m_pPayload->m_dDoclist[m_iDoclist++];
+		if ( tSlice.IsDictionaryRecord() )
+			this->SeekDocReader ( 0, 0, tSlice.m_pRecord );
+		else
+			this->SeekDocReader ( tSlice.m_uOff, tSlice.m_iLen );
 	}
 
 	const DiskSubstringPayload_t *	m_pPayload;

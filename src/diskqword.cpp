@@ -48,7 +48,7 @@ void DiskIndexQwordSetup_c::PrefetchPayload ( const DiskSubstringPayload_t & tPa
 	CSphFixedVector<FileRange_t> dRanges ( tPayload.m_dDoclist.GetLength() );
 	int iRanges = 0;
 	for ( const auto & t : tPayload.m_dDoclist )
-		if ( SphOffset_t(t.m_uOff)>=0 )
+		if ( !t.IsDictionaryRecord() && SphOffset_t(t.m_uOff)>=0 )
 			dRanges[iRanges++] = { SphOffset_t(t.m_uOff), PrefetchBytes(t.m_iLen) };
 
 	if ( iRanges && m_pDoclist->Prefetch ( dRanges.Begin(), iRanges ) )

@@ -149,12 +149,81 @@ bool ReaderValidation_c::Open ( uint64_t uOffset, std::string & sError )
 }
 
 
+static bool ReadSingletonValue ( const uint8_t * & p, const uint8_t * pEnd, uint64_t uMax, uint64_t & uValue )
+{
+	const uint8_t * pLast = std::find_if ( p, pEnd, [] ( uint8_t uByte ) { return !(uByte & 0x80); } );
+	if ( pLast==pEnd || *p==0x80 || pLast-p>=sphCalcZippedLen(INT64_MAX) )
+		return false;
+
+	uValue = UnzipOffsetBE(p);
+	return uValue<=uMax;
+}
+
+
+bool CheckDictionarySingleton ( const uint8_t * pRecord, Posting_t & tPosting, bool bHasHitlist )
+{
+	if ( !bHasHitlist || !*pRecord || *pRecord>MAX_SINGLETON_PAYLOAD )
+		return false;
+
+	const uint8_t * p = pRecord+1;
+	const uint8_t * pEnd = p+*pRecord;
+	uint64_t uTF, uRow, uField;
+	if ( !ReadSingletonValue ( p, pEnd, INT32_MAX, uTF ) || uTF<2 || !ReadSingletonValue ( p, pEnd, INT32_MAX-1, uRow )
+		|| !ReadSingletonValue ( p, pEnd, MAX_FIELDS+FIELD_WORDS, uField ) || uField==MAX_FIELDS )
+		return false;
+
+	tPosting.m_uRow = uint32_t(uRow);
+	tPosting.m_uTF = uint32_t(uTF);
+	tPosting.m_dFields.fill(0);
+	if ( uField<MAX_FIELDS )
+		tPosting.m_dFields[uField>>5] = 1U<<(uField&31);
+	else
+	{
+		for ( size_t i=0; i<uField-MAX_FIELDS; ++i )
+		{
+			uint64_t uMask;
+			if ( !ReadSingletonValue ( p, pEnd, UINT32_MAX, uMask ) )
+				return false;
+
+			tPosting.m_dFields[i] = uint32_t(uMask);
+		}
+
+		if ( !tPosting.m_dFields[uField-MAX_FIELDS-1] )
+			return false;
+	}
+
+	return ReadSingletonValue ( p, pEnd, INT64_MAX, tPosting.m_uHitRef ) && tPosting.m_uHitRef && p==pEnd;
+}
+
+
+bool ReaderValidation_c::OpenDictionarySingleton ( const uint8_t * pRecord, std::string & sError )
+{
+	Posting_t t;
+	if ( !CheckDictionarySingleton ( pRecord, t ) )
+		return Fail ( sError, "invalid multi-hit dictionary singleton" );
+
+	m_tDesc = {};
+	m_tLeaf = {};
+	m_tLeaf.m_bShort = true;
+	m_tLeaf.m_uCount = 1;
+	m_tLeaf.m_uFirst = m_tLeaf.m_uLast = m_dRows[0] = t.m_uRow;
+	m_tLeaf.m_uMaxTF = m_dTF[0] = t.m_uTF;
+	m_dFields[0] = t.m_dFields;
+	m_dHitRefs[0] = t.m_uHitRef;
+	m_dLoaded.fill(true);
+	m_bHaveLeaf = m_bEOF = m_bError = false;
+	m_uNext = 0;
+	m_uEnd = 0;
+	return true;
+}
+
+
 bool ReaderValidation_c::Next ( uint32_t uMinRow, std::string & sError )
 {
 	if ( m_bError )
 		return false;
 
-	if ( m_tLeaf.m_bShort && !m_bEOF && m_uNext!=m_uEnd )
+	if ( m_tLeaf.m_bShort && !m_bEOF && !m_bHaveLeaf )
 	{
 		m_bHaveLeaf = true;
 		if ( !ReadRows(sError) )

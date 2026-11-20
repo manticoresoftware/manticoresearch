@@ -8,7 +8,10 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
+#include "../std/thread_annotations.h"
+#include "../std/zip.h"
 
 namespace postings
 {
@@ -32,12 +35,30 @@ inline uint32_t SingletonHit ( uint64_t uLocator )
 	return uint32_t(uLocator);
 }
 
-// Keyword entries use three big-endian varints. A zero offset introduces
-// a row ID and packed hit, with both dictionary counts implicitly one.
-template<typename WRITER>
-void WriteKeywordPosting ( WRITER & tWriter, int64_t iOffset, int iDocs, int iHits )
+// The length prefix lets dictionary scans skip the field mask and position offset.
+constexpr int MULTI_HIT_FORMAT_VERSION = 77;
+constexpr int MULTI_HIT_MARKER = 1;
+constexpr int TEMP_MULTI_HIT_MARKER = -1;
+constexpr int MAX_SINGLETON_PAYLOAD = 63;
+using SingletonBytes_t = std::array<uint8_t,MAX_SINGLETON_PAYLOAD+1>; // length, TF, row, field code, up to eight masks, .spp offset
+
+// A reader can copy any byte-sized length before the checker inspects the record.
+using SingletonReadBuffer_t = std::array<uint8_t,UINT8_MAX+1>;
+
+inline int SingletonTF ( const uint8_t * pRecord )
 {
-	if ( iOffset<0 )
+	++pRecord;
+	return int(UnzipIntBE(pRecord));
+}
+
+template<typename WRITER>
+void WriteKeywordPosting ( WRITER & tWriter, int64_t iOffset, int iDocs, int iHits, const uint8_t * pRecord = nullptr, int iMultiMarker = MULTI_HIT_MARKER )
+{
+	if ( pRecord )
+	{
+		tWriter.ZipOffset(iMultiMarker);
+		tWriter.PutBytes ( pRecord, 1+*pRecord );
+	} else if ( iOffset<0 )
 	{
 		tWriter.ZipOffset(0);
 		tWriter.ZipInt ( SingletonRow(iOffset) );

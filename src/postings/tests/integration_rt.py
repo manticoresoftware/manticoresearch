@@ -83,10 +83,12 @@ def main():
 
         queries += ["SELECT id,weight() FROM {} WHERE MATCH('" + match +
                     "') ORDER BY id ASC OPTION ranker=proximity_bm25"
-                    for match in ["singlerow", "@title singlerow", "sharedonce", '"singlerow sharedonce"']]
+                    for match in ["singlerow", "@title singlerow", "sharedonce", '"singlerow sharedonce"', "repeatrow", '"repeatrow repeatrow"', "@title repeatrow", "multichunk"]]
         if case == "wide":
-            queries += ["SELECT id FROM {} WHERE MATCH('singler*') ORDER BY id",
-                        "SELECT id FROM {} WHERE MATCH('@f33 upperfield') ORDER BY id"]
+            queries += ["SELECT id FROM {} WHERE MATCH('singler*') ORDER BY id ASC",
+                        "SELECT id FROM {} WHERE MATCH('@f33 upperfield') ORDER BY id ASC",
+                        "SELECT id FROM {} WHERE MATCH('@f33 repeat*') ORDER BY id ASC",
+                        "SELECT id,weight() FROM {} WHERE MATCH('mixedrare*') ORDER BY id ASC OPTION ranker=proximity_bm25"]
 
         # Flat scored AND exercises the block candidate/payload path. Compare
         # complete small result sets, scores and hit-based rankers across formats.
@@ -129,8 +131,15 @@ def main():
                 texts += ["wide common" if f == i % 34 else "" for f in range(len(fields) - 2)]
                 if i in (2, 800):
                     texts[0] += (" singlerow" if i == 2 else "") + " sharedonce"
-                if case == "wide" and i == 800:
-                    texts[-1] += " upperfield"
+                if i in (2, 800):
+                    texts[0] += " multichunk multichunk"
+                if i == 800:
+                    texts[0] += " repeatrow repeatrow"
+                    texts[-1] += " repeatrow"
+                if case == "wide" and i in (2, 3, 800):
+                    texts[0] += " mixedrarecommon"
+                    if i == 800:
+                        texts[-1] += " upperfield mixedrareone mixedraremulti mixedraremulti"
                 values.append("(" + str(i) + "," + ",".join("'" + x + "'" for x in texts) + "," + str(i % 9) + ")")
             for table in tables:
                 sql("INSERT INTO " + table + " (id," + ",".join(fields) + ",grp) VALUES " + ",".join(values))

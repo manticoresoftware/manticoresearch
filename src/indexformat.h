@@ -51,7 +51,7 @@ public:
 	virtual const char *	GetReadError() const { return nullptr; }
 
 	// reader positioning for setup, merge and check code; the templated qword routes these to its reader policy
-	virtual void		SeekDocReader ( SphOffset_t iPos, int iHint )	{ m_rdDoclist->SeekTo ( iPos, iHint ); }
+	virtual void		SeekDocReader ( SphOffset_t iPos, int iHint, const BYTE * pSingleton = nullptr )	{ m_rdDoclist->SeekTo ( iPos, iHint ); }
 	virtual void		SeekHitReader ( SphOffset_t iPos, int iHint )	{ m_rdHitlist->SeekTo ( iPos, iHint ); }
 	virtual SphOffset_t	GetDocReaderPos() const							{ return m_rdDoclist->GetPos(); }
 	virtual SphOffset_t	GetHitReaderPos() const							{ return m_rdHitlist->GetPos(); }
@@ -125,7 +125,7 @@ public:
 										~CWordlist () override;
 
 	void								Reset();
-	bool								Preread ( const CSphString & sName, DictFormat_e eDictFormat, int iSkiplistBlockSize, CSphString & sError );
+	bool								Preread ( const CSphString & sName, DictFormat_e eDictFormat, int iSkiplistBlockSize, bool bMultiHitSingletons, CSphString & sError );
 
 	const CSphWordlistCheckpoint *		FindCheckpointCrc ( SphWordID_t iWordID ) const;
 	const CSphWordlistCheckpoint *		FindCheckpointWrd ( const char * sWord, int iWordLen, bool bStarMode ) const;
@@ -144,6 +144,7 @@ public:
 	void								DebugPopulateCheckpoints();
 
 private:
+	bool m_bMultiHitSingletons = false;
 	bool								m_bWordDict = false;
 	DictFormat_e						m_eDictFormat = DictFormat_e::CRC;
 	CSphVector<InfixBlock_t>			m_dInfixBlocks {0};
@@ -168,16 +169,20 @@ public:
 	int				GetWordLen() const		{ return m_iLen; }
 
 protected:
-					ISphKeywordsBlockReader ( int iSkiplistBlockSize )
+					ISphKeywordsBlockReader ( int iSkiplistBlockSize, bool bMultiHitSingletons )
 						: m_iSkiplistBlockSize ( iSkiplistBlockSize )
+						, m_bMultiHitSingletons ( bMultiHitSingletons )
 					{}
+
+	void			ReadPosting();
 
 	const BYTE *	m_pBuf = nullptr;
 	int				m_iLen = 0;
 	int				m_iSkiplistBlockSize = 0;
+	bool			m_bMultiHitSingletons;
 };
 
-std::unique_ptr<ISphKeywordsBlockReader> CreateKeywordsBlockReader ( const BYTE * pBuf, int iSkiplistBlockSize, DictFormat_e eDictFormat );
+std::unique_ptr<ISphKeywordsBlockReader> CreateKeywordsBlockReader ( const BYTE * pBuf, int iSkiplistBlockSize, DictFormat_e eDictFormat, bool bMultiHitSingletons );
 
 // header of a disk index or chunk
 struct BuildHeader_t : public CSphSourceStats, public DictHeader_t

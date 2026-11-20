@@ -494,7 +494,8 @@ static void TestDictionarySingleton()
 	Check ( tWriter.Add ( t, sError ) );
 
 	int64_t iLocator = 0;
-	Check ( tWriter.FinishDictionarySingleton(iLocator) && iLocator<0 );
+	const uint8_t * pRecord = nullptr;
+	Check ( tWriter.FinishDictionarySingleton ( iLocator, pRecord ) && !pRecord && iLocator<0 );
 	Check ( tDocs.GetSize()==1 && tHits.GetSize()==1 && tWriter.GetLeaves().empty() );
 
 	Reader_c tReader(tDocs);
@@ -506,6 +507,43 @@ static void TestDictionarySingleton()
 	Check ( tReader.ReadHitRefs(sError) && tReader.GetHitRefs()[0]==t.m_uHitRef );
 	Check ( tReader.Next ( 0, sError ) && tReader.IsEOF() );
 	Check ( tReader.Open ( iLocator, sError ) && tReader.Next ( t.m_uRow+1, sError ) && tReader.IsEOF() );
+	for ( bool bWide : { false, true } )
+	{
+		t.m_uTF = 500;
+		t.m_uHitRef = (uint64_t(1)<<40)+123;
+		if ( bWide )
+			t.m_dFields[0] = 3;
+
+		Check ( tWriter.Begin ( tDesc, sError ) && tWriter.Add ( t, sError ) );
+		Check ( tWriter.FinishDictionarySingleton ( iLocator, pRecord ) && pRecord && iLocator==MULTI_HIT_MARKER );
+		Check ( tDocs.GetSize()==1 && tWriter.GetLeaves().empty() );
+		Check ( tReader.Open ( iLocator, sError, pRecord ) && tReader.Next ( t.m_uRow, sError ) && !tReader.IsEOF() );
+		Check ( tReader.GetTF()[0]==t.m_uTF && tReader.GetFields()[0]==t.m_dFields && tReader.GetHitRefs()[0]==t.m_uHitRef );
+		Check ( tReader.Next ( 0, sError ) && tReader.IsEOF() );
+
+		Posting_t tChecked;
+		Check ( CheckDictionarySingleton ( pRecord, tChecked ) && tChecked.m_uRow==t.m_uRow && tChecked.m_dFields==t.m_dFields );
+		SingletonBytes_t dTruncated {};
+		std::copy_n ( pRecord, 1+*pRecord, dTruncated.data() );
+		--dTruncated[0];
+		Check ( !CheckDictionarySingleton ( dTruncated.data(), tChecked ) );
+	}
+
+	Posting_t tChecked;
+	SingletonReadBuffer_t dInvalid {};
+	Check ( !CheckDictionarySingleton ( dInvalid.data(), tChecked ) );
+	dInvalid[0] = UINT8_MAX;
+	Check ( !CheckDictionarySingleton ( dInvalid.data(), tChecked ) );
+
+	// TF, row and field followed by an invalid .spp offset.
+	SingletonBytes_t dRecord { 5, 2, 0, 0, 0x80, 1 };
+	Check ( !CheckDictionarySingleton ( dRecord.data(), tChecked ) );
+	dRecord[0] = uint8_t ( 3+ZipToPtrBE ( dRecord.data()+4, uint64_t(INT64_MAX) ) );
+	Check ( CheckDictionarySingleton ( dRecord.data(), tChecked ) && tChecked.m_uHitRef==INT64_MAX );
+	Check ( !CheckDictionarySingleton ( dRecord.data(), tChecked, false ) );
+	dRecord[0] = uint8_t ( 3+ZipToPtrBE ( dRecord.data()+4, uint64_t(INT64_MAX)+1 ) );
+	Check ( !CheckDictionarySingleton ( dRecord.data(), tChecked ) );
+
 	Check ( !tDocs.m_uReadBytes );
 }
 

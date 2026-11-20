@@ -48,11 +48,13 @@ bool BlockIndexQwordValidation_c::Setup ( const DiskIndexQwordSetup_c * pSetup )
 }
 
 
-void BlockIndexQwordValidation_c::SeekDocReader ( SphOffset_t iPos, int iHint )
+void BlockIndexQwordValidation_c::SeekDocReader ( SphOffset_t iPos, int iHint, const BYTE * pSingleton )
 {
 	ResetCursor();
 	m_iStart = m_iNext = iPos==1 ? postings::FILE_HEADER_SIZE : iPos;
-	m_rdDoclist->SeekTo ( m_iStart, iHint );
+	m_pSingletonPayload = pSingleton;
+	if ( !pSingleton )
+		m_rdDoclist->SeekTo ( m_iStart, iHint );
 }
 
 
@@ -102,7 +104,8 @@ bool BlockIndexQwordValidation_c::LoadLeaf()
 {
 	if ( !m_bOpen )
 	{
-		if ( !m_tReader.Open ( m_iStart, m_sError ) )
+		bool bOpened = m_pSingletonPayload ? m_tReader.OpenDictionarySingleton ( m_pSingletonPayload, m_sError ) : m_tReader.Open ( m_iStart, m_sError );
+		if ( !bOpened )
 		{
 			Fail();
 			return false;
@@ -124,7 +127,7 @@ bool BlockIndexQwordValidation_c::LoadLeaf()
 		return false;
 	}
 
-	if ( !ValidateLeaf() )
+	if ( !m_pSingletonPayload && !ValidateLeaf() )
 	{
 		Fail();
 		return false;

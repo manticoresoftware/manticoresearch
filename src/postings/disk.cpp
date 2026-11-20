@@ -90,9 +90,9 @@ bool DiskWriter_c::Add ( const Posting_t & tPosting, CSphString & sError )
 }
 
 
-bool DiskWriter_c::Finish ( CSphWriter & tSkips, SphOffset_t & iDoclist, CSphString & sError )
+bool DiskWriter_c::Finish ( CSphWriter & tSkips, SphOffset_t & iDoclist, const uint8_t * & pRecord, CSphString & sError )
 {
-	if ( m_tWriter.FinishDictionarySingleton(iDoclist) )
+	if ( m_tWriter.FinishDictionarySingleton ( iDoclist, pRecord ) )
 		return true;
 
 	if ( !m_tWriter.Finish(m_sError) )

@@ -19,7 +19,7 @@ public:
 	void				Reset() override;
 	void				SetReadErrorTarget ( CSphString * pError ) override	{ m_pQueryError = pError; }
 	bool				Setup ( const DiskIndexQwordSetup_c * pSetup ) override;
-	void				SeekDocReader ( SphOffset_t iPos, int iHint ) override;
+	void				SeekDocReader ( SphOffset_t iPos, int iHint, const BYTE * pSingleton = nullptr ) override;
 	void				SeekHitReader ( SphOffset_t iPos, int iHint ) override;
 	SphOffset_t			GetDocReaderPos() const override;
 	const CSphMatch &	GetNextDoc() override;
@@ -53,6 +53,7 @@ private:
 	std::string						m_sError;
 	CSphString *					m_pQueryError = nullptr;
 
+	const BYTE * m_pSingletonPayload = nullptr;
 	SphOffset_t	m_iStart = 0;
 	SphOffset_t	m_iNext = 0;
 	unsigned	m_iOrdinal = 0;

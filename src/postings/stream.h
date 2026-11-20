@@ -9,6 +9,7 @@
 #pragma once
 
 #include "codec.h"
+#include "singleton.h"
 #include <array>
 #include <memory>
 
@@ -23,9 +24,13 @@ namespace postings
 //   dictionary-entry = delta-keyword posting-locator [doclist-hint] [directory-offset]
 //   posting-locator  = positive-spd-offset doc-count hit-count
 //                    | 0 row-id packed-hit
+//                    | 1 byte-length:u8 total-tf row-id field-code [mask-word+] spp-offset
+//   Format 77 reserves locator 1 for a positional term in one row with multiple hits.
+//   byte-length covers everything after itself. field-code < 256 names a single field;
+//   256+n stores n mask words (low fields first). The absolute .spp offset follows.
 //   Locator values are big-endian base-128 varints. In disk format 76, zero marks a
 //   positional term with one document and one hit. The row ID is absolute within the
-//   chunk. The entire posting lives here. A positive offset points to a .spd doclist.
+//   chunk. The entire posting lives here. Physical offsets start after the .spd header.
 //   The hint is present for doc-count >= DOCLIST_HINT_THRESH and the .spe offset for
 //   doc-count > skiplist_block_size (both use the count with the hitless flag masked).
 //
@@ -146,7 +151,7 @@ public:
 	bool						Begin ( const TermDesc_t & tDesc, std::string & sError );
 	bool						Add ( const Posting_t & tPosting, std::string & sError );
 	bool						Finish ( std::string & sError );
-	bool						FinishDictionarySingleton ( int64_t & iLocator );
+	bool						FinishDictionarySingleton ( int64_t & iLocator, const uint8_t * & pRecord );
 
 	const std::vector<Leaf_t> &	GetLeaves() const	{ return m_dLeaves; }
 
@@ -159,6 +164,7 @@ private:
 	Output_i &	m_tOutput;
 	Output_i *	m_pHits;
 	TermDesc_t	m_tDesc;
+	SingletonBytes_t m_dSingletonPayload;
 
 	std::array<Posting_t,MAX_VALUES>	m_dPostings;
 	std::vector<Leaf_t>					m_dLeaves;
@@ -180,7 +186,7 @@ class Reader_c
 public:
 	explicit Reader_c ( Input_i & tInput );
 
-	bool				Open ( uint64_t uOffset, std::string & sError );
+	bool				Open ( uint64_t uOffset, std::string & sError, const uint8_t * pSingleton = nullptr );
 	bool				Next ( uint32_t uMinRow, std::string & sError );
 	bool				ReadRows ( std::string & sError );
 	// Read the current leaf's row-container kind, count, bounds and encoded payload
@@ -211,7 +217,7 @@ public:
 private:
 	// The view borrows the input mapping or dBuffer; consume it before either is replaced.
 	bool	ReadColumn ( Column_e eColumn, Bytes_t & tData, std::vector<uint8_t> & dBuffer, std::string & sError );
-	void	OpenDictionarySingleton ( uint64_t uLocator );
+	void	OpenDictionarySingleton ( uint64_t uLocator, const uint8_t * pRecord );
 	bool	Fail ( std::string & sError, const char * sMessage );
 	bool	CheckFields ( std::string & sError );
 	bool	CheckTF ( std::string & sError );

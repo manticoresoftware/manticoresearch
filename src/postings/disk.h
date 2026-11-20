@@ -38,7 +38,7 @@ public:
 
 	bool	Begin ( unsigned uFields, bool bPositions, CSphString & sError );
 	bool	Add ( const Posting_t & tPosting, CSphString & sError );
-	bool	Finish ( CSphWriter & tSkips, SphOffset_t & iDoclist, CSphString & sError );
+	bool	Finish ( CSphWriter & tSkips, SphOffset_t & iDoclist, const uint8_t * & pRecord, CSphString & sError );
 
 private:
 	DiskOutput_c	m_tOutput;

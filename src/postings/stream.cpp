@@ -496,17 +496,50 @@ bool Writer_c::Flush ( std::string & sError )
 }
 
 
-// Transfer a complete one-hit term to the dictionary before writing any posting bytes.
-bool Writer_c::FinishDictionarySingleton ( int64_t & iLocator )
+// Transfer a positional singleton to the dictionary before writing any doclist or directory bytes.
+bool Writer_c::FinishDictionarySingleton ( int64_t & iLocator, const uint8_t * & pRecord )
 {
+	pRecord = nullptr;
 	if ( !m_tDesc.m_bPositions || !m_dLeaves.empty() || m_iCount!=1 )
 		return false;
 
 	const Posting_t & t = m_dPostings[0];
-	if ( t.m_uTF!=1 || !(t.m_uHitRef & INLINE_HIT) || t.m_uRow>=INT32_MAX )
+	if ( t.m_uRow>=INT32_MAX )
 		return false;
 
-	iLocator = PackSingleton ( t.m_uRow, uint32_t(t.m_uHitRef) );
+	if ( t.m_uTF==1 )
+	{
+		if ( !(t.m_uHitRef & INLINE_HIT) )
+			return false;
+
+		iLocator = PackSingleton ( t.m_uRow, uint32_t(t.m_uHitRef) );
+	} else
+	{
+		uint8_t * p = m_dSingletonPayload.data()+1;
+		p += ZipToPtrBE ( p, t.m_uTF );
+		p += ZipToPtrBE ( p, t.m_uRow );
+
+		unsigned int uField = SingleField ( &t, 1, m_tDesc.m_uFields );
+		if ( uField<MAX_FIELDS )
+			p += ZipToPtrBE ( p, uField );
+		else
+		{
+			int iWords = int(FIELD_WORDS);
+			while ( iWords>1 && !t.m_dFields[iWords-1] )
+				--iWords;
+
+			p += ZipToPtrBE ( p, MAX_FIELDS+iWords );
+			for ( int i=0; i<iWords; ++i )
+				p += ZipToPtrBE ( p, t.m_dFields[i] );
+		}
+
+		p += ZipToPtrBE ( p, t.m_uHitRef );
+		assert ( p<=m_dSingletonPayload.data()+m_dSingletonPayload.size() );
+		m_dSingletonPayload[0] = uint8_t(p-m_dSingletonPayload.data()-1);
+		pRecord = m_dSingletonPayload.data();
+		iLocator = MULTI_HIT_MARKER;
+	}
+
 	m_bOpen = false;
 	return true;
 }
@@ -541,29 +574,48 @@ bool Reader_c::Fail ( std::string & sError, const char * sMessage )
 }
 
 
-void Reader_c::OpenDictionarySingleton ( uint64_t uLocator )
+void Reader_c::OpenDictionarySingleton ( uint64_t uLocator, const uint8_t * pRecord )
 {
-	uint32_t uHit = SingletonHit(uLocator);
-	unsigned uField = uHit>>24;
+	uint32_t uTF = 1;
+	uint32_t uRow = SingletonRow(uLocator);
+	uint64_t uRef = INLINE_HIT | SingletonHit(uLocator);
+	unsigned int uField = SingletonHit(uLocator)>>24;
+	m_dFields[0].fill(0);
+	if ( pRecord )
+	{
+		const uint8_t * p = pRecord+1;
+		uTF = UnzipIntBE(p);
+		uRow = UnzipIntBE(p);
+		uField = UnzipIntBE(p);
+		assert ( uField<MAX_FIELDS || (uField>MAX_FIELDS && uField<=MAX_FIELDS+FIELD_WORDS) );
+		if ( uField>MAX_FIELDS )
+			for ( unsigned int i=0; i<std::min<size_t> ( uField-MAX_FIELDS, FIELD_WORDS ); ++i )
+				m_dFields[0][i] = UnzipIntBE(p);
+
+		uRef = UnzipOffsetBE(p);
+		assert ( p==pRecord+1+*pRecord );
+	}
+
+	if ( uField<MAX_FIELDS )
+		m_dFields[0][uField>>5] = 1U<<(uField&31);
+
 	m_tDesc = {};
-	m_tDesc.m_uFields = uint16_t(uField+1);
+	m_tDesc.m_uFields = uint16_t(uField<MAX_FIELDS ? uField+1 : (uField-MAX_FIELDS)*32);
 	m_tDesc.m_tHitRefs = { Codec_e::INLINE_HITS };
 	m_tLeaf.m_bShort = true;
-	m_tLeaf.m_uFieldWords = uField/32+1;
-	m_tLeaf.m_uFirst = m_tLeaf.m_uLast = m_dRows[0] = SingletonRow(uLocator);
-	m_tLeaf.m_uSingleField = uint16_t(uField);
+	m_tLeaf.m_uFieldWords = (m_tDesc.m_uFields+31)/32;
+	m_tLeaf.m_uFirst = m_tLeaf.m_uLast = m_dRows[0] = uRow;
+	m_tLeaf.m_uSingleField = uint16_t(std::min<unsigned int> ( uField, MAX_FIELDS ));
 	m_tLeaf.m_uCount = 1;
-	m_tLeaf.m_uMaxTF = m_dTF[0] = 1;
-	m_dHitRefs[0] = INLINE_HIT | uHit;
-	m_dFields[0].fill(0);
-	m_dFields[0][uField/32] = 1U<<(uField%32);
+	m_tLeaf.m_uMaxTF = m_dTF[0] = uTF;
+	m_dHitRefs[0] = uRef;
 	m_dLoaded.fill(true);
 	m_uNext = m_uEnd = 0;
 	m_bEOF = false;
 }
 
 
-bool Reader_c::Open ( uint64_t uOffset, std::string & sError )
+bool Reader_c::Open ( uint64_t uOffset, std::string & sError, const uint8_t * pSingleton )
 {
 	m_bEOF = true;
 	m_bError = false;
@@ -572,9 +624,9 @@ bool Reader_c::Open ( uint64_t uOffset, std::string & sError )
 	m_tRowData = {};
 	m_dDecodeCounts.fill(0);
 	m_tLeaf = {};
-	if ( uOffset & DICT_SINGLETON )
+	if ( pSingleton || (uOffset & DICT_SINGLETON) )
 	{
-		OpenDictionarySingleton(uOffset);
+		OpenDictionarySingleton ( uOffset, pSingleton );
 		return true;
 	}
 

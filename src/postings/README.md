@@ -13,7 +13,7 @@ format; RT RAM segments retain their existing representation. Cross-format
 ATTACH (including into an empty table), merge, chunk loading and reconfiguration
 are rejected. One daemon can serve separate legacy and block tables.
 
-New block tables use disk header version 76. Version 75 block indexes with component 4 remain readable. Both use RT metadata version 26 and postings
+New block tables use disk header version 77. Versions 75 and 76 with component 4 remain readable. They use RT metadata version 26 and postings
 component version 4. Legacy output retains its existing header/metadata versions.
 Earlier experimental block components (including 2 and 3) require reindexing;
 this reader does not retain their layouts. Legacy tables remain readable.
@@ -161,7 +161,7 @@ There is no statistics footer.
 
 ### Singleton and short-list records
 
-Version 76 keyword dictionaries can carry a complete posting. After the keyword, a positive doclist offset is followed by the document count and total hit count as usual. A zero offset is followed by the absolute chunk-local row ID and packed hit (field, position and field-end bit). All three values use the dictionary's existing big-endian base-128 varints. Both counts are implicitly one. The term occupies no bytes in `.spd`, `.spp` or `.spe`. This applies to positional terms in both keyword dictionary variants. Hitless terms and single-document terms with multiple hits use the regular posting records.
+Version 76 keyword dictionaries can carry a complete posting. After the keyword, a physical doclist offset is followed by the document count and total hit count as usual. A zero offset is followed by the absolute chunk-local row ID and packed hit (field, position and field-end bit). All three values use the dictionary's existing big-endian base-128 varints. Both counts are implicitly one. The term occupies no bytes in `.spd`, `.spp` or `.spe`. This applies to positional terms in both keyword dictionary variants. Version 77 also inlines the posting for a one-document term with multiple hits. Locator 1 introduces a one-byte record length followed by total TF, absolute row ID, field code, optional field-mask words and the absolute hitlist offset. Values after the length use big-endian base-128 varints. A field code below 256 identifies the only matching field. A code of 256+n introduces n mask words, low fields first. Both singleton forms omit the doclist and directory. Multi-hit positions stay in the ordinary terminated varint list in `.spp`. Hitless terms continue to use physical doclists.
 
 Remaining lists of 1..16 documents use one `PSS1` record instead of a term header plus leaf
 header and framed columns. Its fixed header is 24 bytes:
@@ -322,7 +322,7 @@ The six-byte integer header is retained. Its first byte is either a packed width
 - VARINT: `count` canonical uint32 LEB128 values for a non-packed array shorter than 128. Exception count is zero.
 - Width 0..32: pack `floor(count/128)*128` values using the packing layout above (FOR without exceptions, PFOR with optional exceptions). Exceptions refer only to that packed prefix. Append `count%128` canonical uint32 LEB128 values after the exceptions. No unused packed slots are written. Width zero is valid for an all-zero packed prefix with optional exceptions.
 
-Counts remain 1..256. Selection belongs to the FOR/PFOR grammar; no per-block codec ID is added. The earlier padded FOR/PFOR grammar and experimental codec ID 5 have been removed. Membership, TF, field masks and hit references remain independently readable. Dictionary singletons carry their packed hit directly. Posting leaves use codec 7 for inline hits.
+Counts remain 1..256. Selection belongs to the FOR/PFOR grammar; no per-block codec ID is added. The earlier padded FOR/PFOR grammar and experimental codec ID 5 have been removed. Membership, TF, field masks and hit references remain independently readable. One-hit dictionary singletons carry their packed hit directly. Multi-hit singletons carry the external position offset. Posting leaves use codec 7 for inline hits.
 
 ## Row container
 

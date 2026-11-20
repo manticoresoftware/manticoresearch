@@ -58,32 +58,8 @@ manticore_new_cluster
 
 If another node is started first without the required clean-shutdown state, startup is refused to protect the cluster from being restored from an older copy.
 
-If all nodes crashed or were shut down uncleanly, `grastate.dat` may no longer be trustworthy for normal bootstrap selection. In that case, find the node with the most recent data, usually the one with the largest `seqno`, and start it with `--new-cluster-force`. This overrides the normal protection and forces the cluster to start from the chosen node.
+### If the cluster stopped unexpectedly
 
-<!-- example restart-cluster-force -->
-Use this after a crash or unclean full cluster shutdown.
-
-
-<!-- intro -->
-##### Command line:
-If you start Manticore directly, use:
-
-<!-- request Bash -->
-
-```bash
-searchd --new-cluster-force
-```
-
-<!-- intro -->
-
-##### systemd:
-If you run Manticore via systemd on Linux, use:
-
-<!-- request Systemd -->
-
-```bash
-manticore_new_cluster --force
-```
-<!-- end -->
+Do not assume the last stopped node has the newest data or force a restart on an arbitrary node. Follow [Cluster recovery](../../Creating_a_cluster/Setting_up_replication/Cluster_recovery.md#All-nodes-crashed) to identify the correct node first.
 
 <!-- proofread -->

@@ -28,6 +28,12 @@
 #include "std/openhash.h"
 
 #include <climits>
+#include <cstring>
+#if !_WIN32
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 // Miscelaneous short functional tests: TDigest, SpanSearch,
 // stringbuilder, CJson, TaggedHash, Log2
@@ -1185,6 +1191,48 @@ TEST ( functions, Writer )
 	unlink ( sTmpWriteout.cstr () );
 	delete[] pData;
 }
+
+#if !_WIN32
+static bool WriteTempConfig ( const char * szPath, const char * szText, mode_t uMode )
+{
+	int iFd = ::open ( szPath, O_CREAT | O_TRUNC | O_WRONLY, uMode );
+	if ( iFd<0 )
+		return false;
+	auto iLen = (ssize_t)strlen ( szText );
+	auto iWritten = ::write ( iFd, szText, iLen );
+	::close ( iFd );
+	return iWritten==iLen && ::chmod ( szPath, uMode )==0;
+}
+
+
+TEST ( functions, ScriptedConfigRequiresExecutePermission )
+{
+	const char szPath[] = "__shebang_noexec.conf.sh";
+	AT_SCOPE_EXIT ( [&szPath] { unlink ( szPath ); } );
+	ASSERT_TRUE ( WriteTempConfig ( szPath, "#!/bin/sh\necho 'searchd { }'\n", S_IRUSR | S_IWUSR ) );
+
+	TlsMsg::ResetErr();
+	auto tFetched = FetchAndCheckIfChanged ( szPath );
+	EXPECT_TRUE ( TlsMsg::HasErr() );
+	EXPECT_NE ( strstr ( TlsMsg::szError(), "execute permission" ), nullptr ) << TlsMsg::szError();
+	EXPECT_TRUE ( tFetched.second.IsEmpty() );
+}
+
+
+TEST ( functions, PlainConfigDoesNotRequireExecutePermission )
+{
+	const char szPath[] = "__plain_noexec.conf";
+	AT_SCOPE_EXIT ( [&szPath] { unlink ( szPath ); } );
+	const char szText[] = "searchd\n{\n}\n";
+	ASSERT_TRUE ( WriteTempConfig ( szPath, szText, S_IRUSR | S_IWUSR ) );
+
+	TlsMsg::ResetErr();
+	auto tFetched = FetchAndCheckIfChanged ( szPath );
+	EXPECT_FALSE ( TlsMsg::HasErr() ) << TlsMsg::szError();
+	ASSERT_EQ ( tFetched.second.GetLength(), (int)strlen ( szText ) );
+	EXPECT_EQ ( memcmp ( tFetched.second.Begin(), szText, strlen ( szText ) ), 0 );
+}
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 struct tstcase { float wold; DWORD utimer; float wnew; };

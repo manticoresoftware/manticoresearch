@@ -6,6 +6,13 @@ SQL [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) 子句和 HTTP 
 
 ### 一般语法
 
+<!--
+以下示例的数据：
+
+DROP TABLE IF EXISTS test;
+CREATE TABLE test(title text, body text);
+INSERT INTO test(id,title,body) VALUES (1,'hello','world');
+-->
 <!-- example options -->
 
 **SQL**:
@@ -32,13 +39,6 @@ POST /search
 SQL:
 <!-- request SQL -->
 
-<!--
-以下示例的数据：
-
-DROP TABLE IF EXISTS test;
-CREATE TABLE test(title text, body text);
-INSERT INTO test(id,title,body) VALUES (1,'hello','world');
--->
 ```sql
 SELECT * FROM test WHERE MATCH('@title hello @body world')
 OPTION ranker=bm25, max_matches=3000,
@@ -75,7 +75,7 @@ POST /search
             "match": {
               "body": "world"
             }
-          }
+          }  
         ]
       }
     },

@@ -504,15 +504,6 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- end -->
 
-
-<!-- example SHOW PLAN EXPANSION -->
-
-В некоторых случаях оцениваемое дерево запросов может значительно отличаться от исходного из-за расширений и других преобразований.
-
-<!-- intro -->
-##### SQL:
-<!-- request SQL -->
-
 <!--
 data for the following example:
 
@@ -524,6 +515,13 @@ INSERT INTO forum(id,title,content) VALUES
 (711653,'wayyy title','hey content'),
 (711654,'way title','hey content');
 -->
+<!-- example SHOW PLAN EXPANSION -->
+
+В некоторых случаях дерево запросов, участвующее в оценке, может существенно отличаться от исходного из-за раскрытия условий и других преобразований.
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
 
 ```sql
 SET profiling=1;

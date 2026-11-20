@@ -556,7 +556,7 @@ macro ( _manticore_bundle_extra_install_rules )
 	install ( DIRECTORY "${MANTICORE_SOURCE_DIR}/component-licenses" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/manticore COMPONENT bundle )
 	if ( EXISTS "${BUNDLE_DEPS_EXTRACT_DIR}" )
 		# Merge the extracted dependency tree into the package prefix rather than the host root.
-		install ( DIRECTORY ${BUNDLE_DEPS_EXTRACT_DIR}/ DESTINATION . COMPONENT bundle USE_SOURCE_PERMISSIONS )
+		install ( DIRECTORY ${BUNDLE_DEPS_EXTRACT_DIR}/ DESTINATION . COMPONENT bundle USE_SOURCE_PERMISSIONS PATTERN ".bundle_*" EXCLUDE )
 		if ( EXISTS "${BUNDLE_DEPS_EXTRACT_DIR}/usr/share/manticore/modules" )
 			install ( DIRECTORY "${BUNDLE_DEPS_EXTRACT_DIR}/usr/share/manticore/modules/" DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore/modules COMPONENT bundle )
 		endif ()

@@ -114,3 +114,46 @@ restarted
 {"items":[],"current_line":100,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
 {"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
 100
+––– block: ../base/bulk-import-helpers –––
+––– comment –––
+The indexer children take the common and indexer options of the main config, read at startup:
+the staged config of an open pool shows them. Without these sections a child gets the
+lemmatizer_base of searchd, mem_limit 128M and write_buffer 1M.
+––– input –––
+source /tmp/shared.sh; source /tmp/bi.sh; sql "CREATE TABLE s_cfg (title TEXT, j JSON)"; printf '%s\n' '{"insert":{"table":"s_cfg","id":2,"doc":{"title":"loaded","j":{"n":"1"}}}}' > /tmp/c1.ndjson; post s_cfg '' /tmp/c1.ndjson; bi_child_opts s_cfg | sed 's#^\(  lemmatizer_base = \)/.*#\1<absolute>#'; commit s_cfg ''
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+common {
+  lemmatizer_base = <absolute>
+}
+indexer {
+  mem_limit = 128M
+  write_buffer = 1M
+}
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+––– comment –––
+A value set in the main config wins; a path is made absolute, as the child runs in the table
+folder (plugin_dir is relative to the folder searchd starts in). The JSON options of the indexer
+section, which searchd ignores, and keys the child does not use (on_file_field_error) are left
+out, and json_autoconv_numbers of common converts a loaded JSON value as it does an inserted one.
+––– input –––
+mkdir -p /tmp/bulk_plugins /tmp/bulk_lemmatizer; printf 'common {\n  lemmatizer_base = /tmp/bulk_lemmatizer\n  plugin_dir = bulk_plugins\n  json_autoconv_numbers = 1\n}\nindexer {\n  mem_limit = 256M\n  max_iops = 40\n  on_json_attr_error = fail_index\n  on_file_field_error = skip_document\n}\n' >> /etc/manticoresearch/manticore.conf; cd /tmp && source /tmp/shared.sh && restart
+––– output –––
+restarted
+––– input –––
+source /tmp/shared.sh; source /tmp/bi.sh; sql "CREATE TABLE s_cfg2 (title TEXT, j JSON); INSERT INTO s_cfg2 (id,title,j) VALUES (1,'inserted','{\"n\":\"1\"}')"; sed 's/s_cfg/s_cfg2/' /tmp/c1.ndjson > /tmp/c2.ndjson; post s_cfg2 '' /tmp/c2.ndjson; bi_child_opts s_cfg2; commit s_cfg2 ''; sql "SELECT id, j FROM s_cfg2 ORDER BY id ASC"
+––– output –––
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"staged"} HTTP 200
+common {
+  lemmatizer_base = /tmp/bulk_lemmatizer
+  plugin_dir = /tmp/bulk_plugins
+  json_autoconv_numbers = 1
+}
+indexer {
+  mem_limit = 256M
+  write_buffer = 1M
+  max_iops = 40
+}
+{"items":[],"current_line":1,"skipped_lines":0,"errors":false,"error":"","error_code":"","shared_state":"published"} HTTP 200
+1	{"n":1}
+2	{"n":1}

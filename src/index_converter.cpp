@@ -2562,6 +2562,9 @@ int main ( int argc, char ** argv )
 	if ( bAll && !sKlistTarget.IsEmpty() )
 		sphDie ( "killlist-target not compatible with --all option" );
 
+	if ( bAll && sConfig.IsEmpty() )
+		sphDie ( "--all requires --config" );
+
 	KillListTargets_c tKlistTargets;
 	if ( !sKlistTarget.IsEmpty() && !tKlistTargets.Parse ( sKlistTarget, sIndexFile.cstr(), sError ) )
 		sphDie ( "failed to parse killlist-target, '%s'", sError.cstr() );
@@ -2569,10 +2572,12 @@ int main ( int argc, char ** argv )
 	if ( !sphInitCharsetAliasTable ( sError ) )
 		sphDie ( "failed to init charset alias table: %s", sError.cstr() );
 
-	const CSphConfigType * pIndexes = nullptr;
+	CSphConfig hConfig;
+	CSphConfigType hEmptyIndexes;
+	const CSphConfigType * pIndexes = &hEmptyIndexes;
 	if ( !sConfig.IsEmpty() )
 	{
-		CSphConfig hConfig = sphLoadConfig ( sConfig, true );
+		hConfig = sphLoadConfig ( sConfig, true );
 		pIndexes = hConfig ( "index" );
 
 		if ( ( bAll || !sIndexName.IsEmpty() ) && !pIndexes )
@@ -2592,7 +2597,8 @@ int main ( int argc, char ** argv )
 
 		if ( bAll )
 		{
-			++pItt;
+			if ( iIndexTotal )
+				++pItt;
 			if ( pItt==pIndexes->end() )
 				break;
 

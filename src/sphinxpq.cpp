@@ -96,8 +96,9 @@ public:
 	void PostSetup() override EXCLUDES ( m_tLock );
 	bool BindAccum ( RtAccum_t * pAccExt, CSphString * pError = nullptr ) override;
 	TokenizerRefPtr_c CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
-	void SaveMeta ( bool bShutdown = false ) EXCLUDES ( m_tLock );
-	void SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown = false );
+	void SaveMeta ( bool bShutdown = false ) EXCLUDES ( m_tLock, m_tSaveLock );
+	void SaveMetaUnl ( bool bShutdown ) REQUIRES ( m_tSaveLock ) EXCLUDES ( m_tLock );
+	void SaveMetaSnapshot ( const SharedPQSlice_t& dStored, int64_t iTID, bool bShutdown = false ) REQUIRES ( m_tSaveLock );
 
 	enum class LOAD_E { ParseError_e, GeneralError_e, Ok_e };
 	LOAD_E LoadMetaJson ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
@@ -152,7 +153,9 @@ private:
 	StoredQuerySharedPtrVecSharedPtr_t	m_pQueries GUARDED_BY ( m_tLock );
 	OpenHashTable_T<int64_t, int>		m_hQueries GUARDED_BY ( m_tLock ); // QUID -> query
 	int64_t							m_iGeneration GUARDED_BY ( m_tLock ) { 0 }; // eliminate ABA race on insert/delete
-	mutable RwLock_t				m_tLock;
+	// Binlog commit/flush can suspend and resume on another OS thread while this lock is held.
+	mutable Coro::RWLock_c			m_tLock;
+	Coro::Mutex_c					m_tSaveLock; // one meta save at a time; taken before m_tLock
 
 	CSphFixedVector<StoredQueryDesc_t>	m_dLoadedQueries { 0 }; // temporary, just descriptions
 	CSphSchema						m_tMatchSchema;
@@ -177,7 +180,7 @@ private:
 
 	StoredQuerySharedPtrVecSharedPtr_t MakeClone () const REQUIRES_SHARED ( m_tLock );
 	void AddToStoredUnl ( StoredQuerySharedPtr_t tNew ) REQUIRES ( m_tLock );
-	void PostSetupUnl () REQUIRES ( m_tLock  );
+	void PostSetupUnl () REQUIRES ( m_tLock, m_tSaveLock );
 	SharedPQSlice_t GetStored () const EXCLUDES ( m_tLock );
 	SharedPQSlice_t GetStoredUnl () const REQUIRES_SHARED ( m_tLock );
 	bool IsSaveDisabled() const noexcept;
@@ -1628,7 +1631,7 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	int64_t iRamUse = 0;
 	int 	iMaxStack = 0;
 	{
-		ScRL_t rLock { m_tLock };
+		SccRL_t rLock { m_tLock };
 		iRamUse = m_hQueries.GetLengthBytes();
 		iRamUse += m_dHitlessWords.GetLengthBytes64() + m_dLoadedQueries.GetLengthBytes64();
 		iRamUse += m_pQueries->GetLengthBytes64 ();
@@ -1720,7 +1723,7 @@ public:
 std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError )
 {
 	{
-		ScRL_t tLockHash { m_tLock };
+		SccRL_t tLockHash { m_tLock };
 		if ( !CanBeAdded ( tArgs, sError ))
 			return nullptr;
 	}
@@ -1984,7 +1987,7 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 		{
 			// for delete by tags we need snapshot of the current queries
 			{
-				ScRL_t rLock ( m_tLock );
+				SccRL_t rLock ( m_tLock );
 				dElems = GetStoredUnl();
 				iLimit = m_pQueries->GetLimit();
 			}
@@ -2005,7 +2008,7 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 		// for both deletion and addition we need hash and snapshot
 		OpenHashTable_T<int64_t, int> hQueries { 0 };
 		{
-			ScRL_t rLock ( m_tLock );
+			SccRL_t rLock ( m_tLock );
 			if ( iLimit<0 )
 			{
 				dElems = GetStoredUnl();
@@ -2078,7 +2081,7 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 			}
 		}
 
-		ScWL_t wLock ( m_tLock );
+		SccWL_t wLock ( m_tLock );
 		if ( dElems.Generation() != m_iGeneration )
 			continue;
 
@@ -2493,13 +2496,14 @@ void PercolateIndex_c::PostSetupUnl()
 
 	// still need index files for index just created from config
 	if ( !m_bHasFiles )
-		SaveMeta ( SharedPQSlice_t ( m_pQueries ) );
+		SaveMetaSnapshot ( SharedPQSlice_t ( m_pQueries ), m_iTID );
 
 }
 
 void PercolateIndex_c::PostSetup () EXCLUDES ( m_tLock )
 {
-	ScWL_t wLock ( m_tLock );
+	ScopedCoroMutex_t tSave ( m_tSaveLock );
+	SccWL_t wLock ( m_tLock );
 	PostSetupUnl();
 }
 
@@ -2820,7 +2824,8 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 
 void operator<< ( JsonEscapedBuilder& tOut, const StoredQueryDesc_t& tQuery );
 
-void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown )
+// iTID must be the TID of dStored: binlog replay skips every txn up to it
+void PercolateIndex_c::SaveMetaSnapshot ( const SharedPQSlice_t& dStored, int64_t iTID, bool bShutdown )
 {
 	// sanity check
 	if ( m_iLockFD<0 || IsSaveDisabled() )
@@ -2862,7 +2867,7 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 	if ( m_pFieldFilter )
 		m_pFieldFilter->GetSettings(tFieldFilterSettings);
 	sNewMeta.NamedVal ( "field_filter_settings", tFieldFilterSettings );
-	sNewMeta.NamedVal ( "tid", m_iTID );
+	sNewMeta.NamedVal ( "tid", iTID );
 
 	{
 		sNewMeta.Named ( "pqs" );
@@ -2893,20 +2898,35 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 	SaveMutableSettings ( m_tMutableSettings, GetFilename ( SPH_EXT_SETTINGS ) );
 
 	// notify binlog after file saved
-	Binlog::NotifyIndexFlush ( m_iTID, GetName(), (Binlog::Shutdown_e)bShutdown, Binlog::NoSave );
-	m_iSavedTID = m_iTID;
+	Binlog::NotifyIndexFlush ( iTID, GetName(), (Binlog::Shutdown_e)bShutdown, Binlog::NoSave );
+	m_iSavedTID = iTID;
 	m_tmSaved = sphMicroTimer();
 }
 
 
 void PercolateIndex_c::SaveMeta ( bool bShutdown )
 {
-	SaveMeta ( GetStored(), bShutdown );
+	ScopedCoroMutex_t tSave ( m_tSaveLock );
+	SaveMetaUnl ( bShutdown );
+}
+
+void PercolateIndex_c::SaveMetaUnl ( bool bShutdown )
+{
+	// commits change the queries and m_iTID under the write lock, so take both under one read lock
+	SharedPQSlice_t dStored;
+	int64_t iTID;
+	{
+		SccRL_t rLock ( m_tLock );
+		dStored = GetStoredUnl();
+		iTID = m_iTID;
+	}
+	SaveMetaSnapshot ( dStored, iTID, bShutdown );
 }
 
 bool PercolateIndex_c::Truncate ( CSphString & sError, Truncate_e eAction )
 {
-	ScWL_t wLock ( m_tLock );
+	ScopedCoroMutex_t tSave ( m_tSaveLock );
+	SccWL_t wLock ( m_tLock );
 
 	m_hQueries.Reset ( 256 );
 	m_pQueries = new CSphVector<StoredQuerySharedPtr_t>;
@@ -2914,7 +2934,7 @@ bool PercolateIndex_c::Truncate ( CSphString & sError, Truncate_e eAction )
 	// update and save meta
 	// current TID will be saved, so replay will properly skip preceding txns
 	// FIXME!!! however it should be replicated to cluster maybe with TOI
-	SaveMeta ( SharedPQSlice_t ( m_pQueries ) );
+	SaveMetaSnapshot ( SharedPQSlice_t ( m_pQueries ), m_iTID );
 
 	// allow binlog to unlink now-redundant data files
 	Binlog::NotifyIndexFlush ( m_iTID, GetName (), Binlog::NoShutdown, eAction==TRUNCATE ? Binlog::ForceSave : Binlog::DropTable );
@@ -3003,6 +3023,7 @@ bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSp
 
 bool PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 {
+	ScopedCoroMutex_t tSave ( m_tSaveLock ); // a save writes the settings changed below
 	m_tSchema = tSetup.m_tSchema;
 
 	Setup ( tSetup.m_tIndex );
@@ -3013,7 +3034,7 @@ bool PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 	m_iMaxCodepointLength = m_pTokenizer->GetMaxCodepointLength();
 	SetupQueryTokenizer();
 
-	ScWL_t wLock ( m_tLock ); // ensure nothing will be changed during reconfigure pass.
+	SccWL_t wLock ( m_tLock ); // ensure nothing will be changed during reconfigure pass.
 
 	m_dLoadedQueries.Reset ( m_pQueries->GetLength() );
 	ARRAY_FOREACH ( i, m_dLoadedQueries )
@@ -3052,16 +3073,20 @@ void PercolateIndex_c::ForceRamFlush ( const char * szReason )
 		return;
 
 	int64_t tmStart = sphMicroTimer();
-	int64_t iWasTID = std::exchange ( m_iSavedTID, m_iTID );
+	ScopedCoroMutex_t tSave ( m_tSaveLock );
+	if ( !IsFlushNeed() ) // saved by a flush we waited for
+		return;
+
+	int64_t iWasTID = m_iSavedTID;
 	int64_t tmWas = m_tmSaved;
-	SaveMeta ();
+	SaveMetaUnl ( false );
 
 	int64_t tmNow = sphMicroTimer();
 	int64_t tmAge = tmNow - tmWas;
 	int64_t tmSave = tmNow - tmStart;
 
 	sphInfo ( "percolate: table %s: saved ok (mode=%s, last TID=" INT64_FMT ", current TID=" INT64_FMT ", "
-		"time delta=%d sec, took=%d.%03d sec)", GetName(), szReason, iWasTID, m_iTID, (int) (tmAge/1000000), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
+		"time delta=%d sec, took=%d.%03d sec)", GetName(), szReason, iWasTID, m_iSavedTID, (int) (tmAge/1000000), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
 }
 
 bool PercolateIndex_c::ForceDiskChunk()
@@ -3369,7 +3394,7 @@ SharedPQSlice_t PercolateIndex_c::GetStoredUnl () const REQUIRES_SHARED ( m_tLoc
 
 SharedPQSlice_t PercolateIndex_c::GetStored () const EXCLUDES ( m_tLock )
 {
-	ScRL_t rLock ( m_tLock );
+	SccRL_t rLock ( m_tLock );
 	return GetStoredUnl();
 }
 

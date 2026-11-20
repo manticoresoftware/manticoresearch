@@ -174,7 +174,7 @@ systemctl restart manticore-indexer
 * `-v` shows `indexer` version.
 
 ### Indexer configuration settings
-You can also configure indexer behavior in the Manticore configuration file in the `indexer` section:
+You can also configure indexer behavior in the Manticore configuration file in the `indexer` section. `searchd` passes `mem_limit`, `write_buffer`, `max_iops`, `max_iosize` and `lemmatizer_cache` of this section to the `indexer` processes of a [bulk import](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import) as well:
 
 ```ini
 indexer {
@@ -215,7 +215,7 @@ Maximum I/O operations per second, for I/O throttling. Optional, default is 0 (u
 
 I/O throttling related option. It limits the maximum count of I/O operations (reads or writes) per any given second. A value of 0 means that no limit is imposed.
 
-`indexer` can cause bursts of intensive disk I/O during building a table, and it might be desirable to limit its disk activity (and reserve something for other programs running on the same machine, such as `searchd`). I/O throttling helps to do that. It works by enforcing a minimum guaranteed delay between subsequent disk I/O operations performed by `indexer`. Throttling I/O can help reduce search performance degradation caused by building. This setting is not effective for other kinds of data ingestion, e.g. inserting data into a real-time table.
+`indexer` can cause bursts of intensive disk I/O during building a table, and it might be desirable to limit its disk activity (and reserve something for other programs running on the same machine, such as `searchd`). I/O throttling helps to do that. It works by enforcing a minimum guaranteed delay between subsequent disk I/O operations performed by `indexer`. Throttling I/O can help reduce search performance degradation caused by building. This setting is not effective for other kinds of data ingestion, e.g. inserting data into a real-time table, except a [bulk import](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import), which builds its chunks with `indexer`.
 
 #### max_iosize
 

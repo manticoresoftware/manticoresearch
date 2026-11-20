@@ -68,6 +68,10 @@ bool SendClusterUpdateNodes ( const CSphString & sCluster, const CSphString & sU
 	if ( dAgents.IsEmpty() )
 		return true;
 
+	// on shutdown a request to the agents never completes
+	if ( sphInterrupted() )
+		return TlsMsg::Err ( "daemon shutdown" );
+
 	ClusterUpdateNodes_c tReq;
 	return PerformRemoteTasksWrap ( dAgents, tReq, tReq, true );
 }

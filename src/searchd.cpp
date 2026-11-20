@@ -17,6 +17,8 @@
 #include "searchdha.h"
 #include "searchdreplication.h"
 #include "replication/api_command_cluster.h"
+#include "replication/cluster_bulk_chunk.h"
+#include "replication/send_files.h"
 #include "global_idf.h"
 #include "searchdssl.h"
 #include "searchdddl.h"
@@ -59,6 +61,7 @@
 #include "daemon/notifier.h"
 #include "facetutils.h"
 #include "indexer_rt_bulk.h"
+#include "searchd_shard_bulk.h"
 #include "daemon/daemon_ipc.h"
 #include "api_reply_stream.h"
 
@@ -248,7 +251,7 @@ int64_t g_iNextSystemdWatchdogTick = -1;
 static const char * g_dApiCommands[SEARCHD_COMMAND_TOTAL] =
 {
 	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs", "query", "ping", "delete", "set",  "insert", "replace", "commit", "suggest", "json",
-	"callpq", "clusterpq", "getfield", "shard_write", "optimize"
+	"callpq", "clusterpq", "getfield", "shard_write", "optimize", "shard_bulk"
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2730,6 +2733,10 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	if ( !ExtractDistributedIndexes ( dIndexNames, dDistributed, sMissed ) )
 		return SendErrorReply ( tOut, "unknown table '%s' in update request", sMissed.cstr() );
 
+	ARRAY_FOREACH ( iIdx, dIndexNames )
+		if ( AsShard ( dDistributed[iIdx] ) && HasActiveShardBulkLoad ( dIndexNames[iIdx] ) )
+			return SendErrorReply ( tOut, "table '%s' is locked", dIndexNames[iIdx].cstr() );
+
 	// do update
 	SearchFailuresLog_c dFails;
 	int iSuccesses = 0;
@@ -3302,6 +3309,7 @@ void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLengt
 		case SEARCHD_COMMAND_GETFIELD:	HandleCommandGetField ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_SHARD_WRITE: HandleCommandShardWrite ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_OPTIMIZE:	HandleCommandOptimize ( tOut, uCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_SHARD_BULK: HandleCommandShardBulk ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_SUGGEST:	HandleCommandSuggest ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_PERSIST: break; // already processes, here just for stat
 
@@ -5113,9 +5121,7 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 
 	if ( pSession->m_tIndexerRtBulk.IsEnabled() )
 	{
-		if ( !bCommit )
-			AbortIndexerRtBulkBatch ( *pSession );
-		else if ( !FinalizeIndexerRtBulk ( *pSession, sError ) )
+		if ( !( bCommit ? FinalizeIndexerRtBulk ( *pSession, sError ) : RollbackIndexerRtBulk ( *pSession, sError ) ) )
 		{
 			tOut.Error ( "%s", sError.cstr() );
 			return;
@@ -8024,6 +8030,12 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			tOut.Error ( "%s", TlsMsg::szError() );
 			return;
 		}
+
+		if ( HasActiveShardBulkLoad ( dIndexNames[0] ) )
+		{
+			tOut.Error ( "table '%s' is locked", dIndexNames[0].cstr() );
+			return;
+		}
 	}
 
 	const bool bShardPhysicalUpdate = tStmt.m_bShardPhysicalUpdate || bShardUpdate;
@@ -10007,7 +10019,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 			auto pSession = session::Info().GetClientSession();
 			bool bOk = false;
 			if ( !tStmt.m_sIndex.IsEmpty() )
-				bOk = ActivateIndexerRtBulk ( *pSession, tStmt.m_sIndex, sError );
+				bOk = ActivateIndexerRtBulk ( *pSession, tStmt.m_sIndex, sError, true );
 			else if ( !tStmt.m_iSetValue )
 			{
 				CleanupIndexerRtBulk ( *pSession );
@@ -10214,6 +10226,87 @@ void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString
 }
 
 
+// A chunk of a cluster table: the checks of this node, then the chunk goes to the other nodes and one command attaches it
+// on every node, this one included. The session retains the loaded object until the ordered command takes it.
+static DiskAttachRes_e AttachIndexerRtBulkChunkToCluster ( const CSphString & sTable, const ServedIndexWriteReservation_c & tReservation, int64_t iIndexId, int iAlterGeneration, std::unique_ptr<CSphIndex> pPlain, bool & bTargetStale, CSphString & sError )
+{
+	CSphString sCluster;
+	CSphString sRoot;
+	{
+		auto pServed = GetServed ( sTable );
+		if ( !tReservation.Matches ( pServed ) )
+		{
+			bTargetStale = true;
+			sError.SetSprintf ( "table '%s' was replaced while finalizing bulk_import", sTable.cstr() );
+			return DiskAttachRes_e::NOT_ATTACHED;
+		}
+
+		RIdx_T<RtIndex_i *> pRt { pServed };
+		if ( pRt->GetIndexId()!=iIndexId || pRt->GetAlterGeneration()!=iAlterGeneration )
+		{
+			bTargetStale = true;
+			sError.SetSprintf ( "table '%s' was altered while finalizing bulk_import", sTable.cstr() );
+			return DiskAttachRes_e::NOT_ATTACHED;
+		}
+
+		if ( !pRt->CanAttachDiskIndex ( pPlain.get(), sError ) )
+		{
+			bTargetStale = true;
+			return DiskAttachRes_e::NOT_ATTACHED;
+		}
+		sCluster = pServed->m_sCluster;
+		sRoot = GetIndexerRtBulkRoot ( *pRt.Ptr() );
+	}
+
+	const uint64_t uId = NewBulkChunkId();
+
+	CSphString sFilebase = BulkChunkFilebase ( sRoot, uId );
+	if ( !PrepareStagingRoot ( sRoot, sError ) )
+		return DiskAttachRes_e::NOT_ATTACHED;
+	if ( sphFileExists ( sFilebase.cstr() ) || !FindFiles ( SphSprintf ( "%s.*", sFilebase.cstr() ).cstr() ).IsEmpty() )
+	{
+		sError.SetSprintf ( "bulk_import chunk staging filebase '%s' already exists", sFilebase.cstr() );
+		return DiskAttachRes_e::NOT_ATTACHED;
+	}
+	if ( pPlain->RenameEx ( sFilebase )!=CSphIndex::RE_OK )
+	{
+		sError.SetSprintf ( "failed moving bulk_import chunk into '%s': %s", sFilebase.cstr(), pPlain->GetLastError().cstr() );
+		pPlain.reset();
+		RemoveFiles ( FindFiles ( SphSprintf ( "%s.*", sFilebase.cstr() ).cstr() ) );
+		return DiskAttachRes_e::NOT_ATTACHED;
+	}
+	StrVec_t dFiles = FindFiles ( SphSprintf ( "%s.*", sFilebase.cstr() ).cstr() );
+	if ( !RegisterBulkChunk ( sCluster, sTable, uId, std::move ( pPlain ), dFiles, sError ) )
+		return DiskAttachRes_e::NOT_ATTACHED;
+
+	BulkChunkAttach_t tResult;
+	ReplicateBulkImportChunk ( sCluster, sTable, uId, std::move ( dFiles ), tResult );
+	switch ( tResult.m_eResult )
+	{
+	case BulkChunkAttach_e::ATTACHED:
+		return DiskAttachRes_e::OK;
+
+	case BulkChunkAttach_e::SKIPPED:
+		bTargetStale = true;
+		sError.SetSprintf ( "table '%s' left cluster '%s' before bulk_import commit", sTable.cstr(), sCluster.cstr() );
+		return DiskAttachRes_e::NOT_ATTACHED;
+
+	case BulkChunkAttach_e::FAILED:
+		// files seqno is 0 already; the command has returned, so the provider may be disconnected now
+		RejoinClusterBySst ( sCluster );
+		bTargetStale = true;
+		sError.SetSprintf ( "the other nodes of cluster '%s' attached the bulk_import chunk, this node failed and rejoins the cluster by SST: %s", sCluster.cstr(), tResult.m_sError.cstr() );
+		return DiskAttachRes_e::NOT_ATTACHED;
+
+	case BulkChunkAttach_e::NOT_APPLIED:
+	default:
+		sError = tResult.m_sError.IsEmpty() ? CSphString ( "bulk_import chunk was not attached by the cluster" ) : tResult.m_sError;
+		DropBulkChunk ( sCluster, sTable, uId );
+		return DiskAttachRes_e::NOT_ATTACHED;
+	}
+}
+
+
 DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const ServedIndexWriteReservation_c & tReservation, int64_t iIndexId, int iAlterGeneration, const CSphString & sPath, bool & bTargetStale, CSphString & sError )
 {
 	bTargetStale = false;
@@ -10234,13 +10327,9 @@ DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const Serv
 		}
 	}
 
-	auto pPlain = sphCreateIndexPhrase ( "indexer_rt_bulk_chunk", sPath );
-	StrVec_t dWarnings;
-	if ( !pPlain->Prealloc ( false, nullptr, dWarnings ) )
-	{
-		sError.SetSprintf ( "failed loading bulk_import chunk: %s", pPlain->GetLastError().cstr() );
+	auto pPlain = LoadIndexerRtBulkChunk ( sPath, sTable, sError );
+	if ( !pPlain )
 		return DiskAttachRes_e::NOT_ATTACHED;
-	}
 
 	if ( pPlain->GetMatchSchema().HasKNNAttrs() && !pPlain->AlterKNN ( sError ) )
 	{
@@ -10248,7 +10337,20 @@ DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const Serv
 		return DiskAttachRes_e::NOT_ATTACHED;
 	}
 
-	bool bFatal = false;
+	// the attach turns the RAM segments into a disk chunk under the write lock of the table, in a cluster inside the
+	// ordered commit section of every node; do it now, so the attach has only the rows written since
+	{
+		RIdx_T<RtIndex_i *> pRt { pServed };
+		if ( pRt->ForceDiskChunkResult()!=RtActionResult_e::OK )
+		{
+			sError.SetSprintf ( "failed to flush RAM chunk of table '%s' before bulk_import attach: %s", sTable.cstr(), pRt->GetLastError().cstr() );
+			return DiskAttachRes_e::NOT_ATTACHED;
+		}
+	}
+
+	if ( ServedDesc_t::IsCluster ( pServed ) )
+		return AttachIndexerRtBulkChunkToCluster ( sTable, tReservation, iIndexId, iAlterGeneration, std::move ( pPlain ), bTargetStale, sError );
+
 	auto eResult = DiskAttachRes_e::NOT_ATTACHED;
 	{
 		auto pCurrent = GetServed ( sTable );
@@ -10267,18 +10369,29 @@ DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const Serv
 			sError.SetSprintf ( "table '%s' changed while finalizing bulk_import", sTable.cstr() );
 			return DiskAttachRes_e::NOT_ATTACHED;
 		}
-		if ( !pRt->CanAttachDiskIndex ( pPlain.get(), sError ) )
-		{
-			bTargetStale = true;
-			return DiskAttachRes_e::NOT_ATTACHED;
-		}
-
+		bool bFatal = false;
 		eResult = pRt->AttachDiskIndexWithMeta ( pPlain.get(), false, bFatal, sError );
 	}
 	if ( eResult!=DiskAttachRes_e::NOT_ATTACHED )
-		pPlain.release();
+		pPlain.release(); // the table owns the chunk now
 	return eResult;
 }
+
+
+// the chunk names the external files of sTable as the table does, so they are found as for its own disk chunks
+std::unique_ptr<CSphIndex> LoadIndexerRtBulkChunk ( const CSphString & sPath, const CSphString & sTable, CSphString & sError )
+{
+	auto pChunk = sphCreateIndexPhrase ( "indexer_rt_bulk_chunk", sPath );
+	sphLogDebugRpl ( "bulk_import chunk LoadIndexerRtBulkChunk '%s' object %p", sPath.cstr(), pChunk.get() );
+	StrVec_t dWarnings;
+	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( sTable.cstr() );
+	if ( pChunk->Prealloc ( false, pFilenameBuilder.get(), dWarnings ) )
+		return pChunk;
+
+	sError.SetSprintf ( "failed loading bulk_import chunk: %s", pChunk->GetLastError().cstr() );
+	return nullptr;
+}
+
 
 
 void HandleMysqlFlushRtindex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
@@ -10373,12 +10486,6 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const CSphString & sIndex, const CS
 			return;
 		}
 
-		if ( ServedDesc_t::IsCluster ( pServed ) )
-		{
-			tOut.Error ( "FILES format 'bulk_import' does not support cluster tables" );
-			return;
-		}
-
 		CSphString sRoot;
 		{
 			RIdx_T<const RtIndex_i *> pRt { pServed };
@@ -10437,6 +10544,64 @@ void HandleSelectFiles ( RowBuffer_i & tOut, const CSphString & sIndex, const CS
 }
 
 
+static bool PurgeRtBulkImport ( const CSphString & sTable, bool bClearSessions, CSphString & sError )
+{
+	auto pServed = GetServed ( sTable );
+	if ( !pServed || pServed->m_eType!=IndexType_e::RT )
+	{
+		sError.SetSprintf ( "PURGE BULK_IMPORT requires an existing local RT table; table '%s' is absent or unsupported", sTable.cstr() );
+		return false;
+	}
+
+	if ( HasBulkChunkSessions ( sTable ) )
+	{
+		if ( !bClearSessions )
+		{
+			sError.SetSprintf ( "a bulk_import chunk of table '%s' is being replicated; repeat PURGE after it finishes or use OPTION clear_sessions=1", sTable.cstr() );
+			return false;
+		}
+	}
+
+	CSphString sRoot;
+	{
+		RIdx_T<const RtIndex_i *> pRt { pServed };
+		sRoot = GetIndexerRtBulkRoot ( *pRt.Ptr() );
+	}
+	pServed = nullptr;
+
+	return PurgeSharedBulkImport ( sTable, bClearSessions, sError ) && RemoveIndexerRtBulkRoot ( sTable, sRoot, sError );
+}
+
+
+// By the name of a distributed or shard table: the load into the shard table that this node runs, then every local
+// table by its name, then the agent tables; a failure of a table does not stop the others.
+static bool PurgeDistrBulkImport ( const DistributedIndex_t & tDistr, const CSphString & sTable, bool bClearSessions, CSphString & sError )
+{
+	if ( !PurgeShardBulkLoad ( sTable, bClearSessions, sError ) )
+		return false; // open without the option, or being published: its targets are busy with it
+
+	SearchFailuresLog_c dFailures;
+	for ( const CSphString & sLocal : tDistr.m_dLocal )
+	{
+		auto pLocal = GetServed ( sLocal );
+		if ( !pLocal || pLocal->m_eType!=IndexType_e::RT )
+			continue;
+		pLocal = nullptr;
+		if ( !PurgeRtBulkImport ( sLocal, bClearSessions, sError ) )
+			dFailures.Submit ( sLocal, sTable.cstr(), sError.cstr() );
+	}
+
+	PurgeRemoteBulkImport ( tDistr, sTable, bClearSessions, dFailures );
+	if ( dFailures.IsEmpty() )
+		return true;
+
+	StringBuilder_c sReport;
+	dFailures.BuildReport ( sReport );
+	sError = sReport.cstr();
+	return false;
+}
+
+
 static void HandleMysqlPurge ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	if ( !sphCheckWeCanModify ( tOut ) )
@@ -10448,28 +10613,12 @@ static void HandleMysqlPurge ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		return;
 	}
 
-	auto pServed = GetServed ( tStmt.m_sIndex );
-	if ( !pServed || pServed->m_eType!=IndexType_e::RT || ServedDesc_t::IsCluster ( pServed ) )
-	{
-		tOut.ErrorEx ( "PURGE BULK_IMPORT requires an existing local RT table; table '%s' is absent or unsupported", tStmt.m_sIndex.cstr() );
-		return;
-	}
-
-	CSphString sRoot;
-	{
-		RIdx_T<const RtIndex_i *> pRt { pServed };
-		sRoot = GetIndexerRtBulkRoot ( *pRt.Ptr() );
-	}
-	pServed = nullptr;
-
 	CSphString sError;
-	if ( !PurgeSharedBulkImport ( tStmt.m_sIndex, tStmt.m_iIntParam!=0, sError ) )
-	{
-		tOut.Error ( sError.cstr() );
-		return;
-	}
-
-	if ( !RemoveIndexerRtBulkRoot ( tStmt.m_sIndex, sRoot, sError ) )
+	auto pDistr = GetServed ( tStmt.m_sIndex ) ? cDistributedIndexRefPtr_t() : GetDistr ( tStmt.m_sIndex );
+	const bool bPurged = pDistr
+		? PurgeDistrBulkImport ( *pDistr, tStmt.m_sIndex, tStmt.m_iIntParam!=0, sError )
+		: PurgeRtBulkImport ( tStmt.m_sIndex, tStmt.m_iIntParam!=0, sError );
+	if ( !bPurged )
 	{
 		tOut.Error ( sError.cstr() );
 		return;
@@ -12676,6 +12825,11 @@ void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const SqlStmt_t& tStmt, CSphS
 	for ( const auto& sIndex : dIndexes )
 	{
 		auto pIndex = GetServed ( sIndex );
+		if ( !pIndex )
+		{
+			dNonlockedIndexes.Add ( sIndex );
+			continue;
+		}
 		if ( ServedDesc_t::IsMutable ( pIndex ) )
 		{
 			// here we get non-locked instance to avoid deadlock with update.
@@ -16518,23 +16672,22 @@ static void InitBanner()
 	g_sStatusVersion.SetSprintf ( "%s%s%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr(), sKNN.cstr(), sKNNEmb.cstr() );
 }
 
-static bool CheckSSL ( const CSphVector<ListenerDesc_t> & dListeners, bool bForced )
+// set up SSL once, before connections are served; no keys and no need for SSL is not an error
+static bool CheckSSL ( const CSphVector<ListenerDesc_t> & dListeners, bool bForced, bool bKeysConfigured )
 {
-	// check for SSL inited well
-	if ( !bForced && dListeners.none_of ([] ( const auto& tListener ) { return tListener.m_eProto==Proto_e::HTTPS; }) )
+	CSphString sError;
+	if ( CheckWeCanUseSSL ( &sError ) )
 		return true;
 
-	CSphString sError;
-	if ( !CheckWeCanUseSSL ( &sError ) )
-	{
-		if ( bForced )
-			sphFatal ( "SSL initialization failed but is required for Manticore Buddy: %s", sError.cstr() );
+	if ( bForced )
+		sphFatal ( "SSL initialization failed but is required for Manticore Buddy: %s", sError.cstr() );
 
+	if ( bKeysConfigured )
 		sphWarning ( "SSL init error: %s", sError.cstr() );
-		return false;
-	}
+	else if ( dListeners.any_of ( [] ( const auto & tListener ) { return tListener.m_eProto==Proto_e::HTTPS; } ) )
+		sphWarning ( "SSL init error: %s", sError.IsEmpty() ? "HTTPS listener requires ssl_cert and ssl_key" : sError.cstr() );
 
-	return true;
+	return false;
 }
 
 
@@ -16868,6 +17021,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	CheckSetCwd();
 	g_sConfigPath = sphGetCwd();
 	sphConfigureCommon ( hConf, FixPathAbsolute ); // this also inits plugins now
+	ConfigureIndexerRtBulk ( hConf );
 
 	if ( g_iMaxPacketSize<SPH_MIN_PACKET_SIZE || g_iMaxPacketSize>SPH_MAX_PACKET_SIZE )
 		sphFatal ( "max_packet_size out of bounds (128K..128M)" );
@@ -16941,7 +17095,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		if ( bForcedSsl )
 			ForceSsl();
 
-		bool bGotSSL = CheckSSL ( dListenerDescs, bForcedSsl );
+		bool bGotSSL = CheckSSL ( dListenerDescs, bForcedSsl, !sSslCert.IsEmpty() || !sSslKey.IsEmpty() );
 		if ( !bForcedSsl || !bGotSSL )
 			return;
 
@@ -17381,10 +17535,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	Detached::MakeAloneIteratorAvailable ();
 
 	// time for replication to sync with cluster
+	searchd::AddShutdownCb ( ShutdownBulkChunkSessions ); // runs after replication has stopped applying commands
 	searchd::AddShutdownCb ( ReplicationServiceShutdown );
 	ReplicationServiceStart ( eBs );
 	searchd::AddShutdownCb ( BuddyShutdown );
 	searchd::AddShutdownCb ( ShutdownSharedBulkImport );
+	searchd::AddShutdownCb ( ShutdownShardBulkImport );
 	// --test should not guess buddy path
 	// otherwise daemon generates warning message that counts as bad daemon restart by ubertest
 	if ( bWithBuddy.value_or (!bTestMode) )

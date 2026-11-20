@@ -1,0 +1,32 @@
+––– block: rejoin-diag –––
+––– input –––
+export INSTANCE=1; mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}; stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; if timeout 30 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Buddy started!
+––– input –––
+export INSTANCE=2; mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}; stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; if timeout 30 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Buddy started!
+––– input –––
+export INSTANCE=3; mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}; stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; if timeout 30 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Buddy started!
+––– input –––
+rj_q 1306 "CREATE CLUSTER v1"; echo $?
+––– output –––
+0
+––– input –––
+for n in 2 3; do rj_q ${n}306 "JOIN CLUSTER v1 AT '127.0.0.1:1312'"; echo $?; done
+––– output –––
+0
+0
+––– input –––
+rj_q 1306 "CREATE TABLE t0 (title text, v int)" && rj_q 1306 "ALTER CLUSTER v1 ADD t0" && rj_q 1306 "INSERT INTO v1:t0 (id,title,v) VALUES (1,'a',1)"; echo $?
+––– output –––
+0
+––– input –––
+rj_wait "2306 3306" 60 'rj_all "1306 2306 3306" node_state synced && rj_all "1306 2306 3306" last_committed 2'; for p in 1306 2306 3306; do echo "$p $(mysql -h0 -P$p -e "SHOW STATUS LIKE 'cluster_v1_node_state'\G" | awk '/Value:/{print $2}') $(mysql -h0 -P$p -e "SHOW STATUS LIKE 'cluster_v1_last_committed'\G" | awk '/Value:/{print $2}')"; done
+––– output –––
+1306 synced 2
+2306 synced 2
+3306 synced 2

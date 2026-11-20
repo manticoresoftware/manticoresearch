@@ -61,6 +61,10 @@ path 选项指定 [write-set cache replication](https://galeracluster.com/librar
 
 `options` 选项允许直接传递额外参数给 Galera 复制插件，详情请参见 [Galera 文档参数](https://galeracluster.com/library/documentation/galera-parameters.html)。
 
+## 升级集群
+
+> **重大变更：** 从支持[将数据批量导入复制表](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import-into-a-replicated-table)的版本开始，节点会为集群表文件的最后一次变更保留不同的标记，早期版本的节点无法与其在同一集群中工作。不支持滚动升级：请确保集群中的所有节点已同步，然后停止所有节点，完成升级后，再像执行[完全重启](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)一样重新启动集群。
+
 ## 写语句
 
 <!-- example write statements 1 -->

@@ -22,6 +22,7 @@
 #include "cluster_index_add_local.h"
 #include "cluster_recv_state_cleanup.h"
 #include "cluster_sst_progress.h"
+#include "recv_state.h"
 #include "searchdreplication.h"
 
 // for send dist indexes
@@ -172,6 +173,10 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 	tRequest.m_sIndexFileName = GetBaseName ( sIndexPath );
 	tProgress.SetDonor4Joiner ( tSigSrc.m_dIndexFiles.GetLength(), tRequest.m_tProgressCtx );
 
+	// on shutdown a request to the agents never completes
+	if ( sphInterrupted() )
+		return TlsMsg::Err ( "daemon shutdown" );
+
 	auto dNodes = ClusterFileReserve_c::MakeAgents ( dDesc, sUser, iSstQueryTimeoutMs, tRequest );
 	assert ( dDesc.GetLength() == dNodes.GetLength() );
 	auto bOk = SendClusterFileReserve ( dNodes );
@@ -235,7 +240,7 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 
 	bool bSendOk = true;
 	if ( !dSendStates.IsEmpty() )
-		bSendOk = RemoteClusterFileSend ( tSigSrc, dSendStates, sCluster, sIndex, sUser, tProgress );
+		bSendOk = RemoteClusterFileSend ( tSigSrc, dSendStates, sCluster, sIndex, DoubleStringKey ( sCluster, sIndex ), sUser, tProgress );
 
 	// allow index local write operations passed without replicator
 	tIndexSaveGuard.EnableSave ();

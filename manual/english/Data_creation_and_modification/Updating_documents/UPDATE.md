@@ -1,5 +1,12 @@
 # UPDATE
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, price float, enabled int);
+INSERT INTO products(id,title,price,enabled) VALUES (10,'doc ten',19.85,1),(1,'doc one',9.99,1);
+-->
 <!-- example update -->
 
 The `UPDATE` command changes [row-wise](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) attribute values of existing documents in a specified table with new values. Note that you can't update the contents of a fulltext field or a columnar attribute. If there's such a need, use [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
@@ -15,14 +22,6 @@ Read more about `UPDATE` vs. partial `REPLACE` [here](../../Data_creation_and_mo
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
-
-<!--
-data for the following example:
-
-DROP TABLE IF EXISTS products;
-CREATE TABLE products(title text, price float, enabled int);
-INSERT INTO products(id,title,price,enabled) VALUES (10,'doc ten',19.85,1),(1,'doc one',9.99,1);
--->
 
 ```sql
 UPDATE products SET enabled=0 WHERE id=10;
@@ -733,6 +732,12 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 
 <!-- end -->
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, data json);
+-->
 <!-- example full JSON update -->
 
 Updating other data types or changing property type in a JSON attribute requires a full JSON update.
@@ -740,13 +745,6 @@ Updating other data types or changing property type in a JSON attribute requires
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
-
-<!--
-data for the following example:
-
-DROP TABLE IF EXISTS products;
-CREATE TABLE products(title text, data json);
--->
 
 ```sql
 insert into products values (1,'title','{"tags":[1,2,3]}');

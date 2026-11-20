@@ -1735,6 +1735,19 @@ void GlobalCrashQuerySet ( const CrashQuery_t & tQuery )
 }
 }
 
+CrashQuery_t GlobalCrashQuerySnapshot () noexcept
+{
+	const auto * pQuery = *g_ppTlsCrashQuery();
+	return pQuery ? *pQuery : CrashQuery_t {};
+}
+
+CrashQuery_t * GlobalCrashQuerySwap ( CrashQuery_t * pQuery ) noexcept
+{
+	auto * pPrevious = *g_ppTlsCrashQuery();
+	*g_ppTlsCrashQuery() = pQuery;
+	return pPrevious;
+}
+
 static CrashQuery_t g_tUnhandled;
 
 CrashQuery_t & GlobalCrashQueryGetRef ()
@@ -1841,13 +1854,13 @@ bool Threads::CreateQ ( SphThread_t * pThread, Handler fnRun, bool bDetached, co
 	}, bDetached, sName, iNum );
 }
 
-// capture crash query and set it before running fnHandler.
+// Explicitly propagate query context into a child task.
 Threads::Handler Threads::WithCopiedCrashQuery ( Threads::Handler fnHandler )
 {
-	CrashQuery_t tParentCrashQuery = GlobalCrashQueryGetRef ();
+	CrashQuery_t tParentCrashQuery = GlobalCrashQuerySnapshot();
 	return [tCrashQuery = tParentCrashQuery, fnHandler = std::move ( fnHandler )] {
-		// CrashQueryKeeper_c _; // restore previous crash query on exit. Seems, that is not necessary
-		GlobalCrashQuerySet ( tCrashQuery );
+		CrashQueryScope_c tScope;
+		GlobalCrashQueryGetRef() = tCrashQuery;
 		fnHandler ();
 	};
 }

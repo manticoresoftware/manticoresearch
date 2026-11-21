@@ -14,6 +14,8 @@
 #include "searchdhttp.h"
 #include "daemon/search_handler.h"
 #include "nlohmann/json.hpp"
+#include "auth/auth.h"
+#include "auth/auth_proto_http.h"
 
 #include <iostream>
 
@@ -49,6 +51,7 @@ public:
 
 private:
 	bool ProcessEndpoints();
+	bool CheckIndexPerms ( AuthAction_e eAction, const CSphString & sIndex );
 
 	void ReportMissedIndex ( const CSphString & sIndex );
 	void ReportIncorrectMethod ( const char * sAllowed );
@@ -61,7 +64,7 @@ private:
 
 	void ProcessEmptyHead();
 	bool ProcessKbnTableDoc();
-	void ProcessILM();
+	bool ProcessILM();
 	void ProcessCCR();
 	void ProcessKbnTableGet();
 	bool ProcessCount();
@@ -1045,7 +1048,7 @@ static CSphString g_sEmptySearch = R"(
 }
 )";
 
-static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CSphString & sURL, CSphString & sRes )
+static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CSphString & sURL, CSphString & sRes, EHTTP_STATUS & eReplyHttpCode, CSphString & sAuthError, CSphVector<BYTE> & dReply )
 {
 	// expand index(es) to index list
 	CSphString sIndex = sDefaultIndex;
@@ -1063,6 +1066,19 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 
 	CSphString sExpandedIndex;
 	StrVec_t dIndexes = ExpandIndexes ( sIndex, sExpandedIndex );
+
+	// Check the resolved tables: JSON can override the URL index, and a
+	// wildcard or comma-separated target may expand to several tables.
+	if ( IsAuthEnabled() )
+	{
+		if ( dIndexes.IsEmpty() && !sIndex.IsEmpty() &&
+			!HttpCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, eReplyHttpCode, sAuthError, dReply ) )
+			return false;
+
+		for ( const CSphString & sName : dIndexes )
+			if ( !HttpCheckPerms ( session::GetUser(), AuthAction_e::READ, sName, eReplyHttpCode, sAuthError, dReply ) )
+				return false;
+	}
 
 	if ( !dIndexes.GetLength() )
 	{
@@ -1207,7 +1223,8 @@ bool HttpCompatHandler_c::ProcessMSearch ()
 	for ( int i=0; i<dRes.GetLength(); i++ )
 	{
 		nljson & tReq = tSourceReq[i];
-		DoSearch ( sDefaultIndex, tReq, GetFullURL(), dRes[i] );
+		if ( !DoSearch ( sDefaultIndex, tReq, GetFullURL(), dRes[i], m_eHttpCode, m_sError, GetResult() ) && m_eHttpCode==EHTTP_STATUS::_403 )
+			return false;
 	}
 
 	int64_t tmTook = sphMicroTimer() - tmStarted;
@@ -1629,7 +1646,7 @@ static void ProcessKbnResult ( const CSphString * sSourceFilter, const CSphStrin
 
 // FIXME!!! replace with requests to every index with count(*) \ implicit grouper instead of this hack
 // or implement group by IndexTag
-static bool EmulateIndexCount ( const CSphString & sIndex, const nljson & tReq, CSphVector<BYTE> & dResult )
+static bool EmulateIndexCount ( const CSphString & sIndex, const nljson & tReq, CSphVector<BYTE> & dResult, EHTTP_STATUS & eReplyHttpCode, CSphString & sAuthError )
 {
 	bool bCountFromIdx = ( tReq.size()>=1 && ( tReq.contains ( "aggs" ) || ( tReq.size()==2 && tReq.contains ( "size" ) ) ) );
 	if ( !bCountFromIdx )
@@ -1683,6 +1700,9 @@ nljson tRes = nljson::parse ( R"({
 		if ( !sFilter.IsEmpty() && !sphWildcardMatch ( tIt.first.cstr(), sFilter.cstr() ) )
 			continue;
 
+		if ( !HttpCheckPerms ( session::GetUser(), AuthAction_e::READ, tIt.first, eReplyHttpCode, sAuthError, dResult ) )
+			return false;
+
 		RIdx_c tIdx ( tIt.second );
 		int iDocsCount = tIdx->GetStats().m_iTotalDocuments;
 		if ( !iDocsCount )
@@ -1724,12 +1744,16 @@ bool HttpCompatHandler_c::ProcessSearch()
 		return false;
 	}
 
-	if ( EmulateIndexCount ( sIndex, tReq, GetResult() ) )
+	if ( EmulateIndexCount ( sIndex, tReq, GetResult(), m_eHttpCode, m_sError ) )
 		return true;
+	if ( m_eHttpCode==EHTTP_STATUS::_403 )
+		return false;
 
 	CSphString sRes;
-	if ( !DoSearch ( sIndex, tReq, GetFullURL(), sRes ) )
+	if ( !DoSearch ( sIndex, tReq, GetFullURL(), sRes, m_eHttpCode, m_sError, GetResult() ) )
 	{
+		if ( m_eHttpCode==EHTTP_STATUS::_403 )
+			return false;
 		m_sError = TlsMsg::MoveToString();
 		ReportError ( nullptr, HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
 		return false;
@@ -1759,8 +1783,10 @@ bool HttpCompatHandler_c::ProcessCount()
 	}
 
 	CSphString sRes;
-	if ( !DoSearch ( sIndex, tReq, GetFullURL(), sRes ) )
+	if ( !DoSearch ( sIndex, tReq, GetFullURL(), sRes, m_eHttpCode, m_sError, GetResult() ) )
 	{
+		if ( m_eHttpCode==EHTTP_STATUS::_403 )
+			return false;
 		m_sError = sRes;
 		BuildReply ( FromStr ( sRes ), EHTTP_STATUS::_400 );
 		return false;
@@ -1812,7 +1838,10 @@ void HttpCompatHandler_c::ProcessEmptyHead ()
 bool HttpCompatHandler_c::ProcessDeleteDoc()
 {
 	CSphString sIndex;
-	ExpandIndexes ( GetUrlParts()[0], sIndex );
+	StrVec_t dIndexes = ExpandIndexes ( GetUrlParts()[0], sIndex );
+	for ( const CSphString & sName : dIndexes )
+		if ( !CheckIndexPerms ( AuthAction_e::WRITE, sName ) )
+			return false;
 	const CSphString & sId = GetUrlParts()[2];
 
 	if ( sIndex.IsEmpty() )
@@ -2003,7 +2032,7 @@ void HttpCompatHandler_c::ProcessCCR()
 	BuildReplyHead ( FromSz ( sRes ), EHTTP_STATUS::_200 );
 }
 
-void HttpCompatHandler_c::ProcessILM()
+bool HttpCompatHandler_c::ProcessILM()
 {
 	nljson tItems = nljson::parse ( R"({})" );
 
@@ -2012,6 +2041,9 @@ void HttpCompatHandler_c::ProcessILM()
 	{
 		if ( !tIt.second )
 			continue;
+
+		if ( !CheckIndexPerms ( AuthAction_e::READ, tIt.first ) )
+			return false;
 
 		nljson tItem = nljson::parse ( R"({"managed": false})" );
 		tItem["index"] = tIt.first.cstr();
@@ -2023,6 +2055,12 @@ void HttpCompatHandler_c::ProcessILM()
 	tRes["indices"] = tItems;
 	std::string sRes = tRes.dump();
 	BuildReplyHead ( FromStd ( sRes ), EHTTP_STATUS::_200 );
+	return true;
+}
+
+bool HttpCompatHandler_c::CheckIndexPerms ( AuthAction_e eAction, const CSphString & sIndex )
+{
+	return HttpCheckPerms ( session::GetUser(), eAction, sIndex, m_eHttpCode, m_sError, GetResult() );
 }
 
 bool HttpCompatHandler_c::ProcessEndpoints()
@@ -2040,9 +2078,13 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 
 		if ( m_dUrlParts.GetLength()>1 && m_dUrlParts[1].Begins( "_" ) &&
 			m_dUrlParts[1]=="_doc" &&
-			( m_dUrlParts[0]==g_sKbnTableName || m_dUrlParts[0]==g_sKbnTableAlias ) &&
-			ProcessKbnTableDoc() )
+			( m_dUrlParts[0]==g_sKbnTableName || m_dUrlParts[0]==g_sKbnTableAlias ) )
+		{
+			if ( !CheckIndexPerms ( AuthAction_e::READ, m_dUrlParts[0] ) )
+				return false;
+			if ( ProcessKbnTableDoc() )
 				return true;
+		}
 
 		if ( ( m_dUrlParts.GetLength() && m_dUrlParts[0]=="_rollup" ) || ( m_dUrlParts.GetLength()>=2 && m_dUrlParts[1]=="_rollup" )
 			|| ( m_dUrlParts.GetLength() && m_dUrlParts[0]=="_ingest" ) )
@@ -2052,19 +2094,20 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 		}
 
 		if ( m_dUrlParts.GetLength()>=2 && m_dUrlParts[1]=="_ilm" )
-		{
-			ProcessILM();
-			return true;
-		}
+			return ProcessILM();
 
 		if ( m_dUrlParts.GetLength()>=2 && m_dUrlParts[1]=="_ccr" )
 		{
+			if ( !CheckIndexPerms ( AuthAction_e::READ, m_dUrlParts[0] ) )
+				return false;
 			ProcessCCR();
 			return true;
 		}
 
 		if ( m_dUrlParts.GetLength() )
 		{
+			if ( !CheckIndexPerms ( AuthAction_e::READ, m_dUrlParts[0] ) )
+				return false;
 			ProcessKbnTableGet();
 			return true;
 		}
@@ -2085,21 +2128,28 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 		}
 
 		if ( m_dUrlParts.GetLength() )
-			return	ProcessCreateTable();
+		{
+			if ( !CheckIndexPerms ( AuthAction_e::SCHEMA, m_dUrlParts[0] ) )
+				return false;
+			return ProcessCreateTable();
+		}
 	}
 
-	if ( GetRequestType()==HTTP_DELETE && m_dUrlParts.GetLength()>2 && m_dUrlParts[1]=="_doc" 
-		&& ProcessDeleteDoc() )
-		return true;
+	if ( GetRequestType()==HTTP_DELETE && m_dUrlParts.GetLength()>2 && m_dUrlParts[1]=="_doc" )
+		return ProcessDeleteDoc();
 
 	if ( GetRequestType()==HTTP_DELETE && m_dUrlParts.GetLength()==1 )
 	{
+		if ( !CheckIndexPerms ( AuthAction_e::SCHEMA, m_dUrlParts[0] ) )
+			return false;
 		ProcessDeleteTable();
 		return true;
 	}
 
 	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>=2 && m_dUrlParts[1]=="_refresh" )
 	{
+		if ( !CheckIndexPerms ( AuthAction_e::READ, m_dUrlParts[0] ) )
+			return false;
 		ProcessRefresh ( m_dUrlParts.Begin() );
 		return true;
 	}

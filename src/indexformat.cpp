@@ -642,6 +642,24 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 	tDict2Payload.Convert ( tArgs );
 }
 
+
+/// dict=keywords block reader
+class KeywordsBlockReader_c final : public ISphKeywordsBlockReader
+{
+public:
+					KeywordsBlockReader_c ( const BYTE * pBuf, int iSkiplistBlockSize, bool bMultiHitSingletons );
+
+	void			Reset ( const BYTE * pBuf ) override;
+	bool			UnpackWord() override;
+	bool			ReadKeywordText();
+	void			SkipPosting();
+	using ISphKeywordsBlockReader::ReadPosting;
+
+private:
+	std::array<BYTE, MAX_KEYWORD_BYTES>	m_sWord;
+};
+
+
 #if WITH_RE2
 struct RegexMatch_t
 {
@@ -675,31 +693,46 @@ void CWordlist::ScanRegexWords ( const VecTraits_T<RegexTerm_t> & dTerms, const 
 	}
 
 	const int iSkipMagic = ( tArgs.m_bHasExactForms ? 1 : 0 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
-	auto pDictReader = CreateKeywordsBlockReader ( nullptr, m_iSkiplistBlockSize, m_eDictFormat, m_bMultiHitSingletons );
+	KeywordsBlockReader_c tReader ( nullptr, m_iSkiplistBlockSize, m_bMultiHitSingletons );
 
 	// walk those checkpoints, check all their words
 	ARRAY_FOREACH ( i, m_dCheckpoints )
 	{
 		const auto & tCP = m_dCheckpoints[i];
 
-		pDictReader->Reset ( m_tBuf.GetReadPtr() + tCP.m_iWordlistOffset );
-		while ( pDictReader->UnpackWord() )
+		tReader.Reset ( m_tBuf.GetReadPtr() + tCP.m_iWordlistOffset );
+		while ( tReader.ReadKeywordText() )
 		{
 			if ( sphInterrupted () )
 				break;
 
 			// stemmed terms should not match suffixes
-			if ( tArgs.m_bHasExactForms && *pDictReader->GetWord()!=MAGIC_WORD_HEAD_NONSTEMMED )
+			if ( tArgs.m_bHasExactForms && *tReader.GetWord()!=MAGIC_WORD_HEAD_NONSTEMMED )
+			{
+				tReader.SkipPosting();
 				continue;
+			}
 
-			int iLen = pDictReader->GetWordLen();
-			re2::StringPiece sDictToken ( pDictReader->GetWord()+iSkipMagic, iLen );
+			bool bPostingRead = false;
+			int iLen = tReader.GetWordLen();
+			re2::StringPiece sDictToken ( tReader.GetWord()+iSkipMagic, iLen );
 
 			ARRAY_FOREACH ( i, dRegex )
 			{
-				if ( RE2::FullMatchN ( sDictToken, *dRegex[i].m_pRe, nullptr, 0 ) )
-					dRegex[i].m_pPayload->Add ( *pDictReader, iLen );
+				if ( !RE2::FullMatchN ( sDictToken, *dRegex[i].m_pRe, nullptr, 0 ) )
+					continue;
+
+				if ( !bPostingRead )
+				{
+					tReader.ReadPosting();
+					bPostingRead = true;
+				}
+
+				dRegex[i].m_pPayload->Add ( tReader, iLen );
 			}
+
+			if ( !bPostingRead )
+				tReader.SkipPosting();
 		}
 
 		if ( sphInterrupted () )
@@ -738,20 +771,6 @@ bool CWordlist::ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) cons
 }
 
 //////////////////////////////////////////////////////////////////////////
-
-/// dict=keywords block reader
-class KeywordsBlockReader_c final : public ISphKeywordsBlockReader
-{
-public:
-					KeywordsBlockReader_c ( const BYTE * pBuf, int iSkiplistBlockSize, bool bMultiHitSingletons );
-
-	void			Reset ( const BYTE * pBuf ) override;
-	bool			UnpackWord() override;
-
-private:
-	std::array<BYTE, MAX_KEYWORD_BYTES>	m_sWord;
-};
-
 
 /// dict=keywords_v2 block reader
 class KeywordsBlockReaderV2_c final : public ISphKeywordsBlockReader
@@ -813,6 +832,31 @@ void KeywordsBlockReader_c::Reset ( const BYTE * pBuf )
 
 bool KeywordsBlockReader_c::UnpackWord()
 {
+	if ( !ReadKeywordText() )
+		return false;
+
+	ReadPosting();
+	return true;
+}
+
+
+void KeywordsBlockReader_c::SkipPosting()
+{
+	// Dictionary singletons have no size hint or skiplist offset.
+	if ( *m_pBuf==0 )
+	{
+		++m_pBuf;
+		UnzipIntBE(m_pBuf);
+		UnzipIntBE(m_pBuf);
+	} else if ( m_bMultiHitSingletons && *m_pBuf==postings::MULTI_HIT_MARKER )
+		m_pBuf += 2+m_pBuf[1]; // marker, length and payload
+	else
+		ReadPosting();
+}
+
+
+bool KeywordsBlockReader_c::ReadKeywordText()
+{
 	if ( !m_pBuf )
 		return false;
 
@@ -849,8 +893,6 @@ bool KeywordsBlockReader_c::UnpackWord()
 
 	m_iLen = iMatch + iDelta;
 	m_sWord[m_iLen] = '\0';
-
-	ReadPosting();
 
 	assert ( m_iLen>0 );
 	return true;

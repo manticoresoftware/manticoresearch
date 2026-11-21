@@ -645,12 +645,78 @@ diskchunk_flush_write_timeout = 60s
 ```
 <!-- end -->
 
+### docid_lookup_cache_size
+
+Native C++ cache for numeric disk document ID lookups. Enabled by default with
+a `64m` ceiling. This is a process-wide allocation budget, in bytes; set `0`
+to disable it:
+
+```ini
+docid_lookup_cache_size = 256m
+```
+
+Loading a disk chunk does not allocate a cache. Repeated sparse ID batches
+(at least 16 IDs and at most 1/64 of the chunk's rows) trigger construction,
+decoding at most 16,384 entries per chunk in each eligible build call. A query
+visiting several chunks can advance several builds. Other queries do not wait for the
+builder. Only a complete, unique-ID mapping is published for batch lookup.
+Point-only workloads do not trigger construction. Scalar lookups keep the
+compressed reader.
+Allocation refusal, budget exhaustion, duplicate IDs or cancellation retains
+the compressed reader. Cache allocations, alignment padding and handles count
+against the budget; allocator metadata and process RSS do not. The cache adds
+memory beside existing mapped data and does not change the disk format.
+Admission is for a whole chunk (about 11.6 MiB per million rows), so actual
+allocation can be lower than the ceiling. A refused build is not retried until
+the chunk is remapped. Unfinished builds also count against the ceiling and are
+released on remap/destruction; there is no hot-entry eviction or idle shrinking.
+
+Cache allocation alignment is detected once from the OS (64, 128 or 256 bytes),
+with a 64-byte fallback. The handle padding and alignment slack count against
+the budget. Directory nodes use eight child maxima for a 64-byte cache line
+and sixteen for 128/256-byte lines; the extra directory memory counts against
+the budget. Batch lookup uses temporary stack arrays (512 bytes of array data
+per active batch call on 64-bit builds, plus compiler-generated stack-frame
+overhead). It adds no thread-local scratch storage and does not change
+configured coroutine stack allocations.
+
+Sparse ID value filters and sparse updates can reuse the cache. Dense lists,
+ranges and duplicate-ID chunks keep the original merging path. This experimental
+UPDATE optimization currently accepts nonnegative update IDs. The setting does
+not replace RAM hash maps or UUID indexes. Gains depend on workload and platform.
+
+When a chunk has admitted a complete cache, the planner bounds sparse numeric
+`id IN (...)` result estimates by the number of input values and charges for
+every lookup, including misses. This can select DocidIndex without an SQL hint
+and reduce result storage. Explicit DocidIndex/NO_DocidIndex hints still apply.
+Chunks without a cache keep the previous estimates and lookup policy.
+
+`SHOW STATUS LIKE 'docid_lookup_cache_used_bytes'` reports requested cache bytes,
+and table RAM status includes the cache. Chunk destruction/remapping releases
+storage. Uncached chunks are not automatically retried when budget becomes free;
+there is no LRU or eviction. See `test/docid-cache/README.md` for validation instructions and cache
+behavior.
+
 ### docstore_cache_size
 
 <!-- example conf docstore_cache_size -->
 This setting specifies the maximum size of document blocks from document storage that are held in memory. It is optional, with a default value of 16m (16 megabytes).
 
+The cache is enabled by default through `docstore_cache = 1` and always uses
+adaptive admission and reclamation. Setting this size to `0` also disables it.
+
 When `stored_fields` is used, document blocks are read from disk and uncompressed. Since every block typically holds several documents, it may be reused when processing the next document. For this purpose, the block is held in a server-wide cache. The cache holds uncompressed blocks.
+
+The cache uses up to 16 independently locked LRU partitions to reduce contention
+between queries. The configured budget is shared across all partitions, not
+multiplied by the number of workers. Each partition receives at least about
+1 MiB; budgets below 2 MiB use one partition. Hash tables, locks and allocator
+metadata require additional memory beyond the cached-entry budget.
+
+Partitioning can reduce effective capacity when block keys are unevenly
+distributed, and each block must fit its own partition. Increasing this budget
+helps only when the workload reuses enough stored blocks to offset cache lookup
+and synchronization costs. This setting is independent of `docid_lookup_cache_size`.
 
 
 <!-- intro -->
@@ -662,6 +728,77 @@ When `stored_fields` is used, document blocks are read from disk and uncompresse
 docstore_cache_size = 8m
 ```
 <!-- end -->
+
+### docstore_cache
+
+Enable the adaptive stored-field block cache with `1` (the default), or disable
+it with `0`. When enabled, the cache always uses second-touch admission,
+adaptive cold-block reclamation and mapped payload storage; there is no separate
+fixed-policy configuration. A zero `docstore_cache_size` also disables the cache.
+The `docstore_cache_size` setting remains the hard limit for cached decoded blocks
+and LRU entries. Small mapped payloads are charged in 256-byte size classes;
+larger dedicated mappings are charged at their page-rounded size.
+Memory is allocated on demand: a
+512 MiB limit does not reserve 512 MiB at startup. Hash tables and allocator
+metadata, reader buffers and in-flight decompression remain additional memory.
+Adaptive mode also uses a fixed 256 KiB fingerprint history, allocated only when
+the block cache is enabled.
+
+On a cache miss, adaptive mode admits a decoded block only if its fingerprint
+was already observed in its history slot. The first visit uses a temporary
+heap buffer. A second visit can occur within the same query or session.
+The bounded history uses atomic fingerprint replacement; collisions can change
+admission decisions but cannot return another block, since the shared cache
+still compares complete keys. This
+policy reduces insertion and eviction work for sparse accesses; it does not
+guarantee that caching improves every workload.
+
+Adaptive mode allocates decoded payloads through a per-partition virtual-memory
+pool. POSIX uses anonymous mappings; Windows uses `VirtualAlloc`. Blocks up to
+31 KiB are packed into 64 KiB regions, avoiding a full memory-page rounding
+charge for each small block. Larger payloads use dedicated mappings. Compressed
+data is decoded directly into the allocated storage. A region is released when
+its final live block is freed; each pool keeps at most one empty 64 KiB region
+for reuse. Dedicated mappings are released immediately. Sixteen partitions
+therefore retain at most 1 MiB of completely empty spare regions. Unused slots
+in partially occupied regions also consume mapped address space, in addition
+to the cached-entry limit. Mapping
+failure or a payload too large for its partition falls back to the process
+heap. Metadata, temporary input buffers and output values still use the process heap.
+
+Adaptive mode keeps the partition count and block-to-partition mapping fixed.
+Each partition observes windows of 4096 block lookups under its existing lock.
+After four windows with at least 98% hits and touched bytes below one quarter
+of retained bytes, it gradually frees cold, unreferenced entries. It retains
+headroom of twice the touched bytes, with a target floor totaling up to 16 MiB
+across partitions. This floor is not a minimum allocation. Each reclamation
+step examines at most 32 entries per 64 lookups. Recently touched and referenced
+blocks survive reclamation; normal admission can grow again up to the limit.
+
+Reclamation is driven by lookups, not a wall-clock timer. Idle partitions do
+not advance their windows. Low hit rates do not trigger this cold-block trim,
+and adaptive mode does not bypass cache lookup costs or exceed an undersized
+configured limit. Choose the limit for the active decoded working set and
+available memory. It is independent of DocID caching and requires no reader TLS.
+
+`SHOW STATUS LIKE 'docstore_cache_used_bytes'` reports retained payload
+allocation and LRU entry bytes, summed from separately locked snapshots. It
+excludes hash tables, allocator metadata, reader buffers and in-flight blocks;
+it is not process RSS or an atomic cross-partition snapshot.
+`docstore_cache_mapped_bytes` reports mapped address-space bytes, including
+partially occupied regions, in-flight payloads and empty spare regions.
+`docstore_cache_spare_bytes` reports only completely empty retained regions,
+not free slots inside occupied regions. These metrics do not include
+heap-fallback payloads and do not measure resident physical pages.
+Released mappings bypass heap retention, but other process allocations can
+still prevent a net RSS decrease. The target floor is a policy target, not a guaranteed
+final occupancy; the activity threshold and pinned blocks can stop reclamation
+above it.
+
+```ini
+docstore_cache_size = 512m
+docstore_cache = 1
+```
 
 ### engine
 

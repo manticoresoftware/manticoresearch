@@ -403,6 +403,7 @@ public:
 
 	inline void Yield_ () noexcept
 	{
+		CrashQueryKeeper_c _; // crash query is per thread; we may resume on another one
 		m_tCoroutine.Yield_ ();
 	}
 

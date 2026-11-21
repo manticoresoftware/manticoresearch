@@ -17,7 +17,7 @@ secondary_indexes = 0
 	binlog_path =
 </variant>
 <variant>
-	binlog_path = data
+	binlog_path = <data_path/>
 </variant>
 </dynamic>
 }

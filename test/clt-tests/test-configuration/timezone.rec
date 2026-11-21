@@ -64,6 +64,23 @@ mysql -h0 -P9306 -e "select now(), curtime(), curdate(), utc_time(), utc_timesta
 ––– output –––
 At least 7 hours apart
 ––– comment –––
+Wait for searchd to accept connections after a timezone-related restart.
+––– input –––
+wait_for_timezone() {
+  local wanted="$1" result
+  for attempt in $(seq 1 100); do
+    if result=$(mysql -h0 -P9306 -e "show variables like 'timezone'\G" 2>/dev/null) &&
+       awk -v want="$wanted" '$1 == "Value:" && $2 == want { found=1 } END { exit !found }' <<< "$result"; then
+      printf '%s\n' "$result" | grep Value
+      return 0
+    fi
+    sleep 0.1
+  done
+  echo "Timezone $wanted did not become ready" >&2
+  return 1
+}
+––– output –––
+––– comment –––
 NEW TEST: Save current config and check TZ environment variable inheritance
 ––– input –––
 cp /etc/manticoresearch/manticore.conf /tmp/manticore.conf.backup
@@ -76,7 +93,7 @@ searchd --stopwait 2>&1 | grep "successfully sent SIGTERM"
 export TZ=Asia/Tokyo && searchd --config /etc/manticoresearch/manticore.conf > /dev/null 2>&1
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+wait_for_timezone "Asia/Tokyo"
 ––– output –––
         Value: Asia/Tokyo
 ––– input –––
@@ -92,7 +109,7 @@ searchd --stopwait 2>&1 | grep "successfully sent SIGTERM"
 export TZ=UTC && searchd --config /etc/manticoresearch/manticore.conf > /dev/null 2>&1
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+wait_for_timezone "UTC"
 ––– output –––
         Value: UTC
 ––– input –––
@@ -117,7 +134,7 @@ ln -snf /usr/share/zoneinfo/Asia/Singapore /etc/localtime && echo "Asia/Singapor
 unset TZ && searchd --config /etc/manticoresearch/manticore.conf > /dev/null 2>&1
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+wait_for_timezone "Asia/Singapore"
 ––– output –––
         Value: Asia/Singapore
 ––– comment –––
@@ -133,7 +150,7 @@ ln -snf /usr/share/zoneinfo/Europe/London /etc/localtime && echo "Europe/London"
 searchd --config /etc/manticoresearch/manticore.conf > /dev/null 2>&1
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+wait_for_timezone "Europe/London"
 ––– output –––
         Value: Europe/London
 ––– input –––
@@ -157,7 +174,7 @@ searchd --config /tmp/manticore_tz.conf 2>&1 | head -2 | grep "Using time zone"
 ––– output –––
 [#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] Using time zone 'America/New_York'
 ––– input –––
-mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+wait_for_timezone "America/New_York"
 ––– output –––
         Value: America/New_York
 ––– comment –––
@@ -177,7 +194,7 @@ searchd --config /tmp/manticore_tz.conf 2>&1 | head -2 | grep "Using time zone"
 ––– output –––
 [#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] Using time zone 'America/New_York'
 ––– input –––
-mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+wait_for_timezone "America/New_York"
 ––– output –––
         Value: America/New_York
 ––– input –––

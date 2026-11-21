@@ -37,13 +37,14 @@ retry_remote_embedding_create_table() {
     done
 }
 
-# Transient remote API errors can occur during vector generation for INSERTs.
-# Do not retry SQL, model or validation errors.
+# Transient network errors and HTTP 408/429/5xx can occur during vector generation.
+# Retry only those; fail immediately on SQL, model and validation errors.
 retry_remote_embedding_insert() {
     local sql="$1"
     local attempts=5
     local delay=1
     local attempt output rc
+    local transient_http_status='HTTP error from remote model: status code (408|429|500|502|503|504)([^0-9]|$)'
     for attempt in $(seq 1 "$attempts"); do
         if output=$(mysql -h0 -P9306 -e "$sql" 2>&1); then
             return 0
@@ -51,7 +52,8 @@ retry_remote_embedding_insert() {
             rc=$?
         fi
 
-        if [[ "$output" != *"Failed to send request to remote model"* ]]; then
+        if [[ "$output" != *"Failed to send request to remote model"* &&
+              ! "$output" =~ $transient_http_status ]]; then
             printf '%s\n' "$output" >&2
             return "$rc"
         fi

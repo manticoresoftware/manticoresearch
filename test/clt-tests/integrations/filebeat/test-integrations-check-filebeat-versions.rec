@@ -138,16 +138,18 @@ echo "✓ Fetching $BLOG_URL"
 
 BLOG_CONTENT=$(curl -s "$BLOG_URL")
 
+# Match the specific supported version range, not unrelated versions on the same HTML line.
+BLOG_VERSION=$(printf '%s\n' "$BLOG_CONTENT" | grep -oE 'Filebeat versions [0-9]+(\.[0-9]+)+-[0-9]+(\.[0-9]+)+' | head -1 || true)
+EXPECTED_BLOG_VERSION="Filebeat versions 7.17-${FILEBEAT_LATEST}"
+
 if [ -z "$BLOG_CONTENT" ]; then
     echo "⚠️  WARNING: Blog fetch failed - skipping" >&2
-elif echo "$BLOG_CONTENT" | grep -q "Filebeat versions.*${FILEBEAT_LATEST}"; then
-    FOUND_FORMAT=$(echo "$BLOG_CONTENT" | grep -o "Filebeat versions [0-9.-]*${FILEBEAT_LATEST}" | head -1)
-    echo "✅ Blog: $FOUND_FORMAT"
+elif [ "$BLOG_VERSION" = "$EXPECTED_BLOG_VERSION" ]; then
+    echo "✅ Blog: $BLOG_VERSION"
 else
-    BLOG_VERSION=$(echo "$BLOG_CONTENT" | grep -o "Filebeat versions [0-9.-]*" | head -1)
     echo "⚠️  WARNING: Blog does NOT contain ${FILEBEAT_LATEST}" >&2
     echo "   Found: $BLOG_VERSION" >&2
-    echo "   Expected: Filebeat versions 7.17-${FILEBEAT_LATEST}" >&2
+    echo "   Expected: $EXPECTED_BLOG_VERSION" >&2
 fi
 SCRIPT
 ––– output –––

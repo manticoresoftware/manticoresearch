@@ -25,6 +25,17 @@ mysql -h0 -P9306 --xml -e "SELECT gh5129_b.price FROM gh5129_a LEFT JOIN gh5129_
 ––– output –––
 name="gh5129_b.price" xsi:nil="true"
 ––– comment –––
+A NULL before a non-NULL column must not shift values in HTTP or MySQL results.
+––– input –––
+curl -sS 'http://127.0.0.1:9308/sql?mode=raw' --data-urlencode "query=SELECT gh5129_b.price,id FROM gh5129_a LEFT JOIN gh5129_b ON gh5129_a.id=gh5129_b.aid WHERE MATCH('one')" | grep -oE '\{"gh5129_b\.price":[^{}]+\}'
+––– output –––
+{"gh5129_b.price":null,"id":1}
+––– input –––
+mysql -h0 -P9306 --xml -e "SELECT gh5129_b.price,id FROM gh5129_a LEFT JOIN gh5129_b ON gh5129_a.id=gh5129_b.aid WHERE MATCH('one') OPTION fuzzy=1,preserve=1" 2>&1 | grep -oE '<field name="[^"]+"( xsi:nil="true" />|>[^<]*</field>)|^ERROR.*'
+––– output –––
+<field name="gh5129_b.price" xsi:nil="true" />
+<field name="id">1</field>
+––– comment –––
 An empty INNER JOIN must report only requested columns, with or without fuzzy processing.
 ––– input –––
 mysql -h0 -P9306 --column-type-info -vvv -e "SELECT id,t,gh5129_b.price FROM gh5129_a JOIN gh5129_b ON gh5129_a.id=gh5129_b.aid WHERE MATCH('one')" | sed -nE 's/^Field[[:space:]]+[0-9]+:[[:space:]]+`([^`]+)`$/\1/p'
@@ -45,3 +56,20 @@ mysql -h0 -P9306 --column-type-info -vvv -e "SELECT id,t FROM gh5129_a WHERE MAT
 ––– output –––
 id
 t
+––– comment –––
+An empty limited GROUP_CONCAT must return its SELECT columns without an error.
+––– input –––
+mysql -h0 -P9306 --column-type-info -vvv -e "SELECT qty,GROUP_CONCAT(id ORDER BY id DESC LIMIT 2) gc FROM gh5129_b WHERE qty=0 GROUP BY qty" 2>&1 | sed -nE 's/^Field[[:space:]]+[0-9]+:[[:space:]]+`([^`]+)`$/\1/p; /^ERROR/p'
+––– output –––
+qty
+gc
+––– comment –––
+An empty search over tables with different schemas must keep the requested column in parallel search.
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS gh5129_s1; DROP TABLE IF EXISTS gh5129_s2; CREATE TABLE gh5129_s1 (t TEXT, x INT); CREATE TABLE gh5129_s2 (t TEXT, y INT); INSERT INTO gh5129_s1 (id,t,x) VALUES (1,'one',1); INSERT INTO gh5129_s2 (id,t,y) VALUES (2,'one',2);"
+––– output –––
+––– input –––
+for i in $(seq 1 20); do mysql -h0 -P9306 --column-type-info -vvv -e "SELECT id,x FROM gh5129_s1,gh5129_s2 WHERE MATCH('missing')" 2>&1 | sed -nE 's/^Field[[:space:]]+[0-9]+:[[:space:]]+`([^`]+)`$/\1/p; /^ERROR/p'; done | sort -u
+––– output –––
+id
+x

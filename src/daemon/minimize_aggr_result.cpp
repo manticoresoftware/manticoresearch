@@ -1330,6 +1330,9 @@ bool MinimizeGroupConcatBundle ( AggrResult_t * pResults, const CSphQuery * pQue
 		return false;
 	}
 
+	if ( !iVisibleGroups )
+		return tHead.Finish();
+
 	for ( int i = 1; i<iQueries; ++i )
 	{
 		if ( !pQueries[i].IsGroupConcatHelper() )

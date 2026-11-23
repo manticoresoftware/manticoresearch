@@ -147,7 +147,7 @@ index mva_save
 
 	<sphinxql>
 		select * from rt_mva order by id desc limit 3;
-		select * from rt_mva where any(mva)&lt;17000 order by id asc limit 3;
+		select * from rt_mva where any(mva)&lt;17000 order by id asc limit 3 option cutoff=0;
 		show meta;
 
 		<!-- regression: crash on INSERT .. ( id, text, mva ) values ( 1, '', 333 ) -->
@@ -155,7 +155,7 @@ index mva_save
 
 		<!-- regression: invalid syntax INSERT .. ( id, text, mva ) values ( 2, '', () ) -->
 		replace into rt_mva (id, text, mva) values ( 2, ' ',  () );
-		select * from rt_mva order by id asc limit 3;
+		select * from rt_mva order by id asc limit 3 option cutoff=0;
 		show meta;
 
 		<!-- regression: crash on SaveAttributes -->

@@ -1026,10 +1026,9 @@ bool PreparedMinimize_t::Prepare ( const sph::StringSet & hExtraColumns, bool bF
 {
 	const bool bReturnZeroCount = !m_tResult.m_dZeroCount.IsEmpty();
 	const bool bQueryFromAPI = m_tQuery.m_eQueryType==QUERY_API;
-	// 0 matches via SphinxAPI? no fiddling with schemes is necessary
-	// (and via SphinxQL, we still need to return the right schema)
-	// 0 result set schemes via SphinxQL? just bail
-	if ( m_tResult.IsEmpty() && ( bQueryFromAPI || !bReturnZeroCount ) )
+	// Preserve SphinxQL's requested columns even when a result set has no matches.
+	// Only skip projection if there is no result schema to project.
+	if ( m_tResult.IsEmpty() && ( bQueryFromAPI || ( !bReturnZeroCount && m_tResult.m_dResults.IsEmpty() ) ) )
 	{
 		Debug ( m_tResult.m_bSingle = true; )
 		if ( !m_tResult.m_dResults.IsEmpty () )

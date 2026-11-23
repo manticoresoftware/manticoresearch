@@ -1,0 +1,47 @@
+––– comment –––
+Regression for #5129: NULLs survive Buddy's JSON roundtrip and empty JOINs preserve SELECT columns.
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS gh5129_a; DROP TABLE IF EXISTS gh5129_b; CREATE TABLE gh5129_a (t TEXT) min_infix_len='2'; CREATE TABLE gh5129_b (aid BIGINT, price FLOAT, qty INT); INSERT INTO gh5129_a (id,t) VALUES (1,'one'); INSERT INTO gh5129_b (id,aid,price,qty) VALUES (2,2,19.99,7);"
+––– output –––
+––– comment –––
+HTTP SQL must represent unmatched numeric JOIN attributes as explicit JSON nulls.
+––– input –––
+curl -sS 'http://127.0.0.1:9308/sql?mode=raw' --data-urlencode "query=SELECT id,gh5129_b.price,gh5129_b.qty FROM gh5129_a LEFT JOIN gh5129_b ON gh5129_a.id=gh5129_b.aid WHERE MATCH('one')" | grep -oE '"gh5129_b\.(price|qty)":null'
+––– output –––
+"gh5129_b.price":null
+"gh5129_b.qty":null
+––– comment –––
+The MySQL response after fuzzy processing must contain real SQL NULL markers for float and int.
+––– input –––
+mysql -h0 -P9306 --xml -e "SELECT id,gh5129_b.price,gh5129_b.qty FROM gh5129_a LEFT JOIN gh5129_b ON gh5129_a.id=gh5129_b.aid WHERE MATCH('one') OPTION fuzzy=1,preserve=1" | grep -oE 'name="gh5129_b\.(price|qty)" xsi:nil="true"'
+––– output –––
+name="gh5129_b.price" xsi:nil="true"
+name="gh5129_b.qty" xsi:nil="true"
+––– comment –––
+Selecting only a NULL right-hand column must still return one row with a real SQL NULL.
+––– input –––
+mysql -h0 -P9306 --xml -e "SELECT gh5129_b.price FROM gh5129_a LEFT JOIN gh5129_b ON gh5129_a.id=gh5129_b.aid WHERE MATCH('one') OPTION fuzzy=1,preserve=1" | grep -oE 'name="gh5129_b.price" xsi:nil="true"'
+––– output –––
+name="gh5129_b.price" xsi:nil="true"
+––– comment –––
+An empty INNER JOIN must report only requested columns, with or without fuzzy processing.
+––– input –––
+mysql -h0 -P9306 --column-type-info -vvv -e "SELECT id,t,gh5129_b.price FROM gh5129_a JOIN gh5129_b ON gh5129_a.id=gh5129_b.aid WHERE MATCH('one')" | sed -nE 's/^Field[[:space:]]+[0-9]+:[[:space:]]+`([^`]+)`$/\1/p'
+––– output –––
+id
+t
+gh5129_b.price
+––– input –––
+mysql -h0 -P9306 --column-type-info -vvv -e "SELECT id,t,gh5129_b.price FROM gh5129_a JOIN gh5129_b ON gh5129_a.id=gh5129_b.aid WHERE MATCH('one') OPTION fuzzy=1,preserve=1" | sed -nE 's/^Field[[:space:]]+[0-9]+:[[:space:]]+`([^`]+)`$/\1/p'
+––– output –––
+id
+t
+gh5129_b.price
+––– comment –––
+Empty results from a single table must preserve SELECT columns too.
+––– input –––
+mysql -h0 -P9306 --column-type-info -vvv -e "SELECT id,t FROM gh5129_a WHERE MATCH('missing')" | sed -nE 's/^Field[[:space:]]+[0-9]+:[[:space:]]+`([^`]+)`$/\1/p'
+––– output –––
+id
+t

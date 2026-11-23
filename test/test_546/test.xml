@@ -26,6 +26,16 @@ select groupby() key from json_mixed_numeric_facets where id=7 group by j.a;
 select groupby() key from json_mixed_numeric_facets where id in (1,2) group by j.a;
 select groupby() key from json_mixed_numeric_facets where id=1 group by j.a, id;
 </sphinxql>
+<!-- Compare mixed int/double arrays with homogeneous int/double arrays. -->
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":1}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":2}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":3}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":4}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":5}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":6}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":7}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<!-- Cross-document bucket counts, and the non-emulated multi-aggregation path. -->
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"in":{"id":[1,2]}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
 <query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":1}},"aggs":{"v":{"terms":{"field":"j.a","size":10}},"ids":{"terms":{"field":"id","size":10}}}}</query>
 <!-- Repeat on a disk chunk. -->
 <sphinxql>FLUSH RAMCHUNK json_mixed_numeric_facets;
@@ -40,6 +50,15 @@ select groupby() key from json_mixed_numeric_facets where id=7 group by j.a;
 select groupby() key from json_mixed_numeric_facets where id in (1,2) group by j.a;
 select groupby() key from json_mixed_numeric_facets where id=1 group by j.a, id;
 </sphinxql>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":1}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":2}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":3}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":4}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":5}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":6}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":7}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
+<!-- Cross-document bucket counts, and the non-emulated multi-aggregation path. -->
+<query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"in":{"id":[1,2]}},"aggs":{"v":{"terms":{"field":"j.a","size":10}}}}</query>
 <query endpoint="json/search">{"table":"json_mixed_numeric_facets","limit":0,"query":{"equals":{"id":1}},"aggs":{"v":{"terms":{"field":"j.a","size":10}},"ids":{"terms":{"field":"id","size":10}}}}</query>
 <sphinxql>DROP TABLE json_mixed_numeric_facets</sphinxql>
 </queries>

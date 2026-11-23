@@ -87,11 +87,11 @@ printf '%s\n' '{"index":"esauth_private"}' '{"query":{"match_all":{}}}' | curl -
 ––– output –––
 403
 ––– comment –––
-The ES index-count shortcut must not list private table names or document counts.
+The ES index-count shortcut lists only readable tables, as SHOW TABLES does.
 ––– input –––
-curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 -H 'Content-Type: application/json' -d '{"size":0,"aggs":{"indices":{"terms":{"field":"_index"}}}}' http://127.0.0.1:9308/_all/_search
+curl -s -u esauth_reader:readerpass123 -H 'Content-Type: application/json' -d '{"size":0,"aggs":{"indices":{"terms":{"field":"_index"}}}}' http://127.0.0.1:9308/_all/_search | grep -o '"key":"[a-z_]*"'
 ––– output –––
-403
+"key":"esauth_allowed"
 ––– comment –––
 Document deletes require WRITE; table creation and deletion require SCHEMA.
 ––– input –––
@@ -121,13 +121,19 @@ curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 http://1
 ––– output –––
 403
 ––– input –––
-curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 http://127.0.0.1:9308/esauth_allowed/_ilm/explain
+curl -s -u esauth_reader:readerpass123 http://127.0.0.1:9308/esauth_allowed/_ilm/explain | grep -o '"index":"[a-z_]*"'
 ––– output –––
-403
+"index":"esauth_allowed"
 ––– input –––
 curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 -X POST http://127.0.0.1:9308/esauth_private/_refresh
 ––– output –––
 403
+––– comment –––
+ES API stubs are not tables and stay available to table-scoped users.
+––– input –––
+curl -s -o /dev/null -w '%{http_code}\n' -u esauth_reader:readerpass123 http://127.0.0.1:9308/_nodes
+––– output –––
+200
 ––– comment –––
 Authorized admin retains ES-compatible schema operations.
 ––– input –––

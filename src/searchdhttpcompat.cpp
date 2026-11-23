@@ -64,7 +64,7 @@ private:
 
 	void ProcessEmptyHead();
 	bool ProcessKbnTableDoc();
-	bool ProcessILM();
+	void ProcessILM();
 	void ProcessCCR();
 	void ProcessKbnTableGet();
 	bool ProcessCount();
@@ -1644,9 +1644,16 @@ static void ProcessKbnResult ( const CSphString * sSourceFilter, const CSphStrin
 		sRes = tRes.dump().c_str();
 }
 
+// table lists skip tables the user cannot read, as SHOW TABLES does
+static bool CanReadTable ( const CSphString & sTable )
+{
+	CSphString sError;
+	return !IsAuthEnabled() || CheckPerms ( session::GetUser(), AuthAction_e::READ, sTable, false, sError );
+}
+
 // FIXME!!! replace with requests to every index with count(*) \ implicit grouper instead of this hack
 // or implement group by IndexTag
-static bool EmulateIndexCount ( const CSphString & sIndex, const nljson & tReq, CSphVector<BYTE> & dResult, EHTTP_STATUS & eReplyHttpCode, CSphString & sAuthError )
+static bool EmulateIndexCount ( const CSphString & sIndex, const nljson & tReq, CSphVector<BYTE> & dResult )
 {
 	bool bCountFromIdx = ( tReq.size()>=1 && ( tReq.contains ( "aggs" ) || ( tReq.size()==2 && tReq.contains ( "size" ) ) ) );
 	if ( !bCountFromIdx )
@@ -1700,8 +1707,8 @@ nljson tRes = nljson::parse ( R"({
 		if ( !sFilter.IsEmpty() && !sphWildcardMatch ( tIt.first.cstr(), sFilter.cstr() ) )
 			continue;
 
-		if ( !HttpCheckPerms ( session::GetUser(), AuthAction_e::READ, tIt.first, eReplyHttpCode, sAuthError, dResult ) )
-			return false;
+		if ( !CanReadTable ( tIt.first ) )
+			continue;
 
 		RIdx_c tIdx ( tIt.second );
 		int iDocsCount = tIdx->GetStats().m_iTotalDocuments;
@@ -1744,10 +1751,8 @@ bool HttpCompatHandler_c::ProcessSearch()
 		return false;
 	}
 
-	if ( EmulateIndexCount ( sIndex, tReq, GetResult(), m_eHttpCode, m_sError ) )
+	if ( EmulateIndexCount ( sIndex, tReq, GetResult() ) )
 		return true;
-	if ( m_eHttpCode==EHTTP_STATUS::_403 )
-		return false;
 
 	CSphString sRes;
 	if ( !DoSearch ( sIndex, tReq, GetFullURL(), sRes, m_eHttpCode, m_sError, GetResult() ) )
@@ -2032,7 +2037,7 @@ void HttpCompatHandler_c::ProcessCCR()
 	BuildReplyHead ( FromSz ( sRes ), EHTTP_STATUS::_200 );
 }
 
-bool HttpCompatHandler_c::ProcessILM()
+void HttpCompatHandler_c::ProcessILM()
 {
 	nljson tItems = nljson::parse ( R"({})" );
 
@@ -2042,8 +2047,8 @@ bool HttpCompatHandler_c::ProcessILM()
 		if ( !tIt.second )
 			continue;
 
-		if ( !CheckIndexPerms ( AuthAction_e::READ, tIt.first ) )
-			return false;
+		if ( !CanReadTable ( tIt.first ) )
+			continue;
 
 		nljson tItem = nljson::parse ( R"({"managed": false})" );
 		tItem["index"] = tIt.first.cstr();
@@ -2055,7 +2060,6 @@ bool HttpCompatHandler_c::ProcessILM()
 	tRes["indices"] = tItems;
 	std::string sRes = tRes.dump();
 	BuildReplyHead ( FromStd ( sRes ), EHTTP_STATUS::_200 );
-	return true;
 }
 
 bool HttpCompatHandler_c::CheckIndexPerms ( AuthAction_e eAction, const CSphString & sIndex )
@@ -2094,7 +2098,10 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 		}
 
 		if ( m_dUrlParts.GetLength()>=2 && m_dUrlParts[1]=="_ilm" )
-			return ProcessILM();
+		{
+			ProcessILM();
+			return true;
+		}
 
 		if ( m_dUrlParts.GetLength()>=2 && m_dUrlParts[1]=="_ccr" )
 		{
@@ -2106,7 +2113,8 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 
 		if ( m_dUrlParts.GetLength() )
 		{
-			if ( !CheckIndexPerms ( AuthAction_e::READ, m_dUrlParts[0] ) )
+			// names starting with '_' are ES API stubs (/_nodes, /_xpack), not tables
+			if ( !m_dUrlParts[0].Begins ( "_" ) && !CheckIndexPerms ( AuthAction_e::READ, m_dUrlParts[0] ) )
 				return false;
 			ProcessKbnTableGet();
 			return true;
@@ -2136,7 +2144,12 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 	}
 
 	if ( GetRequestType()==HTTP_DELETE && m_dUrlParts.GetLength()>2 && m_dUrlParts[1]=="_doc" )
-		return ProcessDeleteDoc();
+	{
+		if ( ProcessDeleteDoc() )
+			return true;
+		if ( m_eHttpCode==EHTTP_STATUS::_403 )
+			return false;
+	}
 
 	if ( GetRequestType()==HTTP_DELETE && m_dUrlParts.GetLength()==1 )
 	{

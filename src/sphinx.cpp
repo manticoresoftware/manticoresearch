@@ -4843,6 +4843,10 @@ static void Builder_StoreAttrs ( const CSphSchema & tSchema, DocID_t tDocId, CSp
 			}
 			break;
 
+		case SPH_ATTR_TOKENCOUNT: // counted while iterating the hits, stored only in the row
+			pBuilder->SetAttr ( iAttrId, tSource.m_tDocInfo.GetAttr ( tAttr.m_tLocator ) );
+			break;
+
 		default:
 			pBuilder->SetAttr ( iAttrId, tSource.GetAttr(i) );
 			break;
@@ -5871,12 +5875,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			if ( pColumnarBuilder )
 				Builder_StoreAttrs ( m_tSchema, tDocID, *pSource, tQueryMvaContainer, pColumnarBuilder.get(), tColumnarAttrs );
 
-			if ( pSIBuilder )
-			{
-				pSIBuilder->SetRowID ( pSource->m_tDocInfo.m_tRowID );
-				Builder_StoreAttrs ( m_tSchema, tDocID, *pSource, tQueryMvaContainer, pSIBuilder.get(), tSIAttrs );
-			}
-
 			BuildStoreHistograms ( m_tSchema, tDocID, *pSource, tQueryMvaContainer, dHistograms );
 
 			// store hits
@@ -5935,6 +5933,13 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			{
 				for ( int i=0; i < m_tSchema.GetFieldsCount(); i++ )
 					m_dFieldLens[i] += pSource->m_tDocInfo.GetAttr ( m_tSchema.GetAttr ( i+iFieldLens ).m_tLocator );
+			}
+
+			// after the hits, as field lengths are computed while iterating them
+			if ( pSIBuilder )
+			{
+				pSIBuilder->SetRowID ( pSource->m_tDocInfo.m_tRowID );
+				Builder_StoreAttrs ( m_tSchema, tDocID, *pSource, tQueryMvaContainer, pSIBuilder.get(), tSIAttrs );
 			}
 
 			if ( bHaveNonColumnarAttrs )

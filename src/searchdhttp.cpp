@@ -1675,8 +1675,6 @@ inline static void PutAnyValAsString ( RowBuffer_i & tOut, const JsonObj_c& tDat
 		tOut.PutDoubleAsString ( tDataCol.DblVal() );
 	else if ( tDataCol.IsBool () )
 		tOut.PutString ( tDataCol.BoolVal() ? "true" : "false" );
-	else if ( tDataCol.IsNull () )
-		tOut.PutString ( "null" );
 	else
 		tOut.PutString ( tDataCol.StrVal() );
 }
@@ -1784,13 +1782,16 @@ void ConvertJsonDataset ( const JsonObj_c & tRoot, const char * sStmt, RowBuffer
 			for ( const auto & tDataCol : tDataRow )
 			{
 				assert ( iCol < dSqlColumns.GetLength() );
-				switch ( dSqlColumns[iCol].second ) {
-					case MYSQL_COL_LONG : tOut.PutDWORD (NumberAsInt(tDataCol)); break;
-					case MYSQL_COL_LONGLONG : tOut.PutInt64 (NumberAsInt(tDataCol)); break;
-					case MYSQL_COL_FLOAT : tOut.PutFloat (NumberAsDouble(tDataCol)); break;
-					case MYSQL_COL_DOUBLE : tOut.PutDouble (NumberAsDouble(tDataCol)); break;
-					default: PutAnyValAsString ( tOut, tDataCol );
-				}
+				if ( tDataCol.IsNull() )
+					tOut.PutNULL();
+				else
+					switch ( dSqlColumns[iCol].second ) {
+						case MYSQL_COL_LONG : tOut.PutDWORD (NumberAsInt(tDataCol)); break;
+						case MYSQL_COL_LONGLONG : tOut.PutInt64 (NumberAsInt(tDataCol)); break;
+						case MYSQL_COL_FLOAT : tOut.PutFloat (NumberAsDouble(tDataCol)); break;
+						case MYSQL_COL_DOUBLE : tOut.PutDouble (NumberAsDouble(tDataCol)); break;
+						default: PutAnyValAsString ( tOut, tDataCol );
+					}
 				++iCol;
 			}
 			if ( !tOut.Commit() )

@@ -478,6 +478,10 @@ struct LocalSearchRef_t
 
 			tResult.m_dResults.Append ( tChild.m_dResults );
 
+			// a sorter without matches leaves its schema only in the context that ran it
+			if ( !tResult.m_tSchema.GetAttrsCount() && tChild.m_tSchema.GetAttrsCount() )
+				tResult.m_tSchema = tChild.m_tSchema;
+
 			// word statistics
 			tResult.MergeWordStats ( tChild );
 

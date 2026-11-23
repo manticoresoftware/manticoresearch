@@ -1448,6 +1448,14 @@ bool SearchHandler_c::CheckMultiQuery() const
 	const CSphQuery & qFirst = m_dNQueries.First();
 	auto dQueries = m_dNQueries.Slice ( 1 );
 
+	// A forced sort-bound scan needs its own sorter's threshold.
+	if ( m_dNQueries.any_of ( []( const CSphQuery & tQuery )
+	{
+		const auto * pHint = tQuery.m_tIndexHints.GetSortBoundHint();
+		return pHint && pHint->m_bForce;
+	} ) )
+		return false;
+
 	// queries over special indexes as status/meta are not capable for multiquery
 	if ( !qFirst.m_dStringSubkeys.IsEmpty() )
 		return false;

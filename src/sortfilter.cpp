@@ -12,8 +12,7 @@
 #include "sphinxint.h"
 #include "columnarlib.h"
 #include "columnar/columnar.h"
-
-#include <algorithm>
+#include "sphinxfilter.h"
 
 
 class ColumnarSortFilter_c final : private columnar::BlockTester_i

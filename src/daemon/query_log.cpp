@@ -405,6 +405,7 @@ static const char* GetHintName ( const IndexHint_t & tHint )
 	case SecondaryIndexType_e::LOOKUP: return "DocidIndex";
 	case SecondaryIndexType_e::INDEX: return "SecondaryIndex";
 	case SecondaryIndexType_e::ANALYZER: return "ColumnarScan";
+	case SecondaryIndexType_e::SORT_BOUND: return "SortBound";
 	default: return "None";
 	}
 }
@@ -421,30 +422,31 @@ static void AppendHint ( const IndexHint_t & tHint, const StrVec_t & dIndexes, S
 
 static void FormatIndexHints ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 {
-	if ( !tQuery.m_dIndexHints.GetLength() )
+	auto dHints = tQuery.m_tIndexHints.GetAll();
+	if ( dHints.IsEmpty() )
 		return;
 
 	ScopedComma_c sMatch ( tBuf, nullptr );
-	CSphVector<bool> dUsed { tQuery.m_dIndexHints.GetLength() };
+	CSphVector<bool> dUsed { dHints.GetLength() };
 	dUsed.ZeroVec();
 
 	tBuf << " /*+ ";
 
-	ARRAY_FOREACH ( i, tQuery.m_dIndexHints )
+	ARRAY_FOREACH ( i, dHints )
 	{
 		if ( dUsed[i] )
 			continue;
 
 		StrVec_t dIndexes;
-		dIndexes.Add ( tQuery.m_dIndexHints[i].m_sIndex );
-		for ( int j = i + 1; j < tQuery.m_dIndexHints.GetLength(); j++ )
-			if ( !dUsed[j] && tQuery.m_dIndexHints[i].m_eType == tQuery.m_dIndexHints[j].m_eType && tQuery.m_dIndexHints[i].m_bForce == tQuery.m_dIndexHints[j].m_bForce )
+		dIndexes.Add ( dHints[i].m_sIndex );
+		for ( int j = i + 1; j < dHints.GetLength(); j++ )
+			if ( !dUsed[j] && dHints[i].m_eType == dHints[j].m_eType && dHints[i].m_bForce == dHints[j].m_bForce )
 			{
-				dIndexes.Add ( tQuery.m_dIndexHints[j].m_sIndex );
+				dIndexes.Add ( dHints[j].m_sIndex );
 				dUsed[j] = true;
 			}
 
-		AppendHint ( tQuery.m_dIndexHints[i], dIndexes, tBuf );
+		AppendHint ( dHints[i], dIndexes, tBuf );
 	}
 
 	tBuf << " */";

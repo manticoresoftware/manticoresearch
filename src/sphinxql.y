@@ -93,6 +93,8 @@
 %token	TOK_HINT_CLOSE
 %token	TOK_HINT_COLUMNAR
 %token	TOK_HINT_NO_COLUMNAR
+%token	TOK_HINT_SORTBOUND
+%token	TOK_HINT_NO_SORTBOUND
 %token	TOK_HINT_OPEN
 %token	TOK_HOSTNAMES
 %token	TOK_HOUR
@@ -1538,30 +1540,46 @@ hint_attr_list:
 	| hint_attr_list ',' json_field {TRACK_BOUNDS ( $$, $1, $3 );}
 	;
 
-hint_item:           
+hint_item:
 	TOK_HINT_SECONDARY '(' hint_attr_list ')'
 		{
-			pParser->AddIndexHint ( SecondaryIndexType_e::INDEX, true, $3 );
+			if ( !pParser->AddIndexHint ( SecondaryIndexType_e::INDEX, true, $3 ) )
+				YYERROR;
 		}
 	| TOK_HINT_NO_SECONDARY '(' hint_attr_list ')'
 		{
-			pParser->AddIndexHint ( SecondaryIndexType_e::INDEX, false, $3 );
+			if ( !pParser->AddIndexHint ( SecondaryIndexType_e::INDEX, false, $3 ) )
+				YYERROR;
 		}
 	| TOK_HINT_DOCID '(' hint_attr_list ')'
 		{
-			pParser->AddIndexHint ( SecondaryIndexType_e::LOOKUP, true, $3 );
+			if ( !pParser->AddIndexHint ( SecondaryIndexType_e::LOOKUP, true, $3 ) )
+				YYERROR;
 		}
 	| TOK_HINT_NO_DOCID '(' hint_attr_list ')'
 		{
-			pParser->AddIndexHint ( SecondaryIndexType_e::LOOKUP, false, $3 );
+			if ( !pParser->AddIndexHint ( SecondaryIndexType_e::LOOKUP, false, $3 ) )
+				YYERROR;
 		}
 	| TOK_HINT_COLUMNAR '(' hint_attr_list ')'
 		{
-			pParser->AddIndexHint ( SecondaryIndexType_e::ANALYZER, true, $3 );
+			if ( !pParser->AddIndexHint ( SecondaryIndexType_e::ANALYZER, true, $3 ) )
+				YYERROR;
 		}
 	| TOK_HINT_NO_COLUMNAR '(' hint_attr_list ')'
 		{
-			pParser->AddIndexHint ( SecondaryIndexType_e::ANALYZER, false, $3 );
+			if ( !pParser->AddIndexHint ( SecondaryIndexType_e::ANALYZER, false, $3 ) )
+				YYERROR;
+		}
+	| TOK_HINT_SORTBOUND '(' ident ')'
+		{
+			if ( !pParser->AddSortBoundHint ( true, $3 ) )
+				YYERROR;
+		}
+	| TOK_HINT_NO_SORTBOUND '(' ident ')'
+		{
+			if ( !pParser->AddSortBoundHint ( false, $3 ) )
+				YYERROR;
 		}
 	;
 

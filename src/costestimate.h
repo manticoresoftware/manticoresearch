@@ -11,7 +11,7 @@
 #ifndef _costestimate_
 #define _costestimate_
 
-#include "sphinx.h"
+#include "sphinxfilter.h"
 
 class CostEstimate_i
 {
@@ -67,8 +67,27 @@ struct SelectIteratorCtx_t
 // Relative filter evaluation complexity; a simple scalar filter has complexity 1.
 float CalcGetFilterComplexity ( const SecondaryIndexInfo_t & tSIInfo, const CSphFilterSettings & tFilter, const SelectIteratorCtx_t & tCtx );
 
+class SortBound_c;
+
+struct SortBoundScanPlan_t
+{
+	RowIdBoundaries_t	m_tRange;
+	int					m_iBlockRows = 0;
+
+	CSphAttrLocator		m_tLocator;
+	int					m_iStride = 0;
+	const DWORD *		m_pMinMax = nullptr;
+	const columnar::BlockBounds_i * m_pColumnarBounds = nullptr;
+	int					m_iLeafLevel = 0;
+
+	bool				IsColumnar() const { return !!m_pColumnarBounds; }
+	SphAttr_t			GetBlockBound ( RowID_t tBlock, bool bMax ) const;
+};
+
+// Select a sort-bound fullscan and retain the block bounds needed to spawn it.
+std::optional<SortBoundScanPlan_t> PlanSortBoundScan ( const SelectIteratorCtx_t & tSelect, const CreateFilterContext_t & tFlx, const CSphQueryContext & tCtx, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs, const CSphIndex & tIndex, const DWORD * pMinMax, bool bSelectIterators, SortBound_c & tBound, CSphVector<SecondaryIndexInfo_t> & dOrdinaryPlan, CSphString & sWarning, const char * & szReason );
+
 struct NodeEstimate_t;
-struct CreateFilterContext_t;
 
 CostEstimate_i *	CreateCostEstimate ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, int iCutoff );
 float				CalcFTIntersectCost ( const NodeEstimate_t & tEst1, const NodeEstimate_t & tEst2, int64_t iTotalDocs, int iDocsPerBlock1, int iDocsPerBlock2 );

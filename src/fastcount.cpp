@@ -37,7 +37,7 @@ bool IsRanklessCountQuery ( const CSphQuery & tQuery, const VecTraits_T<ISphMatc
 	if ( tQuery.m_iCutoff>0 )
 		return false;
 
-	if ( !tQuery.m_sQueryTokenFilterLib.IsEmpty() || !tQuery.m_dIndexHints.IsEmpty() )
+	if ( !tQuery.m_sQueryTokenFilterLib.IsEmpty() || tQuery.m_tIndexHints.HasFilterIteratorHints() )
 		return false;
 
 	if ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )

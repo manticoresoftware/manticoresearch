@@ -11,11 +11,15 @@
 
 #include "costestimate.h"
 
+#include <cfloat>
 #include <math.h>
 #include <algorithm>
+#include <utility>
 
 #include "sphinxint.h"
 #include "sphinxsort.h"
+#include "sortbound.h"
+#include "querycontext.h"
 #include "columnarfilter.h"
 #include "secondaryindex.h"
 #include "geodist.h"
@@ -212,6 +216,7 @@ float EstimateMTCostSIFT ( float fCost, int iThreads )
 
 class CostEstimate_c : public CostEstimate_i
 {
+	friend struct SortBoundScanCost_t;
 	friend float CalcIntersectCost ( int64_t iDocs );
 	friend float CalcFTIntersectCost ( const NodeEstimate_t & tEst1, const NodeEstimate_t & tEst2, int64_t iTotalDocs, int iDocsPerBlock1, int iDocsPerBlock2 );
 
@@ -272,6 +277,389 @@ private:
 	const CSphFilterSettings & GetFilter ( int iIndex ) const	{ return m_tCtx.m_dFilters[m_dSorted[iIndex]]; }
 	bool	IsFilterOverExpr ( int iIndex ) const;
 };
+
+
+// Compare scan strategies for one worker's row range.
+struct SortBoundScanCost_t
+{
+	int64_t		m_iRows;
+	int64_t		m_iMatches;
+	int			m_iCapacity;
+	float		m_fFilterComplexity = 0.0f;
+	float		m_fOrdinaryCost = FLT_MAX;
+
+	void		EstimateOrdinary ( const SelectIteratorCtx_t & tCtx, int iFilter, CSphVector<SecondaryIndexInfo_t> & dPlan, float fBestCost, int64_t iChunkMatches );
+	float		CalcOrdinaryCost() const;
+	float		CalcSortBoundCost ( int64_t iBoundsRead, int64_t iBlocks, int64_t iVisitedBlocks, int iBlockRows ) const;
+};
+
+
+// Estimate the cost of running the already selected ordinary filter plan over one worker's row range.
+// The sort-bound planner compares against this cost, using filter complexity to estimate a plain scan if no plan cost is available.
+void SortBoundScanCost_t::EstimateOrdinary ( const SelectIteratorCtx_t & tCtx, int iFilter, CSphVector<SecondaryIndexInfo_t> & dPlan, float fBestCost, int64_t iChunkMatches )
+{
+	SecondaryIndexInfo_t tDefault;
+	m_fFilterComplexity = CalcGetFilterComplexity ( dPlan.IsEmpty() ? tDefault : dPlan[iFilter], tCtx.m_dFilters[iFilter], tCtx );
+	if ( fBestCost==FLT_MAX )
+		return;
+
+	// Price the selected plan for one worker, using the exact predicate frequency when available.
+	if ( tCtx.m_iThreads!=1 || ( iChunkMatches>=0 && iChunkMatches!=dPlan[iFilter].m_iRsetEstimate ) )
+	{
+		SelectIteratorCtx_t tWorker = tCtx;
+		tWorker.m_iThreads = 1;
+		if ( iChunkMatches>=0 )
+			dPlan[iFilter].m_iRsetEstimate = iChunkMatches;
+
+		std::unique_ptr<CostEstimate_i> pEstimate ( CreateCostEstimate ( dPlan, tWorker, -1 ) );
+		fBestCost = pEstimate->CalcQueryCost();
+	}
+
+	m_fOrdinaryCost = fBestCost*(double(m_iRows)/tCtx.m_iTotalDocs);
+}
+
+
+float SortBoundScanCost_t::CalcOrdinaryCost() const
+{
+	if ( m_fOrdinaryCost!=FLT_MAX )
+		return m_fOrdinaryCost;
+
+	return CostEstimate_c::Cost_Filter ( m_iRows, m_fFilterComplexity ) + CostEstimate_c::Cost_Push(m_iMatches);
+}
+
+
+float SortBoundScanCost_t::CalcSortBoundCost ( int64_t iBoundsRead, int64_t iBlocks, int64_t iVisitedBlocks, int iBlockRows ) const
+{
+	using Cost = CostEstimate_c;
+	int64_t iVisited = Min ( m_iRows, iVisitedBlocks*iBlockRows );
+	int64_t iPushed = int64_t(ceil ( double(m_iMatches)*iVisited/m_iRows ));
+
+	// Read the block bounds and build a priority queue. Each visit removes the block with the best remaining bound.
+	int64_t iHeapWork = iBoundsRead + iBlocks + iVisitedBlocks*sphLog2(iBlocks);
+	return Cost::Cost_Filter ( iHeapWork, 1.0f ) + Cost::Cost_Filter ( iVisited, m_fFilterComplexity ) + Cost::Cost_Push(iPushed);
+}
+
+
+SphAttr_t SortBoundScanPlan_t::GetBlockBound ( RowID_t tBlock, bool bMax ) const
+{
+	if ( IsColumnar() )
+	{
+		auto tBounds = m_pColumnarBounds->GetMinMax ( m_iLeafLevel, tBlock );
+		return bMax ? tBounds.second : tBounds.first;
+	}
+
+	return sphGetRowAttr ( m_pMinMax+(uint64_t(tBlock)*2+int(bMax))*m_iStride, m_tLocator );
+}
+
+
+template <int NUM_SAMPLES>
+static int64_t EstimateVisitedBlocks ( RowID_t tFirst, int64_t iBlocks, int64_t iNeeded, const SortBound_c & tBound, const SortBoundScanPlan_t & tPlan )
+{
+	// Sample evenly across the worker's range. Store (worst, best) keys with larger values ranking first for either sort direction.
+	std::pair<SphAttr_t,SphAttr_t> dSample[NUM_SAMPLES];
+	int iSample = int(Min ( iBlocks, int64_t(NUM_SAMPLES) ));
+	for ( int i=0; i<iSample; ++i )
+	{
+		RowID_t tBlock = tFirst+(iBlocks-1)*i/(iSample-1);
+		dSample[i] = { tBound.CompetitiveKey ( tPlan.GetBlockBound ( tBlock, !tBound.IsDescending() ) ), tBound.CompetitiveKey ( tPlan.GetBlockBound ( tBlock, tBound.IsDescending() ) ) };
+	}
+
+	// Rank blocks by their worst key because every row in a block is at least as competitive as that key.
+	std::sort ( dSample, dSample+iSample, std::greater<>() );
+
+	// Map the last of the iNeeded blocks into the sample. Its worst key estimates the threshold when the sorter fills.
+	int iPivot = int((iNeeded-1)*iSample/iBlocks);
+	int iRemaining = iSample-iPivot-1;
+	if ( !iRemaining )
+		return iNeeded;
+
+	// Count remaining sample blocks whose best key reaches the threshold. A tie can still win on a secondary sort key.
+	int iOverlap = int(std::count_if ( dSample+iPivot+1, dSample+iSample, [&]( const auto & tBlock ){ return tBlock.second>=dSample[iPivot].first; } ));
+
+	// Apply the sampled overlap fraction to the blocks beyond iNeeded, rounding up to a whole block.
+	return iNeeded + ( (iBlocks-iNeeded)*iOverlap+iRemaining-1 )/iRemaining;
+}
+
+
+static bool ShouldUseSortBoundScan ( const SortBoundScanCost_t & tCost, const SortBoundScanPlan_t & tPlan, const SortBound_c & tBound )
+{
+	int iBlockRows = tPlan.m_iBlockRows;
+	RowID_t tFirst = tPlan.m_tRange.m_tMinRowID/iBlockRows;
+	RowID_t tLast = tPlan.m_tRange.m_tMaxRowID/iBlockRows;
+	if ( tFirst==tLast )
+		return false;
+
+	int64_t iBlocks = int64_t(tLast)-tFirst+1;
+	int64_t iBoundsRead = iBlocks;
+
+	// Estimate how many blocks fill the sorter if matching rows are distributed uniformly.
+	int64_t iNeeded = int64_t(ceil ( double(tCost.m_iCapacity)*tCost.m_iRows/(double(tCost.m_iMatches)*iBlockRows) ));
+	if ( iNeeded>=iBlocks )
+		return false;
+
+	const float fOrdinaryCost = tCost.CalcOrdinaryCost();
+	const float fOptimisticCost = tCost.CalcSortBoundCost ( iBoundsRead, iBlocks, iNeeded, iBlockRows );
+	if ( fOptimisticCost>=fOrdinaryCost )
+		return false;
+
+	constexpr int INITIAL_SAMPLE_SIZE = 8;
+	constexpr int REFINED_SAMPLE_SIZE = 64;
+	int64_t iVisited = EstimateVisitedBlocks<INITIAL_SAMPLE_SIZE> ( tFirst, iBlocks, iNeeded, tBound, tPlan );
+	if ( iVisited==iBlocks )
+		return false;
+
+	if ( iVisited==iNeeded )
+		return true;
+
+	const float fSampledCost = tCost.CalcSortBoundCost ( iBoundsRead, iBlocks, iVisited, iBlockRows );
+	if ( fSampledCost<fOrdinaryCost )
+		return true;
+
+	// One overlap in a small sample can stand for thousands of blocks. Refine a close decision.
+	if ( iBlocks<=INITIAL_SAMPLE_SIZE )
+		return false;
+
+	iVisited = EstimateVisitedBlocks<REFINED_SAMPLE_SIZE> ( tFirst, iBlocks, iNeeded, tBound, tPlan );
+	if ( iVisited==iBlocks )
+		return false;
+
+	const float fRefinedCost = tCost.CalcSortBoundCost ( iBoundsRead, iBlocks, iVisited, iBlockRows );
+	return fRefinedCost<fOrdinaryCost;
+}
+
+
+static int64_t GetSortBoundMatchCount ( const CSphIndex & tIndex, const CSphFilterSettings * pFilter, ESphCollation eCollation )
+{
+	if ( !pFilter )
+		return tIndex.GetCount();
+
+	if ( eCollation==SPH_COLLATION_DEFAULT && ( pFilter->m_eType==SPH_FILTER_STRING || ( pFilter->m_eType==SPH_FILTER_VALUES && pFilter->GetNumValues()==1 ) ) )
+	{
+		// A single SI lookup gives the frequency even for heavily skewed strings.
+		CSphString sAttr;
+		return tIndex.GetCountFilter ( *pFilter, sAttr );
+	}
+
+	return -1;
+}
+
+
+namespace
+{
+class SortBoundScanPlanner_c
+{
+public:
+										SortBoundScanPlanner_c ( const SelectIteratorCtx_t & tSelect, const CreateFilterContext_t & tFlx, const CSphQueryContext & tCtx, const VecTraits_T<ISphMatchSorter *> & dSorters, const DWORD * pMinMax, SortBound_c & tBound, const char * & szReason );
+
+	std::optional<SortBoundScanPlan_t>	Plan ( const CSphMultiQueryArgs & tArgs, const CSphIndex & tIndex, bool bSelectIterators, CSphVector<SecondaryIndexInfo_t> & dOrdinaryPlan, CSphString & sWarning );
+
+private:
+	static constexpr const char * BOUNDS_UNAVAILABLE = "block bounds are unavailable for this row range or sort attribute";
+
+	const SelectIteratorCtx_t &				m_tSelect;
+	const CreateFilterContext_t &			m_tFlx;
+	const CSphQueryContext &				m_tCtx;
+	const VecTraits_T<ISphMatchSorter *> &	m_dSorters;
+	const DWORD *							m_pMinMax;
+	SortBound_c &							m_tBound;
+	const char * &							m_szReason;
+
+	SortBoundScanPlan_t			m_tPlan;
+	bool						m_bForce = false;
+	const CSphColumnInfo *		m_pSortAttr = nullptr;
+	const CSphFilterSettings *	m_pRowIdFilter = nullptr;
+	const CSphFilterSettings *	m_pFilter = nullptr;
+
+	bool						SetupQuery ( const CSphMultiQueryArgs & tArgs );
+	bool						SetupRangeAndSortAttr();
+	bool						SetupFilter();
+	bool						EstimateCost ( SortBoundScanCost_t & tCost, const CSphIndex & tIndex, bool bSelectIterators, CSphVector<SecondaryIndexInfo_t> & dOrdinaryPlan, CSphString & sWarning ) const;
+	bool						SelectBlockScan ( const CSphIndex & tIndex, bool bSelectIterators, CSphVector<SecondaryIndexInfo_t> & dOrdinaryPlan, CSphString & sWarning );
+	bool						Reject ( const char * szReason );
+	bool						SetupBlocks ( const CSphColumnInfo & tAttr );
+};
+
+
+SortBoundScanPlanner_c::SortBoundScanPlanner_c ( const SelectIteratorCtx_t & tSelect, const CreateFilterContext_t & tFlx, const CSphQueryContext & tCtx, const VecTraits_T<ISphMatchSorter *> & dSorters, const DWORD * pMinMax, SortBound_c & tBound, const char * & szReason )
+	: m_tSelect(tSelect)
+	, m_tFlx(tFlx)
+	, m_tCtx(tCtx)
+	, m_dSorters(dSorters)
+	, m_pMinMax(pMinMax)
+	, m_tBound(tBound)
+	, m_szReason(szReason)
+{}
+
+
+bool SortBoundScanPlanner_c::Reject ( const char * szReason )
+{
+	m_szReason = szReason;
+	return false;
+}
+
+
+bool SortBoundScanPlanner_c::SetupQuery ( const CSphMultiQueryArgs & tArgs )
+{
+	const auto & tQuery = m_tSelect.m_tQuery;
+	if ( tQuery.m_tIndexHints.HasFilterIteratorHints() )
+		return Reject ( "an explicit filter iterator hint selects the ordinary scan plan" );
+
+	if ( tQuery.m_eSort!=SPH_SORT_EXTENDED || tQuery.HasKnn() || m_tSelect.m_iCutoff>=0 || !CanUseSortBound ( tQuery, m_dSorters, tArgs, false )
+		|| !tQuery.m_dFilterTree.IsEmpty() || tQuery.m_bHybridSearch
+		|| m_tCtx.m_pWeightFilter || m_dSorters[0]->GetMatchCapacity()<=0 || !m_tBound.Setup ( tQuery, m_tSelect.m_tIndexSchema, *m_dSorters[0] ) )
+		return Reject ( "requires a single eligible ORDER BY sorter on an integer attribute and automatic cutoff" );
+
+	const auto * pHint = tQuery.m_tIndexHints.GetSortBoundHint();
+	m_bForce = pHint && pHint->m_bForce;
+	if ( pHint )
+	{
+		bool bPrimaryAttr = pHint->m_sIndex==m_tBound.GetAttr();
+		if ( m_bForce!=bPrimaryAttr )
+			return Reject ( "the hint must name the primary ORDER BY attribute" );
+	}
+
+	return true;
+}
+
+
+bool SortBoundScanPlanner_c::SetupRangeAndSortAttr()
+{
+	auto & tRange = m_tPlan.m_tRange;
+	tRange = { 0, RowID_t(m_tSelect.m_iTotalDocs)-1 };
+	m_pRowIdFilter = GetRowIdFilter ( *m_tFlx.m_pFilters, RowID_t(m_tSelect.m_iTotalDocs), tRange );
+	if ( tRange.m_tMinRowID>tRange.m_tMaxRowID || tRange.m_tMaxRowID>=m_tSelect.m_iTotalDocs )
+		return Reject ( BOUNDS_UNAVAILABLE );
+
+	m_pSortAttr = m_tSelect.m_tIndexSchema.GetAttr ( m_tBound.GetAttr().cstr() );
+	if ( !m_pSortAttr || ( m_pSortAttr->IsColumnar() ? !m_tSelect.m_pColumnar : m_pSortAttr->m_tLocator.m_bDynamic || !m_pMinMax ) )
+		return Reject ( BOUNDS_UNAVAILABLE );
+
+	return true;
+}
+
+
+bool SortBoundScanPlanner_c::SetupFilter()
+{
+	constexpr const char * szUnsupported = "requires at most one supported attribute predicate after filter simplification";
+	// The sort-bound scan evaluates one ordinary predicate in addition to the worker's row range.
+	for ( const auto & tFilter : *m_tFlx.m_pFilters )
+	{
+		if ( &tFilter==m_pRowIdFilter )
+			continue;
+
+		const auto * pCol = m_tSelect.m_tIndexSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
+		if ( m_pFilter || !pCol || pCol->m_pExpr || tFilter.m_bOptional || tFilter.m_bExclude
+			|| ( tFilter.m_eType!=SPH_FILTER_STRING && tFilter.m_eType!=SPH_FILTER_VALUES && tFilter.m_eType!=SPH_FILTER_RANGE ) )
+			return Reject ( szUnsupported );
+
+		if ( m_tSelect.m_tQuery.m_dItems.any_of ( [&]( const auto & tItem ) { return tItem.m_sAlias==tFilter.m_sAttrName && tItem.m_sExpr!=tItem.m_sAlias; } ) )
+			return Reject ( szUnsupported );
+
+		m_pFilter = &tFilter;
+	}
+
+	if ( m_pFilter && !m_tCtx.m_pFilter )
+		return Reject ( szUnsupported );
+
+	return true;
+}
+
+
+bool SortBoundScanPlanner_c::SetupBlocks ( const CSphColumnInfo & tAttr )
+{
+	if ( tAttr.IsColumnar() )
+	{
+		auto * pBounds = m_tSelect.m_pColumnar->GetBlockBounds ( tAttr.m_sName.cstr() );
+		if ( !pBounds )
+			return false;
+
+		m_tPlan.m_pColumnarBounds = pBounds;
+		m_tPlan.m_iLeafLevel = pBounds->GetNumMinMaxLevels()-1;
+		m_tPlan.m_iBlockRows = pBounds->GetLeafRows();
+		return m_tPlan.m_iBlockRows>0 && m_tPlan.m_tRange.m_tMaxRowID/m_tPlan.m_iBlockRows<RowID_t(pBounds->GetNumMinMaxBlocks(m_tPlan.m_iLeafLevel));
+	}
+
+	m_tPlan.m_iBlockRows = DOCINFO_INDEX_FREQ;
+	m_tPlan.m_pMinMax = m_pMinMax;
+	m_tPlan.m_iStride = m_tSelect.m_tIndexSchema.GetRowSize();
+	m_tPlan.m_tLocator = tAttr.m_tLocator;
+	return true;
+}
+
+
+bool SortBoundScanPlanner_c::EstimateCost ( SortBoundScanCost_t & tCost, const CSphIndex & tIndex, bool bSelectIterators, CSphVector<SecondaryIndexInfo_t> & dOrdinaryPlan, CSphString & sWarning ) const
+{
+	int64_t iRows = m_tSelect.m_iTotalDocs;
+	int64_t iChunkMatches = GetSortBoundMatchCount ( tIndex, m_pFilter, m_tSelect.m_tQuery.m_eCollation );
+	int64_t iEstimate = iChunkMatches;
+	if ( iEstimate<0 )
+		iEstimate = m_pFilter ? EstimateFilterSelectivity ( *m_pFilter, m_tFlx ) : iRows;
+
+	const auto & tRange = m_tPlan.m_tRange;
+	int64_t iRangeRows = int64_t(tRange.m_tMaxRowID) - tRange.m_tMinRowID + 1;
+	tCost.m_iRows = iRangeRows;
+	tCost.m_iMatches = int64_t ( double ( std::clamp ( iEstimate, int64_t(0), iRows ) ) * iRangeRows / iRows );
+	if ( tCost.m_iMatches<=tCost.m_iCapacity )
+		return false;
+
+	if ( !m_pFilter )
+		return true;
+
+	float fBestCost = FLT_MAX;
+	if ( bSelectIterators )
+	{
+		StrVec_t dWarnings;
+		dOrdinaryPlan = SelectIterators ( m_tSelect, fBestCost, dWarnings );
+		if ( !dWarnings.IsEmpty() )
+			sWarning = ConcatWarnings(dWarnings);
+	}
+
+	tCost.EstimateOrdinary ( m_tSelect, int(m_pFilter-m_tSelect.m_dFilters.Begin()), dOrdinaryPlan, fBestCost, iChunkMatches );
+	return true;
+}
+
+
+bool SortBoundScanPlanner_c::SelectBlockScan ( const CSphIndex & tIndex, bool bSelectIterators, CSphVector<SecondaryIndexInfo_t> & dOrdinaryPlan, CSphString & sWarning )
+{
+	SortBoundScanCost_t tCost { 0, 0, m_dSorters[0]->GetMatchCapacity() };
+	if ( !m_bForce && !EstimateCost ( tCost, tIndex, bSelectIterators, dOrdinaryPlan, sWarning ) )
+		return Reject ( BOUNDS_UNAVAILABLE );
+
+	if ( !SetupBlocks(*m_pSortAttr) )
+		return Reject ( BOUNDS_UNAVAILABLE );
+
+	if ( !m_bForce && !ShouldUseSortBoundScan ( tCost, m_tPlan, m_tBound ) )
+		return Reject ( BOUNDS_UNAVAILABLE );
+
+	return true;
+}
+
+
+std::optional<SortBoundScanPlan_t> SortBoundScanPlanner_c::Plan ( const CSphMultiQueryArgs & tArgs, const CSphIndex & tIndex, bool bSelectIterators, CSphVector<SecondaryIndexInfo_t> & dOrdinaryPlan, CSphString & sWarning )
+{
+	if ( !SetupQuery(tArgs) )
+		return std::nullopt;
+
+	if ( !SetupRangeAndSortAttr() )
+		return std::nullopt;
+
+	if ( !SetupFilter() )
+		return std::nullopt;
+
+	if ( !SelectBlockScan ( tIndex, bSelectIterators, dOrdinaryPlan, sWarning ) )
+		return std::nullopt;
+
+	m_szReason = nullptr;
+	return std::move(m_tPlan);
+}
+} // namespace
+
+
+std::optional<SortBoundScanPlan_t> PlanSortBoundScan ( const SelectIteratorCtx_t & tSelect, const CreateFilterContext_t & tFlx, const CSphQueryContext & tCtx, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs, const CSphIndex & tIndex, const DWORD * pMinMax, bool bSelectIterators, SortBound_c & tBound, CSphVector<SecondaryIndexInfo_t> & dOrdinaryPlan, CSphString & sWarning, const char * & szReason )
+{
+	SortBoundScanPlanner_c tPlanner ( tSelect, tFlx, tCtx, dSorters, pMinMax, tBound, szReason );
+	return tPlanner.Plan ( tArgs, tIndex, bSelectIterators, dOrdinaryPlan, sWarning );
+}
 
 
 CostEstimate_c::CostEstimate_c ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, int iCutoff )

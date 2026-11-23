@@ -16,6 +16,99 @@ import urllib.parse
 import urllib.request
 
 
+def check_sort_bound_scan(sql, table, storage):
+    sql(f"CREATE TABLE {table} (ts bigint, bucket int, shuffled int, rare int) engine='{storage}'")
+    # The last columnar parent has just one partial leaf.
+    docs = 64 * 1024 + 123 if storage == "columnar" else 32768
+    for start in range(0, docs, 1024):
+        rows = [f"({i + 1},{i // 300 - 55},{i % 2},{i % 31},{int(i % 96 == 0)})" for i in range(start, min(start + 1024, docs))]
+        sql(f"INSERT INTO {table} (id,ts,bucket,shuffled,rare) VALUES " + ",".join(rows))
+
+    def hinted(query, hint):
+        rows, meta = sql(query + " /*+ " + hint + " */;SHOW META")
+        info = {r["Variable_name"]: r["Value"] for r in meta["data"]}
+        return rows["data"], info.get("index", ""), info.get("warning", "")
+
+    query = f"SELECT id,ts FROM {table} WHERE rare=1 ORDER BY shuffled DESC,id ASC LIMIT 20,30 OPTION threads=1,max_matches=50"
+    ram_rows, plan, warning = hinted(query, "SortBound(shuffled)")
+    assert ram_rows == sql(query)[0]["data"] and ram_rows, ram_rows
+    assert "SortBound" not in plan and not warning, (plan, warning)
+
+    sql(f"FLUSH RAMCHUNK {table}")
+
+    def compare(order, predicate="", expect_scan=True, hint=""):
+        query = f"SELECT id,ts FROM {table} {predicate} ORDER BY {order} LIMIT 20,30 OPTION threads=1,max_matches=50"
+        rows, meta = sql(query + (f" /*+ {hint} */" if hint else "") + ";SHOW META")
+        expected, exact = sql(query + ",cutoff=0;SHOW META")
+        assert rows["data"] == expected["data"], (storage, order, predicate)
+        info = {r["Variable_name"]: r["Value"] for r in meta["data"]}
+        total = int(next(r["Value"] for r in exact["data"] if r["Variable_name"] == "total_found"))
+        if info["total_relation"] == "eq":
+            assert int(info["total_found"]) == total, info
+        else:
+            assert info["total_relation"] == "gte" and 50 <= int(info["total_found"]) <= total, info
+        if expect_scan is None:
+            control = next((r["Value"] for r in exact["data"] if r["Variable_name"] == "index"), "")
+            if "rare:SecondaryIndex" in control:
+                assert "rare:SecondaryIndex" in info.get("index", ""), info
+        elif storage == "rowwise" or not expect_scan:
+            assert ("SortBound" in info.get("index", "")) == expect_scan, info
+        return info
+
+    plain = compare("ts DESC,id ASC")
+    if "SortBound" in plain.get("index", ""):
+        assert plain["total_relation"] == "gte" and int(plain["total_found"]) < docs, plain
+    filtered = compare("ts DESC,id ASC", f"WHERE bucket=1 AND ts BETWEEN -55 AND {(docs - 1) // 300 - 55}")
+    assert ("SortBound" in plain.get("index", "")) == ("SortBound" in filtered.get("index", "")), filtered
+    compare("ts ASC,id DESC")
+    compare("shuffled DESC,id ASC", expect_scan=False)
+    # Every block contains the maximum shuffled value, so a forced scan must visit them all.
+    tied = compare("shuffled DESC,id ASC", hint="SortBound(shuffled)")
+    assert tied["total_relation"] == "eq", tied
+    if "SortBound" in plain.get("index", ""):
+        assert "SortBound" in tied.get("index", ""), tied
+    # More than 50 matches, but fetching the rare rows from an SI costs less than scanning by ts.
+    compare("ts DESC,id ASC", "WHERE rare=1", expect_scan=None)
+
+    disabled, plan, warning = hinted(query, "NO_SortBound(shuffled)")
+    assert "SortBound" not in plan and not warning, (plan, warning)
+    forced, plan, warning = hinted(query, "SortBound(shuffled)")
+    assert forced == disabled
+    assert "shuffled:SortBound" in plan and not warning, (plan, warning)
+
+    combined, plan, warning = hinted(query, "SecondaryIndex(rare) SortBound(shuffled)")
+    assert combined == disabled and "SortBound" not in plan, plan
+    assert "explicit filter iterator hint" in warning and "filter not found" not in warning, warning
+    repeated = hinted(query, "SecondaryIndex(rare) SortBound(shuffled) SecondaryIndex(rare)")
+    assert repeated == (combined, plan, warning), repeated
+    sql(query + " /*+ SortBound(ts) SortBound(shuffled) */", "conflicting sort-bound hints")
+    sql(query + " /*+ SecondaryIndex(rare) SortBound(rare) NO_SecondaryIndex(rare) */", "conflicting hints")
+
+    wrong, plan, warning = hinted(query, "SortBound(ts)")
+    assert wrong == disabled and "SortBound" not in plan
+    assert "primary ORDER BY attribute" in warning, warning
+    cutoff, plan, warning = hinted(query + ",cutoff=0", "SortBound(shuffled)")
+    assert cutoff == disabled and "automatic cutoff" in warning and "SortBound" not in plan, (plan, warning)
+
+    common = f"SELECT id FROM {table} WHERE bucket=1 ORDER BY ts DESC,id ASC LIMIT 10 OPTION threads=1"
+    disabled, plan, warning = hinted(common, "NO_SortBound(ts)")
+    assert "SortBound" not in plan and not warning, (plan, warning)
+    other, plan, warning = hinted(common, "NO_SortBound(shuffled)")
+    assert other == disabled and not warning
+    if "SortBound" in plain.get("index", ""):
+        assert "ts:SortBound" in plan, plan
+
+    sql(f"DELETE FROM {table} WHERE id IN (1,2,300,{docs})")
+    info = compare("ts ASC,id DESC", "WHERE bucket=1")
+    if "SortBound" in info.get("index", ""):
+        assert info["total_relation"] == "gte", info
+
+    sql(f"INSERT INTO {table} (id,ts,bucket,shuffled,rare) VALUES ({docs + 1},1000,1,31,1)")
+    mixed, _, warning = hinted(common, "SortBound(ts)")
+    assert mixed == sql(common)[0]["data"] and int(mixed[0]["id"]) == docs + 1, mixed
+    assert "RT RAM segments" not in warning, warning
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", required=True, help="Private daemon HTTP endpoint")
@@ -163,6 +256,10 @@ def main():
             status = sql("SHOW TABLE " + table + " STATUS")[0]["data"]
             assert [x["Value"] for x in status if x["Variable_name"] == "disk_chunks"] == ["1"]
         compare("merged", 1022)
+
+    for storage in ["rowwise", "columnar"]:
+        check_sort_bound_scan(sql, args.prefix + "_sort_" + storage, storage)
+        checks.append({"case": "sort_bound_scan", "storage": storage})
 
     with open(args.output, "w", encoding="utf-8", newline="\n") as output:
         json.dump(checks, output, indent=2)

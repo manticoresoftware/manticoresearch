@@ -394,7 +394,8 @@ public:
 
 	void			PushQuery ();
 
-	void			AddIndexHint ( SecondaryIndexType_e eType, bool bForce, const SqlNode_t & tValue );
+	bool			AddIndexHint ( SecondaryIndexType_e eType, bool bForce, const SqlNode_t & tValue );
+	bool			AddSortBoundHint ( bool bForce, const SqlNode_t & tAttr );
 	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	void			AddGroupConcatPlainItem ( SqlNode_t * pExpr, const SqlNode_t & tSeparator, SqlNode_t * pStart, SqlNode_t * pEnd );
 	void			BeginGroupConcatOrder ();
@@ -1302,20 +1303,33 @@ bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNam
 }
 
 
-void SqlParser_c::AddIndexHint ( SecondaryIndexType_e eType, bool bForce, const SqlNode_t & tValue )
+bool SqlParser_c::AddIndexHint ( SecondaryIndexType_e eType, bool bForce, const SqlNode_t & tValue )
 {
 	CSphString sIndexes;
 	ToString ( sIndexes, tValue );
 	StrVec_t dIndexes;
 	sphSplit ( dIndexes, sIndexes.cstr(), ", \t" );
 	
-	for ( const auto & i : dIndexes )
+	for ( auto & sIndex : dIndexes )
+		if ( !m_pQuery->m_tIndexHints.Add ( { std::move(sIndex), eType, bForce }, *m_pParseError ) )
+			return false;
+
+	return true;
+}
+
+
+bool SqlParser_c::AddSortBoundHint ( bool bForce, const SqlNode_t & tAttr )
+{
+	if ( m_pStmt->m_eStmt!=STMT_SELECT )
 	{
-		IndexHint_t & tHint = m_pQuery->m_dIndexHints.Add();
-		tHint.m_sIndex = i;
-		tHint.m_eType = eType;
-		tHint.m_bForce = bForce;
+		*m_pParseError = "sort-bound hints require SELECT";
+		return false;
 	}
+
+	CSphString sAttr = GetString(tAttr);
+	sAttr.ToLower();
+
+	return m_pQuery->m_tIndexHints.Add ( { std::move(sAttr), SecondaryIndexType_e::SORT_BOUND, bForce }, *m_pParseError );
 }
 
 
@@ -2839,35 +2853,6 @@ static void CreateFilterTree ( const CSphVector<FilterTreeItem_t> & dOps, int iS
 }
 
 
-struct HintComp_fn
-{
-	bool IsLess ( const IndexHint_t & tA, const IndexHint_t & tB ) const
-	{
-		return strcasecmp ( tA.m_sIndex.cstr(), tB.m_sIndex.cstr() ) < 0;
-	}
-
-	bool IsEq ( const IndexHint_t & tA, const IndexHint_t & tB ) const
-	{
-		return tA.m_sIndex==tB.m_sIndex && tA.m_eType==tB.m_eType && tA.m_bForce==tB.m_bForce;
-	}
-};
-
-
-static bool CheckQueryHints ( CSphVector<IndexHint_t> & dHints, CSphString & sError )
-{
-	sphSort ( dHints.Begin(), dHints.GetLength(), HintComp_fn() );
-	sphUniq ( dHints.Begin(), dHints.GetLength(), HintComp_fn() );
-
-	for ( int i = 1; i < dHints.GetLength(); i++ )
-		if ( dHints[i-1].m_sIndex==dHints[i].m_sIndex && dHints[i-1].m_eType==dHints[i].m_eType )
-		{
-			sError.SetSprintf ( "conflicting hints specified for table '%s'", dHints[i-1].m_sIndex.cstr() );
-			return false;
-		}
-
-	return true;
-}
-
 static ParseResult_e ParseNext ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSphString& sError, bool bKeepError )
 {
 	using ParserFN = ParseResult_e ( * ) ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString & sError );
@@ -3392,7 +3377,7 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 		iFilterStart = iFilterCount;
 
 		// fixup hints
-		if ( !CheckQueryHints ( tQuery.m_dIndexHints, sError ) )
+		if ( !tQuery.m_tIndexHints.Normalize(sError) )
 			return false;
 	}
 

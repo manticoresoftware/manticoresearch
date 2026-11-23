@@ -18,6 +18,7 @@
 #include "sphinxutils.h"
 #include "sphinxsort.h"
 #include "sortbound.h"
+#include "costestimate.h"
 #include "sortfilter.h"
 #include "fileutils.h"
 #include "sphinxexpr.h"
@@ -1183,7 +1184,7 @@ private:
 	template<typename RUN>
 	bool						SplitQuery ( RUN && tRun, CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
 	bool						ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker, bool bPlanForKNNIterator ) const;
-	std::pair<RowidIterator_i *, bool> SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, const CSphVector<const ISphSchema *> & dSorterSchemas, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker, bool & bKNNIteratorCreated ) const;
+	std::pair<RowidIterator_i *, bool> SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, const CSphVector<const ISphSchema *> & dSorterSchemas, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker, bool & bKNNIteratorCreated, CSphVector<SecondaryIndexInfo_t> * pFullscanPlan = nullptr ) const;
 	bool						SelectIteratorsFT ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tSorterSchema, ISphRanker * pRanker, CSphVector<SecondaryIndexInfo_t> & dSIInfo, int iCutoff, int iThreads, StrVec_t & dWarnings ) const;
 
 	bool						IsQueryFast ( const CSphQuery & tQuery, const CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, float fCost ) const;
@@ -9133,7 +9134,7 @@ static bool AddLateKNNDistFilter ( const CSphQuery & tQuery, bool bKNNIteratorCr
 }
 
 
-std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, const CSphVector<const ISphSchema *> & dSorterSchemas, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker, bool & bKNNIteratorCreated ) const
+std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, const CSphVector<const ISphSchema *> & dSorterSchemas, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker, bool & bKNNIteratorCreated, CSphVector<SecondaryIndexInfo_t> * pFullscanPlan ) const
 {
 	std::unique_ptr<knn::KNNFilter_i> pKNNFilterWrapper;
 	if ( tQuery.HasKnn() && tQuery.SingleKnnSettings().m_bPrefilter && tCtx.m_pFilter )
@@ -9164,7 +9165,10 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	bool bKNNBypassed = ShouldBypassKNNIterator ( m_pKNN.get(), tQuery, pKNNFilterWrapper.get() );
 
 	CSphVector<SecondaryIndexInfo_t> dSIInfo;
-	if ( !ChooseIterators ( dSIInfo, tQuery, dFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, iThreads, dModifiedFilters, pRanker, tQuery.HasKnn() && !bKNNBypassed ) )
+	// Reuse the ordinary filter plan if the sort-bound planner already called SelectIterators() to estimate its cost.
+	if ( pFullscanPlan && !pFullscanPlan->IsEmpty() )
+		dSIInfo.SwapData(*pFullscanPlan);
+	else if ( !ChooseIterators ( dSIInfo, tQuery, dFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, iThreads, dModifiedFilters, pRanker, tQuery.HasKnn() && !bKNNBypassed ) )
 	{
 		if ( !RecreateFallbackFilters ( dFilters, dJsonSITransforms, true, tCtx, tFlx, tMeta, dSorterSchemas, pModifiedMatchSchema, dModifiedFilters ) )
 			return { nullptr, true };
@@ -9274,7 +9278,7 @@ static bool AreAllFiltersExpressions ( const CSphVector<CSphFilterSettings> & dF
 static bool CanRemoveCoveredFilters ( const CSphQuery & tQuery )
 {
 	return tQuery.m_dFilterTree.IsEmpty() && tQuery.m_sJoinIdx.IsEmpty() && !tQuery.HasKnn() && !tQuery.m_bHybridSearch
-		&& tQuery.m_dIndexHints.IsEmpty() && tQuery.m_dFilters.any_of ( []( const CSphFilterSettings & tFilter )
+		&& !tQuery.m_tIndexHints.HasFilterIteratorHints() && tQuery.m_dFilters.any_of ( []( const CSphFilterSettings & tFilter )
 			{ return tFilter.m_eType==SPH_FILTER_RANGE && !tFilter.m_bExclude; } );
 }
 
@@ -9345,6 +9349,8 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 {
 	assert ( tArgs.m_iTag>=0 );
 	auto& tMeta = *tResult.m_pMeta;
+	const char * szHintWarning = "no scan was needed";
+	AT_SCOPE_EXIT ( [&] { WarnSortBoundHint ( tQuery, tMeta, szHintWarning ); } );
 
 	// check if index is ready
 	if ( !m_bPassedAlloc )
@@ -9427,15 +9433,29 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	if ( tMeta.m_tIteratorStats.m_dIterators.GetLength()!=iOldLen )
 		tMeta.m_tIteratorStats.m_iTotal = 1;
 
-	// try to spawn an iterator from a secondary index
 	CSphVector<CSphFilterSettings> dFiltersAfterIterator; // holds filter settings if they were modified. filters hold pointers to those settings
+	SortBound_c tSortBound;
+	CSphVector<SecondaryIndexInfo_t> dOrdinaryPlan;
+	SelectIteratorCtx_t tSelect ( tQuery, dTransformedFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_tSI, iCutoff, m_iDocinfo, tArgs.m_iTotalThreads );
+	szHintWarning = "the filter needs a JSON secondary-index transformation";
 	std::unique_ptr<RowidIterator_i> pIterator;
+	if ( dJsonSITransforms.IsEmpty() )
+	{
+		bool bSelectIterators = m_iDocinfo>=SMALL_INDEX_THRESH || g_iPseudoShardingThresh==0;
+		auto tPlan = PlanSortBoundScan ( tSelect, tFlx, tCtx, dSorters, tArgs, *this, m_pDocinfoIndex, bSelectIterators, tSortBound, dOrdinaryPlan, tMeta.m_sWarning, szHintWarning );
+		if ( tPlan )
+		{
+			pIterator = CreateSortBoundScan ( tSortBound, *tPlan );
+			szHintWarning = nullptr;
+		}
+	}
+
 	bool bKNNIteratorCreated = false;
 	if ( bAllPrecalc )
 		tCtx.m_pFilter.reset();
-	else
+	else if ( !pIterator )
 	{
-		auto tSpawned = SpawnIterators ( tQuery, dTransformedFilters, dJsonSITransforms, tCtx, tFlx, tMaxSorterSchema, dSorterSchemas, pModifiedMatchSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, nullptr, bKNNIteratorCreated );
+		auto tSpawned = SpawnIterators ( tQuery, dTransformedFilters, dJsonSITransforms, tCtx, tFlx, tMaxSorterSchema, dSorterSchemas, pModifiedMatchSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, nullptr, bKNNIteratorCreated, &dOrdinaryPlan );
 		pIterator = std::unique_ptr<RowidIterator_i> ( tSpawned.first );
 		if ( tSpawned.second )
 			return false;
@@ -12239,6 +12259,8 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	if ( !tParsed.m_sParseWarning.IsEmpty() )
 		tMeta.m_sWarning = tParsed.m_sParseWarning;
 
+	AT_SCOPE_EXIT ( [&] { WarnSortBoundHint ( tQuery, tMeta, "requires an attribute fullscan" ); } );
+
 	// single-term count(*) fast path
 	const bool bFastTermCount = IsFastTermCountQuery ( tQuery, dSorters, tArgs ) && !m_tDeadRowMap.HasDead() && GetFastTermCountKeyword ( tParsed.m_pRoot, m_tSchema );
 
@@ -12433,6 +12455,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 			} else
 				tMeta.m_iMultiplier = -1;
 
+			WarnSortBoundHint ( tCurQuery, tMeta, "requires an attribute fullscan" );
 			tMeta.m_tIOStats.Stop();
 		}
 	});
@@ -12603,7 +12626,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 	tTermSetup.m_bHasWideFields = ( m_tSchema.GetFieldsCount()>32 );
 	tMeta.m_bBigram = ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE );
 
-	if ( HasForceHints ( tQuery.m_dIndexHints ) )
+	if ( tQuery.m_tIndexHints.HasForcedSecondaryIndex() )
 		tCtx.m_bSkipQCache = true;
 
 	// bind weights
@@ -12710,7 +12733,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 	std::unique_ptr<SortBoundFilter_c> pSortFilter;
 	if ( bSortBound && !pIterator )
 	{
-		const SIContainer_c * pSortSI = m_tSI.IsEnabled(tSortBound.GetAttr()) && tQuery.m_dIndexHints.IsEmpty() ? &m_tSI : nullptr;
+		const SIContainer_c * pSortSI = m_tSI.IsEnabled(tSortBound.GetAttr()) && !tQuery.m_tIndexHints.HasFilterIteratorHints() ? &m_tSI : nullptr;
 		if ( pSortAttr->IsColumnar() )
 			pSortFilter = std::make_unique<SortBoundFilter_c> ( tSortBound, *m_pColumnar, RowID_t(m_iDocinfo), pSortSI );
 		else

@@ -2196,7 +2196,7 @@ static void TransformForJsonSI ( const CreateFilterContext_t & tCtx, CSphVector<
 				}
 			}
 
-			if ( tCtx.m_pSI->IsEnabled(sTransformed) )
+			if ( sTransformed!=tFilter.m_sAttrName && tCtx.m_pSI->IsEnabled(sTransformed) )
 			{
 				CSphFilterSettings tOriginal = tFilter;
 				tFilter.m_sAttrName = sTransformed;

@@ -17,6 +17,7 @@
 
 #include "sphinxstd.h"
 #include "indexsettings.h"
+#include "indexhints.h"
 #include "fileutils.h"
 #include "collation.h"
 #include "binlog_defs.h"
@@ -482,25 +483,6 @@ public:
 
 class QueryParser_i;
 
-enum class SecondaryIndexType_e
-{
-	NONE,
-	FILTER,
-	LOOKUP,
-	INDEX,
-	ANALYZER,
-
-	TOTAL
-};
-
-
-struct IndexHint_t
-{
-	CSphString				m_sIndex;
-	SecondaryIndexType_e	m_eType = SecondaryIndexType_e::NONE;
-	bool					m_bForce = true;
-};
-
 struct OnFilter_t
 {
 	CSphString	m_sIdx1;
@@ -633,7 +615,7 @@ struct CSphQuery
 	CSphVector<CSphFilterSettings>	m_dFilters;		///< filters
 	CSphVector<FilterTreeItem_t>	m_dFilterTree;
 
-	CSphVector<IndexHint_t>			m_dIndexHints;	///< secondary index hints
+	IndexHints_c					m_tIndexHints;	///< optimizer hints
 
 	JoinType_e		m_eJoinType = JoinType_e::NONE;	///< JOIN type
 	CSphString		m_sJoinIdx;						///< index to perform join on

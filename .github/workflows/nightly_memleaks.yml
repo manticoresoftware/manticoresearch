@@ -51,7 +51,7 @@ jobs:
       - name: Upload build artifacts
         if: always()
         continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@v5
+        uses: manticoresoftware/upload_artifact_with_retries@ca6df9e9abb96e0f9e440222339062738114425d # Retry verification without re-uploading
         with:
           name: memleaks_${{ github.sha }}
           path: build/Testing

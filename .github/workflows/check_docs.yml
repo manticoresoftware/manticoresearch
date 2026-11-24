@@ -87,7 +87,7 @@ jobs:
           echo "errors=$docs_errors" >> "$GITHUB_OUTPUT"
       - name: Upload artifact
         if: steps.check.outputs.errors != ''
-        uses: manticoresoftware/upload_artifact_with_retries@v5
+        uses: manticoresoftware/upload_artifact_with_retries@ca6df9e9abb96e0f9e440222339062738114425d # Retry verification without re-uploading
         with:
           name: Docs error artifact
           path: $DOCS_ERRORS_DIR

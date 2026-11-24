@@ -178,14 +178,14 @@ jobs:
         continue-on-error: true
       - name: Upload CTest XML artifact
         if: always()
-        uses: manticoresoftware/upload_artifact_with_retries@ca6df9e9abb96e0f9e440222339062738114425d # Retry verification without re-uploading
+        uses: manticoresoftware/upload_artifact_with_retries@v6
         with:
           name: ${{ inputs.artifact_name }}_ctest_xml
           path: "build/test*/Test.xml"
       - name: Upload test artifacts
         if: always()
         continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@ca6df9e9abb96e0f9e440222339062738114425d # Retry verification without re-uploading
+        uses: manticoresoftware/upload_artifact_with_retries@v6
         with:
           name: ${{ inputs.artifact_name }}
           path: "build/test*/Test.xml build/test/**/report* build/test/**/error*.txt build/test/**/*.log build/test/**/*log build/test/**/*.txt build/test/*.mdmp build/test/*.dmp build/test/**/*.mdmp build/test/**/*.dmp"

@@ -305,7 +305,7 @@ jobs:
 
       - name: Upload build artifacts
         if: success()
-        uses: manticoresoftware/upload_artifact_with_retries@ca6df9e9abb96e0f9e440222339062738114425d # Retry verification without re-uploading
+        uses: manticoresoftware/upload_artifact_with_retries@v6
         with:
           name: ${{ inputs.artifact_name }}
           path: ${{ inputs.artifact_list }}

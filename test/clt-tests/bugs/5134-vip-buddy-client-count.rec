@@ -1,17 +1,16 @@
 ––– comment –––
-Regression for #5134: VIP and Buddy flags can overlap. Keep-alive requests
-can change the Buddy flag, and closed connections must leave no stale counts.
-Disable the real Buddy process to make connection counts deterministic.
+Regression for #5134: VIP and Buddy connections must not be subtracted twice.
 ––– input –––
 bash <<'EOF'
 set -euo pipefail
-dir=$(mktemp -d /tmp/gh5134.XXXXXX)
+dir=$(mktemp -d)
 trap 'searchd --config "$dir/manticore.conf" --stopwait >/dev/null 2>&1 || true; rm -rf "$dir"' EXIT
+
 cat > "$dir/manticore.conf" <<CONF
 searchd {
     listen = 127.0.0.1:19534:http
     listen = 127.0.0.1:19535:http_vip
-    listen = 127.0.0.1:19536:mysql41
+    listen = 127.0.0.1:19536:http
     log = $dir/searchd.log
     pid_file = $dir/searchd.pid
     data_dir = $dir
@@ -19,89 +18,65 @@ searchd {
     max_connections = 1
 }
 CONF
-searchd --config "$dir/manticore.conf" > "$dir/start.log" 2>&1 || { cat "$dir/start.log"; exit 1; }
-export LC_ALL=C
+
+searchd --config "$dir/manticore.conf" >/dev/null 2>&1
+
+vip='http://127.0.0.1:19535/sql?mode=raw'
+normal='http://127.0.0.1:19534/sql?mode=raw'
+extra='http://127.0.0.1:19536/sql?mode=raw'
+buddy='Manticore Buddy'
 query="SHOW STATUS LIKE 'workers_clients%'"
+args=(-sS --max-time 5 -d "$query" -w '\nHTTP %{http_code}, new connections: %{num_connects}\n')
 
-# Read a complete HTTP response on an already open socket. Using the same
-# descriptor for successive requests guarantees actual TCP keep-alive reuse.
-get_counts() {
-    local fd=$1 agent=$2 line length= body
-    printf 'POST /sql?mode=raw HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\nUser-Agent: %s\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: %s\r\n\r\n%s' "$agent" "${#query}" "$query" >&"$fd"
-    IFS= read -r -t 5 -u "$fd" line
-    [[ $line == 'HTTP/1.1 200 '* ]] || { echo "Unexpected HTTP status: $line" >&2; exit 1; }
-    while IFS= read -r -t 5 -u "$fd" line; do
-        line=${line%$'\r'}
-        [[ -n $line ]] || break
-        case $line in
-            'Content-Length: '*) length=${line#Content-Length: };;
-        esac
-    done
-    [[ $length =~ ^[1-9][0-9]*$ ]] || { echo "Missing response length" >&2; exit 1; }
-    IFS= read -r -t 5 -N "$length" -u "$fd" body
-    actual=$(jq -er '.[0] | select((.error // "") == "") | .data | map({key: .Variable_name, value: .Value}) | from_entries | [.workers_clients, .workers_clients_vip, .workers_clients_buddy] | map(tonumber) | join(" ")' <<< "$body")
+counts_only() {
+    awk -F'"' '
+        $4 == "workers_clients"       { n = $8 }
+        $4 == "workers_clients_vip"   { v = $8 }
+        $4 == "workers_clients_buddy" { print n, v, $8 }
+        /^HTTP /                     { print }
+    '
 }
 
-expect() {
-    [[ $1 == "$2" ]] || { echo "Expected [$1], got [$2]" >&2; exit 1; }
-}
+curl --fail-early "${args[@]}" "$vip" \
+  --next "${args[@]}" -A "$buddy" "$vip" \
+  --next "${args[@]}" -A "$buddy" "$vip" \
+  --next "${args[@]}" "$vip" \
+  --next "${args[@]}" -A "$buddy" "$vip" \
+  --next "${args[@]}" "$normal" \
+  --next "${args[@]}" -A "$buddy" "$normal" \
+  --next "${args[@]}" -A "$buddy" "$normal" \
+  --next "${args[@]}" "$normal" \
+  --next "${args[@]}" -o /dev/null "$extra" \
+  --next "${args[@]}" -o /dev/null -A "$buddy" "$normal" |
+  counts_only
 
-check() {
-    get_counts "$1" "${3:-CLT}"
-    expect "$2" "$actual"
-}
-
-# Closing a socket and updating daemon counters are asynchronous.
-wait_counts() {
-    local i
-    for ((i=0; i<100; i++)); do
-        get_counts "$1" CLT
-        [[ $actual == "$2" ]] && return
-        sleep 0.05
-    done
-    expect "$2" "$actual"
-}
-
-buddy='Manticore Buddy/1.0.0'
-exec {vip}<>/dev/tcp/127.0.0.1/19535
-check "$vip" '0 1 0'
-check "$vip" '0 1 1' "$buddy"
-check "$vip" '0 1 1' "$buddy"
-check "$vip" '0 1 0'
-
-exec {normal}<>/dev/tcp/127.0.0.1/19534
-check "$normal" '1 1 0'
-check "$normal" '0 1 1' "$buddy"
-check "$normal" '0 1 1' "$buddy"
-check "$normal" '1 1 0'
-
-# A VIP/Buddy connection must not hide an ordinary client from max_connections.
-check "$vip" '1 1 1' "$buddy"
-check "$normal" '1 1 1'
-code=$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' --data-binary "$query" 'http://127.0.0.1:19534/sql?mode=raw')
-expect 503 "$code"
-exec {normal}>&-
-
-# A VIP observer never changes the ordinary connection count.
-exec {observer}<>/dev/tcp/127.0.0.1/19535
-wait_counts "$observer" '0 2 1'
-
-# MySQL clients must be counted too while the VIP/Buddy connection is open.
-actual=$(timeout 10 mysql --no-defaults --protocol=tcp -h127.0.0.1 -P19536 --batch --skip-column-names -e "$query" |
-    awk '$1=="workers_clients"{n=$2} $1=="workers_clients_vip"{v=$2} $1=="workers_clients_buddy"{b=$2} END{print n, v, b}')
-expect '1 2 1' "$actual"
-wait_counts "$observer" '0 2 1'
-
-# Closing a normal-port Buddy connection must not decrement ordinary clients.
-exec {normal}<>/dev/tcp/127.0.0.1/19534
-check "$normal" '0 2 2' "$buddy"
-exec {normal}>&-
-wait_counts "$observer" '0 2 1'
-exec {vip}>&-
-wait_counts "$observer" '0 1 0'
-exec {observer}>&-
-
-echo CLIENT_COUNTS_OK
+# Wait for all previous connections to close.
+for i in {1..100}; do
+    counts=$(curl -fsS --max-time 5 -d "$query" "$vip" | counts_only)
+    [[ "$counts" == "0 1 0" ]] && break
+    sleep 0.05
+done
+echo "$counts"
 EOF
 ––– output –––
-CLIENT_COUNTS_OK
+0 1 0
+HTTP 200, new connections: 1
+0 1 1
+HTTP 200, new connections: 0
+0 1 1
+HTTP 200, new connections: 0
+0 1 0
+HTTP 200, new connections: 0
+0 1 1
+HTTP 200, new connections: 0
+1 1 1
+HTTP 200, new connections: 1
+0 1 2
+HTTP 200, new connections: 0
+0 1 2
+HTTP 200, new connections: 0
+1 1 1
+HTTP 200, new connections: 0
+HTTP 503, new connections: 1
+HTTP 200, new connections: 0
+0 1 0

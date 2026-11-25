@@ -28,6 +28,8 @@
 #include "auth/auth.h"
 #include "auth/auth_common.h"
 
+#include <optional>
+
 static const bool LOG_LEVEL_LOCAL_SEARCH = env_exists ( "MANTICORE_LOG_LOCAL_SEARCH" ); // verbose logging local search events, ruled by this env variable
 #define LOG_COMPONENT_LOCSEARCHINFO __LINE__ << " "
 #define LOCSEARCHINFO LOGINFO ( LOCAL_SEARCH, LOCSEARCHINFO )
@@ -177,14 +179,14 @@ cServedIndexRefPtr_c KeepCollection_c::Get ( const CSphString & sName ) const
 	return *ppIndex;
 }
 
-void SearchHandler_c::RunCollect ( const CSphQuery &tQuery, const CSphString &sIndex, CSphString * pErrors, CSphVector<BYTE> * pCollectedDocs )
+void SearchHandler_c::RunCollect ( const CSphQuery &tQuery, const CSphString &sIndex, CSphString * pErrors, CSphVector<BYTE> * pCollectedDocs, const RWIdx_c * pLockedIndex )
 {
 	m_bQueryLog = false;
 	m_pCollectedDocs = pCollectedDocs;
-	RunActionQuery ( tQuery, sIndex, pErrors );
+	RunActionQuery ( tQuery, sIndex, pErrors, pLockedIndex );
 }
 
-void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors )
+void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, const RWIdx_c * pLockedIndex )
 {
 	SetQuery ( 0, tQuery, nullptr );
 	m_dQueries[0].m_sIndexes = sIndex;
@@ -197,7 +199,7 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 	int64_t tmLocal = -sphMicroTimer();
 	int64_t tmCPU = -sphTaskCpuTimer ();
 
-	RunLocalSearches();
+	RunLocalSearches ( pLockedIndex );
 	tmLocal += sphMicroTimer();
 	tmCPU += sphTaskCpuTimer();
 
@@ -656,7 +658,21 @@ bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt
 }
 
 
-void SearchHandler_c::PopulateCountDistinct ( CSphVector<CSphVector<int64_t>> & dCountDistinct ) const
+// A document collection for an UPDATE may already hold the table read lock.
+// Reuse that lock instead of queuing behind a waiting writer.
+static const CSphIndex * ReadSearchIndex ( const cServedIndexRefPtr_c & pServed, std::optional<RIdx_c> & tLock, const RWIdx_c * pLockedIndex )
+{
+	if ( pLockedIndex )
+	{
+		assert ( pLockedIndex->Ptr()==UnlockedHazardIdxFromServed ( *pServed ) );
+		return pLockedIndex->Ptr();
+	}
+
+	return tLock.emplace ( pServed ).Ptr();
+}
+
+
+void SearchHandler_c::PopulateCountDistinct ( CSphVector<CSphVector<int64_t>> & dCountDistinct, const RWIdx_c * pLockedIndex ) const
 {
 	dCountDistinct.Resize ( m_dLocal.GetLength() );
 
@@ -670,16 +686,18 @@ void SearchHandler_c::PopulateCountDistinct ( CSphVector<CSphVector<int64_t>> & 
 		auto & dIndexCountDistinct = dCountDistinct[iLocal];
 		dIndexCountDistinct.Resize ( m_dNQueries.GetLength() );
 		dIndexCountDistinct.Fill(-1);
+		std::optional<RIdx_c> tLock;
+		const CSphIndex * pLocked = ReadSearchIndex ( pIndex, tLock, pLockedIndex );
 		ARRAY_FOREACH ( i, dIndexCountDistinct )
 		{
 			auto & tQuery = m_dNQueries[i];
-			int iGroupby = GetAliasedAttrIndex ( tQuery.m_sGroupBy, tQuery, RIdx_c(pIndex)->GetMatchSchema() );
+			int iGroupby = GetAliasedAttrIndex ( tQuery.m_sGroupBy, tQuery, pLocked->GetMatchSchema() );
 			if ( iGroupby<0 )
 				continue;
 
-			auto & sAttr = RIdx_c(pIndex)->GetMatchSchema().GetAttr(iGroupby).m_sName;
+			auto & sAttr = pLocked->GetMatchSchema().GetAttr(iGroupby).m_sName;
 			CSphString sModifiedAttr;
-			dIndexCountDistinct[i] = RIdx_c(pIndex)->GetCountDistinct ( sAttr, sModifiedAttr );
+			dIndexCountDistinct[i] = pLocked->GetCountDistinct ( sAttr, sModifiedAttr );
 		}
 	}
 }
@@ -692,7 +710,7 @@ int SearchHandler_c::CalcMaxThreadsPerIndex ( int iConcurrency ) const
 }
 
 
-void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
+void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency, const RWIdx_c * pLockedIndex )
 {
 	if ( !iConcurrency )
 		iConcurrency =  MaxChildrenThreads();
@@ -712,7 +730,7 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 	}
 
 	CSphVector<CSphVector<int64_t>> dCountDistinct;
-	PopulateCountDistinct ( dCountDistinct );
+	PopulateCountDistinct ( dCountDistinct, pLockedIndex );
 
 	int iMaxThreadsPerIndex = CalcMaxThreadsPerIndex ( iAvailableWorkers );
 
@@ -729,7 +747,8 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 		iEnabledIndexes++;
 		auto & tPSInfo = m_dPSInfo[iLocal];
 		auto & tSplitData = dSplitData[iLocal];
-		RIdx_c pIdx { pIndex };
+		std::optional<RIdx_c> tLock;
+		const CSphIndex * pIdx = ReadSearchIndex ( pIndex, tLock, pLockedIndex );
 		if ( GetPseudoSharding () || pIdx->IsRT() )
 		{
 			// do metric calcs
@@ -999,13 +1018,15 @@ bool SearchHandler_c::SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, 
 }
 
 
-void SearchHandler_c::RunLocalSearches()
+void SearchHandler_c::RunLocalSearches ( const RWIdx_c * pLockedIndex )
 {
 	int64_t tmLocal = sphMicroTimer ();
 
 	// setup local searches
 	const int iQueries = m_dNQueries.GetLength ();
 	const int iNumLocals = m_dLocal.GetLength();
+	// Only single-table action queries can borrow a caller's lock.
+	assert ( !pLockedIndex || iNumLocals==1 );
 
 //	sphWarning ( "%s:%d", __FUNCTION__, __LINE__ );
 //	sphWarning ("Locals: %d, queries %d", iNumLocals, iQueries );
@@ -1055,7 +1076,7 @@ void SearchHandler_c::RunLocalSearches()
 			return m_dLocal[a].m_iMass>m_dLocal[b].m_iMass;
 		} ) );
 
-		CalcThreadsPerIndex ( pDispatcher->GetConcurrency() );
+		CalcThreadsPerIndex ( pDispatcher->GetConcurrency(), pLockedIndex );
 	}
 
 //	for ( int iOrder : dOrder )
@@ -1127,7 +1148,8 @@ void SearchHandler_c::RunLocalSearches()
 			bool bLocalMultiQueue = false;
 
 			{	// scope for r-locking the index
-				RIdx_c pIndex { pServed };
+				std::optional<RIdx_c> tLock;
+				const CSphIndex * pIndex = ReadSearchIndex ( pServed, tLock, pLockedIndex );
 
 				tCtx.m_tHook.SetIndex ( pIndex );
 				tCtx.m_tHook.SetQueryType ( m_eQueryType );

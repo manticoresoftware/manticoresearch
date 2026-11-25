@@ -43,12 +43,12 @@ class DocsCollector_c::Impl_c
 		return m_bFastPath;
 	}
 
-	void ProcessFull ( const CSphQuery& tQuery, bool bJson, QueryType_e eQueryType, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
+	void ProcessFull ( const CSphQuery& tQuery, bool bJson, QueryType_e eQueryType, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError, const RWIdx_c * pLockedIndex )
 	{
 		CrashQueryKeeper_c _; // the search points the crash index into tHandler; restore the caller's one on exit
 		SearchHandler_c tHandler ( 1, CreateQueryParser ( bJson ), eQueryType, false );
 		tHandler.m_dAcquired.AddIndex ( sIndex, pDesc );
-		tHandler.RunCollect ( tQuery, sIndex, pError, &m_dCompressedDocids );
+		tHandler.RunCollect ( tQuery, sIndex, pError, &m_dCompressedDocids, pLockedIndex );
 
 		if ( m_dCompressedDocids.IsEmpty() )
 			return;
@@ -90,10 +90,10 @@ class DocsCollector_c::Impl_c
 	}
 
 public:
-	Impl_c ( const CSphQuery& tQuery, bool bJson, QueryType_e eQueryType, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
+	Impl_c ( const CSphQuery& tQuery, bool bJson, QueryType_e eQueryType, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError, const RWIdx_c * pLockedIndex )
 	{
 		if ( !ProcessFast ( tQuery ) )
-			ProcessFull ( tQuery, bJson, eQueryType, sIndex, pDesc, pError );
+			ProcessFull ( tQuery, bJson, eQueryType, sIndex, pDesc, pError, pLockedIndex );
 	}
 
 	bool GetValuesChunk ( CSphVector<DocID_t>& dValues, int iValues )
@@ -126,13 +126,13 @@ public:
 };
 
 /// public iface
-DocsCollector_c::DocsCollector_c ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
-	: DocsCollector_c ( tQuery, bJson, tQuery.m_eQueryType, sIndex, pDesc, pError )
+DocsCollector_c::DocsCollector_c ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError, const RWIdx_c * pLockedIndex )
+	: DocsCollector_c ( tQuery, bJson, tQuery.m_eQueryType, sIndex, pDesc, pError, pLockedIndex )
 {}
 
 
-DocsCollector_c::DocsCollector_c ( const CSphQuery& tQuery, bool bJson, QueryType_e eQueryType, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
-	: m_pImpl { std::make_unique<Impl_c> ( tQuery, bJson, eQueryType, sIndex, pDesc, pError ) }
+DocsCollector_c::DocsCollector_c ( const CSphQuery& tQuery, bool bJson, QueryType_e eQueryType, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError, const RWIdx_c * pLockedIndex )
+	: m_pImpl { std::make_unique<Impl_c> ( tQuery, bJson, eQueryType, sIndex, pDesc, pError, pLockedIndex ) }
 {}
 
 DocsCollector_c::~DocsCollector_c() = default;

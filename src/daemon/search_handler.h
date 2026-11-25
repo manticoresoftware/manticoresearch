@@ -87,7 +87,7 @@ public:
 									~SearchHandler_c();
 
 	void							RunQueries ();					///< run all queries, get all results
-	void							RunCollect ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<BYTE> * pCollectedDocs );
+	void							RunCollect ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<BYTE> * pCollectedDocs, const RWIdx_c * pLockedIndex = nullptr );
 	void							SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc );
 	void							SetJoinQueryOptions ( int iQuery, const CSphQuery & tJoinQueryOptions ) const { m_dJoinQueryOptions[iQuery] = tJoinQueryOptions; }
 	void							SetProfile ( QueryProfile_c * pProfile );
@@ -107,7 +107,7 @@ public:
 private:
 									explicit SearchHandler_c ( int iQueries ) noexcept;
 	void							RunSubset ( int iStart, int iEnd );	///< run queries against index(es) from first query in the subset
-	void							RunLocalSearches();
+	void							RunLocalSearches ( const RWIdx_c * pLockedIndex = nullptr );
 	bool							AllowsMulti() const;
 	void							SetupLocalDF();
 
@@ -167,7 +167,7 @@ private:
 	bool							CheckMultiQuery() const;
 	bool							AcquireInvokedIndexes();
 	void							UniqLocals ( VecTraits_T<LocalIndex_t>& dLocals );
-	void							RunActionQuery ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors ); ///< run delete/update
+	void							RunActionQuery ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, const RWIdx_c * pLockedIndex ); ///< run delete/update
 	bool							BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ); // fixme!
 	void							CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent );
 	void							CalcPerIndexStats ( const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ) const;
@@ -183,9 +183,9 @@ private:
 	CSphVector<JoinedIndexes_t>		GetRlockedJoinedIndexes ( const CSphVector<CSphVector<JoinedServedIndex_t>> & dJoinedServed, std::vector<RIdx_c> & dRLockedJoined ) const;
 	bool							CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex* pIndex, CSphVector<JoinedIndexes_t> & dJoinedIndexes, const CSphString & sLocal, const char * szParent, ISphExprHook * pHook );
 
-	void							PopulateCountDistinct ( CSphVector<CSphVector<int64_t>> & dCountDistinct ) const;
+	void							PopulateCountDistinct ( CSphVector<CSphVector<int64_t>> & dCountDistinct, const RWIdx_c * pLockedIndex ) const;
 	int								CalcMaxThreadsPerIndex ( int iConcurrency ) const;
-	void							CalcThreadsPerIndex ( int iConcurrency );
+	void							CalcThreadsPerIndex ( int iConcurrency, const RWIdx_c * pLockedIndex );
 
 	bool							SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, GlobalSorters_c & tGlobalSorters, LocalSearchRef_t & tCtx, int64_t & iCpuTime, int iQuery, int iLocal, int64_t tmLocalCallUs, bool bLocalMultiQueue, const CSphQueryResultMeta & tMqMeta, const CSphQueryResult & tMqRes );
 };

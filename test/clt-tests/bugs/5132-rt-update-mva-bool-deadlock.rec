@@ -1,0 +1,52 @@
+–––– comment –––
+Issue #5132: concurrent MVA and bool UPDATEs with id BETWEEN must not wedge an RT table.
+
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS t; CREATE TABLE t(title text,tags multi,flag bool); INSERT INTO t(id,title,tags,flag) VALUES(1,'x',(1),0)"
+––– output –––
+––– input –––
+cat <<'PHP' > /tmp/issue-5132.php
+<?php
+mysqli_report(MYSQLI_REPORT_OFF);
+function db($timeout = 60) {
+    $db = mysqli_init();
+    mysqli_options($db, MYSQLI_OPT_READ_TIMEOUT, $timeout);
+    mysqli_real_connect($db, '127.0.0.1', '', '', '', 9306);
+    return $db;
+}
+$pids = [];
+$ok = true;
+foreach ([
+    'UPDATE t SET tags=(1) WHERE id BETWEEN 1 AND 1',
+    'UPDATE t SET flag=1 WHERE id BETWEEN 1 AND 1',
+] as $query) {
+    $pid = pcntl_fork();
+    if ($pid === -1) { $ok = false; break; }
+    if ($pid > 0) { $pids[] = $pid; continue; }
+    $db = db();
+    while ($db->query($query)) {}
+    exit(1);
+}
+if ($ok) {
+    sleep(5);
+    try {
+        $ok = (bool)db(30)->query('SELECT COUNT(*) FROM t');
+    } catch (Throwable $e) {
+        $ok = false;
+    }
+}
+foreach ($pids as $pid) {
+    if (pcntl_waitpid($pid, $status, WNOHANG) !== 0) {
+        $ok = false;
+        continue;
+    }
+    posix_kill($pid, SIGKILL);
+    pcntl_waitpid($pid, $status);
+}
+echo $ok ? "table responsive\n" : "table deadlocked\n";
+exit($ok ? 0 : 1);
+PHP
+php /tmp/issue-5132.php
+––– output –––
+table responsive

@@ -1842,7 +1842,7 @@ bool FilterCoversIndex ( const CSphFilterSettings & tFilter, const CreateFilterC
 	{
 		if ( pMatch->m_pExpr )
 		{
-			if ( !pMatch->IsColumnarExpr() )
+			if ( !pMatch->IsColumnarExpr() && !pMatch->IsStoredExpr() )
 				return false;
 
 			CSphString sColumn;

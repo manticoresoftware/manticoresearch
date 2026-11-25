@@ -158,9 +158,23 @@ def main():
         choice = args.prefix + "_choice"
         sql(f"CREATE TABLE {choice}(body text, ts bigint, bucket int) postings_format='block'{storage}")
         for start in range(0, 16384, 512):
-            rows = [f"({i+1},'charge',{-(i//128)},{2 if i==8192 else i%2})" for i in range(start, start+512)]
+            rows = [f"({i+1},'charge{' probe' if i%8==0 else ''}',{127-i//128},{2 if i==8192 else i%2})" for i in range(start, start+512)]
             sql(f"INSERT INTO {choice}(id,body,ts,bucket) VALUES " + ",".join(rows))
         sql("FLUSH RAMCHUNK " + choice)
+
+        if args.columnar:
+            # Selecting both stored attributes makes the sorter fetch them after LIMIT.
+            base = f"SELECT ts,bucket FROM {choice} WHERE MATCH('probe')"
+            order = " ORDER BY weight() DESC,id ASC LIMIT 10 OPTION threads=1,cutoff=0"
+            unfiltered = sql(base + order + ";SHOW META")
+            covered = sql(base + " AND ts BETWEEN 0 AND 127" + order + ";SHOW META")
+            assert covered[0]["data"] == unfiltered[0]["data"]
+            assert meta(covered)["total_found"] == meta(unfiltered)["total_found"] == "2048"
+            assert "ts:" not in meta(covered).get("index", ""), meta(covered)
+
+            partial = sql(base + " AND ts BETWEEN 0 AND 1" + order + ";SHOW META")
+            assert meta(partial)["total_found"] == "32", meta(partial)
+            assert all(0 <= row["ts"] <= 1 for row in partial[0]["data"])
 
         query = (f"SELECT id,ts FROM {choice} WHERE MATCH('charge') AND bucket=1 "
                  "ORDER BY ts DESC,id DESC LIMIT 7,20 OPTION threads=1,max_matches=32")

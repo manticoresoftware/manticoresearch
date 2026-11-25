@@ -340,6 +340,28 @@ float SortBoundScanCost_t::CalcSortBoundCost ( int64_t iBoundsRead, int64_t iBlo
 }
 
 
+static bool SetupSortBounds ( SortBoundScanPlan_t & tPlan, const SelectIteratorCtx_t & tSelect, const CSphColumnInfo & tAttr, const DWORD * pMinMax )
+{
+	if ( tAttr.IsColumnar() )
+	{
+		auto * pBounds = tSelect.m_pColumnar ? tSelect.m_pColumnar->GetBlockBounds ( tAttr.m_sName.cstr() ) : nullptr;
+		if ( !pBounds )
+			return false;
+
+		tPlan.m_pColumnarBounds = pBounds;
+		tPlan.m_iLeafLevel = pBounds->GetNumMinMaxLevels()-1;
+		tPlan.m_iBlockRows = pBounds->GetLeafRows();
+		return tPlan.m_iBlockRows>0 && tPlan.m_tRange.m_tMaxRowID/tPlan.m_iBlockRows<RowID_t(pBounds->GetNumMinMaxBlocks(tPlan.m_iLeafLevel));
+	}
+
+	tPlan.m_iBlockRows = DOCINFO_INDEX_FREQ;
+	tPlan.m_pMinMax = pMinMax;
+	tPlan.m_iStride = tSelect.m_tIndexSchema.GetRowSize();
+	tPlan.m_tLocator = tAttr.m_tLocator;
+	return pMinMax!=nullptr;
+}
+
+
 SphAttr_t SortBoundScanPlan_t::GetBlockBound ( RowID_t tBlock, bool bMax ) const
 {
 	if ( IsColumnar() )
@@ -349,6 +371,19 @@ SphAttr_t SortBoundScanPlan_t::GetBlockBound ( RowID_t tBlock, bool bMax ) const
 	}
 
 	return sphGetRowAttr ( m_pMinMax+(uint64_t(tBlock)*2+int(bMax))*m_iStride, m_tLocator );
+}
+
+
+SphAttr_t SortBoundScanPlan_t::GetChunkBound ( int64_t iRows, bool bMax ) const
+{
+	if ( IsColumnar() )
+	{
+		const auto tRoot = m_pColumnarBounds->GetMinMax ( 0, 0 );
+		return bMax ? tRoot.second : tRoot.first;
+	}
+
+	// The rowwise chunk min/max pair follows the last leaf.
+	return GetBlockBound ( RowID_t ( (iRows+m_iBlockRows-1)/m_iBlockRows ), bMax );
 }
 
 
@@ -444,6 +479,96 @@ static int64_t GetSortBoundMatchCount ( const CSphIndex & tIndex, const CSphFilt
 }
 
 
+static int64_t GetFulltextEqualityRows ( const SelectIteratorCtx_t & tSelect, const CSphIndex & tIndex, RowIdBoundaries_t & tRange )
+{
+	const auto * pRowRange = GetRowIdFilter ( tSelect.m_dFilters, RowID_t(tSelect.m_iTotalDocs), tRange );
+	const CSphFilterSettings * pEquality = nullptr;
+	for ( const auto & tFilter : tSelect.m_dFilters )
+	{
+		if ( &tFilter==pRowRange )
+			continue;
+
+		if ( pEquality || tFilter.m_bOptional || tFilter.m_bExclude )
+			return -1;
+
+		pEquality = &tFilter;
+	}
+
+	// Covered ranges have already been removed. Cost the remaining equality using its SI.
+	if ( !pEquality || !tSelect.m_tIndexSchema.GetAttr(pEquality->m_sAttrName.cstr()) )
+		return -1;
+
+	return GetSortBoundMatchCount ( tIndex, pEquality, tSelect.m_tQuery.m_eCollation );
+}
+
+
+bool PreferFulltextSortBound ( const SelectIteratorCtx_t & tSelect, const CSphIndex & tIndex, const SortBound_c & tBound, const CSphColumnInfo & tSortAttr, const DWORD * pMinMax, int64_t iDocsAfterFulltext, int iSorterCapacity )
+{
+	if ( iDocsAfterFulltext<=0 || iSorterCapacity<=0 || !tSelect.m_tQuery.m_tIndexHints.GetAll().IsEmpty() )
+		return false;
+
+	SortBoundScanPlan_t tBlocks;
+	auto & tRange = tBlocks.m_tRange;
+	tRange = { 0, RowID_t(tSelect.m_iTotalDocs-1) };
+	const int64_t iEqualityRows = GetFulltextEqualityRows ( tSelect, tIndex, tRange );
+	if ( iEqualityRows<=0 || tRange.m_tMinRowID>tRange.m_tMaxRowID || tRange.m_tMaxRowID>=tSelect.m_iTotalDocs )
+		return false;
+
+	const double fRows = int64_t(tRange.m_tMaxRowID)-tRange.m_tMinRowID+1;
+	const double fEqualityRatio = double(iEqualityRows)/tSelect.m_iTotalDocs;
+
+	// A selective SI can exhaust its row IDs for less work than filling a fresh collector through the residual filter.
+	if ( fEqualityRatio*fRows <= iSorterCapacity/fEqualityRatio )
+		return false;
+
+	if ( !SetupSortBounds ( tBlocks, tSelect, tSortAttr, pMinMax ) )
+		return false;
+
+	if ( tBound.IsSet() && tBound.CompetitiveKey ( tBlocks.GetChunkBound ( tSelect.m_iTotalDocs, tBound.IsDescending() ) )<tBound.CompetitiveKey(tBound.GetValue()) )
+		return true;
+
+	const RowID_t tFirst = tRange.m_tMinRowID/tBlocks.m_iBlockRows;
+	const RowID_t uBlocks = tRange.m_tMaxRowID/tBlocks.m_iBlockRows-tFirst+1;
+	constexpr int MAX_SAMPLES = 32;
+	const int iSamples = Min ( int(uBlocks), MAX_SAMPLES );
+	const double fMatchesAfterFTAndFilters = fRows * (double(iDocsAfterFulltext)/tSelect.m_iTotalDocs) * fEqualityRatio;
+	if ( !tBound.IsSet() && fMatchesAfterFTAndFilters<=iSorterCapacity )
+		return false;
+
+	// Each sampled block stands for an equal share of the matching rows. Keep enough
+	// preceding block minima (maxima for ASC) to model the collector filling in row-ID order.
+	const int iNeededToFillSorter = tBound.IsSet() ? 0 : int(ceil(double(iSorterCapacity)*iSamples/fMatchesAfterFTAndFilters));
+	SphAttr_t dWorst[MAX_SAMPLES];
+	int iCompetitive = 0;
+	for ( int i=0; i<iSamples; ++i )
+	{
+		const RowID_t tBlock = tFirst + RowID_t ( (int64_t(2*i+1)*uBlocks)/(2*iSamples) );
+		const auto tBest = tBound.CompetitiveKey ( tBlocks.GetBlockBound ( tBlock, tBound.IsDescending() ) );
+		if ( tBound.IsSet() )
+		{
+			iCompetitive += tBest>=tBound.CompetitiveKey(tBound.GetValue());
+			continue;
+		}
+
+		const bool bFull = i>=iNeededToFillSorter;
+		iCompetitive += !bFull || tBest>=dWorst[iNeededToFillSorter-1];
+
+		const auto tWorst = tBound.CompetitiveKey ( tBlocks.GetBlockBound ( tBlock, !tBound.IsDescending() ) );
+		if ( bFull && tWorst<=dWorst[iNeededToFillSorter-1] )
+			continue;
+
+		// When full, discard the weakest bound to make room for the new one.
+		auto * pLast = dWorst + Min ( i, iNeededToFillSorter-1 );
+		auto * pInsert = std::lower_bound ( dWorst, pLast, tWorst, std::greater<>() );
+		std::move_backward ( pInsert, pLast, pLast+1 );
+		*pInsert = tWorst;
+	}
+
+	// The sample only selects an access path. Execution uses the real collector threshold.
+	return iCompetitive<iSamples && double(iDocsAfterFulltext)*Max ( iCompetitive, 1 ) < double(iEqualityRows)*iSamples;
+}
+
+
 namespace
 {
 class SortBoundScanPlanner_c
@@ -476,7 +601,6 @@ private:
 	bool						EstimateCost ( SortBoundScanCost_t & tCost, const CSphIndex & tIndex, bool bSelectIterators, CSphVector<SecondaryIndexInfo_t> & dOrdinaryPlan, CSphString & sWarning ) const;
 	bool						SelectBlockScan ( const CSphIndex & tIndex, bool bSelectIterators, CSphVector<SecondaryIndexInfo_t> & dOrdinaryPlan, CSphString & sWarning );
 	bool						Reject ( const char * szReason );
-	bool						SetupBlocks ( const CSphColumnInfo & tAttr );
 };
 
 
@@ -565,28 +689,6 @@ bool SortBoundScanPlanner_c::SetupFilter()
 }
 
 
-bool SortBoundScanPlanner_c::SetupBlocks ( const CSphColumnInfo & tAttr )
-{
-	if ( tAttr.IsColumnar() )
-	{
-		auto * pBounds = m_tSelect.m_pColumnar->GetBlockBounds ( tAttr.m_sName.cstr() );
-		if ( !pBounds )
-			return false;
-
-		m_tPlan.m_pColumnarBounds = pBounds;
-		m_tPlan.m_iLeafLevel = pBounds->GetNumMinMaxLevels()-1;
-		m_tPlan.m_iBlockRows = pBounds->GetLeafRows();
-		return m_tPlan.m_iBlockRows>0 && m_tPlan.m_tRange.m_tMaxRowID/m_tPlan.m_iBlockRows<RowID_t(pBounds->GetNumMinMaxBlocks(m_tPlan.m_iLeafLevel));
-	}
-
-	m_tPlan.m_iBlockRows = DOCINFO_INDEX_FREQ;
-	m_tPlan.m_pMinMax = m_pMinMax;
-	m_tPlan.m_iStride = m_tSelect.m_tIndexSchema.GetRowSize();
-	m_tPlan.m_tLocator = tAttr.m_tLocator;
-	return true;
-}
-
-
 bool SortBoundScanPlanner_c::EstimateCost ( SortBoundScanCost_t & tCost, const CSphIndex & tIndex, bool bSelectIterators, CSphVector<SecondaryIndexInfo_t> & dOrdinaryPlan, CSphString & sWarning ) const
 {
 	int64_t iRows = m_tSelect.m_iTotalDocs;
@@ -625,7 +727,7 @@ bool SortBoundScanPlanner_c::SelectBlockScan ( const CSphIndex & tIndex, bool bS
 	if ( !m_bForce && !EstimateCost ( tCost, tIndex, bSelectIterators, dOrdinaryPlan, sWarning ) )
 		return Reject ( BOUNDS_UNAVAILABLE );
 
-	if ( !SetupBlocks(*m_pSortAttr) )
+	if ( !SetupSortBounds ( m_tPlan, m_tSelect, *m_pSortAttr, m_pMinMax ) )
 		return Reject ( BOUNDS_UNAVAILABLE );
 
 	if ( !m_bForce && !ShouldUseSortBoundScan ( tCost, m_tPlan, m_tBound ) )

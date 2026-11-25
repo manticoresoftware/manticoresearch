@@ -1184,6 +1184,16 @@ private:
 	template<typename RUN>
 	bool						SplitQuery ( RUN && tRun, CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const;
 	bool						ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker, bool bPlanForKNNIterator ) const;
+	struct FulltextAccess_t
+	{
+		CSphVector<CSphFilterSettings>		m_dModifiedFilters;	// backing storage for filters rebuilt during iterator setup
+		std::unique_ptr<RowidIterator_i>	m_pIterator;
+		std::unique_ptr<SortBoundFilter_c>	m_pSortFilter;
+		bool								m_bKNNIteratorCreated = false;
+	};
+
+	bool						SetupFulltextAccess ( FulltextAccess_t & tAccess, const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, const CSphVector<const ISphSchema *> & dSorterSchemas, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphQueryResultMeta & tMeta, const CSphMultiQueryArgs & tArgs, int iCutoff, ISphRanker & tRanker, const CSphColumnInfo * pSortAttr, SortBound_c & tSortBound, int iMatchPoolSize ) const;
+	std::unique_ptr<SortBoundFilter_c> CreateFulltextSortBoundFilter ( const SelectIteratorCtx_t & tSelect, const CSphColumnInfo & tAttr, SortBound_c & tBound, ISphRanker & tRanker, bool bAllowSortSI ) const;
 	std::pair<RowidIterator_i *, bool> SpawnIterators ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, const CSphVector<const ISphSchema *> & dSorterSchemas, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, bool bUseSICache, ISphRanker * pRanker, bool & bKNNIteratorCreated, CSphVector<SecondaryIndexInfo_t> * pFullscanPlan = nullptr ) const;
 	bool						SelectIteratorsFT ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tSorterSchema, ISphRanker * pRanker, CSphVector<SecondaryIndexInfo_t> & dSIInfo, int iCutoff, int iThreads, StrVec_t & dWarnings ) const;
 
@@ -12537,6 +12547,64 @@ static void SetupRowIdBoundaries ( const CSphVector<CSphFilterSettings> & dFilte
 }
 
 
+std::unique_ptr<SortBoundFilter_c> CSphIndex_VLN::CreateFulltextSortBoundFilter ( const SelectIteratorCtx_t & tSelect, const CSphColumnInfo & tAttr, SortBound_c & tBound, ISphRanker & tRanker, bool bAllowSortSI ) const
+{
+	std::unique_ptr<SortBoundFilter_c> pSortFilter;
+	const SIContainer_c * pSortSI = bAllowSortSI && m_tSI.IsEnabled(tBound.GetAttr()) && !tSelect.m_tQuery.m_tIndexHints.HasFilterIteratorHints() ? &m_tSI : nullptr;
+	if ( tAttr.IsColumnar() )
+		pSortFilter = std::make_unique<SortBoundFilter_c> ( tBound, *m_pColumnar, RowID_t(m_iDocinfo), pSortSI );
+	else
+		pSortFilter = std::make_unique<SortBoundFilter_c> ( tBound, tAttr.m_tLocator, GetRawAttrs(), m_pDocinfoIndex, RowID_t(m_iDocinfo), m_tSchema.GetRowSize(), pSortSI );
+
+	CSphFilterSettings tSortFilter;
+	tSortFilter.m_sAttrName = tBound.GetAttr();
+	tSortFilter.m_eType = SPH_FILTER_RANGE;
+
+	pSortFilter->SetFilterComplexity ( CalcGetFilterComplexity ( {}, tSortFilter, tSelect ) );
+
+	if ( !pSortFilter->IsValid() || !tRanker.SetCandidateFilter(pSortFilter.get()) )
+		return nullptr;
+
+	return pSortFilter;
+}
+
+
+bool CSphIndex_VLN::SetupFulltextAccess ( FulltextAccess_t & tAccess, const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<JsonSIFilterTransform_t> & dJsonSITransforms, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, const CSphVector<const ISphSchema *> & dSorterSchemas, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, CSphQueryResultMeta & tMeta, const CSphMultiQueryArgs & tArgs, int iCutoff, ISphRanker & tRanker, const CSphColumnInfo * pSortAttr, SortBound_c & tSortBound, int iMatchPoolSize ) const
+{
+	const bool bCached = tRanker.IsCache();
+	SelectIteratorCtx_t tEstimateCtx ( tQuery, dFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_tSI, iCutoff, m_iDocinfo, 1 );
+	if ( pSortAttr && !bCached && tCtx.m_pFilter && !tFlx.m_pFilterTree && dJsonSITransforms.IsEmpty() && !tQuery.m_bHybridSearch && !dFilters.IsEmpty() && dFilters.GetLength()<=2 )
+	{
+		tSortBound.Update();
+		if ( PreferFulltextSortBound ( tEstimateCtx, *this, tSortBound, *pSortAttr, m_pDocinfoIndex, tRanker.Estimate(m_iDocinfo).m_iDocs, iMatchPoolSize ) )
+		{
+			tAccess.m_pSortFilter = CreateFulltextSortBoundFilter ( tEstimateCtx, *pSortAttr, tSortBound, tRanker, false );
+			if ( tAccess.m_pSortFilter )
+				return true;
+		}
+	}
+
+	if ( !bCached )
+	{
+		auto [pIterator,bError] = SpawnIterators ( tQuery, dFilters, dJsonSITransforms, tCtx, tFlx, tMaxSorterSchema, dSorterSchemas, pModifiedMatchSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, tAccess.m_dModifiedFilters, tArgs.m_bUseSICache, &tRanker, tAccess.m_bKNNIteratorCreated );
+		tAccess.m_pIterator.reset(pIterator);
+		if ( bError )
+			return false;
+
+		if ( pIterator )
+		{
+			tRanker.ExtraData ( EXTRA_SET_ITERATOR, (void**)&pIterator );
+			return true;
+		}
+	}
+
+	if ( pSortAttr )
+		tAccess.m_pSortFilter = CreateFulltextSortBoundFilter ( tEstimateCtx, *pSortAttr, tSortBound, tRanker, true );
+
+	return true;
+}
+
+
 bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, CSphQueryResult & tResult, const VecTraits_T<ISphMatchSorter *> & dSorters, const XQQuery_t & tXQ, DictRefPtr_c pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, int64_t tmMaxTimer ) const
 {
 	assert ( !tQuery.m_sQuery.IsEmpty() && tQuery.m_eMode!=SPH_MATCH_FULLSCAN ); // scans must go through MultiScan()
@@ -12707,50 +12775,11 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 	if ( tMeta.m_tIteratorStats.m_dIterators.GetLength()!=iOldLen )
 		tMeta.m_tIteratorStats.m_iTotal = 1;
 
-	CSphVector<CSphFilterSettings> dFiltersAfterIterator; // holds filter settings if they were modified. filters hold pointers to those settings
+	FulltextAccess_t tAccess;
+	if ( !SetupFulltextAccess ( tAccess, tQuery, dTransformedFilters, dJsonSITransforms, tCtx, tFlx, tMaxSorterSchema, dSorterSchemas, pModifiedMatchSchema, tMeta, tArgs, iCutoff, *pRanker, bSortBound ? pSortAttr : nullptr, tSortBound, iMatchPoolSize ) )
+		return false;
 
-	// skip SI create if cache ranker used
-	bool bIsCacheRanker = pRanker->IsCache();
-	std::pair<RowidIterator_i *, bool>  tSpawned = {nullptr, false};
-	std::unique_ptr<RowidIterator_i> pIterator;
-	bool bKNNIteratorCreated = false;
-
-	if ( !bIsCacheRanker )
-	{
-		// Not using cache - spawn SI iterators if needed
-		tSpawned = SpawnIterators ( tQuery, dTransformedFilters, dJsonSITransforms, tCtx, tFlx, tMaxSorterSchema, dSorterSchemas, pModifiedMatchSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, tArgs.m_bUseSICache, pRanker.get(), bKNNIteratorCreated );
-		pIterator = std::unique_ptr<RowidIterator_i> ( tSpawned.first );
-		if ( tSpawned.second )
-			return false;
-
-		if ( pIterator )
-		{
-			auto pIter = pIterator.get();
-			pRanker->ExtraData ( EXTRA_SET_ITERATOR, (void**)&pIter );
-		}
-	}
-
-	std::unique_ptr<SortBoundFilter_c> pSortFilter;
-	if ( bSortBound && !pIterator )
-	{
-		const SIContainer_c * pSortSI = m_tSI.IsEnabled(tSortBound.GetAttr()) && !tQuery.m_tIndexHints.HasFilterIteratorHints() ? &m_tSI : nullptr;
-		if ( pSortAttr->IsColumnar() )
-			pSortFilter = std::make_unique<SortBoundFilter_c> ( tSortBound, *m_pColumnar, RowID_t(m_iDocinfo), pSortSI );
-		else
-			pSortFilter = std::make_unique<SortBoundFilter_c> ( tSortBound, pSortAttr->m_tLocator, GetRawAttrs(), m_pDocinfoIndex, RowID_t(m_iDocinfo), m_tSchema.GetRowSize(), pSortSI );
-
-		CSphFilterSettings tSortFilter;
-		tSortFilter.m_sAttrName = tSortBound.GetAttr();
-		tSortFilter.m_eType = SPH_FILTER_RANGE;
-
-		SelectIteratorCtx_t tEstimateCtx ( tQuery, dTransformedFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_tSI, iCutoff, m_iDocinfo, 1 );
-		pSortFilter->SetFilterComplexity ( CalcGetFilterComplexity ( {}, tSortFilter, tEstimateCtx ) );
-
-		if ( !pSortFilter->IsValid() || !pRanker->SetCandidateFilter(pSortFilter.get()) )
-			pSortFilter.reset();
-	}
-
-	if ( !AddLateKNNDistFilter ( tQuery, bKNNIteratorCreated, tCtx, tFlx, tMeta ) )
+	if ( !AddLateKNNDistFilter ( tQuery, tAccess.m_bKNNIteratorCreated, tCtx, tFlx, tMeta ) )
 		return false;
 
 	//////////////////////////////////////
@@ -12790,15 +12819,15 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 	switch ( iIndex )
 	{
 #define DECL_FNSCAN( _, n, params ) case n: MatchExtended<!!(n&64), !!(n&32), !!(n&16), !!(n&8), !!(n&4), !!(n&2), !!(n&1)> params; break;
-	BOOST_PP_REPEAT ( 128, DECL_FNSCAN, ( tCtx, tQuery, dSorters, pRanker.get(), iMyTag, tArgs.m_iIndexWeight, iCutoff, pSortFilter ? &tSortBound : nullptr ) )
+	BOOST_PP_REPEAT ( 128, DECL_FNSCAN, ( tCtx, tQuery, dSorters, pRanker.get(), iMyTag, tArgs.m_iIndexWeight, iCutoff, tAccess.m_pSortFilter ? &tSortBound : nullptr ) )
 #undef DECL_FNSCAN
 		default:
 			assert ( 0 && "Internal error" );
 			break;
 	}
 
-	if ( pSortFilter )
-		FinalizeSortBound ( *pSortFilter, tSortBound, *pRanker, tMeta );
+	if ( tAccess.m_pSortFilter )
+		FinalizeSortBound ( *tAccess.m_pSortFilter, tSortBound, *pRanker, tMeta );
 
 	if ( !tMeta.m_sError.IsEmpty() )
 		return false;
@@ -12809,9 +12838,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, const QueryExec
 
 	SwitchProfile ( pProfile, SPH_QSTATE_FINALIZE );
 
-	if ( pIterator )
+	if ( tAccess.m_pIterator )
 	{
-		pIterator->AddDesc ( tMeta.m_tIteratorStats.m_dIterators );
+		tAccess.m_pIterator->AddDesc ( tMeta.m_tIteratorStats.m_dIterators );
 		tMeta.m_tIteratorStats.m_iTotal = 1;
 	}
 

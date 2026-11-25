@@ -82,7 +82,12 @@ struct SortBoundScanPlan_t
 
 	bool				IsColumnar() const { return !!m_pColumnarBounds; }
 	SphAttr_t			GetBlockBound ( RowID_t tBlock, bool bMax ) const;
+	SphAttr_t			GetChunkBound ( int64_t iRows, bool bMax ) const;
 };
+
+// Return true when using min/max bounds to skip blocks and checking the equality filter
+// on the remaining full-text matches is expected to be cheaper than intersecting postings with the secondary index.
+bool PreferFulltextSortBound ( const SelectIteratorCtx_t & tSelect, const CSphIndex & tIndex, const SortBound_c & tBound, const CSphColumnInfo & tSortAttr, const DWORD * pMinMax, int64_t iDocsAfterFulltext, int iSorterCapacity );
 
 // Select a sort-bound fullscan and retain the block bounds needed to spawn it.
 std::optional<SortBoundScanPlan_t> PlanSortBoundScan ( const SelectIteratorCtx_t & tSelect, const CreateFilterContext_t & tFlx, const CSphQueryContext & tCtx, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs, const CSphIndex & tIndex, const DWORD * pMinMax, bool bSelectIterators, SortBound_c & tBound, CSphVector<SecondaryIndexInfo_t> & dOrdinaryPlan, CSphString & sWarning, const char * & szReason );

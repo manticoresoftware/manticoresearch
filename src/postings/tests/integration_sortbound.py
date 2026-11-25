@@ -154,6 +154,23 @@ def main():
                 assert checks[-1]["meta"]["total_relation"] == "eq", checks[-1]
                 assert checks[-1]["meta"]["total_found"] == checks[-1]["exact"]["total_found"], checks[-1]
 
+    if args.expect_si:
+        choice = args.prefix + "_choice"
+        sql(f"CREATE TABLE {choice}(body text, ts bigint, bucket int) postings_format='block'{storage}")
+        for start in range(0, 16384, 512):
+            rows = [f"({i+1},'charge',{-(i//128)},{2 if i==8192 else i%2})" for i in range(start, start+512)]
+            sql(f"INSERT INTO {choice}(id,body,ts,bucket) VALUES " + ",".join(rows))
+        sql("FLUSH RAMCHUNK " + choice)
+
+        query = (f"SELECT id,ts FROM {choice} WHERE MATCH('charge') AND bucket=1 "
+                 "ORDER BY ts DESC,id DESC LIMIT 7,20 OPTION threads=1,max_matches=32")
+        compare(query)
+        assert scan_name in checks[-1]["meta"].get("index", ""), checks[-1]
+        compare(query + " /*+ SECONDARYINDEX(bucket) */")
+        assert "bucket:SecondaryIndex" in checks[-1]["meta"].get("index", ""), checks[-1]
+        compare(query.replace("bucket=1", "bucket=2").replace("LIMIT 7,20", "LIMIT 20"))
+        assert len(checks[-1]["rows"]) == 1 and checks[-1]["meta"]["total_relation"] == "eq", checks[-1]
+
     fallbacks = [
         f"SELECT id,ts FROM {table} WHERE {phrase} AND ts>10000 ORDER BY ts desc,id asc LIMIT 20 OPTION threads=1 /*+ SECONDARYINDEX(ts) */",
         f"SELECT COUNT(*) FROM {table} WHERE {phrase} OPTION threads=4",

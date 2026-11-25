@@ -15,16 +15,16 @@
 #include "sphinxfilter.h"
 
 
-class ColumnarSortFilter_c final : private columnar::BlockTester_i
+class ColumnarSortFilter_c final
 {
 public:
 				ColumnarSortFilter_c ( const SortBound_c & tBound, const columnar::Columnar_i & tColumnar );
 
 	std::unique_ptr<ColumnarSortFilter_c> CloneCursor() const;
-	std::unique_ptr<RowidIterator_i> CreateIterator ( bool & bReady );
+	RowID_t		AdvanceTo ( RowID_t tMin, RowID_t tRows ) const;
 
-	bool		IsValid() const		{ return m_pValues && m_iColumnarAttr>=0; }
-	bool		ShouldRejectChunk();
+	bool		IsValid() const		{ return bool(m_pValues); }
+	bool		ShouldRejectChunk() const;
 	int			SelectRows ( RowID_t * pRows, int iCount );
 
 private:
@@ -32,15 +32,13 @@ private:
 	const columnar::Columnar_i &	m_tColumnar;
 
 	std::unique_ptr<columnar::Iterator_i> m_pValues;
-	std::vector<common::Filter_t> m_dFilter;
+	const columnar::BlockBounds_i * m_pBounds = nullptr;
+	int			m_iLeafLevel = 0;
+	int			m_iLeafRows = 0;
+	SphAttr_t	m_tChunkBest = 0;
 
-	int			m_iColumnarAttr = -1;
-	SphAttr_t	m_tMinMaxBound = 0;
-	bool		m_bMinMaxChecked = false;
-	bool		m_bChunkRejected = false;
-
+	SphAttr_t	GetBestBound ( int iLevel, RowID_t tBlock ) const;
 	bool		Accepts ( SphAttr_t tValue ) const;
-	bool		Test ( const columnar::MinMaxVec_t & dMinMax ) const final;
 };
 
 
@@ -48,15 +46,15 @@ ColumnarSortFilter_c::ColumnarSortFilter_c ( const SortBound_c & tBound, const c
 	: m_tBound(tBound)
 	, m_tColumnar(tColumnar)
 {
-	columnar::AttrInfo_t tInfo;
-	if ( tColumnar.GetAttrInfo ( tBound.GetAttr().cstr(), tInfo ) )
-		m_iColumnarAttr = tInfo.m_iId;
-
 	std::string sError;
 	m_pValues = CreateColumnarIterator ( &tColumnar, tBound.GetAttr().cstr(), sError );
-	m_dFilter.resize(1);
-	m_dFilter[0].m_sName = tBound.GetAttr().cstr();
-	m_dFilter[0].m_eType = common::FilterType_e::RANGE;
+	m_pBounds = tColumnar.GetBlockBounds ( tBound.GetAttr().cstr() );
+	if ( m_pBounds )
+	{
+		m_iLeafLevel = m_pBounds->GetNumMinMaxLevels()-1;
+		m_iLeafRows = m_pBounds->GetLeafRows();
+		m_tChunkBest = GetBestBound ( 0, 0 );
+	}
 }
 
 
@@ -72,45 +70,46 @@ bool ColumnarSortFilter_c::Accepts ( SphAttr_t tValue ) const
 }
 
 
-std::unique_ptr<RowidIterator_i> ColumnarSortFilter_c::CreateIterator ( bool & bReady )
+SphAttr_t ColumnarSortFilter_c::GetBestBound ( int iLevel, RowID_t tBlock ) const
 {
-	// The initial range remains a superset as the collector threshold tightens.
-	// SelectRows checks buffered candidates against the current threshold.
-	auto & tFilter = m_dFilter[0];
-	tFilter.m_iMinValue = tFilter.m_iMaxValue = m_tBound.GetValue();
-	tFilter.m_bLeftUnbounded = !m_tBound.IsDescending();
-	tFilter.m_bRightUnbounded = m_tBound.IsDescending();
-
-	std::vector<int> dDeleted;
-	auto dIterators = m_tColumnar.CreateAnalyzerOrPrefilter ( m_dFilter, dDeleted, *this );
-	bReady = dIterators.size()==1;
-	if ( bReady )
-		return std::unique_ptr<RowidIterator_i> ( dIterators[0] ? CreateIteratorWrapper ( dIterators[0], nullptr ) : nullptr );
-
-	for ( auto * pIterator : dIterators )
-		delete pIterator;
-
-	return nullptr;
+	const auto tRange = m_pBounds->GetMinMax ( iLevel, tBlock );
+	return m_tBound.IsDescending() ? tRange.second : tRange.first;
 }
 
 
-bool ColumnarSortFilter_c::Test ( const columnar::MinMaxVec_t & dMinMax ) const
+bool ColumnarSortFilter_c::ShouldRejectChunk() const
 {
-	const auto & tRange = dMinMax[m_iColumnarAttr];
-	return Accepts ( m_tBound.IsDescending() ? tRange.second : tRange.first );
+	return m_pBounds && !Accepts(m_tChunkBest);
 }
 
 
-bool ColumnarSortFilter_c::ShouldRejectChunk()
+RowID_t ColumnarSortFilter_c::AdvanceTo ( RowID_t tMin, RowID_t tRows ) const
 {
-	if ( !m_bMinMaxChecked || m_tMinMaxBound!=m_tBound.GetValue() )
+	if ( !m_pBounds )
+		return tMin;
+
+	while ( tMin<tRows )
 	{
-		m_bMinMaxChecked = true;
-		m_tMinMaxBound = m_tBound.GetValue();
-		m_bChunkRejected = m_tColumnar.EarlyReject ( m_dFilter, *this );
+		RowID_t tBlock = tMin/m_iLeafRows;
+		if ( Accepts ( GetBestBound ( m_iLeafLevel, tBlock ) ) )
+			return tMin;
+
+		// Skip the remainder of the largest enclosing block that cannot meet the current threshold.
+		int iLevel = m_iLeafLevel;
+		while ( iLevel>0 && !Accepts ( GetBestBound ( iLevel-1, tBlock>>1 ) ) )
+		{
+			--iLevel;
+			tBlock >>= 1;
+		}
+
+		const uint64_t uNext = (uint64_t(tBlock+1)<<(m_iLeafLevel-iLevel))*m_iLeafRows;
+		if ( uNext>=tRows )
+			break;
+
+		tMin = RowID_t(uNext);
 	}
 
-	return m_bChunkRejected;
+	return INVALID_ROWID;
 }
 
 
@@ -190,9 +189,6 @@ void SortBoundFilter_c::SelectSource()
 		// Every branch uses the same immutable SI range and its own iterator.
 		m_pIterator = CreateSortBoundIterator ( *m_pSI, m_tBound.GetAttr(), tSource.m_tSourceBound, m_tBound.IsDescending(), m_tRows, m_bIteratorReady );
 	}
-
-	if ( !tSource.m_bSI && m_pColumnar )
-		m_pIterator = m_pColumnar->CreateIterator(m_bIteratorReady);
 }
 
 
@@ -248,8 +244,10 @@ RowID_t SortBoundFilter_c::AdvanceTo ( RowID_t tMin )
 	SelectSource();
 
 	RowID_t tNext = tMin;
-	if ( m_pSource->m_bSI || m_pColumnar )
+	if ( m_pSource->m_bSI )
 		tNext = m_bIteratorReady ? AdvanceIterator(tMin) : tMin;
+	else if ( m_pColumnar )
+		tNext = m_pColumnar->AdvanceTo ( tMin, m_tRows );
 	else
 	{
 		// Return a conservative candidate periodically so the caller can check interruption.

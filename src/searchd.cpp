@@ -7912,9 +7912,9 @@ bool HandleUpdateAPI ( AttrUpdateArgs& tArgs, CSphIndex* pIndex, int& iUpdate )
 }
 
 namespace {
-DocsCollector_c InitUpdate( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, const RWIdx_c * pLockedIndex = nullptr )
+DocsCollector_c InitUpdate( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc )
 {
-	DocsCollector_c tCollector ( *tArgs.m_pQuery, tArgs.m_bJson, *tArgs.m_pIndexName, pDesc, tArgs.m_pError, pLockedIndex );
+	DocsCollector_c tCollector ( *tArgs.m_pQuery, tArgs.m_bJson, *tArgs.m_pIndexName, pDesc, tArgs.m_pError );
 	AttrUpdateSharedPtr_t& pUpdate = tArgs.m_pUpdate;
 	pUpdate->m_bReusable = false;
 	pUpdate->m_bIgnoreNonexistent = tArgs.m_pQuery->m_bIgnoreNonexistent;
@@ -7948,12 +7948,12 @@ void UpdateWlocked ( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, i
 void UpdateRlocked ( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, int& iUpdated)
 {
 	TRACE_CORO ( "sph", "UpdateRlocked" );
-	// Keep the read lock across collection and update. The collector must reuse it:
-	// a queued writer would otherwise block a second read lock and deadlock.
+	// Collect before taking the update lock, as in UpdateWlocked(), to avoid nested read locks.
+	// There may be a race between collecting and updating.
+	auto tCollector = InitUpdate ( tArgs, pDesc );
 	BEGIN_CORO ( "wait", "take r-lock" );
 	RWIdx_c rLocked { pDesc };
 	END_CORO ( "wait" );
-	auto tCollector = InitUpdate ( tArgs, pDesc, &rLocked );
 	DoUpdate ( tCollector, tArgs, rLocked );
 }
 } // unnamed namespace

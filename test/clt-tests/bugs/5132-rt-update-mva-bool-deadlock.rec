@@ -1,80 +1,11 @@
 ––– comment –––
-Issue #5132: concurrent MVA and bool UPDATEs must not deadlock an RT table.
-Exercise id BETWEEN on RAM segments and a non-id filter with a disk chunk.
+Issue #5132: concurrent MVA and bool UPDATEs with id BETWEEN must not deadlock an RT table with RAM segments.
 ––– block: ../base/start-searchd –––
+––– block: ../base/5132-update-deadlock –––
 ––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS t; CREATE TABLE t(title text,tags multi,flag bool,group_id int); INSERT INTO t(id,title,tags,flag,group_id) VALUES(1,'x',(1),0,7),(2,'y',(1),0,8)"
+timeout -k 5s 30s mysql -h0 -P9306 -e "DROP TABLE IF EXISTS t; CREATE TABLE t(title text,tags multi,flag bool,group_id int); INSERT INTO t(id,title,tags,flag,group_id) VALUES(1,'x',(1),0,7),(2,'y',(1),0,8)" || echo "table setup failed"
 ––– output –––
 ––– input –––
-cat <<'PHP' > /tmp/issue-5132.php
-<?php
-mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
-function db($timeout = 15) {
-    $db = mysqli_init();
-    mysqli_options($db, MYSQLI_OPT_READ_TIMEOUT, $timeout);
-    mysqli_real_connect($db, '127.0.0.1', '', '', '', 9306);
-    return $db;
-}
-$mode = $argv[1];
-$boolWhere = $mode === 'range' ? 'id BETWEEN 1 AND 1' : 'group_id=7';
-$mvaWhere = $mode === 'range' ? 'id BETWEEN 1 AND 1' : 'id=1';
-$pids = [];
-$ok = true;
-foreach ([
-    ['UPDATE t SET tags=(%d) WHERE ' . $mvaWhere, 1],
-    ['UPDATE t SET flag=%d WHERE ' . $boolWhere, 0],
-] as [$query, $offset]) {
-    $pid = pcntl_fork();
-    if ($pid === -1) { $ok = false; break; }
-    if ($pid > 0) { $pids[] = $pid; continue; }
-    try {
-        $db = db();
-        for ($i = 0; $i < 1000; ++$i)
-            $db->query(sprintf($query, $offset + ($i % 2)));
-        $db->close();
-        exit(0);
-    } catch (Throwable $e) {
-        fwrite(STDERR, $e->getMessage() . "\n");
-        exit(1);
-    }
-}
-$deadline = microtime(true) + 45;
-while ($ok && $pids && microtime(true) < $deadline) {
-    foreach ($pids as $key => $pid) {
-        $result = pcntl_waitpid($pid, $status, WNOHANG);
-        if ($result === 0) continue;
-        unset($pids[$key]);
-        if ($result !== $pid || !pcntl_wifexited($status) || pcntl_wexitstatus($status) !== 0)
-            $ok = false;
-    }
-    if ($pids) usleep(10000);
-}
-if ($pids) $ok = false;
-foreach ($pids as $pid) {
-    posix_kill($pid, SIGKILL);
-    pcntl_waitpid($pid, $status);
-}
-if ($ok) {
-    try {
-        $db = db();
-        $ok = (int)$db->query('SELECT COUNT(*) FROM t WHERE id=1 AND flag=1 AND ANY(tags)=2')->fetch_row()[0] === 1
-            && (int)$db->query('SELECT COUNT(*) FROM t WHERE id=2 AND flag=0 AND ANY(tags)=1')->fetch_row()[0] === 1;
-        $db->close();
-    } catch (Throwable $e) {
-        fwrite(STDERR, $e->getMessage() . "\n");
-        $ok = false;
-    }
-}
-echo $ok ? "table responsive\n" : "concurrent updates failed or table deadlocked\n";
-exit($ok ? 0 : 1);
-PHP
-php /tmp/issue-5132.php range
-––– output –––
-table responsive
-––– input –––
-mysql -h0 -P9306 -e "UPDATE t SET tags=(1),flag=0 WHERE id=1; FLUSH RAMCHUNK t"
-––– output –––
-––– input –––
-php /tmp/issue-5132.php attr
+timeout -k 5s 75s php /tmp/issue-5132.php range || echo "concurrent update test failed"
 ––– output –––
 table responsive

@@ -1,0 +1,112 @@
+––– comment –––
+Regression for #5134: VIP and Buddy flags can overlap. Keep-alive requests
+can change the Buddy flag, and closed connections must leave no stale counts.
+Disable the real Buddy process to make connection counts deterministic.
+––– input –––
+bash <<'EOF'
+set -e
+dir=$(mktemp -d /tmp/gh5134.XXXXXX)
+trap 'searchd --config "$dir/manticore.conf" --stopwait >/dev/null 2>&1 || true; rm -rf "$dir"' EXIT
+cat > "$dir/manticore.conf" <<CONF
+searchd {
+    listen = 127.0.0.1:19534:http
+    listen = 127.0.0.1:19535:http_vip
+    listen = 127.0.0.1:19536:mysql41
+    log = $dir/searchd.log
+    pid_file = $dir/searchd.pid
+    data_dir = $dir
+    buddy_path =
+    max_connections = 1
+}
+CONF
+searchd --config "$dir/manticore.conf" > "$dir/start.log" 2>&1 || { cat "$dir/start.log"; exit 1; }
+python3 - <<'PY'
+import http.client
+import json
+import subprocess
+import time
+
+ordinary_port = 19534
+vip_port = 19535
+query = "SHOW STATUS LIKE 'workers_clients%'"
+keys = ("workers_clients", "workers_clients_vip", "workers_clients_buddy")
+
+def request(conn, buddy=False):
+    headers = {"Connection": "keep-alive", "Content-Type": "application/x-www-form-urlencoded"}
+    if buddy:
+        headers["User-Agent"] = "Manticore Buddy/1.0.0"
+    conn.request("POST", "/sql?mode=raw", body=query, headers=headers)
+    resp = conn.getresponse()
+    return resp.status, resp.read()
+
+def counts(conn, buddy=False):
+    previous = conn.sock
+    code, body = request(conn, buddy)
+    assert code == 200, (code, body)
+    assert conn.sock is not None and (previous is None or conn.sock is previous), "connection was not reused"
+    rows = json.loads(body)[0]["data"]
+    values = {row["Variable_name"]: int(row["Value"]) for row in rows}
+    return tuple(values[key] for key in keys)
+
+def check(conn, expected, buddy=False):
+    actual = counts(conn, buddy)
+    assert actual == expected, (expected, actual)
+
+def wait_counts(conn, expected):
+    deadline = time.monotonic() + 5
+    while True:
+        actual = counts(conn)
+        if actual == expected:
+            return
+        assert time.monotonic() < deadline, (expected, actual)
+        time.sleep(0.05)
+
+vip = http.client.HTTPConnection("127.0.0.1", vip_port, timeout=5)
+normal = http.client.HTTPConnection("127.0.0.1", ordinary_port, timeout=5)
+observer = http.client.HTTPConnection("127.0.0.1", vip_port, timeout=5)
+extra = http.client.HTTPConnection("127.0.0.1", ordinary_port, timeout=5)
+try:
+    check(vip, (0, 1, 0))
+    check(vip, (0, 1, 1), True)
+    check(vip, (0, 1, 1), True)
+    check(vip, (0, 1, 0))
+
+    check(normal, (1, 1, 0))
+    check(normal, (0, 1, 1), True)
+    check(normal, (0, 1, 1), True)
+    check(normal, (1, 1, 0))
+
+    # An overlapping VIP/Buddy connection must not hide the ordinary client.
+    check(vip, (1, 1, 1), True)
+    check(normal, (1, 1, 1))
+    code, body = request(extra)
+    assert code == 503, (code, body)
+    extra.close()
+    normal.close()
+    # The observer is VIP, so it never affects the ordinary count.
+    wait_counts(observer, (0, 2, 1))
+
+    # MySQL clients must be counted too, even with the VIP/Buddy connection open.
+    output = subprocess.check_output(
+        ["mysql", "--no-defaults", "--protocol=tcp", "-h127.0.0.1",
+         "-P19536", "--batch", "--skip-column-names", "-e", query],
+        text=True, timeout=10)
+    values = dict(line.split("\t") for line in output.splitlines())
+    assert tuple(int(values[key]) for key in keys) == (1, 2, 1), output
+    wait_counts(observer, (0, 2, 1))
+
+    # Closing a normal-port Buddy connection must not decrement ordinary clients.
+    check(normal, (0, 2, 2), True)
+    normal.close()
+    wait_counts(observer, (0, 2, 1))
+    vip.close()
+    wait_counts(observer, (0, 1, 0))
+finally:
+    for conn in (extra, normal, vip, observer):
+        conn.close()
+
+print("CLIENT_COUNTS_OK")
+PY
+EOF
+––– output –––
+CLIENT_COUNTS_OK

@@ -14,6 +14,7 @@
 std::atomic<int> ClientTaskInfo_t::m_iClients { 0 };
 std::atomic<int> ClientTaskInfo_t::m_iVips { 0 };
 std::atomic<int> ClientTaskInfo_t::m_iBuddy { 0 };
+std::atomic<int> ClientTaskInfo_t::m_iOrdinaryClients { 0 };
 
 DEFINE_RENDER ( ClientTaskInfo_t )
 {
@@ -88,6 +89,10 @@ void ClientTaskInfo_t::SetBuddy ( bool bBuddy )
 			m_iBuddy.fetch_add ( 1, std::memory_order_relaxed );
 		else
 			m_iBuddy.fetch_sub ( 1, std::memory_order_relaxed );
+
+		// The Buddy flag can change on a keep-alive connection. VIPs are never ordinary clients.
+		if ( !m_bVip )
+			m_iOrdinaryClients.fetch_add ( bBuddy ? -1 : 1, std::memory_order_relaxed );
 	}
 }
 

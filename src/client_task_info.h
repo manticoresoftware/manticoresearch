@@ -65,6 +65,7 @@ public:
 	static std::atomic<int> m_iClients;
 	static std::atomic<int> m_iVips;
 	static std::atomic<int> m_iBuddy;
+	static std::atomic<int> m_iOrdinaryClients;
 
 	Dispatcher::Template_t m_tBaseDispatcherTemplate;
 	Dispatcher::Template_t m_tPseudoShardingDispatcherTemplate;
@@ -98,6 +99,7 @@ public:
 	bool GetVip() const { return m_bVip; }
 	inline static int GetVips() { return m_iVips.load ( std::memory_order_relaxed ); }
 	inline static int GetClients() { return m_iClients.load ( std::memory_order_relaxed ); }
+	inline static int GetOrdinaryClients() { return m_iOrdinaryClients.load ( std::memory_order_relaxed ); }
 
 	void SetBuddy ( bool bBuddy );
 	bool GetBuddy() const { return m_bBuddy; }
@@ -228,10 +230,10 @@ namespace session {
 } // namespace session
 
 namespace myinfo {
-	// num of client tasks, not including vips
+	// num of client tasks, excluding both VIP and Buddy connections
 	inline int CountClients ()
 	{
-		return session::GetClients() - ( session::GetVips() + session::GetBuddyCount() );
+		return ClientTaskInfo_t::GetOrdinaryClients();
 	}
 
 	// num of real tasks (that is mini-info + client-info)

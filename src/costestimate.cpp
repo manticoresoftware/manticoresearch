@@ -14,6 +14,9 @@
 #include <cfloat>
 #include <math.h>
 #include <algorithm>
+#include <limits>
+#include <queue>
+#include <tuple>
 #include <utility>
 
 #include "sphinxint.h"
@@ -416,6 +419,59 @@ static int64_t EstimateVisitedBlocks ( RowID_t tFirst, int64_t iBlocks, int64_t 
 }
 
 
+// Probe the columnar tree in best-bound order. Use the collector cutoff when available.
+// A leaf expected to fill the collector can raise the estimated cutoff to its worst key.
+static std::optional<int64_t> EstimateColumnarVisits ( const SortBoundScanPlan_t & tPlan, const SortBound_c & tBound, int64_t iRowsToFill )
+{
+	constexpr int MAX_PROBE_NODES = 128;
+	const auto & tRange = tPlan.m_tRange;
+	const RowID_t tFirst = tRange.m_tMinRowID/tPlan.m_iBlockRows;
+	const RowID_t tLast = tRange.m_tMaxRowID/tPlan.m_iBlockRows;
+	SphAttr_t tCutoff = tBound.IsSet() ? tBound.CompetitiveKey(tBound.GetValue()) : std::numeric_limits<SphAttr_t>::lowest();
+	int64_t iVisited = 0;
+
+	// The highest remaining maximum (minimum for ASC) determines when the probe can stop.
+	using Node_t = std::tuple<SphAttr_t,int,RowID_t>;
+	std::priority_queue<Node_t> dQueue;
+	auto PushNode = [&]( int iLevel, RowID_t tBlock )
+	{
+		auto tBounds = tPlan.m_pColumnarBounds->GetMinMax ( iLevel, tBlock );
+		SphAttr_t tBest = tBound.CompetitiveKey ( tBound.IsDescending() ? tBounds.second : tBounds.first );
+		if ( tBest>=tCutoff )
+			dQueue.emplace ( tBest, iLevel, tBlock );
+	};
+
+	PushNode ( 0, 0 );
+	for ( int i=0; !dQueue.empty(); ++i )
+	{
+		auto [tBest,iLevel,tBlock] = dQueue.top();
+		if ( tBest<tCutoff )
+			break;
+
+		if ( i==MAX_PROBE_NODES )
+			return std::nullopt;
+
+		dQueue.pop();
+
+		if ( iLevel==tPlan.m_iLeafLevel )
+		{
+			++iVisited;
+			const int64_t iStart = Max ( int64_t(tRange.m_tMinRowID), int64_t(tBlock)*tPlan.m_iBlockRows );
+			const int64_t iEnd = Min ( int64_t(tRange.m_tMaxRowID)+1, (int64_t(tBlock)+1)*tPlan.m_iBlockRows );
+			if ( iEnd-iStart>=iRowsToFill )
+				tCutoff = Max ( tCutoff, tBound.CompetitiveKey ( tPlan.GetBlockBound ( tBlock, !tBound.IsDescending() ) ) );
+		} else
+		{
+			const int iShift = tPlan.m_iLeafLevel-iLevel-1;
+			for ( RowID_t tChild=Max ( tBlock*2, tFirst>>iShift ); tChild<=Min ( tBlock*2+1, tLast>>iShift ); ++tChild )
+				PushNode ( iLevel+1, tChild );
+		}
+	}
+
+	return iVisited;
+}
+
+
 static bool ShouldUseSortBoundScan ( const SortBoundScanCost_t & tCost, const SortBoundScanPlan_t & tPlan, const SortBound_c & tBound )
 {
 	int iBlockRows = tPlan.m_iBlockRows;
@@ -428,22 +484,30 @@ static bool ShouldUseSortBoundScan ( const SortBoundScanCost_t & tCost, const So
 	int64_t iBoundsRead = iBlocks;
 
 	// Estimate how many blocks fill the sorter if matching rows are distributed uniformly.
-	int64_t iNeeded = int64_t(ceil ( double(tCost.m_iCapacity)*tCost.m_iRows/(double(tCost.m_iMatches)*iBlockRows) ));
-	if ( iNeeded>=iBlocks )
+	const int64_t iRowsToFill = (int64_t(tCost.m_iCapacity)*tCost.m_iRows+tCost.m_iMatches-1)/tCost.m_iMatches;
+	int64_t iNeededToFillSorter = (iRowsToFill+iBlockRows-1)/iBlockRows;
+	if ( iNeededToFillSorter>=iBlocks )
 		return false;
 
 	const float fOrdinaryCost = tCost.CalcOrdinaryCost();
-	const float fOptimisticCost = tCost.CalcSortBoundCost ( iBoundsRead, iBlocks, iNeeded, iBlockRows );
+	const float fOptimisticCost = tCost.CalcSortBoundCost ( iBoundsRead, iBlocks, tBound.IsSet() ? 0 : iNeededToFillSorter, iBlockRows );
 	if ( fOptimisticCost>=fOrdinaryCost )
 		return false;
 
+	if ( tPlan.IsColumnar() && ( tBound.IsSet() || iNeededToFillSorter==1 ) )
+	{
+		auto iVisited = EstimateColumnarVisits ( tPlan, tBound, iRowsToFill );
+		if ( iVisited )
+			return *iVisited<iBlocks && tCost.CalcSortBoundCost ( iBoundsRead, iBlocks, *iVisited, iBlockRows )<fOrdinaryCost;
+	}
+
 	constexpr int INITIAL_SAMPLE_SIZE = 8;
 	constexpr int REFINED_SAMPLE_SIZE = 64;
-	int64_t iVisited = EstimateVisitedBlocks<INITIAL_SAMPLE_SIZE> ( tFirst, iBlocks, iNeeded, tBound, tPlan );
+	int64_t iVisited = EstimateVisitedBlocks<INITIAL_SAMPLE_SIZE> ( tFirst, iBlocks, iNeededToFillSorter, tBound, tPlan );
 	if ( iVisited==iBlocks )
 		return false;
 
-	if ( iVisited==iNeeded )
+	if ( iVisited==iNeededToFillSorter )
 		return true;
 
 	const float fSampledCost = tCost.CalcSortBoundCost ( iBoundsRead, iBlocks, iVisited, iBlockRows );
@@ -454,7 +518,7 @@ static bool ShouldUseSortBoundScan ( const SortBoundScanCost_t & tCost, const So
 	if ( iBlocks<=INITIAL_SAMPLE_SIZE )
 		return false;
 
-	iVisited = EstimateVisitedBlocks<REFINED_SAMPLE_SIZE> ( tFirst, iBlocks, iNeeded, tBound, tPlan );
+	iVisited = EstimateVisitedBlocks<REFINED_SAMPLE_SIZE> ( tFirst, iBlocks, iNeededToFillSorter, tBound, tPlan );
 	if ( iVisited==iBlocks )
 		return false;
 
@@ -729,6 +793,9 @@ bool SortBoundScanPlanner_c::SelectBlockScan ( const CSphIndex & tIndex, bool bS
 
 	if ( !SetupSortBounds ( m_tPlan, m_tSelect, *m_pSortAttr, m_pMinMax ) )
 		return Reject ( BOUNDS_UNAVAILABLE );
+
+	if ( !m_bForce && m_tPlan.IsColumnar() )
+		m_tBound.Update();
 
 	if ( !m_bForce && !ShouldUseSortBoundScan ( tCost, m_tPlan, m_tBound ) )
 		return Reject ( BOUNDS_UNAVAILABLE );

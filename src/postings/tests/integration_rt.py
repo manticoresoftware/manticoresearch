@@ -17,12 +17,13 @@ import urllib.request
 
 
 def check_sort_bound_scan(sql, table, storage):
-    sql(f"CREATE TABLE {table} (ts bigint, bucket int, shuffled int, rare int) engine='{storage}'")
+    sql(f"CREATE TABLE {table} (ts bigint, bucket int, shuffled int, rare int, peak int) engine='{storage}'")
     # The last columnar parent has just one partial leaf.
     docs = 64 * 1024 + 123 if storage == "columnar" else 32768
     for start in range(0, docs, 1024):
-        rows = [f"({i + 1},{i // 300 - 55},{i % 2},{i % 31},{int(i % 96 == 0)})" for i in range(start, min(start + 1024, docs))]
-        sql(f"INSERT INTO {table} (id,ts,bucket,shuffled,rare) VALUES " + ",".join(rows))
+        peak = int(start == 4 * 1024)
+        rows = [f"({i + 1},{i // 300 - 55},{i % 2},{i % 31},{int(i % 96 == 0)},{peak})" for i in range(start, min(start + 1024, docs))]
+        sql(f"INSERT INTO {table} (id,ts,bucket,shuffled,rare,peak) VALUES " + ",".join(rows))
 
     def hinted(query, hint):
         rows, meta = sql(query + " /*+ " + hint + " */;SHOW META")
@@ -62,6 +63,10 @@ def check_sort_bound_scan(sql, table, storage):
     assert ("SortBound" in plain.get("index", "")) == ("SortBound" in filtered.get("index", "")), filtered
     compare("ts ASC,id DESC")
     compare("shuffled DESC,id ASC", expect_scan=False)
+    if storage == "columnar":
+        # Only leaf 4 contains ones. An evenly spaced sample misses it.
+        info = compare("peak DESC,id ASC", "WHERE bucket=1")
+        assert "peak:SortBoundColumnar" in info.get("index", "") and info["total_relation"] == "gte", info
     # Every block contains the maximum shuffled value, so a forced scan must visit them all.
     tied = compare("shuffled DESC,id ASC", hint="SortBound(shuffled)")
     assert tied["total_relation"] == "eq", tied

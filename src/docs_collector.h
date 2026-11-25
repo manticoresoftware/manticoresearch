@@ -20,8 +20,9 @@ class DocsCollector_c : public ISphNoncopyable
 	std::unique_ptr<Impl_c> m_pImpl;
 
 public:
-	DocsCollector_c ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError );
-	DocsCollector_c ( const CSphQuery& tQuery, bool bJson, QueryType_e eQueryType, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError );
+	// If supplied, pLockedIndex must lock pDesc throughout construction.
+	DocsCollector_c ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError, const RWIdx_c * pLockedIndex = nullptr );
+	DocsCollector_c ( const CSphQuery& tQuery, bool bJson, QueryType_e eQueryType, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError, const RWIdx_c * pLockedIndex = nullptr );
 	DocsCollector_c ( DocsCollector_c&& rhs ) noexcept;
 	~DocsCollector_c();
 

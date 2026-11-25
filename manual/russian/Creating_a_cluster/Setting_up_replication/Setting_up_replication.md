@@ -61,6 +61,10 @@ GRANT replication ON 'posts' TO 'repl_user';
 
 Опция `options` позволяет передавать дополнительные параметры непосредственно плагину репликации Galera, как описано в [Galera Documentation Parameters](https://galeracluster.com/library/documentation/galera-parameters.html)
 
+## Обновление кластера
+
+> **Критическое изменение:** Начиная с версии, поддерживающей [массовый импорт в реплицируемую таблицу](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import-into-a-replicated-table), узел хранит другую метку последнего изменения файлов таблиц кластера, поэтому узел более ранней версии не может работать с ним в одном кластере. Поэтапное обновление не поддерживается: убедитесь, что все узлы кластера синхронизированы, остановите их, обновите и снова запустите кластер, как после [полного перезапуска](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md).
+
 ## Операторы записи
 
 <!-- example write statements 1 -->

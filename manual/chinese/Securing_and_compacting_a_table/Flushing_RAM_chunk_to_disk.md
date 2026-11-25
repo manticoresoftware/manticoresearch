@@ -2,6 +2,13 @@
 
 ## FLUSH TABLE
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS rt;
+CREATE TABLE rt(title text);
+INSERT INTO rt(id,title) VALUES (1,'doc');
+-->
 <!-- example flush_rtindex -->
 
 ```sql
@@ -16,14 +23,6 @@ FLUSH TABLE rt_table
 
 <!-- intro -->
 ##### SQL:
-
-<!--
-data for the following example:
-
-DROP TABLE IF EXISTS rt;
-CREATE TABLE rt(title text);
-INSERT INTO rt(id,title) VALUES (1,'doc');
--->
 
 <!-- request SQL -->
 

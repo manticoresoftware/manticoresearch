@@ -35,7 +35,8 @@ void CreateAttrMap ( CSphVector<int> & dAttrMap, const CSphSchema & tOldSchema, 
 
 const CSphRowitem * CopyRow ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo, int iOldStride )
 {
-	memcpy ( pTmpDocinfo, pDocinfo, iOldStride*sizeof(DWORD) );
+	if ( iOldStride )
+		memcpy ( pTmpDocinfo, pDocinfo, iOldStride*sizeof(DWORD) );
 	return pDocinfo + iOldStride;
 }
 
@@ -208,6 +209,7 @@ AddRemoveCtx_c::AddRemoveCtx_c ( const CSphSchema & tOldSchema, const CSphSchema
 	m_bHaveBlobs = m_iNumNewBlobs>0;
 
 	m_dAttrRow.Reset(m_iNewStride);
+	m_dAttrRow.ZeroVec();
 }
 
 
@@ -237,7 +239,7 @@ bool AddRemoveCtx_c::AddRowwiseAttr()
 		if ( !bKeepVal && !pNewAttr->m_tLocator.IsBlobAttr() )
 			sphSetRowAttr ( m_dAttrRow.Begin(), pNewAttr->m_tLocator, 0 );
 
-		if ( bBlob && !m_tMinMaxer.Alter_IsMinMax ( m_pDocinfo, m_iOldStride ) )
+		if ( bBlob && !m_tMinMaxer.Alter_IsMinMax ( tRowID ) )
 		{
 			if ( pNewAttr->m_eAttrType==SPH_ATTR_FLOAT_VECTOR && pNewAttr->IsIndexedKNN() )
 			{
@@ -293,7 +295,7 @@ bool AddRemoveCtx_c::RemoveRowwiseAttr()
 	{
 		pNextDocinfo = CopyRowAttrByAttr ( m_pDocinfo, m_dAttrRow.Begin(), m_tOldSchema, m_tNewSchema, dAttrMap, m_iOldStride );
 
-		if ( m_bHaveBlobs && bBlobsModified && !m_tMinMaxer.Alter_IsMinMax ( m_pDocinfo, m_iOldStride ) )
+		if ( m_bHaveBlobs && bBlobsModified && !m_tMinMaxer.Alter_IsMinMax ( tRowID ) )
 		{
 			assert(m_pOldBlobRowLocator);
 			sphRemoveAttrFromBlobRow ( m_pDocinfo, m_dBlobRow, m_pBlobPool, m_iNumOldBlobs, tOldAttr.m_tLocator.m_iBlobAttrId, m_pOldBlobRowLocator->m_tLocator );

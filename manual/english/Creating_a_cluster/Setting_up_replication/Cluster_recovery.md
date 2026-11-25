@@ -156,14 +156,20 @@ Important:
 
 ### All nodes crashed
 
-If every node crashed, `grastate.dat` is typically no longer trustworthy for normal bootstrap selection. In local tests, all nodes showed:
+If the entire cluster stopped unexpectedly, **do not bootstrap an arbitrary node**: it may lose recent transactions. If a `primary` / `synced` node is still running, follow [single-node recovery](../../Creating_a_cluster/Setting_up_replication/Cluster_recovery.md#One-node-crashed-or-became-unreachable) instead.
 
-- `seqno: -1`
-- `safe_to_bootstrap: 0`
+1. Keep all nodes stopped, disable automatic restarts, and back up each node's `data_dir`.
+2. Find this cluster's `grastate.dat` on each node (under `data_dir`, possibly in a cluster-specific subdirectory):
 
-In this situation, choose the node with the most recent data and start it with [`--new-cluster-force`](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md). This forces Manticore to start a new copy of the cluster from that node even though the usual clean-shutdown metadata is not trustworthy. If you run Manticore via systemd on Linux, use `manticore_new_cluster --force`. It starts Manticore in `--new-cluster-force` mode for you.
+   ```bash
+   sudo find /var/lib/manticore -name grastate.dat -type f
+   ```
 
-Then start the remaining nodes normally and let them rejoin. Verify recovery with `SHOW STATUS LIKE 'cluster_<name>_status'`, `SHOW STATUS LIKE 'cluster_<name>_node_state'`, and `SHOW STATUS LIKE 'cluster_<name>_size'`.
+   Replace the default path if your `data_dir` differs.
+3. Compare `uuid` and `seqno` across nodes from the same cluster history. After a crash, `seqno: -1` and `safe_to_bootstrap: 0` may appear; these **do not identify the newest data**. If you cannot determine which node has the latest state, check the logs and data or get assistance **before** forcing a restart.
+4. Once the newest node is identified, bootstrap **only that node** with `manticore_new_cluster --force` (systemd) or `searchd --new-cluster-force` (direct startup). Start the others normally. Confirm `primary` / `synced` and the expected cluster size before resuming writes.
+
+`--new-cluster-force` bypasses the normal safety check. For a clean full shutdown, follow [Restarting a cluster](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) instead.
 
 ### An even-sized cluster lost quorum, for example after a split
 

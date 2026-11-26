@@ -5376,17 +5376,18 @@ bool CSphIndex_VLN::Build_SetupInplace ( SphOffset_t & iHitsGap, int iHitsMax, i
 }
 
 
+// a field that is also a string attribute (sql_field_string) may be stored, as with stored_fields = *
 bool CheckStoredFields ( const CSphSchema & tSchema, const CSphIndexSettings & tSettings, CSphString & sError )
 {
 	for ( const auto & i : tSettings.m_dStoredFields )
-		if ( tSchema.GetAttr ( i.cstr() ) )
+		if ( tSchema.GetAttr ( i.cstr() ) && tSchema.GetFieldIndex ( i.cstr() )<0 )
 		{
 			sError.SetSprintf ( "existing attribute specified in stored_fields: '%s'\n", i.cstr() );
 			return false;
 		}
 
 	for ( const auto & i : tSettings.m_dStoredOnlyFields )
-		if ( tSchema.GetAttr ( i.cstr() ) )
+		if ( tSchema.GetAttr ( i.cstr() ) && tSchema.GetFieldIndex ( i.cstr() )<0 )
 		{
 			sError.SetSprintf ( "existing attribute specified in stored_fields: '%s'\n", i.cstr() );
 			return false;

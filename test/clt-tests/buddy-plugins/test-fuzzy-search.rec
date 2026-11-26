@@ -1123,7 +1123,7 @@ mysql -h0 -P9306 -e "SELECT id FROM comment_28798446 WHERE MATCH('Manticore') OP
 |    2 |
 +------+
 ––– input –––
-mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('bus', 'comment_28798446', 'ru,us,ua' AS layouts);"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('bus', 'comment_28798446', 'ru,us,ua' AS layouts, 1 as preserve);"
 ––– output –––
 +----------+
 | query    |
@@ -1131,7 +1131,7 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('bus', 'comment_28798446', 'ru,us,ua' AS 
 | business |
 +----------+
 ––– input –––
-mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('bus', 'comment_28798446', '' AS layouts);"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('bus', 'comment_28798446', '' AS layouts, 1 as preserve);"
 ––– output –––
 +----------+
 | query    |
@@ -1203,7 +1203,7 @@ mysql -h0 -P9306 -e "SELECT id FROM comment_28798446 WHERE MATCH('Manticore') OP
 |    2 |
 +------+
 ––– input –––
-mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('bus', 'comment_28798446', 'ru,us,ua' AS layouts);"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('bus', 'comment_28798446', 'ru,us,ua' AS layouts, 1 as preserve);"
 ––– output –––
 +----------+
 | query    |
@@ -1211,7 +1211,7 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('bus', 'comment_28798446', 'ru,us,ua' AS 
 | business |
 +----------+
 ––– input –––
-mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('bus', 'comment_28798446', '' AS layouts);"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('bus', 'comment_28798446', '' AS layouts, 1 as preserve);"
 ––– output –––
 +----------+
 | query    |
@@ -1437,7 +1437,7 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('abc', 'idx_plain');"
 | abcdef |
 +--------+
 ––– input –––
-mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('ran', 'idx_plain');"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('ran', 'idx_plain', 1 as preserve);"
 ––– output –––
 +--------+
 | query  |

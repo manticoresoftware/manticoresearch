@@ -546,6 +546,7 @@ private:
 			RepartitionMatches();
 
 		SortMatches();
+		m_pWorst = Used()==m_iSize ? Last() : nullptr;
 	}
 
 	// generic push entry (add it some way to the queue clone or swap PUSHER depends on)

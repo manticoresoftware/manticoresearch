@@ -178,7 +178,7 @@ a:2:{i:0;a:479:{i:0;a:2:{s:8:"sphinxql";s:93:"create table join1 ( id bigint, ti
       ]
     }
   ]
-}";s:4:"rows";s:285:"{"timed_out":false,"hits":{"total":1,"total_relation":"eq","hits":[{"_id":1,"_score":1597,"join2._score":0,"_source":{"title":"title1","string_id":1,"tmp":"tmp1","j":{"a":1,"table":"join1"},"join2.id":1,"join2.name":"name1","join2.j":{"a":1,"table":"join2"},"join2.title":"title1"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:185;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:510:"{
+}";s:4:"rows";s:286:"{"timed_out":false,"hits":{"total":1,"total_relation":"gte","hits":[{"_id":1,"_score":1597,"join2._score":0,"_source":{"title":"title1","string_id":1,"tmp":"tmp1","j":{"a":1,"table":"join1"},"join2.id":1,"join2.name":"name1","join2.j":{"a":1,"table":"join2"},"join2.title":"title1"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:185;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:510:"{
   "table": "join1",
   "query": { "query_string": "title1 | title2" },
   "options":

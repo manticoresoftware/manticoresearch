@@ -29,6 +29,12 @@ inline int sphIsAlpha ( int c )
 	return ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || c=='-' || c=='_';
 }
 
+// Characters accepted in full-text field specifications (including UTF-8 bytes).
+inline bool sphIsFieldSpecChar ( char c )
+{
+	return (unsigned char)c>=0x80 || sphIsAlpha ( c ) || c=='.' || c=='-';
+}
+
 inline int sphIsAlphaOnly ( int c )
 {
 	return ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' );

@@ -93,7 +93,7 @@ CALL CHAT(
 );
 EOF
 ––– output –––
-ERROR 1064 (42000) at line 1: CHAT expects query, table, model, optional conversation_uuid, optional fields
+ERROR 1064 (42000) at line 1: CHAT expects query, table, model, optional conversation_uuid, optional fields, optional search_strategy
 ––– comment –––
 Test 9: DROP non-existent CHAT MODEL
 ––– input –––

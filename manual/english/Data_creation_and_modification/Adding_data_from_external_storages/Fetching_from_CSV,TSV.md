@@ -29,6 +29,7 @@ The following directives can be used to declare the types of the indexed columns
 * `tsvpipe_attr_multi_64` - declares a multi-value attribute with 64-bit integers.
 * `tsvpipe_attr_string` - declares a string attribute.
 * `tsvpipe_attr_json` - declares a JSON attribute.
+* `tsvpipe_attr_float_vector` - declares a [float vector](../../Creating_a_table/Data_types.md#Float-vector) attribute. The value is a list of floats separated by commas or spaces. To search it with KNN, add its KNN index with the `knn` table setting (see the CSV example below).
 
 
 Example of a source using a TSV file:
@@ -67,6 +68,7 @@ The following directives can be used to declare the types of the indexed columns
 * `csvpipe_attr_multi_64` - declares a multi-value attribute with 64-bit integers.
 * `csvpipe_attr_string` - declares a string attribute.
 * `csvpipe_attr_json` - declares a JSON attribute.
+* `csvpipe_attr_float_vector` - declares a [float vector](../../Creating_a_table/Data_types.md#Float-vector) attribute. The value is a list of floats separated by commas or spaces. To search it with KNN, add its KNN index with the `knn` table setting, as in the example below.
 
 Example of a source using a CSV file:
 
@@ -84,6 +86,31 @@ source csv_test
 1,"Led Zeppelin","35,23,16"
 2,"Deep Purple","35,92"
 3,"Frank Zappa","35,23,16,92,33,24"
+```
+
+Example of a plain table with a [KNN](../../Searching/KNN.md) index on a float vector from a CSV file. `indexer` builds the KNN index together with the table:
+
+```ini
+source csv_vectors
+{
+    type = csvpipe
+    csvpipe_command = cat /tmp/images.csv
+    csvpipe_field = title
+    csvpipe_attr_float_vector = image_vector
+}
+
+table images
+{
+    type = plain
+    source = csv_vectors
+    path = /var/lib/manticore/images
+    knn = {"attrs":[{"name":"image_vector","type":"hnsw","dims":4,"hnsw_similarity":"L2"}]}
+}
+```
+
+```ini
+1,"yellow bag","0.653448,0.192478,0.017971,0.339821"
+2,"white bag","-0.148894,0.748278,0.091892,-0.095406"
 ```
 <!-- proofread -->
 

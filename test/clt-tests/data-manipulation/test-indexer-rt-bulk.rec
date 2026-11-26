@@ -112,3 +112,59 @@ bulk_ext state kept
 bulk_ext: [21 31]
 bulk_ext_empty state kept
 bulk_ext_empty: [21 31]
+––– comment –––
+A bulk chunk runs with the runtime settings of the table, also after ALTER, and loads keep the table definition.
+––– input –––
+source /tmp/bi.sh; bi_sql "CREATE TABLE bulk_def (title text, body text stored, note text indexed, a int engine='columnar', b int, j json secondary_index='1') min_infix_len='2' expand_keywords='1' boolean_mode='or' docstore_compression='lz4hc'"; bi_sql "SHOW CREATE TABLE bulk_def" > /tmp/bi_def.ddl; bi_load bulk_def "(id,title,body,note,a,b,j) VALUES (1,'cable power','secret','private',1,1,'{\"k\":1}')"; bi_load bulk_def "(id,title,body,note,a,b,j) VALUES (2,'usb hub','text','word',2,2,'{\"k\":2}')"; [ "$(bi_sql 'SHOW CREATE TABLE bulk_def')" = "$(cat /tmp/bi_def.ddl)" ] && echo "definition kept"; for q in cab 'cable hub' secret private; do echo "$q: [$(bi_ids bulk_def "$q")]"; done
+––– output –––
+definition kept
+cab: [1]
+cable hub: [1 2]
+secret: []
+private: [1]
+––– input –––
+source /tmp/bi.sh; bi_sql "ALTER TABLE bulk_def expand_keywords='0'"; echo "cab: [$(bi_ids bulk_def cab)]"
+––– output –––
+cab: []
+––– comment –––
+A loaded chunk stores the columns as the table does: the fields and attributes in the header of its disk chunk are those of a FLUSH chunk of a table with the same definition (stored and indexed fields, columnar and rowwise attributes, fast_fetch, string hashes, JSON secondary index, KNN, every value type, settings with files).
+––– input –––
+printf 'cats > cat\n' > /tmp/bulk_hwf1.txt; printf 'dogs > dog\n' > /tmp/bulk_hwf2.txt; source /tmp/bi.sh; n=0; while IFS='|' read -r def cols vals; do n=$((n+1)); bi_sql "CREATE TABLE bulk_hb$n $def; CREATE TABLE bulk_hf$n $def"; bi_load bulk_hb$n "$cols VALUES $vals"; bi_sql "INSERT INTO bulk_hf$n $cols VALUES $vals; FLUSH RAMCHUNK bulk_hf$n"; bi_same_schema bulk_hb$n bulk_hf$n; done <<'DEFS'
+(a text indexed, b text stored, c text)|(id,a,b,c)|(1,'x','y','z')
+(title text, a int engine='columnar')|(id,title,a)|(1,'x',1)
+(title text, a int engine='columnar' fast_fetch='0', b int engine='columnar')|(id,title,a,b)|(1,'x',1,2)
+(title text, s string engine='columnar' hash='0', s2 string engine='columnar')|(id,title,s,s2)|(1,'x','s','t')
+(title text, a int engine='rowwise', j json, b int, s string) engine='columnar'|(id,title,a,b,s)|(1,'x',1,2,'s')
+(title text, a int fast_fetch='0', b int, s string hash='0') engine='columnar'|(id,title,a)|(1,'x',1)
+(t text, s string attribute indexed engine='columnar' hash='0', a int engine='columnar')|(id,t,s,a)|(1,'x','s',1)
+(title text, j json secondary_index='1')|(id,title,j)|(1,'x','{"k":1}')
+(title text, v float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='COSINE' hnsw_m='32' quantization='8bit', w float_vector)|(id,title,v,w)|(1,'x',(0.1,0.2,0.3,0.4),(1,2))
+(title text, a bit(5), m multi, m64 multi64, ts timestamp, bo bool, fl float, bi bigint)|(id,title,a,m,m64,ts,bo,fl,bi)|(1,'x',3,(1,2),(3,4),5,1,0.5,6)
+(title text) wordforms='/tmp/bulk_hwf1.txt /tmp/bulk_hwf2.txt' morphology='stem_en' min_infix_len='2' html_strip='1'|(id,title)|(1,'cats')
+DEFS
+––– output –––
+bulk_hb1 schema same
+bulk_hb2 schema same
+bulk_hb3 schema same
+bulk_hb4 schema same
+bulk_hb5 schema same
+bulk_hb6 schema same
+bulk_hb7 schema same
+bulk_hb8 schema same
+bulk_hb9 schema same
+bulk_hb10 schema same
+bulk_hb11 schema same
+––– comment –––
+Indexer builds field lengths rowwise: a load into a columnar table with field lengths is refused at once, empty or not, and the table keeps its definition.
+––– input –––
+source /tmp/bi.sh; bi_sql "CREATE TABLE bulk_lens (title text, a int) engine='columnar' index_field_lengths='1'"; bi_load bulk_lens "(id,title,a) VALUES (1,'three',1)" 2>&1; bi_sql "INSERT INTO bulk_lens (id,title,a) VALUES (2,'one two',2); FLUSH RAMCHUNK bulk_lens"; bi_load bulk_lens "(id,title,a) VALUES (3,'three',3)" 2>&1; bi_sql "SELECT id, title_len FROM bulk_lens"
+––– output –––
+ERROR 1064 (42000) at line 1: bulk_import does not support columnar field lengths (attribute 'title_len')
+ERROR 1064 (42000) at line 1: bulk_import does not support columnar field lengths (attribute 'title_len')
+2	2
+––– comment –––
+A loaded chunk is ready at once: COUNT(*) over field lengths is answered by the secondary index right after the load (12000 rows, 4000 each with 0, 1 and 2 words).
+––– input –––
+source /tmp/bi.sh; bi_sql "CREATE TABLE bulk_si (title text) index_field_lengths='1'"; seq 1 12000 | awk 'BEGIN { print "SET bulk_import=bulk_si;" } { printf "%s(%d,\047%s\047)", ($1%1000==1 ? "INSERT INTO bulk_si (id,title) VALUES " : ","), $1, ($1%3==0 ? "" : ($1%3==1 ? "one" : "one two")) } $1%1000==0 { print ";" } END { print "COMMIT; SET bulk_import=0;" }' | mysql -h0 -P9306; bi_sql "SELECT COUNT(*) FROM bulk_si WHERE title_len=1; SHOW META LIKE 'index'" | xargs
+––– output –––
+4000 index title_len:Precalc (100%)

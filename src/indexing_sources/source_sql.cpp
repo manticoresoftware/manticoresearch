@@ -648,14 +648,14 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 		m_tSchema.AddField ( tCol );
 	}
 
-	// auto-computed length attributes
-	if ( !AddAutoAttrs ( sError ) )
-		return false;
-
 	StrVec_t dWarnings;
 	m_tSchema.SetupFlags ( *this, false, &dWarnings );
 	for ( const auto & i : dWarnings )
 		sphWarn ( "%s", i.cstr() );
+
+	// auto-computed length attributes, after the storage flags as in other sources: the builder keeps them in the row
+	if ( !AddAutoAttrs ( sError ) )
+		return false;
 
 	// check it
 	if ( m_tSchema.GetFieldsCount()>SPH_MAX_FIELDS )

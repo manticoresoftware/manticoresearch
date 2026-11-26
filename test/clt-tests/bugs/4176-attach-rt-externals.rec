@@ -72,20 +72,16 @@ mysql -h0 -P9306 -e "ALTER TABLE rt_src_multi STOPWORDS='/var/lib/manticore/ext_
 mysql -h0 -P9306 -e "INSERT INTO rt_src_multi VALUES (3, 'c'); FLUSH RAMCHUNK rt_src_multi;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLE rt_src_multi STATUS LIKE 'disk_chunks';" -N -B
+mysql -h0 -P9306 -e "SHOW TABLE rt_src_multi STATUS LIKE 'disk_chunks';" -N -B | awk '$1 == "disk_chunks" { print $2 } $2 == "disk_chunks" { print $4 }'
 ––– output –––
-+-------------+------+
-| disk_chunks |    3 |
-+-------------+------+
+3
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE rt_dst_multi (id BIGINT, title TEXT); ATTACH TABLE rt_src_multi TO TABLE rt_dst_multi;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLE rt_dst_multi STATUS LIKE 'disk_chunks';" -N -B
+mysql -h0 -P9306 -e "SHOW TABLE rt_dst_multi STATUS LIKE 'disk_chunks';" -N -B | awk '$1 == "disk_chunks" { print $2 } $2 == "disk_chunks" { print $4 }'
 ––– output –––
-+-------------+------+
-| disk_chunks |    3 |
-+-------------+------+
+3
 ––– input –––
 if grep -q "swauniq" /var/lib/manticore/rt_dst_multi/stopwords_chunk*.txt && \
 grep -q "swauniqb" /var/lib/manticore/rt_dst_multi/stopwords_chunk*.txt && \
@@ -141,11 +137,9 @@ mysql -h0 -P9306 -e "CREATE TABLE rt_src_second (id BIGINT, title TEXT) stopword
 mysql -h0 -P9306 -e "CREATE TABLE rt_dst_attach (id BIGINT, title TEXT); ATTACH TABLE rt_src_multi TO TABLE rt_dst_attach; ATTACH TABLE rt_src_second TO TABLE rt_dst_attach;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLE rt_dst_attach STATUS LIKE 'disk_chunks';" -N -B
+mysql -h0 -P9306 -e "SHOW TABLE rt_dst_attach STATUS LIKE 'disk_chunks';" -N -B | awk '$1 == "disk_chunks" { print $2 } $2 == "disk_chunks" { print $4 }'
 ––– output –––
-+-------------+------+
-| disk_chunks |    4 |
-+-------------+------+
+4
 ––– input –––
 if grep -q "swduniq" /var/lib/manticore/rt_dst_attach/stopwords_chunk*.txt && \
 grep -q "d1 => d1r" /var/lib/manticore/rt_dst_attach/wordforms_chunk*.txt && \
@@ -165,11 +159,9 @@ mysql -h0 -P9306 -e "CREATE TABLE rt_src_second (id BIGINT, title TEXT) stopword
 mysql -h0 -P9306 -e "CREATE TABLE rt_dst_nonempty (id BIGINT, title TEXT) stopwords='/var/lib/manticore/ext_rt/sw_dst.txt' wordforms='/var/lib/manticore/ext_rt/wf_dst.txt' exceptions='/var/lib/manticore/ext_rt/exc_dst.txt'; INSERT INTO rt_dst_nonempty VALUES (10,'dst'); FLUSH RAMCHUNK rt_dst_nonempty; ATTACH TABLE rt_src_second TO TABLE rt_dst_nonempty;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLE rt_dst_nonempty STATUS LIKE 'disk_chunks';" -N -B
+mysql -h0 -P9306 -e "SHOW TABLE rt_dst_nonempty STATUS LIKE 'disk_chunks';" -N -B | awk '$1 == "disk_chunks" { print $2 } $2 == "disk_chunks" { print $4 }'
 ––– output –––
-+-------------+------+
-| disk_chunks |    2 |
-+-------------+------+
+2
 ––– input –––
 if grep -q "swdstuniq" /var/lib/manticore/rt_dst_nonempty/stopwords_chunk*.txt && \
 grep -q "swduniq" /var/lib/manticore/rt_dst_nonempty/stopwords_chunk*.txt; then echo OK_NONEMPTY_CONTENT; else echo FAIL_NONEMPTY_CONTENT; fi

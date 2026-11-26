@@ -53,9 +53,20 @@ for i in 2 3; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq
 ––– output –––
 OK
 ––– comment –––
-Verify that shards was rebalanced
+Wait until takeover has placed both shards on the two surviving nodes.
 ––– input –––
-show_shards 2306 "$TABLE_NAME"
+wait_for_rebalance() {
+  local actual expected
+  expected=$'system.t_s0: 127.0.0.1:2312 127.0.0.1:3312\nsystem.t_s1: 127.0.0.1:2312 127.0.0.1:3312'
+  for attempt in $(seq 1 90); do
+    actual=$(show_shards 2306 "$TABLE_NAME" 2>/dev/null)
+    [ "$actual" = "$expected" ] && return 0
+    sleep 1
+  done
+  printf 'Last shard layout: %s\n' "$actual" >&2
+  return 1
+}
+if wait_for_rebalance; then show_shards 2306 "$TABLE_NAME"; else echo rebalance_incomplete; fi
 ––– output –––
 system.t_s0: 127.0.0.1:2312 127.0.0.1:3312
 system.t_s1: 127.0.0.1:2312 127.0.0.1:3312
@@ -77,9 +88,9 @@ for i in 1 2 3; do check_cluster_status ${i}306 "$CLUSTER_NAME"; done | uniq
 ––– output –––
 OK
 ––– comment –––
-At this point we should not rebalance old table on new node addition
+At this point the original placement must still be present after rejoin.
 ––– input –––
-show_shards 2306 "$TABLE_NAME"
+if wait_for_rebalance; then show_shards 2306 "$TABLE_NAME"; else echo rebalance_incomplete; fi
 ––– output –––
 system.t_s0: 127.0.0.1:2312 127.0.0.1:3312
 system.t_s1: 127.0.0.1:2312 127.0.0.1:3312

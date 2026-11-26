@@ -875,10 +875,43 @@ static bool PushJsonField ( int64_t iValue, const BYTE * pBlobPool, PUSH && fnPu
 
 	case JSON_STRING:
 	case JSON_OBJECT:
-	case JSON_MIXED_VECTOR:
 		iLen = sphJsonUnpackInt ( &pValue );
 		uGroupKey = ( iLen==1 && eJson!=JSON_STRING ) ? 0 : sphFNV64 ( pValue, iLen );
 		return fnPush ( ( iLen==1 && eJson!=JSON_STRING ) ? nullptr : &iValue, uGroupKey );
+
+	case JSON_MIXED_VECTOR:
+	{
+		iLen = sphJsonUnpackInt ( &pValue );
+		const BYTE * pStart = pValue;
+		int iCount = sphJsonUnpackInt ( &pValue );
+		const BYTE * pElems = pValue;
+
+		// Mixed int/double arrays are not stored as homogeneous vectors. Expand
+		// their elements just like JSON_INT32/INT64/DOUBLE_VECTOR below.
+		bool bNumeric = iCount>0;
+		for ( int i=0; i<iCount && bNumeric; ++i )
+		{
+			auto eType = (ESphJsonType)*pValue++;
+			bNumeric = ( eType==JSON_INT32 || eType==JSON_INT64 || eType==JSON_DOUBLE );
+			if ( bNumeric )
+				sphJsonSkipNode ( eType, &pValue );
+		}
+
+		// Keep the existing behavior for empty and non-numeric mixed arrays.
+		if ( !bNumeric )
+			return ( iLen==1 ) ? fnPush ( nullptr, 0 ) : fnPush ( &iValue, sphFNV64 ( pStart, iLen ));
+
+		bool bRes = false;
+		pValue = pElems;
+		for ( int i=0; i<iCount; ++i )
+		{
+			auto eType = (ESphJsonType)*pValue++;
+			int64_t iPacked = sphJsonPackTypeOffset ( eType, pValue-pBlobPool );
+			SphGroupKey_t uElementKey = eType==JSON_INT32 ? sphJsonLoadInt ( &pValue ) : sphJsonLoadBigint ( &pValue );
+			bRes |= fnPush ( &iPacked, uElementKey );
+		}
+		return bRes;
+	}
 
 	case JSON_STRING_VECTOR:
 	{

@@ -1,28 +1,28 @@
 # 集群恢复
 
-如果复制节点或整个集群变得不可用，正确的恢复程序取决于仍有多少节点可以访问以及关闭是干净的还是突然的。
+如果某个复制节点或整个集群不可用，正确的恢复流程取决于仍可访问的节点数量，以及停机是正常还是突然发生的。
 
-复制集群应被视为一个逻辑系统，而不是一组无关的服务器。这为您提供了多主写入和一致的数据，但也意味着您必须谨慎恢复法定人数。特别是，在确定缺失的节点确实已消失之前，不要运行恢复存活侧写入的手动恢复命令。该命令在本文后面显示为 `SET CLUSTER <name> GLOBAL 'pc.bootstrap' = 1`。如果过早运行它，可能会导致脑裂，并最终形成两个独立的集群。
+应将复制集群视为一个逻辑系统，而不是一组互不相关的服务器。这样可以支持多主写入和一致数据，但也意味着必须谨慎恢复仲裁。尤其是在确认缺失节点确实已经离线之前，不要运行用于恢复幸存节点写入能力的手动恢复命令。本页后面会展示该命令：`SET CLUSTER <name> GLOBAL 'pc.bootstrap' = 1`。如果过早运行，可能造成脑裂，最终形成两个相互独立的集群。
 
-在下面的示例中，除非另有说明，否则假设一个包含节点 A、B 和 C 的集群。
+以下示例均假设集群包含节点 A、B 和 C，除非另有说明。
 
-## 在恢复任何内容之前
+## 开始恢复前
 
-首先确定您处于哪种情况：
+首先确定你遇到的是哪种情况：
 
-- 至少有一个节点仍在在线吗？
-- 节点是干净停止，还是发生了崩溃？干净停止意味着 `searchd` 正常关闭并在退出前有时间保存其复制状态。崩溃、断电或 `kill -9` 不是干净停止。
-- 集群的存活部分是否仍具有法定人数？法定人数意味着足够多的节点仍能相互看到，以安全地保持可写集群。
-- 如果所有节点都已关闭，应首先启动哪个节点以恢复集群？
+- 是否至少有一个节点仍处于在线状态？
+- 节点是正常停止，还是发生了崩溃？正常停止意味着 `searchd` 已正常关闭，并在退出前有时间保存复制状态。崩溃、断电或执行 `kill -9` 都不属于正常停止。
+- 集群的幸存部分是否仍拥有仲裁？仲裁意味着仍有足够的节点可以相互发现，从而安全地保持为可写集群。
+- 如果所有节点都已停止，应先启动哪个节点来恢复集群？
 
 有用的检查：
 
 - `SHOW STATUS LIKE 'cluster_<name>_status'`
 - `SHOW STATUS LIKE 'cluster_<name>_size'`
 - `SHOW STATUS LIKE 'cluster_<name>_node_state'`
-- 如果所有节点都已关闭，请检查 `grastate.dat`，这是存储在集群数据目录中的小型复制状态文件。特别注意 `seqno` 和 `safe_to_bootstrap`：在干净关闭后，通常首选启动的节点是具有最先进 `seqno` 和 `safe_to_bootstrap: 1` 的节点。有关完整的引导程序，请参阅 [重新启动集群](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)。
+- 如果所有节点都已停止，请检查 `grastate.dat`。这是存储在集群数据目录中的小型复制状态文件。重点查看 `seqno` 和 `safe_to_bootstrap`：正常停止时，通常应首先启动具有最大 `seqno` 且 `safe_to_bootstrap: 1` 的节点。完整的引导流程请参阅[重启集群](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)。
 
-干净关闭后 `grastate.dat` 可能的样子示例：
+正常停止后，`grastate.dat` 可能如下所示：
 
 ```text
 # saved replication state
@@ -34,59 +34,59 @@ safe_to_bootstrap: 1
 
 在此示例中：
 
-- `seqno: 12345` 表示此节点知道到序列号 12345 的事务
-- `safe_to_bootstrap: 1` 表示此节点被标记为可以首先启动
+- `seqno: 12345` 表示该节点已知的事务最多达到序列号 12345
+- `safe_to_bootstrap: 1` 表示该节点已标记为可首先启动
 
-在干净关闭的所有节点都关闭的恢复中，这通常是您使用 `--new-cluster` 首先启动的节点类型，以恢复集群。
+在所有节点正常停止后的恢复过程中，通常应先使用 `--new-cluster` 启动这类节点，以恢复集群。
 
-恢复后，等待重新启动的节点报告 `cluster_<name>_status=primary` 和 `cluster_<name>_node_state=synced` 后，再将其视为完全可写。您可以使用 `SHOW STATUS LIKE 'cluster_<name>_status'` 和 `SHOW STATUS LIKE 'cluster_<name>_node_state'` 检查这一点。在本地测试中，重新启动的节点有时会在达到 `synced`/`primary` 之前短暂显示 `cluster_<name>_node_state=joining` 和 `cluster_<name>_status=disconnected`。
+恢复后，等待重启节点报告 `cluster_<name>_status=primary` 和 `cluster_<name>_node_state=synced`，再将其视为完全可写。可以使用 `SHOW STATUS LIKE 'cluster_<name>_status'` 和 `SHOW STATUS LIKE 'cluster_<name>_node_state'` 进行检查。在本地测试中，重启节点有时会短暂处于 `cluster_<name>_node_state=joining` 和 `cluster_<name>_status=disconnected` 状态，之后才达到 `synced`/`primary`。
 
-### 一个节点被干净关闭
+### 一个节点正常关闭
 
-如果节点 A 正常关闭，节点 B 和 C 会继续处理写入。您可以使用 `SHOW STATUS LIKE 'cluster_<name>_status'` 和 `SHOW STATUS LIKE 'cluster_<name>_size'` 确认这些节点上的集群仍然健康。
+如果节点 A 正常停止，节点 B 和 C 会继续提供写入服务。可以在这两个节点上使用 `SHOW STATUS LIKE 'cluster_<name>_status'` 和 `SHOW STATUS LIKE 'cluster_<name>_size'`，确认集群仍处于健康状态。
 
-当节点 A 重新启动时，它会自动重新加入集群。在同步完成之前，不要向该节点发送写入。检查 `SHOW STATUS LIKE 'cluster_<name>_status'` 和 `SHOW STATUS LIKE 'cluster_<name>_node_state'`，并等待 `primary` / `synced`。
+节点 A 再次启动时，会自动重新加入集群。在同步完成之前，不要向该节点发送写入请求。检查 `SHOW STATUS LIKE 'cluster_<name>_status'` 和 `SHOW STATUS LIKE 'cluster_<name>_node_state'`，并等待其变为 `primary` / `synced`。
 
-如果供体节点 B 或 C 仍然在它们的复制缓存中拥有节点 A 错过的所有事务，节点 A 可以使用增量状态传输 (IST) 进行追赶。IST 代表增量状态传输。这意味着节点仅接收它错过的事务，因此恢复通常更快且更轻量。否则，它将需要快照状态传输 (SST)。SST 代表快照状态传输。这意味着从另一个节点复制表文件，而不是仅仅重放缺失的事务。SST 更重：通常更慢，移动更多数据，并且可能在大型集群上使恢复更具破坏性。
+如果供体节点 B 或 C 的复制缓存中仍保留节点 A 遗漏的全部事务，节点 A 可以通过增量状态传输（IST）追赶进度。IST 是增量状态传输的缩写，表示节点只接收遗漏的事务，因此恢复通常更快、开销更低。否则就需要执行快照状态传输（SST）。SST 是快照状态传输的缩写，表示从另一个节点复制表文件，而不是仅重放缺失的事务。SST 的开销更大：通常速度更慢、传输的数据更多，并且在大型集群中可能使恢复过程造成更大的干扰。
 
-### 两个节点被干净关闭，一个节点保持在线
+### 两个节点正常关闭，一个节点保持在线
 
-如果节点 A 和 B 被干净关闭，节点 C 保持在线，节点 C 可以继续接受写入。如果您想确认它现在是唯一活动的节点，请在节点 C 上检查 `SHOW STATUS LIKE 'cluster_<name>_status'` 和 `SHOW STATUS LIKE 'cluster_<name>_size'`。
+如果节点 A 和 B 正常停止，而节点 C 仍在线，节点 C 可以继续接受写入。可以在节点 C 上检查 `SHOW STATUS LIKE 'cluster_<name>_status'` 和 `SHOW STATUS LIKE 'cluster_<name>_size'`，确认它现在是唯一的活动节点。
 
-当节点 A 和 B 重新启动时，它们会自动重新加入并从节点 C 同步。在它们重新加入时，检查 `SHOW STATUS LIKE 'cluster_<name>_status'`、`SHOW STATUS LIKE 'cluster_<name>_node_state'` 和 `SHOW STATUS LIKE 'cluster_<name>_size'`。等待所有节点显示 `primary` / `synced` 并且集群大小符合预期后，再将恢复视为完成。
+节点 A 和 B 再次启动时，会自动重新加入集群，并从节点 C 同步。它们重新加入期间，请检查 `SHOW STATUS LIKE 'cluster_<name>_status'`、`SHOW STATUS LIKE 'cluster_<name>_node_state'` 和 `SHOW STATUS LIKE 'cluster_<name>_size'`。等待所有节点显示 `primary` / `synced`，且集群大小符合预期后，再认为恢复完成。
 
-如果节点 A 和 B 是有意从集群中移除的，例如使用 `EXIT CLUSTER`，而节点 C 现在是集群中唯一仍然保留的节点，那么节点 C 在执行自身的干净重启后，也可以通过正常的守护进程启动恢复。在这种仅剩自身的情况下，不需要 `--new-cluster`。
+如果节点 A 和 B 已被有意从集群中移除，例如使用了 `EXIT CLUSTER`，并且节点 C 现在是集群中唯一持久化保存的节点，那么节点 C 在自身正常重启后也可以通过正常启动守护进程来恢复。在这种仅剩自身的情况下，不需要使用 `--new-cluster`。
 
-### 所有节点都被干净关闭
+### 所有节点正常关闭
 
-如果多节点集群中的所有节点都已正常停止，那么集群就处于完全离线状态，必须以特殊方式重新启动，这样其中一个节点才能成为集群中第一个运行的节点。
+如果多节点集群中的所有节点都正常停止，集群将完全离线，必须以特殊方式重新启动，使其中一个节点成为集群中第一个运行的节点。
 
-在干净关闭时，每个节点将其最后一个事务号写入 `grastate.dat`。最后关闭的节点是首先启动的最安全节点：
+正常停止时，每个节点都会将最后一个事务编号写入 `grastate.dat`。最后停止的节点最适合首先启动：
 
-- 它具有最先进 `seqno`
+- 它具有最先进的 `seqno`
 - 它具有 `safe_to_bootstrap: 1`
 
-使用 [`--new-cluster`](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) 启动该节点。这会告诉 Manticore 从此节点开始一个新的集群副本。如果您通过 Linux 上的 systemd 运行 Manticore，请使用 `manticore_new_cluster`。它会为您以 `--new-cluster` 模式启动 Manticore。
+使用 [`--new-cluster`](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) 启动该节点。这会让 Manticore 从该节点启动集群的新副本。如果在 Linux 上通过 systemd 运行 Manticore，请使用 `manticore_new_cluster`。它会自动以 `--new-cluster` 模式启动 Manticore。
 
-之后，正常启动其余节点并让它们重新加入。通过 `SHOW STATUS LIKE 'cluster_<name>_status'`、`SHOW STATUS LIKE 'cluster_<name>_node_state'` 和 `SHOW STATUS LIKE 'cluster_<name>_size'` 验证恢复。
+之后正常启动其余节点，让它们重新加入。使用 `SHOW STATUS LIKE 'cluster_<name>_status'`、`SHOW STATUS LIKE 'cluster_<name>_node_state'` 和 `SHOW STATUS LIKE 'cluster_<name>_size'` 验证恢复情况。
 
-如果您首先引导一个较不先进的节点，一个更先进的节点可能会稍后加入它并从较旧状态接收完整的 SST，这可能会丢弃仅存在于更先进节点上的事务。这就是为什么 `safe_to_bootstrap: 1` 的节点应是您的首选。
+如果先引导一个状态较旧的节点，状态较新的节点稍后可能加入该节点，并从较旧状态接收完整的 SST，从而丢弃仅存在于状态较新节点上的事务。因此，应优先选择具有 `safe_to_bootstrap: 1` 的节点。
 
-### 从现有本地表重新创建集群
+### 使用现有本地表重新创建集群
 
-当没有任何节点能够通过上面的常规恢复方法恢复集群，但集群的表仍然存在于本地数据目录中时，可将此流程作为最后手段。在保存的集群元数据不完整、与当前运行版本不兼容，或者其他启动失败导致旧集群成员关系不可用时，都可能出现这种情况。
+当没有节点能够通过上述正常恢复方法恢复集群，但集群表仍存在于本地数据目录中时，可以将此流程作为最后手段。这可能发生在保存的集群元数据不完整或与正在运行的版本不兼容时，也可能发生在其他启动失败导致旧集群成员关系无法使用时。
 
-此流程会创建一个新集群。它会丢弃旧集群成员关系和复制历史，然后把所选节点上的表复制到其他节点。只要任何节点仍然拥有旧集群健康的 `primary` / `synced` 副本，就不要使用此流程。在这种情况下，应保留健康的集群，并通过 [JOIN CLUSTER](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md#Joining-a-replication-cluster) 恢复其他节点。
+此流程会创建一个新集群。它会丢弃旧的集群成员关系和复制历史，然后将选定节点上的表复制到其他节点。旧集群中只要仍有节点拥有健康的 `primary` / `synced` 副本，就不要使用此流程。在这种情况下，应保留健康集群，并通过 [JOIN CLUSTER](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md#Joining-a-replication-cluster) 恢复其他节点。
 
-1. 在属于故障集群的每个节点上停止 Manticore。在此流程期间，不要写入本地表。
-2. 在每个节点上备份完整的 `data_dir`。如果旧集群描述符中包含你在重新创建集群时仍需要的自定义 `path`、`nodes` 或提供程序 `options`，请保留一份副本。
-3. 选择一个其本地表中包含你想保留的数据的节点。这个节点将成为新集群的数据源。稍后将它的表添加到集群时，会替换其他节点上同名的表。
-4. 在每个节点上，编辑 `<data_dir>/manticore.json`。在顶层 `clusters` 对象中，只删除故障集群对应的条目。例如，对于名为 `posts` 的集群，删除 `clusters.posts`。
+1. 停止属于失败集群的每个节点上的 Manticore。在此流程期间不要写入本地表。
+2. 备份每个节点上的完整 `data_dir`。如果旧集群描述符包含重新创建集群时需要的自定义 `path`、`nodes` 或提供程序 `options`，请保留一份副本。
+3. 选择本地表中包含你要保留的数据的节点。该节点将成为新集群的数据源。稍后将其表添加到集群时，会替换其他节点上同名的表。
+4. 在每个节点上编辑 `<data_dir>/manticore.json`。从顶层 `clusters` 对象中仅删除失败集群对应的条目。例如，对于名为 `posts` 的集群，删除 `clusters.posts`。
 
-   保留 `indexes` 对象以及所有表目录。不要删除或重新创建这些表。
+   保留 `indexes` 对象和每个表目录。不要删除或重新创建这些表。
 
-5. 在每个节点上正常启动 Manticore。原先的集群表现在应该会作为本地表出现。在继续之前，请先检查所选源节点上的表。如果它们缺失或不完整，请停止并恢复备份。
-6. 在所选源节点上创建集群。如果你仍然需要保存的 `path`、`nodes` 或提供程序选项，请一并包含。如果已启用身份验证，请在此语句以及下面的 `JOIN CLUSTER` 语句中添加 `'<replication-user>' AS user`。该账号必须在每个节点上具有匹配的已存储身份验证数据和 `replication` 权限。参见 [设置复制](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Setting-up-replication)。
+5. 在每个节点上正常启动 Manticore。原集群的表现在应显示为本地表。继续操作前，请检查选定源节点上的表。如果表缺失或不完整，请停止操作并恢复备份。
+6. 在选定的源节点上创建集群。如果仍需要，请加入已保存的 `path`、`nodes` 或提供程序选项。如果启用了身份验证，请在此语句和下面的 `JOIN CLUSTER` 语句中添加 `'<replication-user>' AS user`。每个节点上的账户都必须具有匹配的已存储身份验证数据和 `replication` 权限。请参阅[设置复制](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Setting-up-replication)。
 
    ```sql
    CREATE CLUSTER posts
@@ -98,41 +98,41 @@ safe_to_bootstrap: 1
    JOIN CLUSTER posts AT 'node-a.example:9312'
    ```
 
-8. 在所选源节点上，将现有本地表附加到新集群：
+8. 在选定的源节点上，将现有本地表附加到新集群：
 
    ```sql
    ALTER CLUSTER posts ADD table_a, table_b
    ```
 
-9. 在恢复写入之前，等待每个节点都报告 `cluster_posts_status=primary` 且 `cluster_posts_node_state=synced`。
+9. 等待每个节点报告 `cluster_posts_status=primary` 和 `cluster_posts_node_state=synced`，再恢复写入。
 
-### 一个节点崩溃或变得不可达
+### 一个节点崩溃或无法访问
 
-如果节点 A 因崩溃或网络问题消失，节点 B 和 C 会首先尝试重新连接到它。如果失败，它们会将其从集群中移除，重新计算法定人数，并继续作为主集群运行。
+如果节点 A 因崩溃或网络问题消失，节点 B 和 C 会先尝试重新连接它。如果失败，它们会将该节点从集群中移除，重新计算仲裁，并继续作为主集群运行。
 
-在本地测试中，对等节点的移除并非立即发生：存活的节点会在几秒钟内保持旧的集群大小，之后才会丢弃失败的对等节点并切换到较小的主集群。
+在本地测试中，移除对等节点并不是立即完成的：幸存节点会在几秒内保持旧的集群大小，之后才删除失败节点并切换到规模更小的主集群。
 
-当节点 A 重新启动时，它会自动重新加入，并以与干净的一节点关闭后相同的方式进行同步。同样，使用 `SHOW STATUS LIKE 'cluster_<name>_status'`、`SHOW STATUS LIKE 'cluster_<name>_node_state'` 和 `SHOW STATUS LIKE 'cluster_<name>_size'` 来确认恢复已完成。
+节点 A 再次启动时，会自动重新加入集群，并以与单节点正常关闭后相同的方式追赶进度。同样，请使用 `SHOW STATUS LIKE 'cluster_<name>_status'`、`SHOW STATUS LIKE 'cluster_<name>_node_state'` 和 `SHOW STATUS LIKE 'cluster_<name>_size'`，确认恢复已完成。
 
-### 有两个节点消失，只剩一个节点仍在运行
+### 两个节点丢失，仅一个节点仍在运行
 
-如果节点 A 和 B 都丢失，只剩节点 C 在运行，那么在三个节点的集群中，节点 C 将不再拥有法定人数。它会切换到 `non-primary` 并拒绝写入。
+如果节点 A 和 B 丢失，只剩节点 C 仍在运行，那么节点 C 在三节点集群中将不再拥有仲裁。它会切换到 `non-primary` 状态并拒绝写入。
 
-写入错误是明确的：
+写入错误信息会明确说明这一点：
 
 ```sql
 ERROR 1064 (42000): cluster '<name>' is not ready, not primary state (synced)
 ```
 
-如果节点 A 和 B 仅临时断开连接但仍能互相看到，它们可能会继续接受写入，而节点 C 保持隔离。如果需要查看哪一侧仍可写入，请在每侧使用 `SHOW STATUS LIKE 'cluster_<name>_status'`。
+如果节点 A 和 B 只是暂时断开连接，但彼此仍能发现对方，那么它们可能继续接受写入，而节点 C 保持隔离。如果需要查看哪一侧仍可写，可以在两侧分别运行 `SHOW STATUS LIKE 'cluster_<name>_status'`。
 
-如果节点 A 和 B 确实崩溃，且节点 C 是唯一希望继续使用的存活副本，请在节点 C 上运行此命令，使其重新变为可写入状态：
+如果节点 A 和 B 确实已崩溃，而节点 C 是你希望继续使用的唯一幸存副本，请在节点 C 上运行以下命令，使其恢复可写：
 
 <!-- example bootstrap-primary -->
-如果您已确认其他节点确实离线，请运行：
+如果已确认其他节点确实处于离线状态，请运行：
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -150,32 +150,38 @@ SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 
 重要提示：
 
-- 仅在确认其他节点无法到达后运行此命令
-- 仅在必须存活的一侧运行
-- 引导后，该节点可以再次接受写入，其他节点之后可以从它重新加入
+- 只有在确认其他节点无法访问后才能运行此命令
+- 只能在必须保留的一侧运行此命令
+- 引导后，该节点可以重新接受写入，其他节点之后可以从该节点重新加入
 
-### 所有节点崩溃
+### 所有节点均崩溃
 
-如果所有节点都崩溃，`grastate.dat` 通常不再适合用于正常引导选择。在本地测试中，所有节点显示：
+如果整个集群意外停止，**不要随意引导某个节点**：这样可能丢失最近的事务。如果仍有节点处于 `primary` / `synced` 状态并继续运行，请改为遵循[单节点恢复](../../Creating_a_cluster/Setting_up_replication/Cluster_recovery.md#One-node-crashed-or-became-unreachable)。
 
-- `seqno: -1`
-- `safe_to_bootstrap: 0`
+1. 保持所有节点停止，禁用自动重启，并备份每个节点的 `data_dir`。
+2. 在每个节点上找到此集群的 `grastate.dat`（位于 `data_dir` 下，也可能位于特定于集群的子目录中）：
 
-在这种情况下，选择数据最新的节点，并使用[`--new-cluster-force`](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)启动它。这会强制Manticore从该节点启动一个新的集群副本，即使通常的干净关闭元数据不可靠。如果你在Linux上通过systemd运行Manticore，请使用`manticore_new_cluster --force`。它会为你以`--new-cluster-force`模式启动Manticore。
+   ```bash
+   sudo find /var/lib/manticore -name grastate.dat -type f
+   ```
 
-然后正常启动其余节点并让它们重新加入。使用 `SHOW STATUS LIKE 'cluster_<name>_status'`、`SHOW STATUS LIKE 'cluster_<name>_node_state'` 和 `SHOW STATUS LIKE 'cluster_<name>_size'` 验证恢复。
+   如果你的 `data_dir` 不同，请替换默认路径。
+3. 比较来自同一集群历史的各节点之间的 `uuid` 和 `seqno`。崩溃后可能出现 `seqno: -1` 和 `safe_to_bootstrap: 0`；这两个值**无法确定最新数据所在的节点**。如果无法确定哪个节点拥有最新状态，请在强制重启**之前**检查日志和数据，或寻求帮助。
+4. 确定最新节点后，仅使用 `manticore_new_cluster --force`（systemd）或 `searchd --new-cluster-force`（直接启动）引导该节点。正常启动其他节点。在恢复写入前，确认状态为 `primary` / `synced`，且集群大小符合预期。
 
-### 偶数大小的集群失去法定人数，例如在分裂后
+`--new-cluster-force` 会绕过正常的安全检查。对于完整的正常停机，请改为遵循[重启集群](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)。
 
-偶数大小的集群最容易出现脑裂风险。例如，想象四个节点分裂成两个隔离的对，分布在两个数据中心。每边恰好有原始成员的一半，因此两边都没有法定人数，两边都停止接受写入。
+### 偶数规模的集群失去仲裁，例如发生脑裂后
 
-如果在连接恢复前必须恢复写入，请仅选择分裂的一侧，并在该侧运行相同的恢复命令，使该侧重新变为可写入。在执行此操作之前，请在两侧检查 `SHOW STATUS LIKE 'cluster_<name>_status'`，以确定哪一侧当前为非主集群。
+偶数规模集群发生脑裂的风险最高。例如，假设四个节点分裂成两个数据中心中的两对互相隔离的节点。每一侧都恰好拥有原始成员的一半，因此两侧都没有仲裁，并且都会停止接受写入。
+
+如果必须在连接恢复之前恢复写入，请只选择脑裂的一侧，并在该侧运行相同的恢复命令，使其重新变为可写。在此之前，请在两侧检查 `SHOW STATUS LIKE 'cluster_<name>_status'`，以确定当前哪一侧处于 `non-primary` 状态。
 
 <!-- example bootstrap-primary-split -->
-选择应保持为可写集群的一侧，然后运行：
+选择应保留为可写集群的一侧，然后运行：
 
 <!-- intro -->
-##### SQL:
+##### SQL：
 
 <!-- request SQL -->
 
@@ -191,7 +197,7 @@ SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 ```
 <!-- end -->
 
-永远不要在两侧都执行该语句。如果这样做，您将创建两个独立的主集群，当网络恢复时它们不会自动合并。
+绝不要在两侧都执行该语句。否则会创建两个独立的主集群，网络恢复后它们不会自动合并。
 
-在本地测试中，突然失去四节点集群的一半会重现相同的 `non-primary` 行为，相同的恢复命令使一个存活的一半重新变为 `primary`。
+在本地测试中，四节点集群突然丢失一半节点时，会重现相同的 `non-primary` 行为；执行相同的恢复命令后，其中一个幸存部分会恢复为 `primary`。
 <!-- proofread -->

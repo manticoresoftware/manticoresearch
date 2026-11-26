@@ -33,6 +33,7 @@
 #include "netfetch.h"
 #include "indexer_rt_bulk.h"
 #include "searchd_shard_bulk.h"
+#include "coro_stack.h"
 
 static bool g_bLogBadHttpReq = env_exists ( "MANTICORE_LOG_HTTP_BAD_REQ" ); // log content of bad http requests, ruled by this env variable
 static int g_iLogHttpData = env_long ( "MANTICORE_LOG_HTTP_DATA" ).value_or(0); // verbose logging of http data, ruled by this env variable
@@ -1674,8 +1675,6 @@ inline static void PutAnyValAsString ( RowBuffer_i & tOut, const JsonObj_c& tDat
 		tOut.PutDoubleAsString ( tDataCol.DblVal() );
 	else if ( tDataCol.IsBool () )
 		tOut.PutString ( tDataCol.BoolVal() ? "true" : "false" );
-	else if ( tDataCol.IsNull () )
-		tOut.PutString ( "null" );
 	else
 		tOut.PutString ( tDataCol.StrVal() );
 }
@@ -1783,13 +1782,16 @@ void ConvertJsonDataset ( const JsonObj_c & tRoot, const char * sStmt, RowBuffer
 			for ( const auto & tDataCol : tDataRow )
 			{
 				assert ( iCol < dSqlColumns.GetLength() );
-				switch ( dSqlColumns[iCol].second ) {
-					case MYSQL_COL_LONG : tOut.PutDWORD (NumberAsInt(tDataCol)); break;
-					case MYSQL_COL_LONGLONG : tOut.PutInt64 (NumberAsInt(tDataCol)); break;
-					case MYSQL_COL_FLOAT : tOut.PutFloat (NumberAsDouble(tDataCol)); break;
-					case MYSQL_COL_DOUBLE : tOut.PutDouble (NumberAsDouble(tDataCol)); break;
-					default: PutAnyValAsString ( tOut, tDataCol );
-				}
+				if ( tDataCol.IsNull() )
+					tOut.PutNULL();
+				else
+					switch ( dSqlColumns[iCol].second ) {
+						case MYSQL_COL_LONG : tOut.PutDWORD (NumberAsInt(tDataCol)); break;
+						case MYSQL_COL_LONGLONG : tOut.PutInt64 (NumberAsInt(tDataCol)); break;
+						case MYSQL_COL_FLOAT : tOut.PutFloat (NumberAsDouble(tDataCol)); break;
+						case MYSQL_COL_DOUBLE : tOut.PutDouble (NumberAsDouble(tDataCol)); break;
+						default: PutAnyValAsString ( tOut, tDataCol );
+					}
 				++iCol;
 			}
 			if ( !tOut.Commit() )
@@ -2968,7 +2970,25 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 		return tRes;
 
 	pHandler->SetErrorFormat ( bNeedHttpResponse );
-	tRes.m_bOk = pHandler->Process();
+	const bool bJsonEndpoint = [&] {
+		switch ( tRes.m_eEndpoint )
+		{
+		case EHTTP_ENDPOINT::INDEX:
+		case EHTTP_ENDPOINT::SQL:
+		case EHTTP_ENDPOINT::CLI:
+		case EHTTP_ENDPOINT::CLI_JSON:
+		case EHTTP_ENDPOINT::TOKEN:
+			return false;
+		default:
+			return true;
+		}
+	} ();
+
+	// cJSON limits nesting to 1000 levels, so JSON handlers use a 1 MiB stack.
+	// Revisit this size if the parser or its nesting limit changes.
+	const int iStackForCjson = 1024 * 1024;
+	const int iRequiredStack = bJsonEndpoint ? ((iStackForCjson>Threads::DEFAULT_CORO_STACK_SIZE)?iStackForCjson:-1):-1;
+	tRes.m_bOk = Threads::Coro::ContinueBool ( iRequiredStack, [&pHandler] { return pHandler->Process(); } );
 	tRes.m_sError = pHandler->GetError();
 	tRes.m_eReplyHttpCode = pHandler->GetStatusCode();
 	// error with status code 403 Forbidden should not route into buddy

@@ -46,3 +46,35 @@ Create Table: CREATE TABLE t ( id bigint ) type=shard agent=127.0.0.1:1312:syste
 Create Table: CREATE TABLE t ( id bigint ) type=shard agent=127.0.0.1:1312:system.t_s0|127.0.0.1:3312:system.t_s0|127.0.0.1:5312:system.t_s0[retry_count=2,ha_strategy=noerrors] agent=127.0.0.1:1312:system.t_s1|127.0.0.1:2312:system.t_s1|127.0.0.1:4312:system.t_s1[retry_count=2,ha_strategy=noerrors] agent=127.0.0.1:1312:system.t_s3|127.0.0.1:4312:system.t_s3|127.0.0.1:5312:system.t_s3[retry_count=2,ha_strategy=noerrors] agent=127.0.0.1:2312:system.t_s2|127.0.0.1:3312:system.t_s2|127.0.0.1:4312:system.t_s2[retry_count=2,ha_strategy=noerrors] agent=127.0.0.1:2312:system.t_s4|127.0.0.1:3312:system.t_s4|127.0.0.1:5312:system.t_s4[retry_count=2,ha_strategy=noerrors]
 #{5}
 Create Table: CREATE TABLE t ( id bigint ) type=shard agent=127.0.0.1:1312:system.t_s0|127.0.0.1:3312:system.t_s0|127.0.0.1:5312:system.t_s0[retry_count=2,ha_strategy=noerrors] agent=127.0.0.1:1312:system.t_s1|127.0.0.1:2312:system.t_s1|127.0.0.1:4312:system.t_s1[retry_count=2,ha_strategy=noerrors] agent=127.0.0.1:1312:system.t_s3|127.0.0.1:4312:system.t_s3|127.0.0.1:5312:system.t_s3[retry_count=2,ha_strategy=noerrors] agent=127.0.0.1:2312:system.t_s2|127.0.0.1:3312:system.t_s2|127.0.0.1:4312:system.t_s2[retry_count=2,ha_strategy=noerrors] agent=127.0.0.1:2312:system.t_s4|127.0.0.1:3312:system.t_s4|127.0.0.1:5312:system.t_s4[retry_count=2,ha_strategy=noerrors]
+––– comment –––
+Verify physical shards through the same SHOW TABLES format used by the other sharding CLTs.
+––– input –––
+list_replicas() {
+  local node tables
+  for node in 1 2 3 4 5; do
+    tables=$(mysql --no-defaults -h0 -P${node}306 -e "SHOW TABLES FROM system\\G" 2>/dev/null) || return 1
+    printf '%s\n' "$tables" | awk -v node="$node" '$1 == "Table:" && $2 ~ /^system[.]t_s[0-4]$/ {print node, $2}'
+  done
+}
+replicas_ready() {
+  local replicas
+  replicas=$(list_replicas) || return 1
+  printf '%s\n' "$replicas" | awk '
+    { if ($1 !~ /^[1-5]$/ || $2 !~ /^system[.]t_s[0-4]$/ || seen[$1,$2]++) bad=1; count[$2]++ }
+    END {
+      if (NR != 15 || bad) exit 1
+      for (i=0; i<5; i++) if (count["system.t_s" i] != 3) exit 1
+    }'
+}
+for attempt in $(seq 1 60); do
+  replicas_ready && break
+  sleep 1
+done
+if replicas_ready; then
+  echo all_15_replicas_present
+else
+  echo incomplete_replicas
+  list_replicas | sort
+fi
+––– output –––
+all_15_replicas_present

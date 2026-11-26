@@ -8530,7 +8530,7 @@ static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrs
 
 		if ( IsNullSet ( tMatch, i, tNullMask, pNullBitmaskAttr ) )
 		{
-			dRows.SkipNULL();
+			dRows.PutNULL();
 			continue;
 		}
 

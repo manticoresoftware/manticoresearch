@@ -3,11 +3,6 @@ rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd $SEARCHD_FLAGS > /dev/n
 ––– output –––
 Buddy started!
 ––– input –––
-apt-get install jq -y > /dev/null; echo $?
-––– output –––
-debconf: delaying package configuration, since apt-utils is not installed
-0
-––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE t (id INT, value TEXT, value_attr STRING) min_infix_len = '3' min_prefix_len = '3'; INSERT INTO t VALUES (1, 'example', 'example'), (2, 'test', 'test'), (3, 'sample', 'sample');"
 ––– output –––
 ––– input –––
@@ -32,7 +27,7 @@ curl -s "http://localhost:9308/cli?select%20*%20from%20t%20where%20match('test')
 | total          | 1     |
 | total_found    | 1     |
 | total_relation | eq    |
-| time           | 0.000 |
+| time           | #!/[0-9]+\.[0-9]{3}/!# |
 | keyword[0]     | test  |
 | docs[0]        | 1     |
 | hits[0]        | 1     |
@@ -67,7 +62,7 @@ curl -s "http://localhost:9308/cli_json?select%20*%20from%20t%20where%20match('t
 {"Variable_name":"total","Value":"1"},
 {"Variable_name":"total_found","Value":"1"},
 {"Variable_name":"total_relation","Value":"eq"},
-{"Variable_name":"time","Value":"0.000"},
+{"Variable_name":"time","Value":"#!/[0-9]+\.[0-9]{3}/!#"},
 {"Variable_name":"keyword[0]","Value":"test"},
 {"Variable_name":"docs[0]","Value":"1"},
 {"Variable_name":"hits[0]","Value":"1"}
@@ -114,7 +109,7 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "select * from t where m
 {"Variable_name":"total","Value":"1"},
 {"Variable_name":"total_found","Value":"1"},
 {"Variable_name":"total_relation","Value":"eq"},
-{"Variable_name":"time","Value":"0.000"},
+{"Variable_name":"time","Value":"#!/[0-9]+\.[0-9]{3}/!#"},
 {"Variable_name":"keyword[0]","Value":"test"},
 {"Variable_name":"docs[0]","Value":"1"},
 {"Variable_name":"hits[0]","Value":"1"}

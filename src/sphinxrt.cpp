@@ -10359,6 +10359,18 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const AttrAddRemoveCtx_t & tCtx,
 // MAGIC CONVERSIONS
 //////////////////////////////////////////////////////////////////////////
 
+static bool IsSameAttrStorage ( const CSphSchema & tSchema1, const CSphSchema & tSchema2 )
+{
+	if ( tSchema1.GetAttrsCount()!=tSchema2.GetAttrsCount() )
+		return false;
+
+	for ( int i = 0; i < tSchema1.GetAttrsCount(); ++i )
+		if ( tSchema1.GetAttr(i).IsColumnar()!=tSchema2.GetAttr(i).IsColumnar() )
+			return false;
+
+	return true;
+}
+
 // ClientSession_c::Execute->HandleMysqlAttach->AttachDiskIndex
 bool RtIndex_c::CanAttachDiskIndex ( const CSphIndex * pIndex, CSphString & sError ) const
 {
@@ -10455,7 +10467,8 @@ bool RtIndex_c::CanAttach ( const CSphIndex * pIndex, bool bCheckFT, CSphString 
 			return false;
 		}
 
-		if ( !GetMatchSchema().CompareTo ( pIndex->GetMatchSchema(), sError, true ) )
+		// the schema comparison does not see the storage: plain tables keep field lengths rowwise, also with engine=columnar
+		if ( !GetMatchSchema().CompareTo ( pIndex->GetMatchSchema(), sError, true ) || !IsSameAttrStorage ( GetMatchSchema(), pIndex->GetMatchSchema() ) )
 		{
 			sError = "ATTACH currently requires same attributes declaration (RT-side support not implemented yet)";
 			return false;

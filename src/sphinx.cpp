@@ -1159,7 +1159,7 @@ private:
 	void						MaybeAddPostponedUpdate ( RowsToUpdateData_t& dRows, const UpdateContext_t& tCtx );
 	bool						DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool & bCritical, CSphString & sError, CSphString & sWarning );
 
-	bool						Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride ) const override;
+	bool						Alter_IsMinMax ( RowID_t tRowID ) const override;
 	bool						AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, const ISphSchema & tOldSchema, const ISphSchema & tNewSchema, CSphString & sError );
 	bool						DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHeader, CSphString & sError );
 	bool						AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
@@ -2357,6 +2357,10 @@ bool CSphIndex_VLN::Update_WriteBlobRow ( UpdateContext_t & tCtx, RowID_t tRowID
 
 void CSphIndex_VLN::Update_MinMax ( const RowsToUpdate_t& dRows, const UpdateContext_t & tCtx )
 {
+	// Pure columnar chunks have no rowwise min/max index, even after adding a rowwise attribute.
+	if ( !m_iDocinfoIndex )
+		return;
+
 	int iRowStride = tCtx.m_tSchema.GetRowSize();
 
 	for ( const auto & tRow : dRows )
@@ -2693,9 +2697,9 @@ struct CmpQueuedLookup_fn
 
 DocidRowidPair_t * CmpQueuedLookup_fn::m_pStorage = nullptr;
 
-bool CSphIndex_VLN::Alter_IsMinMax ( const CSphRowitem * pDocinfo, int iStride ) const
+bool CSphIndex_VLN::Alter_IsMinMax ( RowID_t tRowID ) const
 {
-	return pDocinfo-m_tAttr.GetReadPtr() >= m_iDocinfo*iStride;
+	return tRowID >= m_iDocinfo;
 }
 
 
@@ -4914,6 +4918,10 @@ static void Builder_StoreAttrs ( const CSphSchema & tSchema, DocID_t tDocId, CSp
 			}
 			break;
 
+		case SPH_ATTR_TOKENCOUNT: // counted while iterating the hits, stored only in the row
+			pBuilder->SetAttr ( iAttrId, tSource.m_tDocInfo.GetAttr ( tAttr.m_tLocator ) );
+			break;
+
 		default:
 			pBuilder->SetAttr ( iAttrId, tSource.GetAttr(i) );
 			break;
@@ -5942,12 +5950,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			if ( pColumnarBuilder )
 				Builder_StoreAttrs ( m_tSchema, tDocID, *pSource, tQueryMvaContainer, pColumnarBuilder.get(), tColumnarAttrs );
 
-			if ( pSIBuilder )
-			{
-				pSIBuilder->SetRowID ( pSource->m_tDocInfo.m_tRowID );
-				Builder_StoreAttrs ( m_tSchema, tDocID, *pSource, tQueryMvaContainer, pSIBuilder.get(), tSIAttrs );
-			}
-
 			BuildStoreHistograms ( m_tSchema, tDocID, *pSource, tQueryMvaContainer, dHistograms );
 
 			// store hits
@@ -6009,6 +6011,13 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					auto uLength = pSource->m_tDocInfo.GetAttr ( m_tSchema.GetAttr ( i+iFieldLens ).m_tLocator );
 					m_dFieldLens[i] += uLength;
 				}
+			}
+
+			// after the hits, as field lengths are computed while iterating them
+			if ( pSIBuilder )
+			{
+				pSIBuilder->SetRowID ( pSource->m_tDocInfo.m_tRowID );
+				Builder_StoreAttrs ( m_tSchema, tDocID, *pSource, tQueryMvaContainer, pSIBuilder.get(), tSIAttrs );
 			}
 
 			if ( bHaveNonColumnarAttrs )

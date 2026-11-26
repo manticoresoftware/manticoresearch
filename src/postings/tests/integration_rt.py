@@ -16,6 +16,49 @@ import urllib.parse
 import urllib.request
 
 
+def check_unranked_cutoff(sql, table):
+    query = f"SELECT id,grp FROM {table} WHERE MATCH('common') AND grp=3"
+    page = " LIMIT 2,3 OPTION ranker=none,threads=1"
+
+    def run(statement):
+        rows, meta = sql(statement + ";SHOW META")
+        info = {row["Variable_name"]: row["Value"] for row in meta["data"]}
+        return rows["data"], int(info["total_found"]), info["total_relation"]
+
+    rows, lower, relation = run(query + page)
+    assert len({row["id"] for row in rows}) == 3 and all(row["grp"] == 3 for row in rows)
+    assert relation == "gte", (table, lower, relation)
+    _, exact, relation = run(query + page + ",cutoff=0")
+    assert relation == "eq" and 5 <= lower < exact, (table, lower, exact, relation)
+    _, ordered, relation = run(query + " ORDER BY WEIGHT() DESC" + page)
+    assert (ordered, relation) == (exact, "eq"), (table, ordered, exact, relation)
+
+
+def check_json_unranked_cutoff(url, table):
+    query = {"bool": {"must": [{"match": {"body": "common"}}, {"equals": {"grp": 3}}]}}
+    options = {"ranker": "none", "threads": 1}
+
+    def search(**overrides):
+        body = {"table": table, "query": query, "offset": 2, "limit": 3, "options": options, **overrides}
+        request = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(request, timeout=60) as response:
+            return json.load(response)
+
+    page = search()["hits"]
+    exact = search(options={**options, "cutoff": 0})["hits"]
+    assert len({row["_id"] for row in page["hits"]}) == 3 and all(row["_source"]["grp"] == 3 for row in page["hits"])
+    assert page["total_relation"] == "gte" and 5 <= page["total"] < exact["total"], (table, page)
+    assert exact["total_relation"] == "eq", (table, exact)
+    for request in ({"sort": [{"_score": "desc"}]}, {"options": {"threads": 1}}):
+        hits = search(**request)["hits"]
+        assert (hits["total"], hits["total_relation"]) == (exact["total"], "eq"), (table, hits)
+    sort = [{"id": "desc"}]
+    assert search(sort=sort)["hits"]["hits"] == search(sort=sort, options={**options, "cutoff": 0})["hits"]["hits"]
+    agg = search(offset=0, aggs={"groups": {"terms": {"field": "grp"}}})
+    assert agg["aggregations"]["groups"]["buckets"][0]["doc_count"] == exact["total"], (table, agg)
+    assert (agg["hits"]["total"], agg["hits"]["total_relation"]) == (exact["total"], "eq"), (table, agg)
+
+
 def check_sort_bound_scan(sql, table, storage):
     sql(f"CREATE TABLE {table} (ts bigint, bucket int, shuffled int, rare int, peak int) engine='{storage}'")
     # The last columnar parent has just one partial leaf.
@@ -216,6 +259,8 @@ def main():
                 assert a == b, (case, stage, query, a, b)
                 checks.append({"case": case, "stage": stage, "query": query})
             for table in tables:
+                check_unranked_cutoff(sql, table)
+                check_json_unranked_cutoff(args.url.rstrip("/") + "/search", table)
                 result = sql("SELECT count(*) FROM " + table + " WHERE MATCH('common')")[0]["data"]
                 assert result == [{"count(*)": expected_docs}], (table, stage, result)
             print(case, stage, "passed", flush=True)

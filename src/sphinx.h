@@ -650,7 +650,7 @@ struct CSphQuery
 
 	CSphString		m_sSelect;				///< select-list (attributes and/or expressions)
 	CSphString		m_sOrderBy;				///< order-by clause
-	bool			m_bExplicitOrderBy = false;	///< SQL ORDER BY was supplied by the client
+	bool			m_bExplicitOrderBy = false;	///< the client supplied SQL ORDER BY or JSON sort
 	CSphVector<CSphString> m_dOrderByItems;	///< parsed expressions in the explicit SQL ORDER BY
 
 	CSphString		m_sOuterOrderBy;		///< temporary (?) subselect hack

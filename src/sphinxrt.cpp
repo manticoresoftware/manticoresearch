@@ -8996,10 +8996,10 @@ static bool DoFullScanQuery ( const RtSegVec_c & dRamChunks, const ISphSchema & 
 }
 
 
-static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_t & tTermSetup, ISphRanker * pRanker, int iIndexWeight, int iCutoff, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters, bool bCountOnly )
+static bool PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_t & tTermSetup, ISphRanker * pRanker, int iIndexWeight, int iCutoff, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters, bool bCountOnly )
 {
 	if ( !iCutoff )
-		return;
+		return false;
 
 	bool bRandomize = dSorters[0]->IsRandom();
 	// query matching
@@ -9099,18 +9099,13 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 				tCtx.FreeDataFilter ( tMatch );
 				tCtx.FreeDataSort ( tMatch );
 
-				if ( bNewMatch )
-					if ( --iCutoff==0 )
-						break;
-			}
-
-			if ( iCutoff==0 )
-			{
-				iSeg = dRamChunks.GetLength();
-				break;
+				if ( bNewMatch && --iCutoff==0 )
+					return true;
 			}
 		}
 	}
+
+	return false;
 }
 
 static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema & tMaxSorterSchema, const CSphQuery & tQuery, const QueryExecutionSettings_t & tQuerySettings, const CSphMultiQueryArgs & tArgs, int iMatchPoolSize, int iStackNeed, RtQwordSetup_t & tTermSetup, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters, XQQuery_t & tParsed, CSphQueryResultMeta & tMeta, ISphMatchSorter * pSorter, bool bCountOnly )
@@ -9157,7 +9152,7 @@ static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema &
 
 		// do searching
 		int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters, true );
-		PerformFullTextSearch ( dRamChunks, tTermSetup, pRanker.get (), tArgs.m_iIndexWeight, iCutoff, pProfiler, tCtx, dSorters, bCountOnly );
+		tMeta.m_bTotalMatchesApprox |= PerformFullTextSearch ( dRamChunks, tTermSetup, pRanker.get (), tArgs.m_iIndexWeight, iCutoff, pProfiler, tCtx, dSorters, bCountOnly );
 		if ( bCountOnly )
 			RecordFastCount ( tMeta, "RanklessCount" );
 	}

@@ -1255,6 +1255,22 @@ ISphMatchSorter * CreatePlainSorter ( ESphSortFunc eMatchFunc, bool bKbuffer, in
 }
 
 
+static bool CanCutOffUnrankedFulltext ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters )
+{
+	if ( tQuery.m_eQueryType==QUERY_API || !tQuery.m_bExplicitRanker || tQuery.m_eRanker!=SPH_RANK_NONE || tQuery.m_bExplicitOrderBy )
+		return false;
+
+	if ( tQuery.m_iLimit<=0 || tQuery.m_iOffset>INT_MAX-tQuery.m_iLimit || tQuery.m_bHasOuter || tQuery.m_bAgent || tQuery.IsInternalQuery() )
+		return false;
+
+	if ( tQuery.m_eJoinType!=JoinType_e::NONE || !tQuery.m_tScrollSettings.m_dAttrs.IsEmpty() || !tQuery.m_sStore.IsEmpty() )
+		return false;
+
+	// A shared match stream may also feed a sorter with a different order or limit.
+	return dSorters.GetLength()<=1;
+}
+
+
 int ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*> & dSorters, bool bFT )
 {
 	bool bAllPrecalc = dSorters.GetLength() && dSorters.all_of ( []( auto pSorter ){ return pSorter->IsPrecalc(); } );
@@ -1280,7 +1296,7 @@ int ApplyImplicitCutoff ( const CSphQuery & tQuery, const VecTraits_T<ISphMatchS
 		return -1;
 
 	// implicit cutoff when there's no sorting and no grouping
-	if ( !bFT && ( tQuery.m_sSortBy=="@weight desc" || tQuery.m_sSortBy.IsEmpty() ) && tQuery.m_sGroupBy.IsEmpty() && !tQuery.m_bFacet && !tQuery.m_bFacetHead )
+	if ( ( !bFT || CanCutOffUnrankedFulltext ( tQuery, dSorters ) ) && ( tQuery.m_sSortBy=="@weight desc" || tQuery.m_sSortBy.IsEmpty() ) && tQuery.m_sGroupBy.IsEmpty() && !tQuery.m_bFacet && !tQuery.m_bFacetHead )
 		return tQuery.m_iLimit+tQuery.m_iOffset;
 
 	return -1;

@@ -1672,6 +1672,7 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery )
 		if ( !ParseSort ( tSort, tQuery, bGotWeight, sError, tPJQuery.m_sWarning ) )
 			return false;
 
+		tQuery.m_bExplicitOrderBy = true;
 		JsonObj_c tTrackScore = tRoot.GetBoolItem ( "track_scores", sError, true );
 		if ( !sError.IsEmpty() )
 			return false;

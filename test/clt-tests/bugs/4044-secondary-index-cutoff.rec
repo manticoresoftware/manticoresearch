@@ -1,0 +1,34 @@
+––– comment –––
+Regression for #4044: cutoff applies to full-query matches, not to a single
+include filter's SecondaryIndex candidate set.
+https://github.com/manticoresoftware/manticoresearch/issues/4044
+
+The matching row has the ninth city_id. With one attribute filter and cutoff=1,
+the SecondaryIndex must not discard it before MATCH('main') is intersected.
+––– input –––
+export SEARCHD_ARGS="--force-pseudo-sharding"
+––– output –––
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -P9306 -h0 -e "DROP TABLE IF EXISTS gh4044; CREATE TABLE gh4044 (street text, city_id int); INSERT INTO gh4044 (street,city_id) VALUES ('pine',101),('lake',102),('hill',103),('park',104),('mill',105),('ford',106),('dale',107),('wood',108),('main',109); FLUSH RAMCHUNK gh4044;" && echo ready
+––– output –––
+ready
+––– input –––
+mysql -P9306 -h0 -e "SELECT street,city_id FROM gh4044 WHERE MATCH('main') AND city_id IN (101,102,103,104,105,106,107,108,109) OPTION cutoff=1 /*+ SecondaryIndex(city_id) */;"
+––– output –––
++--------+---------+
+| street | city_id |
++--------+---------+
+| main   |     109 |
++--------+---------+
+––– comment –––
+A second filter causes the old iterator selection to drop cutoff. It is a
+control, not the bug contract: both equivalent predicates must find row 9.
+––– input –––
+mysql -P9306 -h0 -e "SELECT street,city_id FROM gh4044 WHERE MATCH('main') AND (1=1 AND city_id IN (101,102,103,104,105,106,107,108,109)) OPTION cutoff=1 /*+ SecondaryIndex(city_id) */;"
+––– output –––
++--------+---------+
+| street | city_id |
++--------+---------+
+| main   |     109 |
++--------+---------+

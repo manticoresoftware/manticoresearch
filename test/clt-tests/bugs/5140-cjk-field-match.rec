@@ -4,28 +4,30 @@ CJK segmentation must not split full-text field selectors or insert spaces
 inside them. Check both preprocessors and ensure matching is actually scoped.
 ––– block: ../base/start-searchd –––
 ––– input –––
+bash -e <<'BASH'
 for mode in jieba_chinese icu_chinese; do
   echo "$mode"
-  mysql -h0 -P9306 -e "CREATE TABLE gh5140 (\`中文列\` text, title text, \`mixed中文field\` text) engine='rowwise' charset_table='non_cont,chinese' morphology='$mode';" || exit 1
-  mysql -h0 -P9306 -B <<'SQL' || exit 1
+  mysql -h0 -P9306 -e "DROP TABLE IF EXISTS gh5140; CREATE TABLE gh5140 (\`中文列\` text, title text, \`mixed中文field\` text) engine='rowwise' charset_table='non_cont,chinese' morphology='$mode';"
+  mysql -h0 -P9306 -B <<'SQL'
 INSERT INTO gh5140 (id, `中文列`, title, `mixed中文field`) VALUES
   (1, '橙黄苹果 苹果 needle', 'other', 'other'),
   (2, 'other', '橙黄苹果 苹果 needle', 'other'),
   (3, 'other', 'other', '橙黄苹果 苹果 needle');
-SELECT id AS unscoped FROM gh5140 WHERE MATCH('苹果') ORDER BY id;
-SELECT id AS single_field FROM gh5140 WHERE MATCH('@中文列 苹果') ORDER BY id;
-SELECT id AS ascii_field FROM gh5140 WHERE MATCH('@title needle') ORDER BY id;
-SELECT id AS mixed_field FROM gh5140 WHERE MATCH('@mixed中文field needle') ORDER BY id;
-SELECT id AS field_list FROM gh5140 WHERE MATCH('@(中文列,title) needle') ORDER BY id;
-SELECT id AS excluded_field FROM gh5140 WHERE MATCH('@!中文列 needle') ORDER BY id;
-SELECT id AS excluded_list FROM gh5140 WHERE MATCH('@!(中文列,title) needle') ORDER BY id;
-SELECT id AS position_limit FROM gh5140 WHERE MATCH('@中文列[10] needle') ORDER BY id;
+SELECT id AS unscoped FROM gh5140 WHERE MATCH('苹果') ORDER BY id ASC;
+SELECT id AS single_field FROM gh5140 WHERE MATCH('@中文列 苹果') ORDER BY id ASC;
+SELECT id AS ascii_field FROM gh5140 WHERE MATCH('@title needle') ORDER BY id ASC;
+SELECT id AS mixed_field FROM gh5140 WHERE MATCH('@mixed中文field needle') ORDER BY id ASC;
+SELECT id AS field_list FROM gh5140 WHERE MATCH('@(中文列,title) needle') ORDER BY id ASC;
+SELECT id AS excluded_field FROM gh5140 WHERE MATCH('@!中文列 needle') ORDER BY id ASC;
+SELECT id AS excluded_list FROM gh5140 WHERE MATCH('@!(中文列,title) needle') ORDER BY id ASC;
+SELECT id AS position_limit FROM gh5140 WHERE MATCH('@中文列[10] needle') ORDER BY id ASC;
 SELECT COUNT(*) AS position_rejected FROM gh5140 WHERE MATCH('@中文列[1] needle');
-SELECT id AS all_fields FROM gh5140 WHERE MATCH('@* needle') ORDER BY id;
-SELECT id AS quoted_text FROM gh5140 WHERE MATCH('@中文列 "苹果 needle"') ORDER BY id;
+SELECT id AS all_fields FROM gh5140 WHERE MATCH('@* needle') ORDER BY id ASC;
+SELECT id AS quoted_text FROM gh5140 WHERE MATCH('@中文列 "苹果 needle"') ORDER BY id ASC;
 DROP TABLE gh5140;
 SQL
 done
+BASH
 ––– output –––
 jieba_chinese
 unscoped

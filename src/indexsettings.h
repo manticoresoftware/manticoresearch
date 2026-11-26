@@ -573,7 +573,8 @@ void		SaveDictionarySettings ( Writer_i & tWriter, const DictRefPtr_c& pDict, bo
 
 void		DumpSettings ( StringBuilder_c & tBuf, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder );
 void		DumpSettings ( StringBuilder_c & tBuf, const CSphIndexSettings & tSettings, const CSphFieldFilterSettings & tFieldFilterSettings, const CSphTokenizerSettings & tTokenizerSettings, const CSphDictSettings & tDictSettings, const MutableIndexSettings_c & tMutableSettings, FilenameBuilder_i * pFilenameBuilder );
-void		DumpSettingsCfg ( FILE * fp, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder );
+// the body of an index section for a standalone indexer: the settings of tIndex and the column storage of tSchema
+void		DumpIndexCfg ( StringBuilder_c & tBuf, const CSphIndex & tIndex, const CSphSchema & tSchema, FilenameBuilder_i * pFilenameBuilder );
 void		DumpReadable ( FILE * fp, const CSphIndex & tIndex, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder );
 
 /// try to set dictionary, tokenizer and misc settings for an index (if not already set)

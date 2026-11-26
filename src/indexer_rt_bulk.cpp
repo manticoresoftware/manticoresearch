@@ -72,17 +72,27 @@ DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const Serv
 static Threads::Coro::Mutex_c g_tIndexerRtBulkLaunchMutex;
 #endif
 
+static const char * g_sIndexerRtBulkChunk = "indexer_rt_bulk_chunk";
+
+const char * GetIndexerRtBulkChunkName()
+{
+	return g_sIndexerRtBulkChunk;
+}
+
 
 static bool ValidateFloatVectorValue ( const CSphColumnInfo & tAttr, const SqlInsert_t & tValue, int iRow, CSphString & sError )
 {
 	if ( tValue.m_iType==SqlInsert_t::TOK_NULL )
 		return true;
 
-	if ( tValue.m_iType!=SqlInsert_t::CONST_MVA || !tValue.m_pVals )
+	if ( tValue.m_iType!=SqlInsert_t::CONST_MVA )
 	{
 		sError.SetSprintf ( "row %d, attribute '%s': float_vector requires a tuple value", iRow+1, tAttr.m_sName.cstr() );
 		return false;
 	}
+
+	if ( !tValue.m_pVals || !tValue.m_pVals->GetLength() )
+		return true;
 
 	const auto & dValues = *tValue.m_pVals;
 	if ( tAttr.IsIndexedKNN() && dValues.GetLength()!=tAttr.m_tKNN.m_iDims )
@@ -298,8 +308,16 @@ bool RemoveIndexerRtBulkRoot ( const CSphString & sTable, const CSphString & sRo
 }
 
 
-static bool CheckSchemaSupported ( const CSphSchema & tSchema, CSphString & sError );
-static bool WriteIndexerRtBulkConfig ( const RtIndex_i & tRt, const CSphString & sDir, CSphVector<int> & dCsvAttrOrder, CSphString & sError );
+// The config of a child that depends on the table only: built once for the children of a load.
+struct IndexerRtBulkConfig_t
+{
+	CSphString		m_sSource;
+	CSphString		m_sIndex;
+	CSphVector<int>	m_dCsvAttrOrder;
+};
+
+static bool BuildIndexerRtBulkConfig ( const RtIndex_i & tRt, IndexerRtBulkConfig_t & tConfig, CSphString & sError );
+static bool WriteIndexerRtBulkConfig ( const IndexerRtBulkConfig_t & tConfig, const CSphString & sDir, CSphString & sError );
 
 // One indexer child: its staging directory, generated config, CSV input stream and chunk.
 class RtBulkIndexer_c
@@ -311,11 +329,8 @@ public:
 		RemoveDir();
 	}
 
-	bool Start ( const RtIndex_i & tRt, CSphString & sError )
+	bool Start ( const RtIndex_i & tRt, const IndexerRtBulkConfig_t & tConfig, CSphString & sError )
 	{
-		if ( !CheckSchemaSupported ( tRt.GetMatchSchema(), sError ) )
-			return false;
-
 		CSphString sRoot = GetIndexerRtBulkRoot ( tRt );
 		if ( !PrepareStagingRoot ( sRoot, sError ) )
 			return false;
@@ -333,8 +348,9 @@ public:
 				m_sDir = RealPath ( m_sDir );
 		}
 
-		if ( !WriteIndexerRtBulkConfig ( tRt, m_sDir, m_dCsvAttrOrder, sError ) )
+		if ( !WriteIndexerRtBulkConfig ( tConfig, m_sDir, sError ) )
 			return false;
+		m_dCsvAttrOrder = tConfig.m_dCsvAttrOrder;
 
 		CSphString sIndexer;
 		if ( !GetIndexerPath ( sIndexer, sError ) )
@@ -355,18 +371,37 @@ public:
 
 	CSphString GetOutput() const
 	{
-		CSphString sPath = GetFile ( "indexer.log" );
-		FILE * fp = fopen ( sPath.cstr(), "rb" );
-		if ( !fp )
+		CSphAutoreader tReader;
+		CSphString sError;
+		if ( !tReader.Open ( GetFile ( "indexer.log" ), sError ) )
 			return {};
 
-		char sBuffer[4097];
-		size_t iLength = fread ( sBuffer, 1, sizeof(sBuffer)-1, fp );
-		fclose ( fp );
-		while ( iLength && sphIsSpace ( sBuffer[iLength-1] ) )
-			--iLength;
-		sBuffer[iLength] = '\0';
-		return CSphString ( sBuffer );
+		// an error of the chunk comes with the name of the internal table, the statement reports it without the name
+		CSphString sTablePrefix = SphSprintf ( "ERROR: table '%s': ", g_sIndexerRtBulkChunk );
+		StringBuilder_c sErrors ( "; " );
+		CSphFixedVector<char> dLine { 16384 }; // a longer line is cut, the rest of it skipped
+		while ( tReader.GetLine ( dLine.Begin(), (int)dLine.GetLengthBytes() )>=0 )
+		{
+			const char * szLine = dLine.Begin();
+			if ( StrEq ( FromStr ( sTablePrefix ), szLine ) )
+			{
+				const char * szMessage = szLine + sTablePrefix.Length();
+				sErrors << szMessage;
+			} else if ( StrEq ( FROMS ( "ERROR: " ), szLine ) || StrEq ( FROMS ( "FATAL: " ), szLine ) )
+				sErrors << szLine;
+		}
+		if ( !sErrors.IsEmpty() )
+			return CSphString ( sErrors );
+
+		// a SQL error reaches the client cut to 512 bytes; the last lines must fit in it, the first of them may be cut
+		const int MAX_TAIL_BYTES = 400;
+		tReader.SeekTo ( Max ( tReader.GetFilesize() - MAX_TAIL_BYTES, (SphOffset_t)0 ), MAX_TAIL_BYTES );
+		StringBuilder_c sTail ( "\n" );
+		int iLen;
+		while ( ( iLen = tReader.GetLine ( dLine.Begin(), (int)dLine.GetLengthBytes() ) )>=0 )
+			if ( iLen )
+				sTail << dLine.Begin();
+		return CSphString ( sTail );
 	}
 
 private:
@@ -395,7 +430,7 @@ private:
 		assert ( !m_tChild.valid() );
 		m_sExecutable = sIndexer;
 
-		std::vector<std::string> dArgs { "--config", sConfig.cstr(), "--remove_dups", "indexer_rt_bulk_chunk" };
+		std::vector<std::string> dArgs { "--config", sConfig.cstr(), "--remove_dups", g_sIndexerRtBulkChunk };
 		// limit_handles keeps per-launch handles in mutable state.
 		// Do not share Boost's global instance across concurrent requests.
 		std::decay_t<decltype(boost::process::limit_handles)> tLimitHandles;
@@ -928,9 +963,29 @@ static bool CheckSchemaSupported ( const CSphSchema & tSchema, CSphString & sErr
 		if ( sphIsInternalAttr ( tAttr ) )
 			continue;
 		ESphAttr eType = tAttr.m_eAttrType;
+		if ( eType==SPH_ATTR_FLOAT_VECTOR_ARRAY ) // indexer sources have no vector arrays
+		{
+			sError.SetSprintf ( "bulk_import does not support float_vector_array attributes (attribute '%s'); load such tables with INSERT", tAttr.m_sName.cstr() );
+			return false;
+		}
+
 		if ( eType!=SPH_ATTR_TOKENCOUNT && !SVpipeAttrDirective ( eType ) )
 		{
 			sError.SetSprintf ( "bulk_import does not support attribute '%s'", tAttr.m_sName.cstr() );
+			return false;
+		}
+
+		// indexer does not compute embeddings
+		if ( !tAttr.m_tKNNModel.m_sModelName.empty() )
+		{
+			sError.SetSprintf ( "bulk_import does not support embeddings models (attribute '%s'); load such tables with INSERT", tAttr.m_sName.cstr() );
+			return false;
+		}
+
+		// indexer keeps field lengths in the row only
+		if ( eType==SPH_ATTR_TOKENCOUNT && tAttr.IsColumnar() )
+		{
+			sError.SetSprintf ( "bulk_import does not support columnar field lengths (attribute '%s')", tAttr.m_sName.cstr() );
 			return false;
 		}
 	}
@@ -1154,15 +1209,55 @@ void ConfigureIndexerRtBulk ( const CSphConfig & hConf )
 }
 
 
-static bool WriteIndexerRtBulkConfig ( const RtIndex_i & tRt, const CSphString & sDir, CSphVector<int> & dCsvAttrOrder, CSphString & sError )
+static bool BuildIndexerRtBulkConfig ( const RtIndex_i & tRt, IndexerRtBulkConfig_t & tConfig, CSphString & sError )
 {
 	const CSphSchema & tSchema = tRt.GetMatchSchema();
+	if ( !CheckSchemaSupported ( tSchema, sError ) )
+		return false;
 
 	// Use the same type-grouped order for csvpipe directives and streamed values.
-	GetIndexerRtBulkCsvAttrOrder ( tSchema, dCsvAttrOrder );
+	GetIndexerRtBulkCsvAttrOrder ( tSchema, tConfig.m_dCsvAttrOrder );
 
+	StringBuilder_c sSource;
+	sSource << "source indexer_rt_bulk_source {\n  type = csvpipe\n";
+	sSource.Appendf ( "  csvpipe_command = %s\n", GetIndexerRtBulkCsvpipeCommand() );
+	for ( int i=0; i<tSchema.GetFieldsCount(); ++i )
+	{
+		const CSphColumnInfo & tField = tSchema.GetField(i);
+		const CSphColumnInfo * pSameAttr = tSchema.GetAttr ( tField.m_sName.cstr() );
+		sSource.Appendf ( "  %s = %s\n", pSameAttr && pSameAttr->m_eAttrType==SPH_ATTR_STRING ? "csvpipe_field_string" : "csvpipe_field", tField.m_sName.cstr() );
+	}
+	for ( int iAttr : tConfig.m_dCsvAttrOrder )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr ( iAttr );
+		sSource.Appendf ( "  %s = %s", SVpipeAttrDirective ( tAttr.m_eAttrType ), tAttr.m_sName.cstr() );
+		if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER && tAttr.m_tLocator.IsBitfield() )
+			sSource.Appendf ( ":%d", tAttr.m_tLocator.m_iBitCount );
+		sSource << "\n";
+	}
+	sSource << "  csvpipe_attr_order = ";
+	bool bFirstAttr = true;
+	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+		if ( tAttr.m_sName==sphGetDocidName() || sphIsInternalAttr ( tAttr ) || !SVpipeAttrDirective ( tAttr.m_eAttrType ) )
+			continue;
+		sSource << ( bFirstAttr ? "" : "," ) << tAttr.m_sName;
+		bFirstAttr = false;
+	}
+	sSource << "\n}\n\n";
+	tConfig.m_sSource = (CSphString)sSource;
+
+	StringBuilder_c sIndex;
+	DumpIndexCfg ( sIndex, tRt, tRt.GetInternalSchema(), nullptr );
+	tConfig.m_sIndex = (CSphString)sIndex;
+	return true;
+}
+
+
+static bool WriteIndexerRtBulkConfig ( const IndexerRtBulkConfig_t & tConfig, const CSphString & sDir, CSphString & sError )
+{
 	CSphString sConfig = SphSprintf ( "%s/indexer.conf", sDir.cstr() );
-	CSphString sIndex = SphSprintf ( "%s/chunk", sDir.cstr() );
 	FILE * fpConfig = fopen ( sConfig.cstr(), "wb" );
 	if ( !fpConfig )
 	{
@@ -1170,56 +1265,12 @@ static bool WriteIndexerRtBulkConfig ( const RtIndex_i & tRt, const CSphString &
 		return false;
 	}
 
+	CSphString sConfigIndex = EscapeIndexerRtBulkConfigPath ( SphSprintf ( "%s/chunk", sDir.cstr() ) );
 	fputs ( g_sIndexerRtBulkSections.cstr(), fpConfig );
-	const char * szPipeField = "csvpipe_field";
-	const char * szPipeFieldString = "csvpipe_field_string";
-	const char * szPipeAttrOrder = "csvpipe_attr_order";
-	fprintf ( fpConfig, "source indexer_rt_bulk_source {\n  type = csvpipe\n" );
-	fprintf ( fpConfig, "  csvpipe_command = %s\n", GetIndexerRtBulkCsvpipeCommand() );
-	for ( int i=0; i<tSchema.GetFieldsCount(); ++i )
-	{
-		const CSphColumnInfo & tField = tSchema.GetField(i);
-		const CSphColumnInfo * pSameAttr = tSchema.GetAttr ( tField.m_sName.cstr() );
-		fprintf ( fpConfig, "  %s = %s\n", pSameAttr && pSameAttr->m_eAttrType==SPH_ATTR_STRING ? szPipeFieldString : szPipeField, tField.m_sName.cstr() );
-	}
-	for ( int iAttr : dCsvAttrOrder )
-	{
-		const CSphColumnInfo & tAttr = tSchema.GetAttr ( iAttr );
-		const char * szDirective = SVpipeAttrDirective ( tAttr.m_eAttrType );
-		fprintf ( fpConfig, "  %s = %s", szDirective, tAttr.m_sName.cstr() );
-		if ( tAttr.m_eAttrType==SPH_ATTR_INTEGER && tAttr.m_tLocator.IsBitfield() )
-			fprintf ( fpConfig, ":%d", tAttr.m_tLocator.m_iBitCount );
-		fprintf ( fpConfig, "\n" );
-	}
-	fprintf ( fpConfig, "  %s = ", szPipeAttrOrder );
-	bool bFirstAttr = true;
-	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
-	{
-		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
-		if ( tAttr.m_sName==sphGetDocidName() || sphIsInternalAttr ( tAttr ) || !SVpipeAttrDirective ( tAttr.m_eAttrType ) )
-			continue;
-		fprintf ( fpConfig, "%s%s", bFirstAttr ? "" : ",", tAttr.m_sName.cstr() );
-		bFirstAttr = false;
-	}
-	fprintf ( fpConfig, "\n" );
-	CSphString sConfigIndex = EscapeIndexerRtBulkConfigPath ( sIndex );
-	fprintf ( fpConfig, "}\n\nindex indexer_rt_bulk_chunk {\n  type = plain\n  source = indexer_rt_bulk_source\n  path = %s\n", sConfigIndex.cstr() );
-	// the settings dump joins the wordforms files into one value, while a config takes one file per wordforms line
-	StringBuilder_c sSettings;
-	DumpSettings ( sSettings, tRt, nullptr );
-	for ( const CSphString & sLine : sphSplit ( sSettings.cstr(), "\n" ) )
-	{
-		if ( !sLine.Begins ( "wordforms = " ) )
-			fprintf ( fpConfig, "\t%s\n", sLine.cstr() );
-		else
-			for ( const CSphString & sFile : tRt.GetDictionary()->GetSettings().m_dWordforms )
-				fprintf ( fpConfig, "\twordforms = %s\n", sFile.cstr() );
-	}
-	// not in the dump: the chunk embeds the external files as the chunks of the table do (none in RT mode, 0)
-	fprintf ( fpConfig, "\tembedded_limit = %d\n", tRt.GetSettings().m_iEmbeddedLimit );
-	if ( tRt.GetSettings().m_dKNN.GetLength() )
-		fprintf ( fpConfig, "\n	knn = %s", FormatKNNConfigStr ( tRt.GetSettings().m_dKNN ).cstr() );
-	fprintf ( fpConfig, "\n}\n" );
+	fputs ( tConfig.m_sSource.cstr(), fpConfig );
+	fprintf ( fpConfig, "index %s {\n  type = plain\n  source = indexer_rt_bulk_source\n  path = %s\n", g_sIndexerRtBulkChunk, sConfigIndex.cstr() );
+	fputs ( tConfig.m_sIndex.cstr(), fpConfig );
+	fprintf ( fpConfig, "}\n" );
 	fclose ( fpConfig );
 	return true;
 }
@@ -1231,8 +1282,12 @@ static bool InitIndexerRtBulk ( ClientSession_c & tSession, const RtIndex_i & tR
 	if ( tState.HasPendingData() )
 		return true;
 
+	IndexerRtBulkConfig_t tConfig;
+	if ( !BuildIndexerRtBulkConfig ( tRt, tConfig, sError ) )
+		return false;
+
 	auto pIndexer = std::make_unique<RtBulkIndexer_c>();
-	if ( !pIndexer->Start ( tRt, sError ) )
+	if ( !pIndexer->Start ( tRt, tConfig, sError ) )
 		return false;
 
 	tState.m_pIndexer = std::move ( pIndexer );
@@ -1676,17 +1731,20 @@ SharedBulkResult_e SharedBulkPool_c::Start ( CSphString & sError )
 	m_tSchema = pRt->GetMatchSchema();
 	BulkImportInfo ( "BULK_IMPORT_SHARED created table=%s pool_size=%d", m_sTable.cstr(), m_iChunks );
 
+	IndexerRtBulkConfig_t tConfig;
+	if ( !BuildIndexerRtBulkConfig ( *pRt.Ptr(), tConfig, sError ) )
+		return SharedBulkResult_e::FAILED;
+
 	CSphFixedVector<SharedBulkSlot_t> dSlots ( m_iChunks );
 	ARRAY_FOREACH ( i, dSlots )
 	{
 		auto & pIndexer = dSlots[i].m_pIndexer;
 		pIndexer = std::make_unique<RtBulkIndexer_c>();
-		if ( !pIndexer->Start ( *pRt.Ptr(), sError ) )
+		if ( !pIndexer->Start ( *pRt.Ptr(), tConfig, sError ) )
 			return SharedBulkResult_e::FAILED;
 		BulkImportInfo ( "BULK_IMPORT_SHARED slot_started table=%s slot=%d pid=%d", m_sTable.cstr(), i, pIndexer->GetPid() );
 	}
-	for ( int iAttr : dSlots[0].m_pIndexer->GetCsvAttrOrder() )
-		m_dCsvAttrOrder.Add ( iAttr );
+	m_dCsvAttrOrder = tConfig.m_dCsvAttrOrder;
 
 	Threads::Coro::ScopedMutex_t tLock { m_tLock };
 	if ( !m_sError.IsEmpty() ) // PURGE, DROP, shutdown or a joiner's invalid document came first

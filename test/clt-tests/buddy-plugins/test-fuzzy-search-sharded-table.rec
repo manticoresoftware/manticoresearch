@@ -40,7 +40,7 @@ mysql -h0 -P1306 -e "SELECT * FROM tbl_fz WHERE MATCH('MARIA') ORDER BY id ASC O
 |    4 | MARINA   |
 +------+----------+
 ––– input –––
-mysql -h0 -P1306 -e "CALL AUTOCOMPLETE('RICH', 'tbl_fz', 1 AS fuzziness)"
+mysql -h0 -P1306 -e "CALL AUTOCOMPLETE('RICH', 'tbl_fz', 1 AS fuzziness, 1 as preserve)"
 ––– output –––
 +---------+
 | query   |

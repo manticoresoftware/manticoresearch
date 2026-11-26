@@ -72,7 +72,7 @@ query: george
 ––– comment –––
 Test 9: Multiple options with force_bigrams
 ––– input –––
-mysql -P9306 -h0 -e "call autocomplete('geor', 't', 1 as fuzziness, 1 as append, 1 as prepend, 1 as force_bigrams)\G"
+mysql -P9306 -h0 -e "call autocomplete('geor', 't', 1 as fuzziness, 1 as append, 1 as prepend, 1 as force_bigrams, 1 as preserve)\G"
 ––– output –––
 *************************** 1. row ***************************
 query: george

@@ -103,9 +103,25 @@ struct TaskInfo_t
 {
 	DECLARE_RENDER ( TaskInfo_t );
 
-	std::atomic<void *> m_pPrev { nullptr }; // link to previous (parent) chain. Hazard, NOT owned!
+	std::atomic<void *> m_pPrev { nullptr }; // parent, kept alive until this node is reclaimed
 	BYTE m_eType;
+	std::atomic<int> m_iOwners { 1 };
+	hazard::Deleter_fn m_fnDelete = nullptr;
+	RefCountedRefPtr_T<TaskInfo_t> m_pParent; // keep the entire ancestry alive
+
+	void AddRef() noexcept { m_iOwners.fetch_add ( 1, std::memory_order_relaxed ); }
+	void Release() noexcept
+	{
+		if ( m_iOwners.fetch_sub ( 1, std::memory_order_acq_rel )==1 )
+			hazard::Retire ( static_cast<void *> ( this ), m_fnDelete );
+	}
 };
+
+template<typename TASKINFO>
+void DestroyTaskInfo ( void * pSrc )
+{
+	delete static_cast<TASKINFO *> ( pSrc );
+}
 
 struct RefCount_t {
 	static void Inc ( BYTE eType );
@@ -128,25 +144,30 @@ template<typename TASKINFO, typename REFCOUNT=RefCount_t>
 class ScopedInfo_T
 {
 protected:
-	hazard::ScopedPtr_t<TASKINFO*> m_pInfo;
+	RefCountedRefPtr_T<TASKINFO> m_pInfo;
 
 public:
 	explicit ScopedInfo_T ( TASKINFO* pInfo )
 		: m_pInfo ( pInfo )
 	{
-		pInfo->m_pPrev = Threads::MyThd().m_pTaskInfo.exchange ( pInfo, std::memory_order_acq_rel );
+		pInfo->m_fnDelete = &DestroyTaskInfo<TASKINFO>;
+		auto * pParent = static_cast<TaskInfo_t *> ( Threads::MyThd().m_pTaskInfo.load ( std::memory_order_relaxed ) );
+		SafeAddRef ( pParent );
+		pInfo->m_pParent = pParent; // takes ownership of the retained reference
+		pInfo->m_pPrev.store ( pParent, std::memory_order_relaxed );
+		Threads::MyThd().m_pTaskInfo.store ( pInfo, std::memory_order_release );
 		REFCOUNT::Inc ( TASKINFO::Task() );
 	}
 
-	explicit operator TASKINFO*() const noexcept { return m_pInfo.operator TASKINFO*(); };
-	TASKINFO* operator->() const noexcept { return m_pInfo.operator->(); }
+	explicit operator TASKINFO*() const noexcept { return m_pInfo.Ptr(); };
+	TASKINFO* operator->() const noexcept { return m_pInfo.Ptr(); }
 
 	ScopedInfo_T ( ScopedInfo_T&& rhs ) = delete;
 	ScopedInfo_T& operator= ( ScopedInfo_T&& rhs) = delete;
 
 	~ScopedInfo_T ()
 	{
-		Threads::MyThd ().m_pTaskInfo.store ( m_pInfo->m_pPrev, std::memory_order_release );
+		Threads::MyThd ().m_pTaskInfo.store ( m_pInfo->m_pPrev.load ( std::memory_order_relaxed ), std::memory_order_release );
 		REFCOUNT::Dec ( TASKINFO::Task() );
 	}
 };

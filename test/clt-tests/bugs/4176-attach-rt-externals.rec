@@ -72,20 +72,16 @@ mysql -h0 -P9306 -e "ALTER TABLE rt_src_multi STOPWORDS='/var/lib/manticore/ext_
 mysql -h0 -P9306 -e "INSERT INTO rt_src_multi VALUES (3, 'c'); FLUSH RAMCHUNK rt_src_multi;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLE rt_src_multi STATUS LIKE 'disk_chunks';" -N -B
+mysql -h0 -P9306 -e "SHOW TABLE rt_src_multi STATUS LIKE 'disk_chunks';" -N -B | awk '$1 == "disk_chunks" { print $2 } $2 == "disk_chunks" { print $4 }'
 ––– output –––
-+-------------+------+
-| disk_chunks |    3 |
-+-------------+------+
+3
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE rt_dst_multi (id BIGINT, title TEXT); ATTACH TABLE rt_src_multi TO TABLE rt_dst_multi;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLE rt_dst_multi STATUS LIKE 'disk_chunks';" -N -B
+mysql -h0 -P9306 -e "SHOW TABLE rt_dst_multi STATUS LIKE 'disk_chunks';" -N -B | awk '$1 == "disk_chunks" { print $2 } $2 == "disk_chunks" { print $4 }'
 ––– output –––
-+-------------+------+
-| disk_chunks |    3 |
-+-------------+------+
+3
 ––– input –––
 if grep -q "swauniq" /var/lib/manticore/rt_dst_multi/stopwords_chunk*.txt && \
 grep -q "swauniqb" /var/lib/manticore/rt_dst_multi/stopwords_chunk*.txt && \
@@ -141,11 +137,9 @@ mysql -h0 -P9306 -e "CREATE TABLE rt_src_second (id BIGINT, title TEXT) stopword
 mysql -h0 -P9306 -e "CREATE TABLE rt_dst_attach (id BIGINT, title TEXT); ATTACH TABLE rt_src_multi TO TABLE rt_dst_attach; ATTACH TABLE rt_src_second TO TABLE rt_dst_attach;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLE rt_dst_attach STATUS LIKE 'disk_chunks';" -N -B
+mysql -h0 -P9306 -e "SHOW TABLE rt_dst_attach STATUS LIKE 'disk_chunks';" -N -B | awk '$1 == "disk_chunks" { print $2 } $2 == "disk_chunks" { print $4 }'
 ––– output –––
-+-------------+------+
-| disk_chunks |    4 |
-+-------------+------+
+4
 ––– input –––
 if grep -q "swduniq" /var/lib/manticore/rt_dst_attach/stopwords_chunk*.txt && \
 grep -q "d1 => d1r" /var/lib/manticore/rt_dst_attach/wordforms_chunk*.txt && \
@@ -165,11 +159,9 @@ mysql -h0 -P9306 -e "CREATE TABLE rt_src_second (id BIGINT, title TEXT) stopword
 mysql -h0 -P9306 -e "CREATE TABLE rt_dst_nonempty (id BIGINT, title TEXT) stopwords='/var/lib/manticore/ext_rt/sw_dst.txt' wordforms='/var/lib/manticore/ext_rt/wf_dst.txt' exceptions='/var/lib/manticore/ext_rt/exc_dst.txt'; INSERT INTO rt_dst_nonempty VALUES (10,'dst'); FLUSH RAMCHUNK rt_dst_nonempty; ATTACH TABLE rt_src_second TO TABLE rt_dst_nonempty;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLE rt_dst_nonempty STATUS LIKE 'disk_chunks';" -N -B
+mysql -h0 -P9306 -e "SHOW TABLE rt_dst_nonempty STATUS LIKE 'disk_chunks';" -N -B | awk '$1 == "disk_chunks" { print $2 } $2 == "disk_chunks" { print $4 }'
 ––– output –––
-+-------------+------+
-| disk_chunks |    2 |
-+-------------+------+
+2
 ––– input –––
 if grep -q "swdstuniq" /var/lib/manticore/rt_dst_nonempty/stopwords_chunk*.txt && \
 grep -q "swduniq" /var/lib/manticore/rt_dst_nonempty/stopwords_chunk*.txt; then echo OK_NONEMPTY_CONTENT; else echo FAIL_NONEMPTY_CONTENT; fi
@@ -199,3 +191,61 @@ mysql -h0 -P9306 -e "CREATE TABLE rt_src_shared2 (id BIGINT, title TEXT) stopwor
 if [ "$(grep -l 'swshareduniq' /var/lib/manticore/rt_dst_shared/stopwords_chunk*.txt | wc -l)" -eq 1 ]; then echo OK_SHARED_DEDUP_MULTI_SRC; else echo FAIL_SHARED_DEDUP_MULTI_SRC; fi
 ––– output –––
 OK_SHARED_DEDUP_MULTI_SRC
+––– comment –––
+Case G: plain mode, three plain tables with exceptions attached one after another to an RT table
+with the same exceptions: the attach keeps the exceptions file info of the RT table, so the next
+attach finds the same tokenizer settings, also after a restart
+––– input –––
+mkdir -p /tmp/attach_exc; echo 'C++ => cplusplus' > /tmp/attach_exc/ex.txt; for p in 1 2 3; do echo "$p,C++ row $p" > /tmp/attach_exc/p$p.csv; done
+cat > /tmp/attach_exc/plain.conf <<'EOF'
+searchd {
+  listen = 19306:mysql41
+  log = /tmp/attach_exc/searchd.log
+  pid_file = /tmp/attach_exc/searchd.pid
+  binlog_path = /tmp/attach_exc
+}
+source p1 {
+  type = csvpipe
+  csvpipe_command = cat /tmp/attach_exc/p1.csv
+  csvpipe_field = title
+}
+source p2 : p1 {
+  csvpipe_command = cat /tmp/attach_exc/p2.csv
+}
+source p3 : p1 {
+  csvpipe_command = cat /tmp/attach_exc/p3.csv
+}
+table p1 {
+  type = plain
+  source = p1
+  path = /tmp/attach_exc/p1
+  exceptions = /tmp/attach_exc/ex.txt
+}
+table p2 : p1 {
+  source = p2
+  path = /tmp/attach_exc/p2
+}
+table p3 : p1 {
+  source = p3
+  path = /tmp/attach_exc/p3
+}
+table rt_exc {
+  type = rt
+  path = /tmp/attach_exc/rt
+  rt_field = title
+  exceptions = /tmp/attach_exc/ex.txt
+}
+EOF
+indexer --quiet --config /tmp/attach_exc/plain.conf --all > /dev/null && echo indexed
+––– output –––
+indexed
+––– input –––
+searchd --config /tmp/attach_exc/plain.conf > /dev/null; mysql -h0 -P19306 -e "ATTACH TABLE p1 TO TABLE rt_exc; ATTACH TABLE p2 TO TABLE rt_exc"
+––– output –––
+––– input –––
+searchd --config /tmp/attach_exc/plain.conf --stopwait > /dev/null; searchd --config /tmp/attach_exc/plain.conf > /dev/null; mysql -h0 -P19306 -e "ATTACH TABLE p3 TO TABLE rt_exc"
+––– output –––
+––– input –––
+mysql -h0 -P19306 --skip-table --batch --raw --skip-column-names -e "SELECT id FROM rt_exc WHERE MATCH('cplusplus') ORDER BY id ASC" | xargs; searchd --config /tmp/attach_exc/plain.conf --stopwait > /dev/null
+––– output –––
+1 2 3

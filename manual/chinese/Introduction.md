@@ -25,6 +25,9 @@ Manticore Search 可以存储由你的机器学习模型提供的向量，也可
 
 对于长文本，[自动分块](Searching/KNN.md#Chunking-strategies)可以将每个文档拆分为固定大小、递归或基于句子的块，并将其嵌入存储在 `float_vector_array` 中。每个块会被独立搜索，而文档在结果中只出现一次，并根据最接近的块进行评分。`mean` 策略则会将各块的嵌入平均为一个向量；默认的 `truncate` 策略会保留此前的单向量行为。
 
+#### 混合搜索
+[混合搜索](Searching/Hybrid_search.md) 在单个查询中使用倒数排名融合（RRF）合并全文和向量（KNN）结果。SQL facet 和 JSON 聚合可作用于合并后的结果集。
+
 #### 会话搜索
 Manticore Search 支持在现有的向量化表上进行 [conversational search](Searching/Conversational_search.md)。它会使用 KNN 搜索检索最相关的行，将这些行与对话历史一起作为 LLM 的上下文，并且可以通过 SQL `CALL CHAT` 或 HTTP JSON `/search` 端点进行应答。
 
@@ -66,6 +69,9 @@ Manticore Search 守护进程使用 C++ 开发，启动速度快，内存利用�
 
 #### 实时插入
 新添加或更新的文档可以立即读取。
+
+#### 批量导入
+[直接写入磁盘的批量导入](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import) 会为大批量数据构建磁盘块，而无需先将文档暂存到 RAM 块中。通过 SQL 和 HTTP，它支持本地、分片和复制的实时表。共享 HTTP 批量导入可接受并发请求，导入的文档会在批次提交后变为可见。
 
 #### 轻松学习的交互式课程
 我们提供 [免费的交互式课程](https://play.manticoresearch.com/)，让学习变得轻松无负担。

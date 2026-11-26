@@ -88,11 +88,15 @@ $ index_converter --config /home/myuser/manticore.conf --index tablename
 $ index_converter --config /home/myuser/manticore.conf --all
 ```
 
-#### 转换文件夹中发现的表
+#### 按路径转换表
+
+不使用配置文件时，请传入不带扩展名的表文件路径。例如，对于存储在 `/var/lib/sphinx/test1.sph`、`/var/lib/sphinx/test1.spa` 等文件中的表：
 
 ```ini
-$ index_converter  --path /var/lib/manticoresearch/data --all
+$ index_converter --path /var/lib/sphinx/test1
 ```
+
+`--path` 用于转换一张表，不会扫描文件夹；如需一次转换所有表，请将 `--all` 与 `--config` 一起使用。
 
 新版表默认写入同一文件夹。前一版本的文件会以 `.old` 扩展名保存。例外的是 `.spp`（命中列表）文件，这是唯一在新格式中没有任何更改的表组件。
 
@@ -119,11 +123,11 @@ $ index_converter --config /home/myuser/manticore.conf --all --output-dir /new/p
 
 * `--config <file>`（简写为 `-c <file>`）告诉 index_converter 使用指定的文件作为配置文件。通常，它会在安装目录中查找 manticore.conf（例如，如果安装在 `/usr/local/sphinx`，则查找 `/usr/local/manticore/etc/manticore.conf`），然后查找调用 index_converter 时所在的当前目录。
 * `--index` 指定要转换的表
-* `--path` - 不使用配置文件，改为使用包含表的路径
+* `--path` - 不使用配置文件，而是根据不带扩展名的文件路径转换一张表
 * `--strip-path` - 从表引用的文件名中去除路径：stopwords、exceptions 和 wordforms
 * `--large-docid` - 允许转换 `id` 大于 2^63 的文档并显示警告；否则，在遇到较大的 `id` 时转换会以错误退出。添加这个选项是为了兼容 Manticore 3.x 格式，因为 Sphinx/Manticore 2.x 使用的是无符号 doc id 值，其范围可能超过有符号 64 位的显示范围。
 * `--output-dir <dir>` - 将新文件写入指定文件夹，而不是放到现有表文件所在位置。设置此选项时，现有表文件将保持其原位置不变。
-* `--all` - 转换配置中的所有表
+* `--all` - 转换配置中的所有表；需要使用 `--config`
 * `--killlist-target <targets>` 设置要应用 kill-list 的目标表。此选项应仅与 `--index` 选项配合使用
 
 <!-- proofread -->

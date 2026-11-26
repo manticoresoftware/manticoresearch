@@ -1,0 +1,16 @@
+––– comment –––
+Regression for #4726: concurrent first MySQL connections at start must not turn on SSL without keys. Before the fix the daemon could advertise SSL with a context without keys; then every SSL handshake failed or hung until restart. Clients hammer the port before searchd starts, so the first handshakes arrive together
+––– input –––
+export INSTANCE=1; mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}
+––– output –––
+––– input –––
+for i in 1 2 3; do for j in $(seq 1 30); do ( for k in $(seq 1 300); do timeout 10 mysql -h0 -P1306 -e "SELECT 1" > /dev/null 2>&1 && break; sleep 0.02; done ) & done; searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; wait; timeout 10 mysql -h0 -P1306 -e "SELECT 1" 2>&1 | grep -v "^[|+]"; searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf --stopwait > /dev/null; done; echo "3 starts done"
+––– output –––
+3 starts done
+––– comment –––
+No ssl_cert / ssl_key and no auth: SSL is not offered, and nothing about SSL is logged
+––– input –––
+searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null; timeout 10 mysql --ssl-mode=REQUIRED -h0 -P1306 -e "SELECT 1" 2>&1; grep -ci "ssl" /var/log/manticore-1/searchd.log
+––– output –––
+ERROR 2026 (HY000): SSL connection error: SSL is required but the server doesn't support it
+0

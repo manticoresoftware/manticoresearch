@@ -48,6 +48,10 @@ CREATE TABLE c:cluster_sharded shards='10' rf='3' timeout='60'
 
 如果超时被超过，表创建将失败，你需要使用更长的超时值重新尝试。
 
+#### 批量加载分片表
+
+分片表通过 HTTP `/bulk` 或 SQL 接受[共享批量导入](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Shared-bulk-import-into-a-sharded-table)：文档会直接写入其路由到的各个分片的新磁盘块中，每个分片一个块，并在提交时变得可搜索。
+
 #### 删除分片表
 
 要删除分片表，请使用标准的 `DROP TABLE` 命令。在集群环境中，请在表名中指定集群名称，以便正确定位要删除的表。支持 `IF EXISTS`。

@@ -312,7 +312,7 @@ bool PrepareBulkChunk ( const ClusterIndexAddLocalRequest_t & tCmd )
 		return false;
 	for ( const auto & sOld : tRotated.m_dOld )
 		pSession->m_dFilesRef.Add ( sOld );
-	auto pChunk = LoadIndexerRtBulkChunk ( pSession->m_sFilebase, sError );
+	auto pChunk = LoadIndexerRtBulkChunk ( pSession->m_sFilebase, tCmd.m_sIndex, sError );
 	if ( !pChunk )
 		return false;
 	{
@@ -406,7 +406,7 @@ bool AttachBulkChunk ( const CSphString & sCluster, const CSphString & sTable, u
 	}
 	if ( bFallback && pSession->BeginPrepare() )
 	{
-		auto pLoaded = LoadIndexerRtBulkChunk ( pSession->m_sFilebase, sError );
+		auto pLoaded = LoadIndexerRtBulkChunk ( pSession->m_sFilebase, sTable, sError );
 		if ( !pLoaded )
 			return false;
 		{

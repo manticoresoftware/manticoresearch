@@ -1,0 +1,17 @@
+––– comment –––
+PQ INSERT must not hang when it overlaps FLUSH RAMCHUNK: the commit waits for the busy binlog
+while it holds the PQ write lock and may resume on another worker thread.
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE pq (body text) type='pq'"; echo $?
+––– output –––
+0
+––– input –––
+(for i in $(seq 200); do timeout 10 mysql -h0 -P9306 -e "FLUSH RAMCHUNK pq" || { echo "flush $i failed"; break; }; done) & for w in 0 1 2 3; do (for i in $(seq 500); do echo "INSERT INTO pq(id,query) VALUES ($((w*500+i)),'alpha beta gamma delta epsilon rule_$i');"; done | timeout 60 mysql -h0 -P9306 || echo "writer $w failed") & done; wait; echo done
+––– output –––
+done
+––– input –––
+timeout 10 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM pq\G"
+––– output –––
+*************************** 1. row ***************************
+count(*): 2000

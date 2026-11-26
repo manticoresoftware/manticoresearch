@@ -59,6 +59,8 @@ jobs:
         github.event.workflow_run.conclusion == 'success'
         &&
         github.ref == 'refs/heads/main'
+        &&
+        github.event.workflow_run.head_repository.full_name == github.repository
       )
       ||
       (
@@ -172,6 +174,8 @@ jobs:
         github.event.workflow_run.conclusion == 'success'
         &&
         github.ref == 'refs/heads/main'
+        &&
+        github.event.workflow_run.head_repository.full_name == github.repository
       )
       ||
       (
@@ -473,7 +477,7 @@ jobs:
         shell: bash
       - run: mv /builds/manticoresearch/dev/build build
       - name: Upload artifact
-        uses: manticoresoftware/upload_artifact_with_retries@v5
+        uses: manticoresoftware/upload_artifact_with_retries@v6
         with:
           name: win_installer
           path: build/manticore-*.exe

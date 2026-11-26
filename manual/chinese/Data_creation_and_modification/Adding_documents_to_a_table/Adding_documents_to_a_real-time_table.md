@@ -904,6 +904,8 @@ SET bulk_import=0;
 
 `COMMIT` 会将自上次 `COMMIT` 或 `ROLLBACK` 以来收集的行作为一个磁盘块发布。`ROLLBACK` 则丢弃这些行。两种操作都不会关闭批量导入模式，因此可以继续下一个批次。执行 `SET bulk_import=0` 可丢弃所有未提交的行、关闭批量导入，并解除此连接对表的占用。占用解除后即可恢复对该表的写入。关闭连接也有相同效果。启用批量导入期间无法更改自动提交设置。
 
+对于分片表，SQL 的工作方式有所不同：请参阅[将数据共享批量导入分片表](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Shared-bulk-import-into-a-sharded-table)。
+
 #### HTTP `/bulk`
 
 在 Manticore `/bulk` 请求中添加 `bulk_import=<table>`。请求体仍采用标准的换行分隔 JSON（NDJSON），且每个操作都必须是针对绑定表的 `insert` 或 `create`：
@@ -938,6 +940,8 @@ curl -sS -X POST \
 
 该端点支持分块传输编码，因此无需缓冲整个请求，即可处理大于 `max_packet_size` 的请求体。
 
+对于分片表，`/bulk` 的工作方式有所不同：请参阅[将数据共享批量导入分片表](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Shared-bulk-import-into-a-sharded-table)。
+
 #### 共享 HTTP 批量导入
 
 当多个并发请求向同一张表加载数据时，请在 `bulk_import=<table>` 旁添加 `shared`，例如日志采集器每次刷新都通过新连接发送数据的场景。所有此类请求都会将数据送入该表共享的索引构建进程池。此池不属于某个连接：它会跨请求、连接和重连持续存在，直到被提交、通过 `PURGE` 取消、表被删除，或守护进程停止。
@@ -960,7 +964,7 @@ printf '\n' | curl -sS -X POST -H 'Content-Type: application/x-ndjson' --data-bi
 
 提交会停止接收新数据，停止未收到数据的索引构建进程，等待其余各进程完成各自部分的构建，为每个有数据的进程挂载一个磁盘块，然后移除进程池并返回 `"shared_state":"published"`。如果其他数据请求仍在运行，提交会返回 HTTP `409` 和 `shared_busy`，进程池继续开放；请在写入请求完成后重试提交。没有进程池时，提交会返回 `409` 和 `shared_no_pool`，因为提交不会创建进程池；未收到数据的进程池不会发布磁盘块。含文档请求中的空行（包括仅含空格的行）会被忽略，因此数据请求永远不会触发发布。LF 和 CRLF 均可作为行结束符。
 
-索引构建进程数（也就是新增磁盘块数）由创建进程池的请求中的 `shared=N` 设置。只提供 `shared` 而不指定值时，守护进程会使用 `searchd` 的 `INDEXER_RT_BULK_SHARED_POOL_SIZE` 环境变量；若未设置，则使用一个索引构建进程。N 的范围为 1 到工作[线程](../../Server_settings/Searchd.md#threads)数减 2（上限至少为 1）：值过小或不是数字时使用一个进程，值过大时使用上限。只有创建进程池的请求会读取 N；加入已有进程池的请求和提交请求都会忽略它。数据以约 32 KiB 的批次轮流分配给各索引构建进程。增加进程数可缩短提交后的构建时间，但加载期间会占用更多 CPU 和内存。建议从工作线程数的约三分之二开始，例如 12 个线程配 8 个索引构建进程；再增加时，这些进程会与传入请求争用 CPU 和磁盘，反而降低加载速度。每个索引构建进程在加载期间大约需要 200 MB 内存。
+索引器的数量以及新磁盘块的数量由创建池的请求中的 `shared=N` 设置。使用单独的 `shared` 时，守护进程使用 `searchd` 的 `INDEXER_RT_BULK_SHARED_POOL_SIZE` 环境变量，否则使用一个索引器。N 的范围限制为 1 到工作[线程](../../Server_settings/Searchd.md#threads)数减 2（至少为 1）：较小的值或非数字值会使用一个索引器，较大的值会使用最大数量。只有创建池的请求会读取 N；加入已打开池的请求以及提交请求都会忽略它。数据会依次以约 32 KiB 为一批分发到各个索引器。索引器越多，提交后的构建时间越短，但加载时占用的 CPU 和内存越多。一个合适的起点是使用约三分之二的工作线程数，例如 12 个线程使用 8 个索引器；索引器过多时，会与传入请求争用 CPU 和磁盘资源，导致加载变慢。使用默认 [mem_limit](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Memory-and-disk-usage) 时，每个索引器在加载期间大约需要 200 MB 内存。
 
 每个响应都是一个 JSON 对象，包含 `errors`、`error`、`error_code` 和 `shared_state`：
 
@@ -990,6 +994,159 @@ PURGE BULK_IMPORT FROM TABLE products OPTION clear_sessions=1;
 
 取消操作会停止索引构建进程、解除对表的占用并删除暂存文件；先前已发布的磁盘块仍保留在表中。如果已退出客户端的数据请求仍被视为正在运行，提交会返回 `409` 和 `shared_busy`，直到该请求超时；取消操作无需等待。表的占用解除后，`SHOW LOCKS` 将不再列出该表，此时即可开始新的共享加载。详情请参阅 [`PURGE BULK_IMPORT`](../../Node_info_and_management/PURGE.md#PURGE-BULK_IMPORT)。
 
+#### 将数据共享批量导入分片表
+
+[分片表](../../Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md)也支持 Shared HTTP 批量导入，SQL `INSERT` 语句可以参与同一次加载。在请求中指定分片表：
+
+```bash
+curl -sS -X POST -H 'Content-Type: application/x-ndjson' --data-binary @part1.ndjson \
+  'http://localhost:9308/bulk?bulk_import=sharded_products'
+```
+
+将一次加载的所有请求以及所有普通写入请求都通过同一个节点发送到分片表，该节点负责协调加载。复制因子为 `1` 时，在其他节点上启动的加载会在处理第一个文档时被拒绝。复制因子更高时，可以选择其他副本，因此不会被拒绝。
+
+协调节点会按照对分片表执行普通 `INSERT` 时的选择规则，将每个文档路由到相应分片，并执行相同的 ID 转换和自动 ID 分配。带有集群前缀的文档会按照对分片表执行普通 `INSERT` 的方式进行检查。不带前缀的文档使用分片表所属的集群。
+
+加载的第一个文档会在每个分片上启动一个包含一个索引器的 Shared 池；索引器所需的内存请参阅[Shared HTTP 批量导入](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Shared-HTTP-bulk-import)。池运行在其分片所在的节点上，因此每个包含该表分片的节点都需要：
+
+* `searchd` 旁边有 `indexer`；
+* 支持此加载方式的 Manticore Search 版本。版本较旧的节点会在处理第一个文档时使加载失败。
+
+每个接收了文档的分片都会获得一个新的磁盘块。请求无需使用 `shared`；`shared=N` 和 `INDEXER_RT_BULK_SHARED_POOL_SIZE` 会被忽略。响应、`shared_join` 以及空行提交的工作方式如上所述。
+
+##### 复制因子大于 1
+
+复制因子大于 `1` 时，每个分片都是[复制集群](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md)中的一张表，并在多个节点上拥有副本。加载开始时，协调节点会像执行普通写入一样，为每个分片选择一个副本，分片的池将在该副本上运行。提交时，该副本会像执行[向复制表批量导入](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import-into-a-replicated-table)一样发布其磁盘块。加载不会转移到其他副本：如果选中的副本发生故障，加载就会失败，与只有一个副本时相同。
+
+SQL 是同一次加载的另一个客户端。在连接到协调节点后，执行 `SET bulk_import=<sharded table>`。随后，每个 `INSERT` 都会作为数据请求运行，而 `COMMIT` 会作为提交请求运行：
+
+```sql
+SET bulk_import=sharded_products;
+INSERT INTO sharded_products(id,title,price) VALUES
+  (101,'Crossbody Bag with Tassel',19.85),
+  (102,'Microfiber Sheet Set',19.99);
+COMMIT;
+```
+
+与向实时表执行 SQL 批量导入不同，这次加载属于分片表，而不是连接：
+
+* `SET bulk_import=<sharded table>` 不会预留任何资源；分片会从第一个文档开始时预留。
+* 其他 SQL 连接和 HTTP 请求可以参与同一次加载。
+* `SET bulk_import=0` 或关闭连接都会使加载保持打开状态。
+* 无效的 `INSERT` 会使整个加载失败，与无效文档的处理方式相同。
+* 当另一个请求正在向加载写入时，`COMMIT` 会失败；没有可提交的加载时，`COMMIT` 也会失败。
+* 不支持 `ROLLBACK`。请使用 `PURGE BULK_IMPORT FROM TABLE <sharded table> OPTION clear_sessions=1` 取消加载。
+
+##### 分片加载期间的写入
+
+在提交结束前，无论复制因子是多少，协调节点都会拒绝对分片表执行普通 `INSERT`、`REPLACE`、`DELETE` 或 `UPDATE`，并返回 `table '<sharded table>' is locked`。任何分片都不会应用这些更改。在事务中，`INSERT`、`REPLACE` 和 `DELETE` 会被接受，但 `COMMIT` 会被拒绝。对分片表执行的 `UPDATE` 不属于事务，会立即被拒绝。
+
+绕过协调节点、通过其他节点或直接写入分片的写入：
+
+* 只有一个副本时，在运行该加载池的每个分片上都会因 `table is locked` 失败；
+* 复制因子大于 `1` 时，可以到达没有该池的副本，并在那里应用写入。如果某次写入的提交在加载开始前已经通过协调节点的检查，也可能以这种方式完成。已发布的行会按照集群应用它们的顺序替换具有相同 ID 的行。
+
+直接向加载中的分片发送 Shared 请求会被拒绝。`SHOW LOCKS` 和 `@files` 会显示分片自身的名称。
+
+##### 提交前的失败
+
+在提交之前，以下任一情况都会使整个加载失败，并取消所有分片上的池：
+
+* 文档无效；
+* 某个分片无法启动池：它被其他批量导入或正在运行的普通写入锁定；它是分片表加载后发生变化的本地分片；或者其节点没有 `indexer`；
+* 向某个分片写入失败；
+* 对远程分片的任何调用失败，包括连接断开或超时。
+
+下一次提交会返回错误并移除加载，或者使用 `PURGE` 取消加载。然后重新执行整个加载。客户端中断自己的请求，或对数据请求执行 `KILL`，只会使该请求失败。
+
+取消操作尽力而为。加载失败后，协调节点不再拒绝写入，但如果取消请求未到达某个分片所在的节点，该分片仍会保留其池。此类分片会因 `table is locked` 拒绝普通写入，因此跨多个分片的普通提交可能会先在部分分片上应用更改，然后在该分片处停止。下一次加载在该分片上也会被拒绝。请按照下文所述移除这些池。
+
+##### 提交与部分失败
+
+提交会一次性发布所有分片。每个索引器会同时构建其磁盘块，因此提交耗时约等于最大分片的构建时间。某个分片失败不会停止其他分片，成功的分片会保留其磁盘块。随后，提交会返回 `500` 以及 `shared_failed` 和错误信息，其中会指出第一个失败的分片及其错误，接着显示 `published <N> of <M> tables` 和已发布的分片。
+
+失败的分片仍可能已经发布其行：
+
+* 远程分片对提交的响应丢失。错误信息会说明其提交尚未确认。
+* 复制分片的某个副本在集群中的其他节点已挂载磁盘块时，未能挂载该磁盘块。这些行已到达每个节点，该副本重新加入集群后会获得这些行。
+
+提交失败后，使用显式 ID 重新执行加载是安全的。对提交请求执行 `KILL` 会使仍在构建中的本地分片失败。远程分片已经收到提交请求，会完成提交。
+
+##### 遗留的分片池
+
+分片池会一直保留在其节点上，直到加载被提交或取消，即使协调节点停止或崩溃也是如此。可以在拥有该分片表的任意节点上使用 `PURGE BULK_IMPORT FROM TABLE <sharded table> OPTION clear_sessions=1` 移除遗留池，也可以在分片所在节点上使用分片名称移除。关于 [`PURGE BULK_IMPORT`](../../Node_info_and_management/PURGE.md#Sharded-and-distributed-tables) 的错误说明，请参阅相关文档。请在以下情况下运行它：
+
+* 协调节点停止或崩溃后。守护进程关闭会取消它所协调的加载以及自身分片上的池，但不会取消其他节点上的池。
+* 复制因子大于 `1` 时，在协调节点重启后、向分片表写入或启动新加载之前运行。此前，选择带有旧池的副本进行写入或新加载会被拒绝，而选择其他副本则不会。
+* 取消请求未到达的节点恢复后。
+
+在协调节点上对分片表执行 `DROP TABLE` 会尽力取消加载及其分片上的池。已经运行的提交会完成。留在无法访问节点上的池随后只能在该节点上使用分片名称移除。
+
+重复的文档 ID 会按照下文针对每个分片规定的规则处理：文档 ID 始终会进入同一个分片，因此加载中具有某个 ID 的第一行会保留，而已发布的行会替换具有相同 ID 的行。
+
+#### 向复制表批量导入
+
+[复制集群](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md)中的实时表支持在集群任意节点上使用 SQL、Manticore `/bulk` 和 Shared 批量导入。与任何[向集群表执行的写入](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Write-statements)一样，每一行都必须指定集群：SQL 中使用 `INSERT INTO <cluster>:<table>`，JSON 中使用 `"cluster":"<cluster>"`。不包含集群的行会被拒绝，并返回与普通 `INSERT` 相同的错误。对于不属于集群的表，指定了集群的行也会被拒绝。`SET bulk_import=<table>` 和 `bulk_import=<table>` 参数中的表名不包含集群。没有集群名称的文档属于请求中的表，并会进入其所属集群。
+
+```sql
+SET bulk_import=products;
+INSERT INTO posts:products(id,title,price) VALUES
+  (101,'Crossbody Bag with Tassel',19.85),
+  (102,'Microfiber Sheet Set',19.99);
+COMMIT;
+SET bulk_import=0;
+```
+
+```bash
+printf '%s\n' \
+  '{"insert":{"cluster":"posts","table":"products","id":101,"doc":{"title":"Crossbody Bag with Tassel","price":19.85}}}' |
+curl -sS -X POST -H 'Content-Type: application/x-ndjson' --data-binary @- \
+  'http://localhost:9308/bulk?bulk_import=products'
+```
+
+##### 复制提交
+
+运行加载的节点会按照上文所述构建磁盘块。提交时，它会：
+
+1. 等待集群中没有节点处于捐赠者或加入状态。它最多检查两次 [replication_retry_count](../../Server_settings/Searchd.md#replication_retry_count)，两次检查之间间隔为 [replication_retry_delay](../../Server_settings/Searchd.md#replication_retry_delay)，然后使提交失败。
+2. 将磁盘块文件发送到集群中的每个其他节点。每个节点接收完磁盘块后都会检查它。
+3. 使用一条复制命令在所有节点（包括自身）上挂载磁盘块。
+
+运行加载的节点挂载磁盘块后，提交即返回。其他节点会像应用任何复制写入一样，在应用该命令时挂载磁盘块。Shared 提交会依次对其发布的每个磁盘块执行此操作。
+
+发送磁盘块时使用的文件传输机制与[向集群添加表](../../Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md)相同，并会同时发送到所有节点。因此，提交耗时会比提交到本地表更长，大约增加对相同大小磁盘块的表执行 `ALTER CLUSTER ... ADD` 所需的时间。命令本身只会挂载节点已经拥有的文件。如果表在 RAM 中有尚未保存到磁盘的行，例如通过其他节点执行普通写入产生的行，则该命令会先在每个节点上将这些行保存到磁盘，集群复制会等待该操作完成。
+
+每个节点都会将接收到的磁盘块保存在 `<table-filebase>.indexer-rt-bulk/repl-<id>.<ext>` 中；接收期间会添加 `.new` 后缀，并将准备好的磁盘块保留在内存中，直到挂载命令使用它，或清理操作将其丢弃。
+
+##### 复制加载期间的写入
+
+加载运行期间，只有运行加载的节点会预留该表：在该节点上，对表的普通写入会因 `table is locked` 失败，如上所述。通过其他节点进行的写入会继续运行，并按正常方式复制。另一个节点可以同时向同一表执行自己的批量导入；每次提交都会挂载自己的磁盘块。已发布的行会在每个节点上替换具有相同 ID 的行，包括加载运行期间通过其他节点写入的行。
+
+##### 节点故障
+
+* 集群中的某个节点无法接收磁盘块，例如该节点没有响应，或无法创建表的暂存目录。提交会失败并指出该节点；每个有响应的节点都会移除磁盘块，并且没有节点会更改表。Shared 提交会逐个发布其磁盘块，因此失败磁盘块之前已经挂载的磁盘块会保留在所有节点上，如[重复文档 ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Duplicate-document-IDs)中所述。
+* 提交时某个节点不在集群中，例如该节点已停止或网络连接丢失。该节点不会获得磁盘块。节点恢复后，会通过完整状态传输（SST）重新加入集群，并获得包含这些行的表。
+* 某个节点已离开集群，但仍在其[节点列表](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md)中，并且接受连接但不响应，例如进程已挂起。它会延迟提交：检查捐赠者和加入节点时会等待其响应，这可能需要几分钟。运行 `ALTER CLUSTER <cluster> UPDATE nodes` 将此节点从列表中删除。不接受连接的节点只会将提交延迟几秒。
+* 某个节点无法挂载其他节点挂载的磁盘块，例如该节点的副本已被删除。它会离开集群：复制提供程序会停止守护进程，重启后（启用看门狗时会立即重启）该节点会通过完整状态传输重新加入集群。
+* 运行加载的节点无法挂载其他节点挂载的磁盘块。客户端会收到错误，说明其他节点已经挂载该磁盘块；该节点无需重启即可通过完整状态传输重新加入集群。如果重新加入失败两次，该节点上的集群会保持 `closed` 状态，原因记录在 `cluster_<name>_last_error` 中（请参阅[复制集群状态](../../Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md)）。重启守护进程后，该节点会通过完整状态传输重新加入集群。
+
+在未挂载磁盘块的节点离开集群之前，它不会将自己的表发送给正在加入的节点。由该节点提供服务的 `JOIN CLUSTER` 会失败，并返回 `the donor did not attach a bulk_import chunk and leaves the cluster, join again`；请重新执行加入操作。
+
+##### 遗留磁盘块
+
+在磁盘块交付完成到执行挂载命令之间，任何保留该磁盘块的节点都会拒绝对该表执行 `PURGE BULK_IMPORT`。加载结束后，节点也可能仍保留已交付的磁盘块，原因包括：
+
+* 运行加载的节点在执行命令前停止；
+* 执行命令时该节点不在集群中；
+* 取消交付时该节点没有响应。
+
+磁盘块会保留在表的暂存根目录中，`@files` 会显示该目录。关于何时等待提交以及何时移除磁盘块，请参阅 [`PURGE BULK_IMPORT`](../../Node_info_and_management/PURGE.md#Tables-in-a-replication-cluster)。
+
+##### 复制表的限制
+
+* 不支持包含外部文件（例如停用词、词形和例外）的表：磁盘块会在一个节点上构建，然后原样挂载到所有节点上。系统不会检查这一点，因此不会拒绝此类加载。
+* 集群中的每个节点都需要使用支持此功能的 Manticore Search 版本。从早期版本升级时，请停止集群中的所有节点，然后重新启动，参阅[升级集群](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Upgrading-a-cluster)。
+
 #### Elasticsearch `/_bulk`
 
 兼容 Elasticsearch 的 `/_bulk` 端点不支持直接写入磁盘的 `bulk_import`；请使用 SQL 或 Manticore `/bulk`。
@@ -1008,7 +1165,11 @@ Manticore 将磁盘块发布到目标表时，块中的行会替换表中具有�
 
 #### 内存和磁盘用量
 
-直接写入磁盘的加载不会将文档集中存放在 `searchd` 的内存中。每条 `INSERT` 语句或 `/bulk` 请求体的每个部分（请求带有 `shared` 参数时约为 32 KiB）都会立即转换为 CSV，并通过管道传给 `indexer` 进程。`indexer` 以与普通表相同的方式构建磁盘块：先在内存中收集数据，达到 [mem_limit](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#mem_limit)（固定为默认值 128 MB）后写入临时文件，并在处理完最后一行后将临时文件合并为磁盘块。因此，加载所需的内存不会随数据量增长：每个 `indexer` 进程的内存用量为 `mem_limit` 加上[写入缓冲区](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#write_buffer)和进程自身开销，总计约 200 MB。一个 `SET bulk_import` 会话或一个 `/bulk` 请求运行一个 `indexer`，带 `shared=N` 的加载运行 N 个；还需加上正在处理的语句或请求部分所占的内存。
+直接写入磁盘的加载不会在 `searchd` 的内存中收集文档。每条 `INSERT` 语句，或每个 `/bulk` 请求正文的部分（请求包含 `shared` 参数时约为 32 KiB），都会立即转换为 CSV，并通过管道传递给 `indexer` 进程。`indexer` 以与普通表相同的方式构建磁盘块：将数据收集到内存中，直到达到其 [mem_limit](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#mem_limit)，将数据刷新到临时文件，并在处理完最后一行后将这些文件合并为磁盘块。因此，加载所需的内存不会随加载大小增长：每个 `indexer` 进程占用其 `mem_limit`、[写入缓冲区](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#write_buffer)以及进程本身所需的内存；使用默认的 128 MB `mem_limit` 时，总计约为 200 MB。`SET bulk_import` 会话或 `/bulk` 请求运行一个 `indexer`，使用 `shared=N` 的加载运行 N 个；此外还要加上当前正在处理的语句或请求部分所占用的内存。
+
+`indexer` 进程会使用 `searchd` 配置文件中的以下选项：`indexer` 部分的 `mem_limit`、`write_buffer`、`max_iops`、`max_iosize` 和 `lemmatizer_cache`（参见 [indexer 配置选项](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-configuration-settings)），以及 `common` 部分的 `lemmatizer_base`、`plugin_dir`、`on_json_attr_error`、`json_autoconv_numbers` 和 `json_autoconv_keynames`（参见 [common](../../Server_settings/Common.md)）。批量导入不会使用这些部分中的其他选项。`searchd` 启动时会读取这些选项，就像读取 `common` 部分一样；相对路径的解析方式也与 `searchd` 相同。如果未设置 `mem_limit` 和 `write_buffer`，加载过程会分别使用 128 MB 和 1 MB。JSON 值会使用 `common` 部分中的选项进行解析，与 `INSERT` 的处理方式相同；`indexer` 部分中已弃用的这些选项副本不会被使用。
+
+`mem_limit` 应用于每个 `indexer` 进程，并且可能有许多进程同时运行：每个包含未提交批量导入行的 SQL 会话运行一个，每个正在运行的 `/bulk` 请求运行一个，每个 Shared 加载运行 N 个；此外，在每个节点上，加载向[分片表](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Shared-bulk-import-into-a-sharded-table)的每个分片写入时也运行一个。为普通表设置较大的 `mem_limit` 会按该数量倍增，但不会使加载更快：在我们的测试中，使用默认的 128 MB 时构建磁盘块的速度最快。
 
 与普通表一样（参阅 [inplace_enable](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#inplace_enable)），临时文件中的中间数据与最终磁盘块的大小相近。两者都会写入表文件旁的暂存目录，因此在峰值时，表所在磁盘需要约为新磁盘块大小两倍的可用空间。发布磁盘块时，通过重命名将文件移入表中，无需复制。参阅[暂存文件与清理](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Staging-files-and-cleanup)。
 
@@ -1034,11 +1195,13 @@ PURGE BULK_IMPORT FROM TABLE products;
 
 当表存在开放的共享进程池时，`PURGE` 会被拒绝；`PURGE BULK_IMPORT FROM TABLE products OPTION clear_sessions=1` 会先取消进程池、停止索引构建进程并解除对表的占用，然后删除暂存根目录。进程池正在挂载磁盘块时，`PURGE` 也会被拒绝；请在提交完成后重试。在 Windows 上，如果数据请求仍在向进程池写入，执行 `PURGE … OPTION clear_sessions=1` 或 `DROP TABLE` 可能返回 `failed to remove bulk staging root`：此时进程池已取消，但已停止的索引构建进程还会短暂保持文件打开；请重试该语句。
 
-`PURGE` 要求目标是已存在且不属于复制集群的本地实时表。它只删除直接写入磁盘的暂存状态，不会更改表结构或已建立索引的行。如果暂存根目录不存在，操作会成功，但不执行任何更改。在无配置模式下，`DROP TABLE` 也会删除该表的直接写入磁盘暂存根目录，并取消其共享进程池；守护进程关闭时会取消所有共享进程池。先前已发布的磁盘块仍保留在表中。
+`PURGE` 要求存在本地实时表，或者分片表或分布式表，请参阅 [`PURGE BULK_IMPORT`](../../Node_info_and_management/PURGE.md#Sharded-and-distributed-tables)。对于复制集群中的表，它只会清理运行命令的节点，请参阅[向复制表批量导入](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import-into-a-replicated-table)。它只会移除直接写入磁盘的暂存状态，不会更改表结构或已建立索引的行。暂存根目录不存在时，它会以空操作成功返回。在无配置模式下，`DROP TABLE` 也会移除表的直接写入磁盘暂存根目录并取消其 Shared 池；守护进程关闭会取消所有 Shared 池。之前发布的磁盘块会保留在表中。
 
 #### 当前限制
 
-* 目标必须是一张已存在、未冻结且不属于复制集群的本地实时表。不支持分布式表、分片表、复制表、percolate 表和普通表。
+* 目标必须是一个已存在、未冻结的本地实时表，也可以是复制集群中的表，请参阅[向复制表批量导入](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-import-into-a-replicated-table)。
+* 对于 Manticore `/bulk` 和 SQL，目标也可以是分片表，请参阅[将数据共享批量导入分片表](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Shared-bulk-import-into-a-sharded-table)。
+* 不支持分布式表、透视表和普通表。
 * SQL 仅支持 `INSERT`。Manticore `/bulk` 接受 `insert`、`create` 和直接提供的文档；`index`、`replace`、`update` 和 `delete` 均会被拒绝。
 * 文档 ID 的转换方式与常规 `INSERT` 相同，包括遵循 [attr_autoconv_strict](../../Server_settings/Searchd.md#attr_autoconv_strict)。没有 ID 或 ID 转换后为 0 的行会获得[自动生成的 ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID)；响应不会返回生成的 ID，重复加载会再次添加这些行。不支持 UUID 文档 ID。
 * 不支持静态构建版本。

@@ -812,11 +812,6 @@ public:
 		m_uPacketID = m_uStoredPacketID;
 	}
 
-	void SkipNULL() override
-	{
-		PutNULL();
-	}
-
 protected:
 	// not intended to be used standalone
 	SqlRowBufferTraits_t ( BYTE * pPacketID, GenericOutputBuffer_c * pOut )

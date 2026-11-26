@@ -823,8 +823,8 @@ Manticore支持两种访问模式来读取表数据：seek+read和mmap。
 | - | - | - |
 | access_plain_attrs  | mmap, **mmap_preread** (默认), mlock | 控制`*.spa`（普通属性）`*.spe`（跳过列表）`*.spt`（查找）`*.spm`（已删除文档）的读取方式 |
 | access_blob_attrs   | mmap, **mmap_preread** (默认), mlock  | 控制`*.spb`（blob属性）（字符串、mva和json属性）的读取方式 |
-| access_doclists   | **file** (默认), mmap, mlock  | 控制`*.spd`（文档列表）数据的读取方式 |
-| access_hitlists   | **file** (默认), mmap, mlock  | 控制`*.spp`（命中列表）数据的读取方式 |
+| access_doclists   | file, **mmap**（默认）、mlock  | 控制 `*.spd`（文档列表）数据的读取方式 |
+| access_hitlists   | file, **mmap**（默认）、mlock  | 控制 `*.spp`（命中列表）数据的读取方式 |
 | access_dict   | mmap, **mmap_preread** (默认), mlock  | 控制`*.spi`（字典）的读取方式 |
 | access_columnar_attrs | file, **mmap**（默认） | 控制如何读取 `*.spc`（列式属性） |
 | access_secondary | **file**（默认）, mmap | 控制如何读取 `*.spidx` 和 `*.spjidx`（二级索引） |
@@ -836,8 +836,8 @@ Manticore支持两种访问模式来读取表数据：seek+read和mmap。
 | [行式](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)（非列式）存储的普通属性、跳过列表、词列表、查找、已删除文档 |  mmap | mmap | **mmap_preread** (默认) | mlock |
 | 行式字符串、多值属性（MVA）和json属性 | mmap | mmap | **mmap_preread** (默认) | mlock |
 | [列式](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)数值、字符串和多值属性 | file | **mmap**（默认） | 否 | 不支持 |
-| 文档列表 | **file** (默认) | mmap | 否 | mlock |
-| 命中列表 | **file** (默认) | mmap | 否 | mlock |
+| 文档列表 | file | **mmap**（默认） | 否	| mlock |
+| 命中列表 | file | **mmap**（默认） | 否	| mlock |
 | 字典 | mmap | mmap | **mmap_preread** (默认) | mlock |
 | 二级索引 | **file**（默认） | mmap | 否 | 不支持 |
 
@@ -853,7 +853,8 @@ Manticore支持两种访问模式来读取表数据：seek+read和mmap。
 * mmap，
 * 预读非列式属性，
 * 对列式属性进行内存映射，不预读，
-* 不预读，直接查找并读取文档列表、命中列表和二级索引。
+* 在不预读的情况下对文档列表和命中列表进行内存映射，
+* 在不预读的情况下查找并读取辅助索引。
 
 这在大多数情况下提供了良好的搜索性能、最佳的内存利用率和更快的searchd重启。
 

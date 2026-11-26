@@ -1,5 +1,12 @@
 # UPDATE
 
+<!--
+данные для следующего примера:
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, price float, enabled int);
+INSERT INTO products(id,title,price,enabled) VALUES (10,'doc ten',19.85,1),(1,'doc one',9.99,1);
+-->
 <!-- example update -->
 
 Команда `UPDATE` изменяет значения атрибутов, хранящихся [построчно](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages), у существующих документов в указанной таблице на новые значения. Обратите внимание, что нельзя обновить содержимое полнотекстового поля или колоночного атрибута. Если такая необходимость есть, используйте [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
@@ -15,14 +22,6 @@
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
-
-<!--
-data for the following example:
-
-DROP TABLE IF EXISTS products;
-CREATE TABLE products(title text, price float, enabled int);
-INSERT INTO products(id,title,price,enabled) VALUES (10,'doc ten',19.85,1),(1,'doc one',9.99,1);
--->
 
 ```sql
 UPDATE products SET enabled=0 WHERE id=10;
@@ -733,6 +732,12 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 
 <!-- end -->
 
+<!--
+data for the following example:
+
+DROP TABLE IF EXISTS products;
+CREATE TABLE products(title text, data json);
+-->
 <!-- example full JSON update -->
 
 Обновление других типов данных или изменение типа свойства в JSON-атрибуте требует полного обновления JSON.
@@ -740,13 +745,6 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
-
-<!--
-data for the following example:
-
-DROP TABLE IF EXISTS products;
-CREATE TABLE products(title text, data json);
--->
 
 ```sql
 insert into products values (1,'title','{"tags":[1,2,3]}');

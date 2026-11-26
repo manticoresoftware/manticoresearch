@@ -1583,8 +1583,6 @@ public:
 
 	virtual void PutNULL() = 0;
 
-	virtual void SkipNULL() {}
-
 	/// more high level. Processing the whole tables.
 	// sends collected data, then reset
 	virtual bool Commit() = 0;

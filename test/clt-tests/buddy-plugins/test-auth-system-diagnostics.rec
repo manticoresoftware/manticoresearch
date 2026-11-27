@@ -8,7 +8,12 @@ MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE USER 'diagnostics' IDENT
 ––– input –––
 cat > /tmp/check-diagnostics-permissions.sh <<'EOF'
 set -eu
-for query in 'SELECT * FROM @@system.sessions' 'SELECT * FROM @@system.threads' 'SHOW THREADS'; do
+for query in \
+    'SELECT * FROM @@system.sessions' \
+    'SELECT * FROM @@system.threads' \
+    'SELECT * FROM @@SYSTEM.SESSIONS' \
+    'SELECT * FROM @@system.ThReAdS' \
+    'SHOW THREADS'; do
     if [ "$1" = denied ]; then
         if out=$(MYSQL_PWD=diagpass123 mysql -udiagnostics -h0 -P9306 -e "$query" 2>&1); then
             echo "Unexpected success: $query"
@@ -35,6 +40,19 @@ denied: OK
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT SCHEMA ON diagnostics_table TO 'diagnostics';" && bash /tmp/check-diagnostics-permissions.sh denied
 ––– output –––
 denied: OK
+––– comment –––
+A partial wildcard must not be treated as an explicit global grant.
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT SCHEMA ON '?' TO 'diagnostics';"
+––– output –––
+––– input –––
+bash /tmp/check-diagnostics-permissions.sh denied
+––– output –––
+denied: OK
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE SCHEMA ON '?' FROM 'diagnostics';"
+––– output –––
 ––– input –––
 MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE READ ON * FROM 'diagnostics'; REVOKE SCHEMA ON diagnostics_table FROM 'diagnostics'; GRANT SCHEMA ON * TO 'diagnostics';" && bash /tmp/check-diagnostics-permissions.sh allowed
 ––– output –––

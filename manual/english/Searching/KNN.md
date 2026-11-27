@@ -14,7 +14,7 @@ Manticore Search enables k-nearest neighbor (KNN) vector searches using the HNSW
 
 ### Configuring a table for KNN search
 
-To run KNN searches, you must first configure your table. Float vectors and KNN search are only supported in real-time tables (not in plain tables). The table needs to have at least one [float_vector](../Creating_a_table/Data_types.md#Float-vector) attribute, which serves as a data vector. You need to specify the following properties:
+To run KNN searches, you must first configure your table. Float vectors and KNN search are supported in real-time tables and in plain tables built by `indexer` from a [TSV or CSV source](../Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_CSV,TSV.md); `indexer` builds the KNN index of a plain table while indexing it. A plain table cannot have an embeddings model (`indexer` refuses it) and is searched with a vector only; a KNN query with text works on real-time tables. The table needs to have at least one [float_vector](../Creating_a_table/Data_types.md#Float-vector) attribute, which serves as a data vector. You need to specify the following properties:
 * `knn_type`: A mandatory setting; currently, only `hnsw` is supported.
 * `knn_dims`: A mandatory setting that specifies the dimensions of the vectors being indexed.
 * `hnsw_similarity`: A mandatory setting that specifies the distance function used by the HNSW index. Acceptable values are:

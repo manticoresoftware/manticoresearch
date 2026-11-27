@@ -1189,6 +1189,7 @@ private:
 	const BYTE *				GetRawBlobAttrs() const override { return m_tBlobAttrs.GetReadPtr(); }
 	bool						AlterSI ( CSphString & sError ) override;
 	bool						AlterKNN ( CSphString & sError ) override;
+	bool						BuildKNN ( CSphString & sError );
 
 	bool				ReserveEmbeddingSpace ( int64_t iDocsToFill, int iDims, CSphString & sError ) final;
 	bool				CollectDocsForEmbedding ( const ExtUpdState_t & tState, const VecTraits_T<std::pair<int,bool>> & dFrom, CSphVector<DocID_t> & dDocids, CSphVector<CSphString> & dFromTexts, CSphString & sError, int iMaxDocs, RowID_t & tStartRowID ) const final;
@@ -4915,6 +4916,12 @@ static void ResetFileAccess ( CSphIndex * pIndex )
 	pIndex->SetMutableSettings ( tMutable );
 }
 
+// a blob attribute the source gives as an MVA (a float_vector holds its floats as DWORD values)
+static bool IsMvaLikeBlob ( ESphAttr eAttr )
+{
+	return eAttr==SPH_ATTR_UINT32SET || eAttr==SPH_ATTR_INT64SET || eAttr==SPH_ATTR_FLOAT_VECTOR;
+}
+
 class KeepAttrs_c : public AttrSource_i
 {
 public:
@@ -4983,7 +4990,7 @@ public:
 					}
 
 					const CSphColumnInfo & tCol = tSchema.GetAttr ( iCol );
-					if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET )
+					if ( IsMvaLikeBlob ( tCol.m_eAttrType ) )
 					{
 						m_dLocMva.BitSet ( iCol );
 						m_bHasMva = true;
@@ -5002,7 +5009,7 @@ public:
 			for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 			{
 				const CSphColumnInfo & tCol = tSchema.GetAttr ( i );
-				if ( ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET ) && tCol.m_eSrc==SPH_ATTRSRC_FIELD )
+				if ( IsMvaLikeBlob ( tCol.m_eAttrType ) && tCol.m_eSrc==SPH_ATTRSRC_FIELD )
 				{
 					m_dMvaField.BitSet ( i );
 				}
@@ -5052,7 +5059,7 @@ public:
 		int iLen = 0;
 		ESphAttr eAttr = SPH_ATTR_NONE;
 		const BYTE * pData = GetBlobData ( iAttr, iLen, eAttr );
-		assert ( eAttr==SPH_ATTR_UINT32SET || eAttr==SPH_ATTR_INT64SET );
+		assert ( IsMvaLikeBlob ( eAttr ) );
 
 		if ( eAttr==SPH_ATTR_INT64SET )
 		{
@@ -5369,17 +5376,18 @@ bool CSphIndex_VLN::Build_SetupInplace ( SphOffset_t & iHitsGap, int iHitsMax, i
 }
 
 
+// a field that is also a string attribute (sql_field_string) may be stored, as with stored_fields = *
 bool CheckStoredFields ( const CSphSchema & tSchema, const CSphIndexSettings & tSettings, CSphString & sError )
 {
 	for ( const auto & i : tSettings.m_dStoredFields )
-		if ( tSchema.GetAttr ( i.cstr() ) )
+		if ( tSchema.GetAttr ( i.cstr() ) && tSchema.GetFieldIndex ( i.cstr() )<0 )
 		{
 			sError.SetSprintf ( "existing attribute specified in stored_fields: '%s'\n", i.cstr() );
 			return false;
 		}
 
 	for ( const auto & i : tSettings.m_dStoredOnlyFields )
-		if ( tSchema.GetAttr ( i.cstr() ) )
+		if ( tSchema.GetAttr ( i.cstr() ) && tSchema.GetFieldIndex ( i.cstr() )<0 )
 		{
 			sError.SetSprintf ( "existing attribute specified in stored_fields: '%s'\n", i.cstr() );
 			return false;
@@ -5646,6 +5654,14 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	if ( !CheckStoredFields ( m_tSchema, m_tSettings, m_sLastError ) )
 		return 0;
+
+	// a source gives no embeddings; a vector of a model would be left empty
+	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
+		if ( !m_tSchema.GetAttr(i).m_tKNNModel.m_sModelName.empty() )
+		{
+			m_sLastError.SetSprintf ( "embeddings models are not supported by indexer (attribute '%s')", m_tSchema.GetAttr(i).m_sName.cstr() );
+			return 0;
+		}
 
 	const auto & tQuerySettings = m_tMutableSettings.m_tQueryExecutionSettings;
 	if ( !ValidateStoredRankerExpression ( tQuerySettings.m_eRanker, tQuerySettings.m_sRankerExpr, m_tSchema, m_sLastError ) )
@@ -6364,6 +6380,25 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	// we're done
 	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, GetFilename(SPH_EXT_SPH), m_sLastError ) )
 		return 0;
+
+	// the KNN index trains on all the vectors before it stores any: build it from the written attributes, as REBUILD
+	// KNN does; only the attribute files are opened, the rest of the table is not needed
+	if ( m_tSchema.HasKNNAttrs() )
+	{
+		CSphIndex_VLN tBuilt ( GetName(), GetFilebase() );
+		tBuilt.m_tSchema = m_tSchema;
+		tBuilt.m_iDocinfo = m_tStats.m_iTotalDocuments;
+		tBuilt.m_iMinMaxIndex = m_iMinMaxIndex;
+		tBuilt.m_bIsEmpty = !tBuilt.m_iDocinfo;
+		if ( !tBuilt.PreallocAttributes() || !tBuilt.PreallocColumnar() )
+		{
+			m_sLastError.SetSprintf ( "failed to open the attributes of the built table to build its KNN index: %s", tBuilt.GetLastError().cstr() );
+			return 0;
+		}
+
+		if ( !tBuilt.BuildKNN ( m_sLastError ) )
+			return 0;
+	}
 
 	// when the party's over..
 	ARRAY_FOREACH ( i, dSources )
@@ -8826,6 +8861,17 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 }
 
 
+// An iterator with a cutoff stops after that many rowids, so the cutoff holds only if each rowid it emits is a match.
+// Deleted rows are dropped after the iterator, so their count is added; a join drops rows in the joined table, so no cutoff.
+static int GetIteratorCutoff ( int iCutoff, const CSphQuery & tQuery, const DeadRowMap_Disk_c & tDeadRowMap )
+{
+	if ( iCutoff<0 || !tQuery.m_sJoinIdx.IsEmpty() )
+		return -1;
+
+	return (int)Min ( (int64_t)iCutoff + tDeadRowMap.GetNumDeads(), (int64_t)INT_MAX );
+}
+
+
 // A knn query must not match documents that hold no vector: their distance is FLT_MAX, so they are near nothing.
 // When an hnsw iterator runs it never offers them in the first place, but a brute-force scan sees every row, so the guard has to be added explicitly.
 // Whether an iterator ran is only known after SpawnIterators, hence the late injection.
@@ -8902,8 +8948,9 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	// an empty result here means the planner chose brute force over the graph
 	bKNNIteratorCreated = !dKNNIterators.IsEmpty();
 
-	// secondary index iterators
-	dSIIterators = m_tSI.CreateSecondaryIndexIterator ( dSIInfo, dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), iCutoff, bUseSICache, tMeta.m_sWarning );
+	// secondary index iterators: fulltext, knn (its iterator or the late no-vector filter) and joins drop rows after them, so cutoff applies only to the final matches
+	int iSICutoff = ( pRanker || tQuery.HasKnn() ) ? -1 : GetIteratorCutoff ( iCutoff, tQuery, m_tDeadRowMap );
+	dSIIterators = m_tSI.CreateSecondaryIndexIterator ( dSIInfo, dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), iSICutoff, bUseSICache, tMeta.m_sWarning );
 
 	// lookup-by-id (.SPT) iterators
 	dLookupIterators = CreateLookupIterator ( dSIInfo, dFilters, m_tDocidLookup.GetReadPtr(), m_uVersion, RowID_t(m_iDocinfo) );
@@ -9177,8 +9224,9 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	bool bCutoffHit =  false;
 	if ( pIterator )
 	{
-		if ( iCutoff>=0 && !tCtx.m_pFilter && !tCtx.m_pWeightFilter )
-			pIterator->SetCutoff(iCutoff);
+		int iIteratorCutoff = GetIteratorCutoff ( iCutoff, tQuery, m_tDeadRowMap );
+		if ( iIteratorCutoff>=0 && !tCtx.m_pFilter && !tCtx.m_pWeightFilter )
+			pIterator->SetCutoff(iIteratorCutoff);
 
 		bCutoffHit = RunFullscanOnIterator ( pIterator.get(), tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );
 		pIterator->AddDesc ( tMeta.m_tIteratorStats.m_dIterators );
@@ -9892,7 +9940,9 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const CSphString& sHeaderName, 
 
 		fprintf ( fp, "}\n\nindex $dump\n{\n\tsource = $dump\n\tpath = $dump\n" );
 
-		DumpSettingsCfg ( fp, *this, pFilenameBuilder.get() );
+		StringBuilder_c sIndexCfg;
+		DumpIndexCfg ( sIndexCfg, *this, m_tSchema, pFilenameBuilder.get() );
+		fputs ( sIndexCfg.cstr(), fp );
 
 		fprintf ( fp, "}\n" );
 		return;
@@ -11865,6 +11915,13 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	if ( dSorters.IsEmpty () )
 		return false;
 
+	// an RT table embeds the text of a KNN query before it queries its chunks; a plain table does not
+	if ( tQuery.m_dKnnSettings.any_of ( [] ( const auto & tKNN ) { return tKNN.m_sEmbStr && tKNN.m_dVec.IsEmpty(); } ) )
+	{
+		tMeta.m_sError = "Embeddings generation string specified, but embeddings are not loaded";
+		return false;
+	}
+
 	// non-random at the start, random at the end
 	if ( dSorters.any_of ( []( ISphMatchSorter * p) { return p->IsRandom(); } ) )
 		dSorters.Sort ( CmpPSortersByRandom_fn() );
@@ -12863,11 +12920,9 @@ bool CSphIndex_VLN::AlterSI ( CSphString & sError )
 }
 
 
-bool CSphIndex_VLN::AlterKNN ( CSphString & sError )
+// writes the KNN index file from the attributes of the table; the loaded KNN index stays as it was
+bool CSphIndex_VLN::BuildKNN ( CSphString & sError )
 {
-	if ( m_uVersion<65 || !m_tSchema.HasKNNAttrs() )
-		return true;
-
 	if ( !IsKNNLibLoaded() )
 	{
 		sError.SetSprintf ( "failed to load table with knn attributes without knn library" );
@@ -12917,7 +12972,16 @@ bool CSphIndex_VLN::AlterKNN ( CSphString & sError )
 		return false;
 	}
 
-	if ( !JuggleFile ( SPH_EXT_SPKNN, sError, bHasKnnFile, true ) )
+	return JuggleFile ( SPH_EXT_SPKNN, sError, bHasKnnFile, true );
+}
+
+
+bool CSphIndex_VLN::AlterKNN ( CSphString & sError )
+{
+	if ( m_uVersion<65 || !m_tSchema.HasKNNAttrs() )
+		return true;
+
+	if ( !BuildKNN ( sError ) )
 		return false;
 
 	m_pKNN.reset();

@@ -1857,7 +1857,7 @@ private:
 	RtActionResult_e		SaveDiskChunk ( bool bForced, bool bEmergent=false ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	void						ConditionalDiskChunk ();
 
-	std::unique_ptr<CSphIndex>	PreallocDiskChunk ( const CSphString& sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * szName=nullptr ) const;
+	std::unique_ptr<CSphIndex>	PreallocDiskChunk ( const CSphString& sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * szName=nullptr ) const final;
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup = true );
 	bool						SaveRamChunk ();
 
@@ -1955,13 +1955,14 @@ private:
 	bool						AlterRebuild ( AlterOp_fn && operation, CSphString & sError, const char * sTrace );
 
 	bool						CanAttach ( const CSphIndex * pIndex, bool bCheckFT, CSphString & sError ) const;
-	DiskAttachRes_e	AttachDiskIndexImpl ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError );
+	DiskAttachRes_e	AttachDiskIndexImpl ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError, bool bKeepDefinition=false );
 	bool						AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	void						AttachSetSettings ( CSphIndex * pIndex );
 	bool						AttachSaveDiskChunk ();
 	ConstDiskChunkRefPtr_t		PopDiskChunk();
 	int							GetChunkId () const override { return m_tChunkID.GetChunkId ( m_tRtChunks ); }
 	void						SetGlobalIDFPath ( const CSphString & sPath ) override;
+	void						SetChunkRuntimeSettings ( CSphIndex & tChunk ) const;
 	void						DebugDumpDict ( FILE * fp, bool bDumpOnly ) final;
 	bool						AttachRtChunksExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, ExtFiles_h & hExtCache, CSphString & sError );
 	bool						AttachRtChunksNoExtCopy ( RtIndex_c * pSrcRtIndex, bool & bFatal, CSphString & sError );
@@ -10297,10 +10298,10 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 
 DiskAttachRes_e RtIndex_c::AttachDiskIndexWithMeta ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError )
 {
-	return AttachDiskIndexImpl ( pIndex, bTruncate, bFatal, sError );
+	return AttachDiskIndexImpl ( pIndex, bTruncate, bFatal, sError, true );
 }
 
-DiskAttachRes_e RtIndex_c::AttachDiskIndexImpl ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError )
+DiskAttachRes_e RtIndex_c::AttachDiskIndexImpl ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError, bool bKeepDefinition )
 {
 	// from the next line we work in index simple scheduler. That made everything much simpler
 	// (no need to care about locks and order of access to ram segments and disk chunks)
@@ -10337,8 +10338,11 @@ DiskAttachRes_e RtIndex_c::AttachDiskIndexImpl ( CSphIndex * pIndex, bool bTrunc
 		tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( pIndex ) );
 	}
 
-	AttachSetSettings ( pIndex );
-	PostSetup();
+	if ( !bKeepDefinition )
+	{
+		AttachSetSettings ( pIndex );
+		PostSetup();
+	}
 
 	// resave header file
 	const bool bMetaSaved = SaveMeta();
@@ -11083,9 +11087,14 @@ bool RtIndex_c::PublishMergedChunks ( const char* szParentAction, std::function<
 	auto pChunks = m_tRtChunks.DiskChunks();
 	for ( auto& pChunk : *pChunks )
 	{
+		int iFirstNew = tChangeset.m_pNewDiskChunks->GetLength();
 		if ( fnPusher ( pChunk->Cidx().m_iChunk, *tChangeset.m_pNewDiskChunks ) )
+		{
 			bReplaced = true;
-		else
+			// a new chunk took the table settings at its prealloc, before the merge; an ALTER may have changed them since
+			for ( int i = iFirstNew; i < tChangeset.m_pNewDiskChunks->GetLength(); ++i )
+				SetChunkRuntimeSettings ( ( *tChangeset.m_pNewDiskChunks )[i]->CastIdx() );
+		} else
 			tChangeset.m_pNewDiskChunks->Add ( pChunk );
 	}
 
@@ -12302,6 +12311,10 @@ RtActionResult_e RtIndex_c::ReconfigureResult ( CSphReconfigureSetup & tSetup )
 	{
 		m_tMutableSettings.Combine ( tSetup.m_tMutableSettings );
 		SetMemLimit ( m_tMutableSettings.m_iMemLimit );
+
+		auto pChunks = m_tRtChunks.DiskChunks();
+		for ( auto & pChunk : *pChunks )
+			SetChunkRuntimeSettings ( pChunk->CastIdx() );
 	}
 
 	bool bWasBinlog = m_tSettings.m_bBinlog;
@@ -13054,6 +13067,15 @@ void RtIndex_c::SetGlobalIDFPath ( const CSphString & sPath )
 	auto pChunks = m_tRtChunks.DiskChunks();
 	for ( auto & pChunk : *pChunks )
 		pChunk->CastIdx().SetGlobalIDFPath ( m_sGlobalIDFPath );
+}
+
+// a chunk keeps the file access its files were opened with
+void RtIndex_c::SetChunkRuntimeSettings ( CSphIndex & tChunk ) const
+{
+	MutableIndexSettings_c tChunkSettings = m_tMutableSettings;
+	tChunkSettings.m_tFileAccess = tChunk.GetMutableSettings().m_tFileAccess;
+	tChunk.SetMutableSettings ( tChunkSettings );
+	tChunk.SetGlobalIDFPath ( m_sGlobalIDFPath );
 }
 
 void RtIndex_c::DebugDumpDict ( FILE * fp, bool bDumpOnly )

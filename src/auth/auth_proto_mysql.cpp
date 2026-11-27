@@ -237,11 +237,11 @@ static bool SqlCheckStmtPerms ( const CSphString & sUser, const SqlStmt_t & tStm
 		if ( DenyInternalAuthStorageTarget ( sUser, sTarget, sError ) )
 			return false;
 
-		// These system views expose server-wide diagnostic information, not
-		// ordinary table data. Apply the same global permission as SHOW.
+		// Use the same name matching as ParseSysVarsAndTables and ParseSystem.
 		const auto & dSubkeys = tStmt.m_tQuery.m_dStringSubkeys;
-		if ( sTarget=="@@system" && !dSubkeys.IsEmpty()
-			&& ( dSubkeys.First()==".sessions" || dSubkeys.First()==".threads" ) )
+		if ( StrEqN ( FROMS ( "@@system" ), sTarget.cstr() ) && !dSubkeys.IsEmpty()
+			&& ( StrEqN ( FROMS ( ".sessions" ), dSubkeys.First().cstr() )
+				|| StrEqN ( FROMS ( ".threads" ), dSubkeys.First().cstr() ) ) )
 			return CheckUnrestrictedPerms ( sUser, AuthAction_e::SCHEMA, sError );
 
 		return CheckPerms ( sUser, AuthAction_e::READ, sTarget, false, sError );

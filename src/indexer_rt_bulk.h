@@ -11,6 +11,7 @@ enum class EMYSQL_ERR : WORD;
 class ClientSession_c;
 class RtIndex_i;
 class CSphIndex;
+class ServedIndex_c;
 
 struct IndexerRtBulkFile_t
 {
@@ -18,12 +19,15 @@ struct IndexerRtBulkFile_t
 	int64_t		m_iSize = 0;
 };
 
+// the table that the indexer child builds into a chunk (its config section, its messages, the loaded chunk)
+const char * GetIndexerRtBulkChunkName();
+
 CSphString GetIndexerRtBulkRoot ( const RtIndex_i & tRt );
 
 // takes the common and indexer options of the main config for the indexer children; call after sphConfigureCommon
 void ConfigureIndexerRtBulk ( const CSphConfig & hConf );
 
-std::unique_ptr<CSphIndex> LoadIndexerRtBulkChunk ( const CSphString & sPath, const CSphString & sTable, CSphString & sError );
+std::unique_ptr<CSphIndex> LoadIndexerRtBulkChunk ( const CSphRefcountedPtr<const ServedIndex_c> & pServed, const CSphString & sPath, CSphString & sError ); // pServed is an RT table
 
 bool PrepareStagingRoot ( const CSphString & sRoot, CSphString & sError );
 

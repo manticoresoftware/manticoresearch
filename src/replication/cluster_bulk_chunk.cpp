@@ -312,13 +312,13 @@ bool PrepareBulkChunk ( const ClusterIndexAddLocalRequest_t & tCmd )
 		return false;
 	for ( const auto & sOld : tRotated.m_dOld )
 		pSession->m_dFilesRef.Add ( sOld );
-	auto pChunk = LoadIndexerRtBulkChunk ( pSession->m_sFilebase, tCmd.m_sIndex, sError );
+	auto pServed = GetServed ( tCmd.m_sIndex );
+	if ( !pServed || pServed->m_eType!=IndexType_e::RT || pServed->m_sCluster!=tCmd.m_sCluster )
+		return TlsMsg::Err ( "bulk_import chunk: table '%s' is not an RT table of cluster '%s'", tCmd.m_sIndex.cstr(), tCmd.m_sCluster.cstr() );
+	auto pChunk = LoadIndexerRtBulkChunk ( pServed, pSession->m_sFilebase, sError );
 	if ( !pChunk )
 		return false;
 	{
-		auto pServed = GetServed ( tCmd.m_sIndex );
-		if ( !pServed || pServed->m_eType!=IndexType_e::RT || pServed->m_sCluster!=tCmd.m_sCluster )
-			return TlsMsg::Err ( "bulk_import chunk: table '%s' is not an RT table of cluster '%s'", tCmd.m_sIndex.cstr(), tCmd.m_sCluster.cstr() );
 		RIdx_T<RtIndex_i *> pRt { pServed };
 		if ( !pRt->CanAttachDiskIndex ( pChunk.get(), sError ) )
 			return false;
@@ -406,7 +406,7 @@ bool AttachBulkChunk ( const CSphString & sCluster, const CSphString & sTable, u
 	}
 	if ( bFallback && pSession->BeginPrepare() )
 	{
-		auto pLoaded = LoadIndexerRtBulkChunk ( pSession->m_sFilebase, sTable, sError );
+		auto pLoaded = LoadIndexerRtBulkChunk ( pServed, pSession->m_sFilebase, sError );
 		if ( !pLoaded )
 			return false;
 		{

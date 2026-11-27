@@ -1,8 +1,9 @@
 # Search prebuilt googletest. If nothing found - download, unpack, build and then search again
 # allow to get googletest from bundle also (instead of download)
 
-set ( GTEST_GITHUB "https://github.com/google/googletest/archive/main.zip" )
-set ( GTEST_ZIP "googletest-master.zip" ) # that is default filename if you download GTEST_GITHUB using browser
+# Pin the fallback to v1.16.0; main requires VS 2022, unlike our Windows cross toolchain.
+set ( GTEST_GITHUB "https://github.com/google/googletest/archive/6910c9d9165801d8827d628cb72eb7ea9dd538c5.zip" )
+set ( GTEST_ZIP "googletest-1.16.0.zip" )
 set ( GTEST_URL "${LIBS_BUNDLE}/${GTEST_ZIP}" )
 
 if (TARGET GTest::gmock_main)

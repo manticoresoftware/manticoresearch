@@ -99,3 +99,26 @@ ready
 mysql -P9306 -h0 -N -e "SELECT id FROM gh4044_nv WHERE KNN(emb,5,(0,0),{fullscan=1}) AND city_id IN ($(seq -s, 100 149)) OPTION cutoff=1 /*+ SecondaryIndex(city_id) */;" | tr -d '|+-' | xargs
 ––– output –––
 101
+––– comment –––
+An IN list with more than eight values and a range are collected into a bitmap
+value by value. The cutoff must keep every collected row: no rows are deleted
+here, so LIMIT N must return N rows. Each query prints the row count and the
+count of rows outside the filter.
+––– input –––
+mysql -P9306 -h0 -e "DROP TABLE IF EXISTS gh4044_bm; CREATE TABLE gh4044_bm (v int); INSERT INTO gh4044_bm (id,v) VALUES $(for i in $(seq 1 199); do printf "(%d,%d)," $i $((100+i%50)); done)(200,100); FLUSH RAMCHUNK gh4044_bm;" && echo ready
+––– output –––
+ready
+––– input –––
+for q in "v IN ($(seq -s, 100 149)) LIMIT 5" "v IN ($(seq -s, 100 149)) LIMIT 30" "v BETWEEN 141 AND 149 LIMIT 5"; do mysql -P9306 -h0 -N -e "SELECT v FROM gh4044_bm WHERE $q /*+ SecondaryIndex(v) */;" | tr -d '|+-' | awk 'NF{n++} END{print n+0}'; done
+––– output –––
+5
+30
+5
+––– comment –––
+An excluded range is inverted after all values are collected, so it must not
+get a cutoff: no row with v <= 140 may come back.
+––– input –––
+for l in 5 100; do mysql -P9306 -h0 -N -e "SELECT v FROM gh4044_bm WHERE v NOT BETWEEN 100 AND 140 LIMIT $l /*+ SecondaryIndex(v) */;" | tr -d '|+-' | awk 'NF{n++; if ($1<=140) bad++} END{print n+0, bad+0}'; done
+––– output –––
+5 0
+36 0

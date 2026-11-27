@@ -7912,9 +7912,9 @@ bool HandleUpdateAPI ( AttrUpdateArgs& tArgs, CSphIndex* pIndex, int& iUpdate )
 }
 
 namespace {
-DocsCollector_c InitUpdate( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc )
+DocsCollector_c InitUpdate( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, const RWIdx_c * pLockedIndex = nullptr )
 {
-	DocsCollector_c tCollector ( *tArgs.m_pQuery, tArgs.m_bJson, *tArgs.m_pIndexName, pDesc, tArgs.m_pError );
+	DocsCollector_c tCollector ( *tArgs.m_pQuery, tArgs.m_bJson, *tArgs.m_pIndexName, pDesc, tArgs.m_pError, pLockedIndex );
 	AttrUpdateSharedPtr_t& pUpdate = tArgs.m_pUpdate;
 	pUpdate->m_bReusable = false;
 	pUpdate->m_bIgnoreNonexistent = tArgs.m_pQuery->m_bIgnoreNonexistent;
@@ -7948,11 +7948,12 @@ void UpdateWlocked ( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, i
 void UpdateRlocked ( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, int& iUpdated)
 {
 	TRACE_CORO ( "sph", "UpdateRlocked" );
-	// wide r-lock over whole update. r-locks acquired by collector should be re-enterable.
+	// Keep the read lock across collection and update; the collector must reuse it
+	// rather than block behind a queued writer while holding this lock.
 	BEGIN_CORO ( "wait", "take r-lock" );
 	RWIdx_c rLocked { pDesc };
 	END_CORO ( "wait" );
-	auto tCollector = InitUpdate ( tArgs, pDesc );
+	auto tCollector = InitUpdate ( tArgs, pDesc, &rLocked );
 	DoUpdate ( tCollector, tArgs, rLocked );
 }
 } // unnamed namespace

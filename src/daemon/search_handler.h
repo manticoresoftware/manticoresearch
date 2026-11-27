@@ -18,6 +18,8 @@
 #include "searchdaemon.h"
 #include "searchdha.h"
 
+#include <optional>
+
 
 struct QueryStat_t
 {
@@ -87,7 +89,7 @@ public:
 									~SearchHandler_c();
 
 	void							RunQueries ();					///< run all queries, get all results
-	void							RunCollect ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<BYTE> * pCollectedDocs );
+	void							RunCollect ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<BYTE> * pCollectedDocs, const RWIdx_c * pLockedIndex = nullptr );
 	void							SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc );
 	void							SetJoinQueryOptions ( int iQuery, const CSphQuery & tJoinQueryOptions ) const { m_dJoinQueryOptions[iQuery] = tJoinQueryOptions; }
 	void							SetProfile ( QueryProfile_c * pProfile );
@@ -116,7 +118,9 @@ private:
 	CSphVector<LocalIndex_t>		m_dLocal;				///< local indexes for the current subset
 	CSphVector<StatsPerQuery_t>		m_dQueryIndexStats;		///< statistics for current query
 	StrVec_t 						m_dExtraSchema;		 	///< the extra attrs for agents. One vec per index*threads
-	CSphVector<BYTE> *				m_pCollectedDocs = nullptr;	///< this query is for deleting
+	CSphVector<BYTE> *				m_pCollectedDocs = nullptr;	///< this query is for deleting/updating
+	const RWIdx_c *				m_pCollectLock = nullptr;	///< borrowed for the duration of RunCollect
+	const RunningIndex_c *		m_pCollectRunningIndex = nullptr;
 
 	QueryProfile_c *				m_pProfile = nullptr;
 	QueryType_e						m_eQueryType {QUERY_API}; ///< queries from sphinxql require special handling
@@ -183,6 +187,7 @@ private:
 	CSphVector<JoinedIndexes_t>		GetRlockedJoinedIndexes ( const CSphVector<CSphVector<JoinedServedIndex_t>> & dJoinedServed, std::vector<RIdx_c> & dRLockedJoined ) const;
 	bool							CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex* pIndex, CSphVector<JoinedIndexes_t> & dJoinedIndexes, const CSphString & sLocal, const char * szParent, ISphExprHook * pHook );
 
+	const CSphIndex *				GetReadIndex ( const cServedIndexRefPtr_c & pServed, std::optional<RIdx_c> & tLock ) const;
 	void							PopulateCountDistinct ( CSphVector<CSphVector<int64_t>> & dCountDistinct ) const;
 	int								CalcMaxThreadsPerIndex ( int iConcurrency ) const;
 	void							CalcThreadsPerIndex ( int iConcurrency );

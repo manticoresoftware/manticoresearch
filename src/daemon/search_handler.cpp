@@ -177,11 +177,20 @@ cServedIndexRefPtr_c KeepCollection_c::Get ( const CSphString & sName ) const
 	return *ppIndex;
 }
 
-void SearchHandler_c::RunCollect ( const CSphQuery &tQuery, const CSphString &sIndex, CSphString * pErrors, CSphVector<BYTE> * pCollectedDocs )
+void SearchHandler_c::RunCollect ( const CSphQuery &tQuery, const CSphString &sIndex, CSphString * pErrors, CSphVector<BYTE> * pCollectedDocs, const RWIdx_c * pLockedIndex )
 {
 	m_bQueryLog = false;
 	m_pCollectedDocs = pCollectedDocs;
+	m_pCollectLock = pLockedIndex;
+	if ( pLockedIndex )
+	{
+		auto pServed = m_dAcquired.Get ( sIndex );
+		assert ( pLockedIndex->Ptr()==UnlockedHazardIdxFromServed ( *pServed ) );
+		m_pCollectRunningIndex = pServed->m_pIndex.Ptr();
+	}
 	RunActionQuery ( tQuery, sIndex, pErrors );
+	m_pCollectLock = nullptr;
+	m_pCollectRunningIndex = nullptr;
 }
 
 void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors )
@@ -656,6 +665,16 @@ bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt
 }
 
 
+// A pending writer prevents new read locks, even if the caller already holds one.
+const CSphIndex * SearchHandler_c::GetReadIndex ( const cServedIndexRefPtr_c & pServed, std::optional<RIdx_c> & tLock ) const
+{
+	if ( m_pCollectLock && pServed->m_pIndex.Ptr()==m_pCollectRunningIndex )
+		return m_pCollectLock->Ptr();
+
+	return tLock.emplace ( pServed ).Ptr();
+}
+
+
 void SearchHandler_c::PopulateCountDistinct ( CSphVector<CSphVector<int64_t>> & dCountDistinct ) const
 {
 	dCountDistinct.Resize ( m_dLocal.GetLength() );
@@ -670,16 +689,18 @@ void SearchHandler_c::PopulateCountDistinct ( CSphVector<CSphVector<int64_t>> & 
 		auto & dIndexCountDistinct = dCountDistinct[iLocal];
 		dIndexCountDistinct.Resize ( m_dNQueries.GetLength() );
 		dIndexCountDistinct.Fill(-1);
+		std::optional<RIdx_c> tLock;
+		const CSphIndex * pLocked = GetReadIndex ( pIndex, tLock );
 		ARRAY_FOREACH ( i, dIndexCountDistinct )
 		{
 			auto & tQuery = m_dNQueries[i];
-			int iGroupby = GetAliasedAttrIndex ( tQuery.m_sGroupBy, tQuery, RIdx_c(pIndex)->GetMatchSchema() );
+			int iGroupby = GetAliasedAttrIndex ( tQuery.m_sGroupBy, tQuery, pLocked->GetMatchSchema() );
 			if ( iGroupby<0 )
 				continue;
 
-			auto & sAttr = RIdx_c(pIndex)->GetMatchSchema().GetAttr(iGroupby).m_sName;
+			auto & sAttr = pLocked->GetMatchSchema().GetAttr(iGroupby).m_sName;
 			CSphString sModifiedAttr;
-			dIndexCountDistinct[i] = RIdx_c(pIndex)->GetCountDistinct ( sAttr, sModifiedAttr );
+			dIndexCountDistinct[i] = pLocked->GetCountDistinct ( sAttr, sModifiedAttr );
 		}
 	}
 }
@@ -729,7 +750,8 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 		iEnabledIndexes++;
 		auto & tPSInfo = m_dPSInfo[iLocal];
 		auto & tSplitData = dSplitData[iLocal];
-		RIdx_c pIdx { pIndex };
+		std::optional<RIdx_c> tLock;
+		const CSphIndex * pIdx = GetReadIndex ( pIndex, tLock );
 		if ( GetPseudoSharding () || pIdx->IsRT() )
 		{
 			// do metric calcs
@@ -1127,7 +1149,8 @@ void SearchHandler_c::RunLocalSearches()
 			bool bLocalMultiQueue = false;
 
 			{	// scope for r-locking the index
-				RIdx_c pIndex { pServed };
+				std::optional<RIdx_c> tLock;
+				const CSphIndex * pIndex = GetReadIndex ( pServed, tLock );
 
 				tCtx.m_tHook.SetIndex ( pIndex );
 				tCtx.m_tHook.SetQueryType ( m_eQueryType );

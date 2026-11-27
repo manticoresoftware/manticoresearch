@@ -1,0 +1,11 @@
+––– comment –––
+Issue #5132: concurrent MVA UPDATE by id and bool UPDATE by a non-id attribute must not deadlock an RT table with a disk chunk.
+––– block: ../base/start-searchd –––
+––– block: ../base/5132-update-deadlock –––
+––– input –––
+timeout -k 5s 30s mysql -h0 -P9306 -e "DROP TABLE IF EXISTS t; CREATE TABLE t(title text,tags multi,flag bool,group_id int); INSERT INTO t(id,title,tags,flag,group_id) VALUES(1,'x',(1),0,7),(2,'y',(1),0,8); FLUSH RAMCHUNK t" || echo "table setup failed"
+––– output –––
+––– input –––
+timeout -k 5s 75s php /tmp/issue-5132.php attr || echo "concurrent update test failed"
+––– output –––
+table responsive

@@ -362,6 +362,8 @@ struct ExprParseArgs_t
 	bool *				m_pNeedDocIds = nullptr;
 	const CSphString *	m_pJoinIdx = nullptr;
 	const CSphString *	m_pJoinIdxLeft = nullptr;
+	// Internal schema materialization must read the physical DocID, not the public UUID.
+	bool				m_bResolveUuidDocid = true;
 };
 
 struct JoinArgs_t

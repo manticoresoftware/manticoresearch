@@ -4362,6 +4362,7 @@ public:
 	ESphCollation			m_eCollation;
 	DWORD					m_uStoredField = CSphColumnInfo::FIELD_NONE;
 	bool					m_bNeedDocIds = false;
+	bool					m_bResolveUuidDocid = true;
 
 private:
 	bool					CheckGeodist ( YYSTYPE * lvalp );
@@ -4540,7 +4541,7 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp ) noe
 {
 	// check attribute type and width
 	const CSphColumnInfo & tCol = m_pSchema->GetAttr ( iAttr );
-	if ( tCol.IsUuidLinkedDocid() )
+	if ( m_bResolveUuidDocid && tCol.IsUuidLinkedDocid() )
 	{
 		int iUuid = m_pSchema->GetAttrIndex ( sphGetUuidDocidName() );
 		assert ( iUuid>=0 );
@@ -10612,7 +10613,7 @@ int ExprParser_t::ParseJoinAttr ( const char * szTable, uint64_t uOffset )
 		sAttrWithTable.SetSprintf ( "%s.%s", szTable, sAttrName.cstr() );
 
 	int iAttr = m_pSchema->GetAttrIndex ( sAttrWithTable.cstr() );
-	if ( iAttr>=0 && m_pSchema->GetAttr(iAttr).IsUuidLinkedDocid() )
+	if ( m_bResolveUuidDocid && iAttr>=0 && m_pSchema->GetAttr(iAttr).IsUuidLinkedDocid() )
 	{
 		int iUuid = m_pSchema->GetAttrIndex ( sphGetUuidDocidName() );
 		assert ( iUuid>=0 );
@@ -10995,6 +10996,7 @@ ISphExpr * sphExprParse ( const char * szExpr, const ISphSchema & tSchema, CSphS
 {
 	// parse into opcodes
 	ExprParser_t tParser ( tArgs.m_pHook, tArgs.m_pProfiler, tArgs.m_eCollation );
+	tParser.m_bResolveUuidDocid = tArgs.m_bResolveUuidDocid;
 	ISphExpr * pRes = tParser.Parse ( szExpr, tSchema, tArgs.m_pJoinIdx, tArgs.m_pJoinIdxLeft, tArgs.m_pAttrType, tArgs.m_pUsesWeight, sError );
 	if ( tArgs.m_pZonespanlist )
 		*tArgs.m_pZonespanlist = tParser.m_bHasZonespanlist;

@@ -310,7 +310,7 @@ private:
 	sph::StringSet				m_hExtra;
 
 	bool	ParseQueryItem ( const CSphQueryItem & tItem );
-	bool	ParseResolvedQueryItem ( const CSphQueryItem & tItem );
+	bool	ParseResolvedQueryItem ( const CSphQueryItem & tItem, bool bPhysicalAttr = false );
 	bool	MaybeAddGeodistColumn();
 	bool	MaybeAddExprColumn();
 	bool	MaybeAddExpressionsFromSelectList();
@@ -1177,7 +1177,7 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 }
 
 
-bool QueueCreator_c::ParseResolvedQueryItem ( const CSphQueryItem & tItem )
+bool QueueCreator_c::ParseResolvedQueryItem ( const CSphQueryItem & tItem, bool bPhysicalAttr )
 {
 	assert ( m_pSorterSchema );
 	const CSphString & sExpr = tItem.m_sExpr;
@@ -1284,6 +1284,7 @@ bool QueueCreator_c::ParseResolvedQueryItem ( const CSphQueryItem & tItem )
 	tExprParseArgs.m_pEvalStage = &tExprCol.m_eStage;
 	tExprParseArgs.m_pStoredField = &tExprCol.m_uFieldFlags;
 	tExprParseArgs.m_pNeedDocIds = &bExprsNeedDocids;
+	tExprParseArgs.m_bResolveUuidDocid = !bPhysicalAttr;
 
 	// tricky bit
 	// GROUP_CONCAT() adds an implicit TO_STRING() conversion on top of its argument
@@ -1321,6 +1322,11 @@ bool QueueCreator_c::ParseResolvedQueryItem ( const CSphQueryItem & tItem )
 	tExprCol.m_iIndex = iSorterAttr>= 0 ? m_pSorterSchema->GetAttrIndexOriginal ( tItem.m_sAlias.cstr() ) : -1;
 	if ( !tExprCol.m_pExpr )
 		return Err ( "parse error: %s", m_sError.cstr() );
+
+	// Retain the link on the materialized numeric DocID so later public
+	// expressions can still resolve it to the UUID.
+	if ( bPhysicalAttr && iAttrIdx>=0 && m_tSettings.m_tSchema.GetAttr(iAttrIdx).IsUuidLinkedDocid() )
+		tExprCol.m_uAttrFlags |= CSphColumnInfo::ATTR_UUID_LINK;
 
 	if ( !SetupAggregateExpr ( tExprCol, tItem.m_sExpr, uQueryPackedFactorFlags ) )
 		return false;
@@ -1514,28 +1520,10 @@ bool QueueCreator_c::AddColumnarAttributeExpressions()
 
 		m_hQueryDups.Delete ( tAttr.m_sName );
 
-		// The linked numeric DocID is used internally (e.g. by the docstore).
-		// Parsing its public name would resolve to the UUID string instead.
-		if ( tAttr.IsUuidLinkedDocid() )
-		{
-			int iDocid = m_pSorterSchema->GetAttrIndex ( tAttr.m_sName.cstr() );
-			assert ( iDocid>=0 );
-			CSphColumnInfo tDocidExpr ( tAttr.m_sName.cstr(), SPH_ATTR_BIGINT );
-			tDocidExpr.m_iIndex = m_pSorterSchema->GetAttrIndexOriginal ( tAttr.m_sName.cstr() );
-			tDocidExpr.m_uAttrFlags = CSphColumnInfo::ATTR_UUID_LINK;
-			tDocidExpr.m_eStage = SPH_EVAL_FINAL;
-			tDocidExpr.m_pExpr = CreateExpr_GetColumnarInt ( tAttr.m_sName, tAttr.IsStored() );
-			m_pSorterSchema->AddAttr ( tDocidExpr, true );
-			m_pSorterSchema->RemoveStaticAttr ( iDocid );
-			m_hQueryDups.Add ( tAttr.m_sName );
-			m_hQueryColumns.Add ( tAttr.m_sName );
-			continue;
-		}
-
 		CSphQueryItem tItem;
 		tItem.m_sExpr = tItem.m_sAlias = tAttr.m_sName;
-		bool bParsed = bUuidAttr ? ParseResolvedQueryItem ( tItem ) : ParseQueryItem ( tItem );
-		if ( !bParsed )
+		// These names come from the storage schema, not from the SELECT list.
+		if ( !ParseResolvedQueryItem ( tItem, true ) )
 			return false;
 
 		// copy knn settings

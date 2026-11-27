@@ -146,13 +146,17 @@ void FrontendSchemaBuilder_c::CollectKnownItems()
 		const CSphQueryItem & tItem = m_dItems[i];
 
 		int iCol = -1;
-		if ( !m_bQueryFromAPI && tItem.m_sAlias.IsEmpty() )
+		// A materialized physical DocID can itself be an expression named id.
+		// Resolve a plain SQL UUID projection before matching expression aliases.
+		if ( m_tQuery.m_eQueryType==QUERY_SQL && tItem.m_eAggrFunc==SPH_AGGR_NONE )
+			iCol = GetUuidIdIndex ( m_tRes.m_tSchema, tItem.m_sExpr, bProjectUuidId );
+		if ( iCol<0 && !m_bQueryFromAPI && tItem.m_sAlias.IsEmpty() )
 			iCol = GetFrontendAttrIndex ( m_tRes.m_tSchema, tItem.m_sExpr, bProjectUuidId );
 
 		if ( iCol>=0 )
 		{
 			m_dKnownAttrs.Add(i);
-			m_dFrontend[i].m_sName = tItem.m_sExpr;
+			m_dFrontend[i].m_sName = tItem.m_sAlias.IsEmpty() ? tItem.m_sExpr : tItem.m_sAlias;
 			m_dFrontend[i].m_iIndex = iCol;
 		}
 		else

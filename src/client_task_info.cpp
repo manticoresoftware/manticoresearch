@@ -14,7 +14,6 @@
 std::atomic<int> ClientTaskInfo_t::m_iClients { 0 };
 std::atomic<int> ClientTaskInfo_t::m_iVips { 0 };
 std::atomic<int> ClientTaskInfo_t::m_iBuddy { 0 };
-std::atomic<int> ClientTaskInfo_t::m_iOrdinaryClients { 0 };
 
 DEFINE_RENDER ( ClientTaskInfo_t )
 {
@@ -81,19 +80,15 @@ ClientSession_c* ClientTaskInfo_t::GetClientSession()
 
 void ClientTaskInfo_t::SetBuddy ( bool bBuddy )
 {
-	// FIXME!!! remove inconsistency increase counter here but decrease at the ~ScopedClientInfo_c
-	if ( bBuddy!=m_bBuddy )
-	{
-		m_bBuddy = bBuddy;
-		if ( bBuddy )
-			m_iBuddy.fetch_add ( 1, std::memory_order_relaxed );
-		else
-			m_iBuddy.fetch_sub ( 1, std::memory_order_relaxed );
+	if ( bBuddy==m_bBuddy )
+		return;
 
-		// The Buddy flag can change on a keep-alive connection. VIPs are never ordinary clients.
-		if ( !m_bVip )
-			m_iOrdinaryClients.fetch_add ( bBuddy ? -1 : 1, std::memory_order_relaxed );
-	}
+	m_bBuddy = bBuddy;
+	// a non-VIP connection moves between ordinary clients and Buddy
+	int iDelta = bBuddy ? 1 : -1;
+	m_iBuddy.fetch_add ( iDelta, std::memory_order_relaxed );
+	if ( !m_bVip )
+		m_iClients.fetch_sub ( iDelta, std::memory_order_relaxed );
 }
 
 namespace {

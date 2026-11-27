@@ -143,6 +143,17 @@ index t13
     morphology = icu_chinese
 }
 
+index gh5140
+{
+	type = rt
+	path = <data_path/>/gh5140
+	rt_field = 中文列
+	rt_field = title
+	rt_field = mixed中文field
+	charset_table = non_cont,chinese
+	morphology = icu_chinese
+}
+
 </config>
 
 <db_create>
@@ -284,6 +295,20 @@ insert into t13 (id, f) values(101, '最后，也许你是一名DevOps，其他�
 select highlight() from t13 where match('最后') and id=101;
 select highlight() from t13 where match('凌晨') and id=101;
 
+
+<!-- Regression #5140: CJK field selectors must survive segmentation. -->
+INSERT INTO gh5140 (id, `中文列`, title, `mixed中文field`) VALUES (1, '橙黄苹果 苹果 needle', 'other', 'other'), (2, 'other', '橙黄苹果 苹果 needle', 'other'), (3, 'other', 'other', '橙黄苹果 苹果 needle');
+SELECT id AS unscoped FROM gh5140 WHERE MATCH('苹果') ORDER BY id ASC;
+SELECT id AS single_field FROM gh5140 WHERE MATCH('@中文列 苹果') ORDER BY id ASC;
+SELECT id AS ascii_field FROM gh5140 WHERE MATCH('@title needle') ORDER BY id ASC;
+SELECT id AS mixed_field FROM gh5140 WHERE MATCH('@mixed中文field needle') ORDER BY id ASC;
+SELECT id AS field_list FROM gh5140 WHERE MATCH('@(中文列,title) needle') ORDER BY id ASC;
+SELECT id AS excluded_field FROM gh5140 WHERE MATCH('@!中文列 needle') ORDER BY id ASC;
+SELECT id AS excluded_list FROM gh5140 WHERE MATCH('@!(中文列,title) needle') ORDER BY id ASC;
+SELECT id AS position_limit FROM gh5140 WHERE MATCH('@中文列[10] needle') ORDER BY id ASC;
+SELECT COUNT(*) AS position_rejected FROM gh5140 WHERE MATCH('@中文列[1] needle');
+SELECT id AS all_fields FROM gh5140 WHERE MATCH('@* needle') ORDER BY id ASC;
+SELECT id AS quoted_text FROM gh5140 WHERE MATCH('@中文列 "苹果 needle"') ORDER BY id ASC;
 </sphinxql></queries>
 
 </test>

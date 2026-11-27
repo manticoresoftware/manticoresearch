@@ -1,0 +1,82 @@
+––– comment –––
+Regression for #5134: VIP and Buddy connections must not be subtracted twice.
+––– input –––
+bash <<'EOF'
+set -euo pipefail
+dir=$(mktemp -d)
+trap 'searchd --config "$dir/manticore.conf" --stopwait >/dev/null 2>&1 || true; rm -rf "$dir"' EXIT
+
+cat > "$dir/manticore.conf" <<CONF
+searchd {
+    listen = 127.0.0.1:19534:http
+    listen = 127.0.0.1:19535:http_vip
+    listen = 127.0.0.1:19536:http
+    log = $dir/searchd.log
+    pid_file = $dir/searchd.pid
+    data_dir = $dir
+    buddy_path =
+    max_connections = 1
+}
+CONF
+
+searchd --config "$dir/manticore.conf" >/dev/null 2>&1
+
+vip='http://127.0.0.1:19535/sql?mode=raw'
+normal='http://127.0.0.1:19534/sql?mode=raw'
+extra='http://127.0.0.1:19536/sql?mode=raw'
+buddy='Manticore Buddy'
+query="SHOW STATUS LIKE 'workers_clients%'"
+args=(-sS --max-time 5 -d "$query" -w '\nHTTP %{http_code}, new connections: %{num_connects}\n')
+
+counts_only() {
+    awk -F'"' '
+        $4 == "workers_clients"       { n = $8 }
+        $4 == "workers_clients_vip"   { v = $8 }
+        $4 == "workers_clients_buddy" { print n, v, $8 }
+        /^HTTP /                     { print }
+    '
+}
+
+curl --fail-early "${args[@]}" "$vip" \
+  --next "${args[@]}" -A "$buddy" "$vip" \
+  --next "${args[@]}" -A "$buddy" "$vip" \
+  --next "${args[@]}" "$vip" \
+  --next "${args[@]}" -A "$buddy" "$vip" \
+  --next "${args[@]}" "$normal" \
+  --next "${args[@]}" -A "$buddy" "$normal" \
+  --next "${args[@]}" -A "$buddy" "$normal" \
+  --next "${args[@]}" "$normal" \
+  --next "${args[@]}" -o /dev/null "$extra" \
+  --next "${args[@]}" -o /dev/null -A "$buddy" "$normal" |
+  counts_only
+
+# Wait for all previous connections to close.
+for i in {1..100}; do
+    counts=$(curl -fsS --max-time 5 -d "$query" "$vip" | counts_only)
+    [[ "$counts" == "0 1 0" ]] && break
+    sleep 0.05
+done
+echo "$counts"
+EOF
+––– output –––
+0 1 0
+HTTP 200, new connections: 1
+0 1 1
+HTTP 200, new connections: 0
+0 1 1
+HTTP 200, new connections: 0
+0 1 0
+HTTP 200, new connections: 0
+0 1 1
+HTTP 200, new connections: 0
+1 1 1
+HTTP 200, new connections: 1
+0 1 2
+HTTP 200, new connections: 0
+0 1 2
+HTTP 200, new connections: 0
+1 1 1
+HTTP 200, new connections: 0
+HTTP 503, new connections: 1
+HTTP 200, new connections: 0
+0 1 0

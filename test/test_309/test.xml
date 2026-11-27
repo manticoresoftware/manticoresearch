@@ -41,6 +41,22 @@ insert into jieba_custom_dict values(1,'土風舞班');
 flush ramchunk jieba_custom_dict;
 select * from jieba_custom_dict;
 drop table jieba_custom_dict;
+
+<!-- Regression #5140: CJK field selectors must survive segmentation. -->
+CREATE TABLE gh5140 (`中文列` text, title text, `mixed中文field` text) engine='rowwise' charset_table='non_cont,chinese' morphology='jieba_chinese';
+INSERT INTO gh5140 (id, `中文列`, title, `mixed中文field`) VALUES (1, '橙黄苹果 苹果 needle', 'other', 'other'), (2, 'other', '橙黄苹果 苹果 needle', 'other'), (3, 'other', 'other', '橙黄苹果 苹果 needle');
+SELECT id AS unscoped FROM gh5140 WHERE MATCH('苹果') ORDER BY id ASC;
+SELECT id AS single_field FROM gh5140 WHERE MATCH('@中文列 苹果') ORDER BY id ASC;
+SELECT id AS ascii_field FROM gh5140 WHERE MATCH('@title needle') ORDER BY id ASC;
+SELECT id AS mixed_field FROM gh5140 WHERE MATCH('@mixed中文field needle') ORDER BY id ASC;
+SELECT id AS field_list FROM gh5140 WHERE MATCH('@(中文列,title) needle') ORDER BY id ASC;
+SELECT id AS excluded_field FROM gh5140 WHERE MATCH('@!中文列 needle') ORDER BY id ASC;
+SELECT id AS excluded_list FROM gh5140 WHERE MATCH('@!(中文列,title) needle') ORDER BY id ASC;
+SELECT id AS position_limit FROM gh5140 WHERE MATCH('@中文列[10] needle') ORDER BY id ASC;
+SELECT COUNT(*) AS position_rejected FROM gh5140 WHERE MATCH('@中文列[1] needle');
+SELECT id AS all_fields FROM gh5140 WHERE MATCH('@* needle') ORDER BY id ASC;
+SELECT id AS quoted_text FROM gh5140 WHERE MATCH('@中文列 "苹果 needle"') ORDER BY id ASC;
+DROP TABLE gh5140;
 </sphinxql>
 </queries>
 

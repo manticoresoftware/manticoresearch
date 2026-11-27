@@ -17,6 +17,45 @@
 #include "tokenizer/tokenizer.h"
 
 
+// Find the end of a field selector without interpreting its names as text.
+// Leave validation and schema lookup to the query parser.
+static const BYTE * GetFieldSpecEnd ( const BYTE * pAt, const BYTE * pEnd )
+{
+	const BYTE * p = pAt+1;
+	if ( p<pEnd && *p=='!' )
+		++p;
+
+	if ( p==pEnd )
+		return pAt;
+
+	if ( *p!='(' )
+	{
+		const BYTE * pName = p;
+		while ( p<pEnd && sphIsFieldSpecChar ( *p ) )
+			++p;
+		return p==pName ? pAt : p;
+	}
+
+	++p;
+	while ( p<pEnd )
+	{
+		const BYTE * pName = p;
+		while ( p<pEnd && sphIsFieldSpecChar ( *p ) )
+			++p;
+
+		if ( p==pName || p==pEnd )
+			break;
+		if ( *p==')' )
+			return p+1;
+		if ( *p!=',' )
+			break;
+		++p;
+	}
+
+	return pAt;
+}
+
+
 bool CJKPreprocessor_c::Process ( const BYTE * pBuffer, int iLength, CSphVector<BYTE> & dOut, bool bQuery )
 {
 	if ( !pBuffer || !iLength )
@@ -32,11 +71,32 @@ bool CJKPreprocessor_c::Process ( const BYTE * pBuffer, int iLength, CSphVector<
 	bool bWasChineseCode = false;
 	const BYTE * pChunkStart = pBuffer;
 	bool bFirstCode = true;
+	bool bQuoted = false;
+	bool bEscaped = false;
 	while ( pBuffer<pBufferMax )
 	{
 		const BYTE * pTmp = pBuffer;
-		int iCode = sphUTF8Decode ( pBuffer );
-		bool bIsChineseCode = sphIsChineseCode(iCode);
+		bool bIsChineseCode = false;
+
+		// Field selectors are syntax, not searchable text. Keep the entire
+		// selector in the non-CJK chunk so neither its name nor its delimiters
+		// are changed by segmentation or space insertion.
+		const BYTE * pFieldEnd = bQuery && !bQuoted && !bEscaped && *pBuffer=='@'
+			? GetFieldSpecEnd ( pBuffer, pBufferMax ) : pBuffer;
+		if ( pFieldEnd!=pBuffer )
+			pBuffer = pFieldEnd;
+		else
+		{
+			int iCode = sphUTF8Decode ( pBuffer );
+			bIsChineseCode = sphIsChineseCode(iCode);
+
+			if ( bQuery )
+			{
+				if ( !bEscaped && iCode=='"' )
+					bQuoted = !bQuoted;
+				bEscaped = !bEscaped && iCode=='\\';
+			}
+		}
 		if ( !bFirstCode && bWasChineseCode!=bIsChineseCode )
 		{
 			AddTextChunk ( pChunkStart, int ( pTmp-pChunkStart ), dOut, bWasChineseCode, bQuery );

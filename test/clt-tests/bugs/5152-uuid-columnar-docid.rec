@@ -1,0 +1,41 @@
+––– comment –––
+Regression for #5152: the public UUID must not replace the physical numeric DocID
+when materializing columnar matches, including stored-field retrieval.
+––– block: ../base/start-searchd –––
+––– input –––
+bash <<'EOF'
+set -euo pipefail
+sql() { timeout 15s mysql -h0 -P9306 --batch --skip-column-names -e "$1"; }
+sql "CREATE TABLE uuid_row (id uuid, title text, tag string, price int) engine='rowwise';
+CREATE TABLE uuid_col (id uuid, title text, tag string, price int) engine='columnar';
+CREATE TABLE uuid_col_noff (id uuid, title text, tag string fast_fetch='0', price int fast_fetch='0') engine='columnar';"
+for t in uuid_row uuid_col uuid_col_noff; do
+    sql "INSERT INTO $t (id,title,tag,price) VALUES ('550e8400-e29b-41d4-a716-846655440001','First','one',10),('550e8400-e29b-41d4-a716-846655440002','Second','two',20)"
+done
+expected=$'550e8400-e29b-41d4-a716-846655440001\tFirst\tone\t10\n550e8400-e29b-41d4-a716-846655440002\tSecond\ttwo\t20'
+for phase in ram disk; do
+    reference=$(sql "SELECT * FROM uuid_row ORDER BY price ASC")
+    test -n "$reference"
+    for t in uuid_col uuid_col_noff; do
+        actual=$(sql "SELECT * FROM $t ORDER BY price ASC")
+        test "$actual" = "$reference"
+        actual=$(sql "SELECT id,title,tag,price FROM $t ORDER BY price ASC")
+        test "$actual" = "$expected"
+        actual=$(sql "SELECT title FROM $t ORDER BY price ASC")
+        test "$actual" = $'First\nSecond'
+        actual=$(sql "SELECT id,title FROM $t WHERE id='550e8400-e29b-41d4-a716-846655440002'")
+        test "$actual" = $'550e8400-e29b-41d4-a716-846655440002\tSecond'
+        actual=$(sql "SELECT * FROM $t ORDER BY price ASC LIMIT 1")
+        reference_first=$(sql "SELECT * FROM uuid_row ORDER BY price ASC LIMIT 1")
+        test "$actual" = "$reference_first"
+    done
+    echo "$phase: OK"
+    if [ "$phase" = ram ]; then
+        for t in uuid_row uuid_col uuid_col_noff; do sql "FLUSH RAMCHUNK $t"; done
+    fi
+done
+sql "DROP TABLE uuid_row; DROP TABLE uuid_col; DROP TABLE uuid_col_noff;"
+EOF
+––– output –––
+ram: OK
+disk: OK

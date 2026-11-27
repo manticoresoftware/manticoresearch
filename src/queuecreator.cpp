@@ -1514,6 +1514,24 @@ bool QueueCreator_c::AddColumnarAttributeExpressions()
 
 		m_hQueryDups.Delete ( tAttr.m_sName );
 
+		// The linked numeric DocID is used internally (e.g. by the docstore).
+		// Parsing its public name would resolve to the UUID string instead.
+		if ( tAttr.IsUuidLinkedDocid() )
+		{
+			int iDocid = m_pSorterSchema->GetAttrIndex ( tAttr.m_sName.cstr() );
+			assert ( iDocid>=0 );
+			CSphColumnInfo tDocidExpr ( tAttr.m_sName.cstr(), SPH_ATTR_BIGINT );
+			tDocidExpr.m_iIndex = m_pSorterSchema->GetAttrIndexOriginal ( tAttr.m_sName.cstr() );
+			tDocidExpr.m_uAttrFlags = CSphColumnInfo::ATTR_UUID_LINK;
+			tDocidExpr.m_eStage = SPH_EVAL_FINAL;
+			tDocidExpr.m_pExpr = CreateExpr_GetColumnarInt ( tAttr.m_sName, tAttr.IsStored() );
+			m_pSorterSchema->AddAttr ( tDocidExpr, true );
+			m_pSorterSchema->RemoveStaticAttr ( iDocid );
+			m_hQueryDups.Add ( tAttr.m_sName );
+			m_hQueryColumns.Add ( tAttr.m_sName );
+			continue;
+		}
+
 		CSphQueryItem tItem;
 		tItem.m_sExpr = tItem.m_sAlias = tAttr.m_sName;
 		bool bParsed = bUuidAttr ? ParseResolvedQueryItem ( tItem ) : ParseQueryItem ( tItem );

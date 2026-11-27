@@ -13,6 +13,7 @@
 #include "schematransform.h"
 
 #include "queuecreator.h"
+#include "columnarexpr.h"
 #include "sphinxjson.h"
 
 
@@ -169,7 +170,11 @@ void TransformedSchemaBuilder_c::ReplaceColumnarAttrWithExpression ( CSphColumnI
 	// and this expression will be used to fetch that value
 	tAttr.m_uAttrFlags &= ~CSphColumnInfo::ATTR_COLUMNAR;
 	tAttr.m_eAttrType = sphPlainAttrToPtrAttr ( tAttr.m_eAttrType );
-	m_tNewSchema.AddAttr ( tAttr, true );
+	// Resolve the temporary attribute as the physical numeric DocID, not the public UUID.
+	// The UUID attribute might not even be present in the transformed schema.
+	CSphColumnInfo tPhysicalAttr = tAttr;
+	tPhysicalAttr.m_uAttrFlags &= ~CSphColumnInfo::ATTR_UUID_LINK;
+	m_tNewSchema.AddAttr ( tPhysicalAttr, true );
 
 	// parse expression as if it is not columnar
 	CSphString		 sError;
@@ -314,9 +319,17 @@ void MatchesToNewSchema_c::SetupAction ( const CSphColumnInfo & tOld, const CSph
 	// we now need to create an expression that fetches data from columnar storage
 	if ( tOld.IsColumnar() && tNew.m_pExpr )
 	{
-		CSphString		sError;
-		ExprParseArgs_t tExprArgs;
-		tAction.m_pExpr =  sphExprParse ( tOld.m_sName.cstr(), *pOldSchema, sError, tExprArgs );
+		if ( tOld.IsUuidLinkedDocid() )
+		{
+			// A schema transform copies the physical BIGINT, not the public UUID string.
+			tAction.m_pExpr = CreateExpr_GetColumnarInt ( tOld.m_sName, tOld.IsStored() );
+		}
+		else
+		{
+			CSphString		sError;
+			ExprParseArgs_t tExprArgs;
+			tAction.m_pExpr = sphExprParse ( tOld.m_sName.cstr(), *pOldSchema, sError, tExprArgs );
+		}
 		assert ( tAction.m_pExpr );
 
 		switch ( tNew.m_eAttrType )

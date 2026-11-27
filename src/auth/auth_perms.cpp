@@ -91,12 +91,18 @@ bool CheckUnrestrictedPerms ( const CSphString & sUser, AuthAction_e eAction, CS
 
 	AuthUsersPtr_t pUsers = GetAuth();
 	const UserPerms_t * pPerms = pUsers->m_hUserPerms ( sUser );
+	bool bHasGlobalAllow = false;
 	bool bHasDeny = false;
 	if ( pPerms )
 		for ( const auto & tPerm : *pPerms )
-			bHasDeny |= ( tPerm.m_eAction==eAction && !tPerm.m_bAllow );
+		{
+			if ( tPerm.m_eAction!=eAction )
+				continue;
+			bHasDeny |= !tPerm.m_bAllow;
+			bHasGlobalAllow |= tPerm.m_bAllow && tPerm.m_bTargetWildcardAll;
+		}
 
-	if ( !bHasDeny && HasPerms ( sUser, eAction, "*", false ) )
+	if ( bHasGlobalAllow && !bHasDeny )
 		return true;
 
 	sError.SetSprintf ( "Permission denied for user '%s'", sUser.cstr() );

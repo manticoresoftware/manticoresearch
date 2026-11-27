@@ -237,6 +237,13 @@ static bool SqlCheckStmtPerms ( const CSphString & sUser, const SqlStmt_t & tStm
 		if ( DenyInternalAuthStorageTarget ( sUser, sTarget, sError ) )
 			return false;
 
+		// Use the same name matching as ParseSysVarsAndTables and ParseSystem.
+		const auto & dSubkeys = tStmt.m_tQuery.m_dStringSubkeys;
+		if ( StrEqN ( FROMS ( "@@system" ), sTarget.cstr() ) && !dSubkeys.IsEmpty()
+			&& ( StrEqN ( FROMS ( ".sessions" ), dSubkeys.First().cstr() )
+				|| StrEqN ( FROMS ( ".threads" ), dSubkeys.First().cstr() ) ) )
+			return CheckUnrestrictedPerms ( sUser, AuthAction_e::SCHEMA, sError );
+
 		return CheckPerms ( sUser, AuthAction_e::READ, sTarget, false, sError );
 	}
 
@@ -361,9 +368,11 @@ static bool SqlCheckStmtPerms ( const CSphString & sUser, const SqlStmt_t & tStm
 
 	case STMT_SHOW_DATABASES:
 	case STMT_SHOW_PLUGINS:
-	case STMT_SHOW_THREADS:
 	case STMT_SHOW_LOCKS:
 		return CheckPerms ( sUser, AuthAction_e::SCHEMA, tStmt.m_sIndex, true, sError );
+
+	case STMT_SHOW_THREADS:
+		return CheckUnrestrictedPerms ( sUser, AuthAction_e::SCHEMA, sError );
 
 	case STMT_RELOAD_AUTH:
 	case STMT_DEBUG:

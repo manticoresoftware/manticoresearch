@@ -106,6 +106,19 @@ MYSQL_PWD=backup_selected1 mysql -ubackup_selected -h0 -P9306 -e "BACKUP TO /tmp
 ––– output –––
 ERROR 1045 (42000) at line 1: Permission denied for user 'backup_selected'
 ––– comment –––
+A partial wildcard read grant does not authorize full BACKUP.
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT read ON '?' TO 'backup_selected';"
+––– output –––
+––– input –––
+MYSQL_PWD=backup_selected1 mysql -ubackup_selected -h0 -P9306 -e "BACKUP TO /tmp/auth-backup-full;" 2>&1
+––– output –––
+ERROR 1045 (42000) at line 1: Permission denied for user 'backup_selected'
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE read ON '?' FROM 'backup_selected';"
+––– output –––
+––– comment –––
 A wildcard read grant does not let full BACKUP bypass an explicit table deny.
 ––– comment –––
 ––– input –––

@@ -1,0 +1,71 @@
+––– comment –––
+Server-wide diagnostics require unrestricted SCHEMA, independent of READ.
+––– comment –––
+––– block: ../base/start-searchd-with-auth –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "CREATE USER 'diagnostics' IDENTIFIED BY 'diagpass123';" >/dev/null && MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT READ ON * TO 'diagnostics';"
+––– output –––
+––– input –––
+cat > /tmp/check-diagnostics-permissions.sh <<'EOF'
+set -eu
+for query in \
+    'SELECT * FROM @@system.sessions' \
+    'SELECT * FROM @@system.threads' \
+    'SELECT * FROM @@SYSTEM.SESSIONS' \
+    'SELECT * FROM @@system.ThReAdS' \
+    'SHOW THREADS'; do
+    if [ "$1" = denied ]; then
+        if out=$(MYSQL_PWD=diagpass123 mysql -udiagnostics -h0 -P9306 -e "$query" 2>&1); then
+            echo "Unexpected success: $query"
+            exit 1
+        fi
+        printf '%s\n' "$out" | grep -q "Permission denied for user 'diagnostics'"
+        code=$(curl -sS -u diagnostics:diagpass123 -o /tmp/diagnostics-response -w '%{http_code}' --data-urlencode "query=$query" 'http://127.0.0.1:9308/sql?mode=raw')
+        test "$code" = 403
+        grep -q 'Permission denied' /tmp/diagnostics-response
+    else
+        out=$(MYSQL_PWD=diagpass123 mysql -udiagnostics -h0 -P9306 -e "$query" 2>&1)
+        test -n "$out"
+        code=$(curl -sS -u diagnostics:diagpass123 -o /tmp/diagnostics-response -w '%{http_code}' --data-urlencode "query=$query" 'http://127.0.0.1:9308/sql?mode=raw')
+        test "$code" = 200
+        grep -q '"data"' /tmp/diagnostics-response
+    fi
+done
+echo "$1: OK"
+EOF
+bash /tmp/check-diagnostics-permissions.sh denied
+––– output –––
+denied: OK
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT SCHEMA ON diagnostics_table TO 'diagnostics';" && bash /tmp/check-diagnostics-permissions.sh denied
+––– output –––
+denied: OK
+––– comment –––
+A partial wildcard must not be treated as an explicit global grant.
+––– comment –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT SCHEMA ON '?' TO 'diagnostics';"
+––– output –––
+––– input –––
+bash /tmp/check-diagnostics-permissions.sh denied
+––– output –––
+denied: OK
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE SCHEMA ON '?' FROM 'diagnostics';"
+––– output –––
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE READ ON * FROM 'diagnostics'; REVOKE SCHEMA ON diagnostics_table FROM 'diagnostics'; GRANT SCHEMA ON * TO 'diagnostics';" && bash /tmp/check-diagnostics-permissions.sh allowed
+––– output –––
+allowed: OK
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "GRANT SCHEMA ON diagnostics_table TO 'diagnostics' WITH ALLOW 0;" && bash /tmp/check-diagnostics-permissions.sh denied
+––– output –––
+denied: OK
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE SCHEMA ON diagnostics_table FROM 'diagnostics';" && bash /tmp/check-diagnostics-permissions.sh allowed
+––– output –––
+allowed: OK
+––– input –––
+MYSQL_PWD=adminpass mysql -uadmin -h0 -P9306 -e "REVOKE SCHEMA ON * FROM 'diagnostics';" && bash /tmp/check-diagnostics-permissions.sh denied
+––– output –––
+denied: OK

@@ -8826,6 +8826,17 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 }
 
 
+// An iterator with a cutoff stops after that many rowids, so the cutoff holds only if each rowid it emits is a match.
+// Deleted rows are dropped after the iterator, so their count is added; a join drops rows in the joined table, so no cutoff.
+static int GetIteratorCutoff ( int iCutoff, const CSphQuery & tQuery, const DeadRowMap_Disk_c & tDeadRowMap )
+{
+	if ( iCutoff<0 || !tQuery.m_sJoinIdx.IsEmpty() )
+		return -1;
+
+	return (int)Min ( (int64_t)iCutoff + tDeadRowMap.GetNumDeads(), (int64_t)INT_MAX );
+}
+
+
 // A knn query must not match documents that hold no vector: their distance is FLT_MAX, so they are near nothing.
 // When an hnsw iterator runs it never offers them in the first place, but a brute-force scan sees every row, so the guard has to be added explicitly.
 // Whether an iterator ran is only known after SpawnIterators, hence the late injection.
@@ -8902,8 +8913,9 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	// an empty result here means the planner chose brute force over the graph
 	bKNNIteratorCreated = !dKNNIterators.IsEmpty();
 
-	// secondary index iterators: with fulltext search or a knn iterator, cutoff applies only after intersecting with their matches
-	dSIIterators = m_tSI.CreateSecondaryIndexIterator ( dSIInfo, dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), ( pRanker || bKNNIteratorCreated ) ? -1 : iCutoff, bUseSICache, tMeta.m_sWarning );
+	// secondary index iterators: fulltext, knn (its iterator or the late no-vector filter) and joins drop rows after them, so cutoff applies only to the final matches
+	int iSICutoff = ( pRanker || tQuery.HasKnn() ) ? -1 : GetIteratorCutoff ( iCutoff, tQuery, m_tDeadRowMap );
+	dSIIterators = m_tSI.CreateSecondaryIndexIterator ( dSIInfo, dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), iSICutoff, bUseSICache, tMeta.m_sWarning );
 
 	// lookup-by-id (.SPT) iterators
 	dLookupIterators = CreateLookupIterator ( dSIInfo, dFilters, m_tDocidLookup.GetReadPtr(), m_uVersion, RowID_t(m_iDocinfo) );
@@ -9177,8 +9189,9 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	bool bCutoffHit =  false;
 	if ( pIterator )
 	{
-		if ( iCutoff>=0 && !tCtx.m_pFilter && !tCtx.m_pWeightFilter )
-			pIterator->SetCutoff(iCutoff);
+		int iIteratorCutoff = GetIteratorCutoff ( iCutoff, tQuery, m_tDeadRowMap );
+		if ( iIteratorCutoff>=0 && !tCtx.m_pFilter && !tCtx.m_pWeightFilter )
+			pIterator->SetCutoff(iIteratorCutoff);
 
 		bCutoffHit = RunFullscanOnIterator ( pIterator.get(), tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );
 		pIterator->AddDesc ( tMeta.m_tIteratorStats.m_dIterators );

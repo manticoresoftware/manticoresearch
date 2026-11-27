@@ -63,3 +63,39 @@ for h in NO_SecondaryIndex SecondaryIndex; do mysql -P9306 -h0 -e "SELECT id,cit
 +---------------+-------+
 | total_found   | 1     |
 +---------------+-------+
+––– comment –––
+Deleted rows are dropped after the iterator. With LIMIT and no ORDER BY the
+implicit cutoff equals the limit, and it must count live rows: the first 20
+rows are deleted, five live rows must come back with one or two indexes.
+––– input –––
+mysql -P9306 -h0 -e "DROP TABLE IF EXISTS gh4044_del; CREATE TABLE gh4044_del (city_id int, g int); INSERT INTO gh4044_del (id,city_id,g) VALUES $(for i in $(seq 1 199); do printf "(%d,%d,%d)," $i $((100+i%50)) $((i%20)); done)(200,100,0); FLUSH RAMCHUNK gh4044_del; DELETE FROM gh4044_del WHERE id<=20;" && echo ready
+––– output –––
+ready
+––– input –––
+mysql -P9306 -h0 -N -e "SELECT id FROM gh4044_del WHERE city_id IN ($(seq -s, 100 149)) LIMIT 5 /*+ SecondaryIndex(city_id) */;" | tr -d '|+-' | wc -w; mysql -P9306 -h0 -N -e "SELECT id FROM gh4044_del WHERE city_id IN ($(seq -s, 100 149)) AND g IN ($(seq -s, 0 19)) LIMIT 5 /*+ SecondaryIndex(city_id,g) */;" | tr -d '|+-' | wc -w
+––– output –––
+5
+5
+––– comment –––
+A join drops rows of the left table that have no pair, after the iterator:
+only ids above 100 have a pair, so the implicit cutoff must not stop the
+SecondaryIndex at the first five rows.
+––– input –––
+mysql -P9306 -h0 -e "DROP TABLE IF EXISTS gh4044_l; DROP TABLE IF EXISTS gh4044_r; CREATE TABLE gh4044_l (city_id int); CREATE TABLE gh4044_r (flag int); INSERT INTO gh4044_l (id,city_id) VALUES $(for i in $(seq 1 199); do printf "(%d,%d)," $i $((100+i%50)); done)(200,100); INSERT INTO gh4044_r (id,flag) VALUES $(for i in $(seq 101 199); do printf "(%d,1)," $i; done)(200,1); FLUSH RAMCHUNK gh4044_l; FLUSH RAMCHUNK gh4044_r;" && echo ready
+––– output –––
+ready
+––– input –––
+mysql -P9306 -h0 -N -e "SELECT gh4044_l.id FROM gh4044_l INNER JOIN gh4044_r ON gh4044_l.id=gh4044_r.id WHERE gh4044_l.city_id IN ($(seq -s, 100 149)) LIMIT 5 /*+ SecondaryIndex(city_id) */;" | tr -d '|+-' | wc -w
+––– output –––
+5
+––– comment –––
+A brute-force KNN drops rows without a vector after the iterator: the first
+100 rows have none, so cutoff=1 must still find a row with a vector.
+––– input –––
+mysql -P9306 -h0 -e "DROP TABLE IF EXISTS gh4044_nv; CREATE TABLE gh4044_nv (city_id int, emb float_vector knn_type='hnsw' knn_dims='2' hnsw_similarity='l2'); INSERT INTO gh4044_nv (id,city_id) VALUES $(for i in $(seq 1 99); do printf "(%d,%d)," $i $((100+i%50)); done)(100,100); INSERT INTO gh4044_nv (id,city_id,emb) VALUES $(for i in $(seq 101 199); do printf "(%d,%d,(%d,%d))," $i $((100+i%50)) $i $i; done)(200,100,(200,200)); FLUSH RAMCHUNK gh4044_nv;" && echo ready
+––– output –––
+ready
+––– input –––
+mysql -P9306 -h0 -N -e "SELECT id FROM gh4044_nv WHERE KNN(emb,5,(0,0),{fullscan=1}) AND city_id IN ($(seq -s, 100 149)) OPTION cutoff=1 /*+ SecondaryIndex(city_id) */;" | tr -d '|+-' | xargs
+––– output –––
+101

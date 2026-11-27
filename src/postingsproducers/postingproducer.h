@@ -36,6 +36,9 @@ class PostingProducer_i
 public:
 	virtual ~PostingProducer_i() = default;
 
+	// A tagged reference contains the posting's only hit in its low 32 bits.
+	virtual bool HasTaggedHitRefs() const { return false; }
+
 	// Produce the next batch of matching rows, up to iCapacity entries.
 	virtual PostingCandidateBatch_t NextCandidates ( int iCapacity ) = 0;
 

@@ -507,11 +507,13 @@ public:
 
 	bool				SetCandidateFilter ( PostingCandidateFilter_c * pFilter ) override;
 
-	PhraseMatcher_fn	GetPhraseMatcher() override;
-	int				MatchDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches );
+	PositionalMatcher_fn	GetPositionalMatcher ( bool bProximity ) override;
+	template<bool PROXIMITY>
+	int				MatchDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches, int iMaxGap );
 
 private:
 	static constexpr int MAX_LAZY_PHRASE_TERMS = 8;
+	static constexpr int MAX_INLINE_PHRASE_TERMS = 4;
 
 	struct NodeInfo_t
 	{
@@ -536,6 +538,21 @@ private:
 		// don't change to default ctr, centos6 will fail to compile!
 		StoredMultiHit_t () : m_dHitlistOffsets ( 0 ) {}
 	};
+
+	// Verify a phrase or proximity match in one document. Return the first matching field's bit, or zero on a miss.
+	template<bool PROXIMITY>
+	DWORD				MatchDocPositions ( const StoredMultiHit_t & tStored, bool bCheckInlineHits, int iMaxGap, DWORD & uReads, int64_t & iHits );
+
+	// Walk the terms' hitlists to find the first set of positions satisfying the phrase or proximity constraint in one field.
+	template<bool PROXIMITY>
+	DWORD				MatchHitlistPositions ( const StoredMultiHit_t & tStored, int iMaxGap, DWORD & uReads, int64_t & iHits );
+
+	// Find an external hit within iMaxGap of the inline hit in the same field. Return nullopt unless exactly one term is inline.
+	std::optional<DWORD>	TryMatchMixedProximity ( const SphOffset_t * pRefs, int iMaxGap, DWORD & uReads, int64_t & iHits );
+
+	// Check positions stored in the hit references. Return nullopt if an external hitlist is needed to decide the match.
+	template<bool PROXIMITY>
+	std::optional<DWORD>	MatchInlinePositions ( const StoredMultiHit_t & tStored, int iMaxGap, int64_t & iFetchedHits ) const;
 
 	struct HitInfo_t
 	{
@@ -770,7 +787,7 @@ public:
 	void				DebugDump ( int iLevel ) override;
 
 private:
-	const ExtDoc_t *	GetLazyPhraseDocs ( PhraseMatcher_fn fnMatcher );
+	const ExtDoc_t *	GetPositionalDocs ( PositionalMatcher_fn fnMatcher, int iMaxGap );
 
 	template<bool COLLECT_HITS>
 	const ExtDoc_t *	GetDocsChunkImpl();
@@ -811,6 +828,7 @@ using ExtPhrase_c = ExtNWay_T<FSMphrase_c>;
 class FSMproximity_c
 {
 protected:
+	bool						m_bCollectHits = false;
 	int						m_iMaxDistance;
 	DWORD					m_uWordsExpected;
 	DWORD					m_uMinQpos;
@@ -5776,7 +5794,7 @@ ExtNWay_T<FSM>::ExtNWay_T ( ExtNode_i * pAnd, const VecTraits_T<int> & dAtomPos,
 template < class FSM >
 void ExtNWay_T<FSM>::SetCollectHits()
 {
-	if constexpr ( std::is_same_v<FSM,FSMphrase_c> )
+	if constexpr ( std::is_same_v<FSM,FSMphrase_c> || std::is_same_v<FSM,FSMproximity_c> )
 		FSM::m_bCollectHits = true;
 }
 
@@ -5787,8 +5805,25 @@ const ExtDoc_t * ExtNWay_T<FSM>::GetDocsChunk()
 	if constexpr ( std::is_same_v<FSM,FSMphrase_c> )
 		if ( !FSM::m_bCollectHits )
 		{
-			if ( auto fnMatcher = m_pNode->GetPhraseMatcher() )
-				return GetLazyPhraseDocs(fnMatcher);
+			auto fnMatcher = m_pNode->GetPositionalMatcher(false);
+			if ( fnMatcher )
+				return GetPositionalDocs ( fnMatcher, 0 );
+
+			return GetDocsChunkImpl<false>();
+		}
+
+	if constexpr ( std::is_same_v<FSM,FSMproximity_c> )
+		if ( !FSM::m_bCollectHits )
+		{
+			// Packed fields are separated by more than the largest position in a field.
+			// Leave windows large enough to cross that boundary to the original FSM.
+			const int64_t iMaxGap = int64_t(FSM::m_iMaxDistance) + FSM::m_uQLen - 1;
+			if ( iMaxGap<HITMAN::GetPos(UINT32_MAX) )
+			{
+				auto fnMatcher = m_pNode->GetPositionalMatcher(true);
+				if ( fnMatcher )
+					return GetPositionalDocs ( fnMatcher, int(iMaxGap) );
+			}
 
 			return GetDocsChunkImpl<false>();
 		}
@@ -5798,13 +5833,13 @@ const ExtDoc_t * ExtNWay_T<FSM>::GetDocsChunk()
 
 
 template < class FSM >
-const ExtDoc_t * ExtNWay_T<FSM>::GetLazyPhraseDocs ( PhraseMatcher_fn fnMatcher )
+const ExtDoc_t * ExtNWay_T<FSM>::GetPositionalDocs ( PositionalMatcher_fn fnMatcher, int iMaxGap )
 {
 	while ( const ExtDoc_t * pDocs = m_pNode->GetDocsChunk() )
 	{
-		int iDocs = fnMatcher ( m_pNode, pDocs, m_dDocs );
+		int iDocs = fnMatcher ( m_pNode, pDocs, m_dDocs, iMaxGap );
 		if ( iDocs )
-			return ReturnDocsChunk ( iDocs, "phrase" );
+			return ReturnDocsChunk ( iDocs, FSM::GetName() );
 	}
 
 	return nullptr;
@@ -5843,8 +5878,9 @@ const ExtDoc_t * ExtNWay_T<FSM>::GetDocsChunkImpl()
 
 				if constexpr ( !COLLECT_HITS )
 				{
-					// Document-only consumers need one successful phrase per document.
-					m_dMyHits.Pop();
+					// Document-only consumers need one positional match per document.
+					if constexpr ( std::is_same_v<FSM,FSMphrase_c> )
+						m_dMyHits.Pop();
 					do
 						++pHit;
 					while ( pHit->m_tRowID==pDoc->m_tRowID );
@@ -5975,7 +6011,7 @@ inline void FSMphrase_c::ResetFSM()
 
 
 template <bool USE_BM25,bool TEST_FIELDS>
-PhraseMatcher_fn ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GetPhraseMatcher()
+PositionalMatcher_fn ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GetPositionalMatcher ( bool bProximity )
 {
 	if ( !m_bQPosReverse || m_dNodes.GetLength()<2 || m_dNodes.GetLength()>MAX_LAZY_PHRASE_TERMS )
 		return nullptr;
@@ -5984,20 +6020,176 @@ PhraseMatcher_fn ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GetPhraseMatcher()
 		if ( tNode.m_bHasWideFields )
 			return nullptr;
 
-	return [] ( ExtNode_i * pNode, const ExtDoc_t * pDocs, ExtDoc_t * pMatches )
+	if ( bProximity )
 	{
-		return static_cast<ExtMultiAnd_T *>(pNode)->MatchDocs ( pDocs, pMatches );
+		if ( m_dNodes.GetLength()!=2 )
+			return nullptr;
+
+		return [] ( ExtNode_i * pNode, const ExtDoc_t * pDocs, ExtDoc_t * pMatches, int iMaxGap )
+		{
+			return static_cast<ExtMultiAnd_T *>(pNode)->template MatchDocs<true> ( pDocs, pMatches, iMaxGap );
+		};
+	}
+
+	return [] ( ExtNode_i * pNode, const ExtDoc_t * pDocs, ExtDoc_t * pMatches, int )
+	{
+		return static_cast<ExtMultiAnd_T *>(pNode)->template MatchDocs<false> ( pDocs, pMatches, 0 );
 	};
 }
 
 
 template <bool USE_BM25,bool TEST_FIELDS>
-int ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::MatchDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches )
+std::optional<DWORD> ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::TryMatchMixedProximity ( const SphOffset_t * pRefs, int iMaxGap, DWORD & uReads, int64_t & iHits )
+{
+	if ( (pRefs[0]<0)==(pRefs[1]<0) )
+		return {};
+
+	const int iInline = pRefs[0]<0 ? 0 : 1;
+	const Hitpos_t uAnchor = Hitpos_t(pRefs[iInline]);
+	const int iField = HITMAN::GetField(uAnchor);
+	if constexpr ( TEST_FIELDS )
+		if ( !m_dNodes[iInline].m_dQueriedFields.Test(iField) )
+			return 0;
+
+	++iHits;
+	const auto & tExternal = m_dNodes[1-iInline];
+	if constexpr ( TEST_FIELDS )
+		if ( !tExternal.m_dQueriedFields.Test(iField) )
+			return 0;
+
+	// Only hits in the anchor's field and within the inclusive distance can match.
+	const int iPos = HITMAN::GetPos(uAnchor);
+	const Hitpos_t uMin = HITMAN::Create ( iField, std::max ( 0, iPos-iMaxGap ) );
+	const Hitpos_t uMax = HITMAN::Create ( iField, std::min ( HITMAN::GetPos(UINT32_MAX), iPos+iMaxGap ) );
+	tExternal.m_pQword->SeekHitlist ( pRefs[1-iInline] );
+
+	for ( ;; )
+	{
+		const Hitpos_t uHit = tExternal.m_pQword->GetNextHit();
+		if ( uHit==EMPTY_HIT || (!(++uReads & 4095) && !CheckContinue()) )
+			return 0;
+
+		++iHits;
+		const Hitpos_t uPos = HITMAN::GetPosWithField(uHit);
+		if ( uPos>=uMin )
+			return uPos<=uMax ? 1U<<iField : 0;
+	}
+}
+
+
+template <bool USE_BM25,bool TEST_FIELDS>
+template<bool PROXIMITY>
+std::optional<DWORD> ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::MatchInlinePositions ( const StoredMultiHit_t & tStored, int iMaxGap, int64_t & iFetchedHits ) const
+{
+	int iAnchorField = 0;
+	int64_t iAnchor = 0;
+	int iHits = 0;
+	ARRAY_FOREACH ( i, m_dNodes )
+	{
+		const SphOffset_t iRef = tStored.m_dHitlistOffsets[i];
+		if ( iRef>=0 )
+			return {}; // An external hitlist needs a position cursor.
+
+		const auto & tNode = m_dNodes[i];
+		Hitpos_t uHit = Hitpos_t(iRef);
+		int iField = HITMAN::GetField(uHit);
+		if constexpr ( TEST_FIELDS )
+			if ( !tNode.m_dQueriedFields.Test(iField) )
+			{
+				iFetchedHits += iHits;
+				return 0;
+			}
+
+		++iHits;
+		int64_t iPos = int64_t(HITMAN::GetPos(uHit)) - (PROXIMITY ? 0 : tNode.m_iAtomPos);
+		if ( !i )
+		{
+			iAnchorField = iField;
+			iAnchor = iPos;
+		} else if ( iField!=iAnchorField || (PROXIMITY ? std::abs(iPos-iAnchor)>iMaxGap : iPos!=iAnchor) )
+		{
+			iFetchedHits += iHits;
+			return 0;
+		}
+	}
+
+	iFetchedHits += iHits;
+	return 1U<<iAnchorField;
+}
+
+
+template <bool USE_BM25,bool TEST_FIELDS>
+template<bool PROXIMITY>
+DWORD ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::MatchHitlistPositions ( const StoredMultiHit_t & tStored, int iMaxGap, DWORD & uReads, int64_t & iHits )
+{
+	const int iTerms = m_dNodes.GetLength();
+	for ( int i=0; i<iTerms; ++i )
+		m_dNodes[i].m_pQword->SeekHitlist ( tStored.m_dHitlistOffsets[i] );
+
+	// Exact phrases align positions after subtracting query offsets. Two-term
+	// proximity accepts either order within iMaxGap positions of the anchor.
+	int64_t iStart = -int64_t(UINT32_MAX);
+	int iAligned = 0;
+	int iTerm = 0;
+	while ( true )
+	{
+		const auto & tNode = m_dNodes[iTerm];
+		Hitpos_t uHit = tNode.m_pQword->GetNextHit();
+		if ( uHit==EMPTY_HIT || (!(++uReads & 4095) && !CheckContinue()) )
+			return 0;
+
+		int iField = HITMAN::GetField(uHit);
+		if constexpr ( TEST_FIELDS )
+			if ( !tNode.m_dQueriedFields.Test(iField) )
+				continue;
+
+		++iHits;
+		// Keep fields disjoint even when the position minus the query offset is negative.
+		int64_t iHitStart = (int64_t(iField)<<32) + HITMAN::GetPos(uHit) - (PROXIMITY ? 0 : tNode.m_iAtomPos);
+		if ( iHitStart+(PROXIMITY ? iMaxGap : 0)<iStart )
+			continue;
+
+		if ( iHitStart>iStart+(PROXIMITY ? iMaxGap : 0) )
+		{
+			iStart = iHitStart;
+			iAligned = 0;
+		}
+
+		if ( ++iAligned==iTerms )
+			return 1U<<iField;
+
+		if ( ++iTerm==iTerms )
+			iTerm = 0;
+	}
+}
+
+
+template <bool USE_BM25,bool TEST_FIELDS>
+template<bool PROXIMITY>
+DWORD ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::MatchDocPositions ( const StoredMultiHit_t & tStored, bool bCheckInlineHits, int iMaxGap, DWORD & uReads, int64_t & iHits )
+{
+	if ( !bCheckInlineHits )
+		return MatchHitlistPositions<PROXIMITY> ( tStored, iMaxGap, uReads, iHits );
+
+	if constexpr ( PROXIMITY )
+		if ( auto uFields = TryMatchMixedProximity ( tStored.m_dHitlistOffsets.Begin(), iMaxGap, uReads, iHits ) )
+			return *uFields;
+
+	if ( auto uFields = MatchInlinePositions<PROXIMITY> ( tStored, iMaxGap, iHits ) )
+		return *uFields;
+
+	return MatchHitlistPositions<PROXIMITY> ( tStored, iMaxGap, uReads, iHits );
+}
+
+
+template <bool USE_BM25,bool TEST_FIELDS>
+template<bool PROXIMITY>
+int ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::MatchDocs ( const ExtDoc_t * pDocs, ExtDoc_t * pMatches, int iMaxGap )
 {
 	assert ( m_bCollectHits && m_bQPosReverse );
 	PrefetchMatchedHits ( pDocs, m_dStoredHits.Begin() );
 
-	const int iTerms = m_dNodes.GetLength();
+	const bool bCheckInlineHits = m_dNodes.GetLength()<=MAX_INLINE_PHRASE_TERMS && m_pProducer->HasTaggedHitRefs();
 	int iDocs = 0;
 	DWORD uReads = 0;
 	int64_t iHits = 0;
@@ -6005,47 +6197,12 @@ int ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::MatchDocs ( const ExtDoc_t * pDocs, Ext
 	for ( ; HasDocs(pDocs) && !m_bStopped; ++pDocs, ++pStored )
 	{
 		assert ( pStored!=m_dStoredHits.End() && pStored->m_tRowID==pDocs->m_tRowID );
-		for ( int i=0; i<iTerms; ++i )
-			m_dNodes[i].m_pQword->SeekHitlist ( pStored->m_dHitlistOffsets[i] );
 
-		// Each hit proposes a phrase start within its field. If a term moves the
-		// start forward, all other terms must reach the new start before we accept.
-		int64_t iStart = INT64_MIN;
-		int iAligned = 0;
-		int iTerm = 0;
-		while ( true )
+		const DWORD uFields = MatchDocPositions<PROXIMITY> ( *pStored, bCheckInlineHits, iMaxGap, uReads, iHits );
+		if ( uFields )
 		{
-			const auto & tNode = m_dNodes[iTerm];
-			Hitpos_t uHit = tNode.m_pQword->GetNextHit();
-			if ( uHit==EMPTY_HIT || (!(++uReads & 4095) && !CheckContinue()) )
-				break;
-
-			int iField = HITMAN::GetField(uHit);
-			if constexpr ( TEST_FIELDS )
-				if ( !tNode.m_dQueriedFields.Test(iField) )
-					continue;
-
-			++iHits;
-			// Keep fields disjoint even when the position minus the query offset is negative.
-			int64_t iHitStart = (int64_t(iField)<<32) + HITMAN::GetPos(uHit) - tNode.m_iAtomPos;
-			if ( iHitStart<iStart )
-				continue;
-
-			if ( iHitStart>iStart )
-			{
-				iStart = iHitStart;
-				iAligned = 0;
-			}
-
-			if ( ++iAligned==iTerms )
-			{
-				pMatches[iDocs] = *pDocs;
-				pMatches[iDocs++].m_uDocFields = 1U<<iField;
-				break;
-			}
-
-			if ( ++iTerm==iTerms )
-				iTerm = 0;
+			pMatches[iDocs] = *pDocs;
+			pMatches[iDocs++].m_uDocFields = uFields;
 		}
 	}
 
@@ -6116,6 +6273,10 @@ inline bool FSMproximity_c::HitFSM ( const ExtHit_t * pHit, CSphVector<ExtHit_t>
 	// all words were found within given distance?
 	if ( m_uWords!=m_uWordsExpected )
 		return false;
+
+	// A membership check ends at the first qualifying window in this document.
+	if ( !m_bCollectHits )
+		return true;
 
 	// compute phrase weight
 	//

@@ -90,8 +90,8 @@ public:
 
 class ExtNode_i;
 
-// Consume candidate hit bookmarks to match document-only phrases; positions cannot be requested afterwards.
-using PhraseMatcher_fn = int (*) ( ExtNode_i * pNode, const ExtDoc_t * pDocs, ExtDoc_t * pMatches );
+// Verify positional matches in a candidate document batch using its saved hit references.
+using PositionalMatcher_fn = int (*) ( ExtNode_i * pNode, const ExtDoc_t * pDocs, ExtDoc_t * pMatches, int iMaxGap );
 
 // Lifecycle and metadata shared by document and window producers.
 class QueryNode_i
@@ -138,7 +138,7 @@ public:
 	virtual const ExtDoc_t *	GetDocsChunk() = 0;
 	virtual const ExtHit_t *	GetHits ( const ExtDoc_t * pDocs ) = 0;
 	virtual void				SetCollectHits() {}
-	virtual PhraseMatcher_fn		GetPhraseMatcher() { return nullptr; }
+	virtual PositionalMatcher_fn	GetPositionalMatcher ( bool bProximity ) { return nullptr; }
 };
 
 // Count/membership-only producer; no document or hit iteration interface.

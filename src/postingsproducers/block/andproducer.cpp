@@ -22,6 +22,7 @@ class BlockAndProducer_c final : public AndProducerBase_c
 public:
 	BlockAndProducer_c ( const AndProducerSetup_t & tSetup, std::vector<std::unique_ptr<PostingBlock_i>> dCursors, std::vector<std::unique_ptr<PostingWindow_i>> dExcluded );
 
+	bool					HasTaggedHitRefs() const final { return true; }
 	PostingCandidateBatch_t	NextCandidates ( int iCapacity ) final;
 	const QwordDoc_t *		ReadPayloads ( int iTerm, const RowID_t * pRows, int iCount ) final;
 

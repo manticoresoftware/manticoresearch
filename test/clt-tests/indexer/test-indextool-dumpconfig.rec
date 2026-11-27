@@ -1,0 +1,28 @@
+––– comment –––
+indextool --dumpconfig prints a config the indexer reads back: one wordforms line per file, the column storage of the table
+(stored fields, columnar attributes, fast_fetch, string hashes, JSON secondary indexes, KNN) and the closing brace on its own line.
+––– input –––
+root=/tmp/indextool-dumpconfig; rm -rf "$root"; mkdir -p "$root"; printf 'cats > cat\n' > "$root/wf1.txt"; printf 'dogs > dog\n' > "$root/wf2.txt"; printf '1,"cats","dogs","3","s","{""k"":1}","0.1,0.2"\n' > "$root/rows.csv"; printf '%s\n' 'source s {' '  type = csvpipe' "  csvpipe_command = cat $root/rows.csv" '  csvpipe_field = title' '  csvpipe_field = body' '  csvpipe_attr_uint = a' '  csvpipe_attr_string = s' '  csvpipe_attr_json = j' '  csvpipe_attr_float_vector = v' '}' 'index t {' '  source = s' "  path = $root/t" "  wordforms = $root/wf1.txt" "  wordforms = $root/wf2.txt" '  stored_fields = title' '  columnar_attrs = a,s,v' '  columnar_no_fast_fetch = a' '  columnar_strings_no_hash = s' '  json_secondary_indexes = j' '  knn = {"attrs":[{"name":"v","type":"hnsw","dims":2,"hnsw_similarity":"L2"}]}' '}' > "$root/manticore.conf"; indexer --config "$root/manticore.conf" --all > "$root/build.log" 2>&1; echo "build exit=$?"; indextool --config "$root/manticore.conf" --dumpconfig "$root/t.sph" 2>&1 | sed -n '/^index \$dump/,$p'
+––– output –––
+build exit=0
+index $dump
+{
+	source = $dump
+	path = $dump
+	wordforms = /tmp/indextool-dumpconfig/wf1.txt
+	wordforms = /tmp/indextool-dumpconfig/wf2.txt
+	embedded_limit = 16384
+	stored_fields = title
+	columnar_attrs = a,v,s
+	columnar_no_fast_fetch = a
+	columnar_strings_no_hash = s
+	json_secondary_indexes = j
+	knn = {"attrs":[{"name":"v","type":"hnsw","dims":2,"hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200,"chunk_strategy":"truncate","max_tokens":0,"overlap_tokens":0,"max_chunks":0}]}
+}
+––– comment –––
+The dumped index section builds the same table: indexer reads it back, and the new table dumps the same section.
+––– input –––
+root=/tmp/indextool-dumpconfig; dump() { indextool --config "$root/manticore.conf" --dumpconfig "$root/$1.sph" 2>&1 | sed -n '/^index \$dump/,$p'; }; dump t | sed -e 's/^index \$dump/index t2/' -e 's/^\tsource = \$dump/\tsource = s/' -e "s#^\tpath = \$dump#\tpath = $root/t2#" >> "$root/manticore.conf"; indexer --config "$root/manticore.conf" t2 > "$root/build2.log" 2>&1; echo "build exit=$?"; [ "$(dump t)" = "$(dump t2)" ] && echo "same section" || diff <(dump t) <(dump t2)
+––– output –––
+build exit=0
+same section

@@ -26,3 +26,44 @@ mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT id FR
 chunks=$(mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SHOW TABLE rt_bulk_vectors STATUS LIKE 'disk_chunks'" | awk '{print $2}'); if [ "$chunks" = 1 ]; then echo ASSISTED_VECTOR_CHUNK_OK; else echo "FAIL_ASSISTED_VECTOR_CHUNKS=$chunks"; fi
 ––– output –––
 ASSISTED_VECTOR_CHUNK_OK
+––– comment –––
+An empty vector is accepted over SQL and HTTP, and later loads keep the KNN index of the table, also after a restart.
+––– input –––
+mysql -h0 -P9306 -e "SET bulk_import=rt_bulk_vectors; INSERT INTO rt_bulk_vectors(id,title,embedding,raw_vector) VALUES (4,'empty sql',(),()); COMMIT; SET bulk_import=0"
+––– output –––
+––– input –––
+printf '%s\n' '{"insert":{"table":"rt_bulk_vectors","id":5,"doc":{"title":"empty http","embedding":[],"raw_vector":[]}}}' | curl -sS -H 'Content-Type: application/x-ndjson' --data-binary @- 'http://localhost:9308/bulk?bulk_import=rt_bulk_vectors' | grep -o '"errors":[a-z]*'
+––– output –––
+"errors":false
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "SET bulk_import=rt_bulk_vectors; INSERT INTO rt_bulk_vectors(id,title,embedding,raw_vector) VALUES (6,'after restart',(0,0,0,1),(7,8)); COMMIT; SET bulk_import=0"
+––– output –––
+––– input –––
+mysql --skip-table --batch --raw --skip-column-names -h0 -P9306 -e "SELECT COUNT(*) FROM rt_bulk_vectors; SELECT id FROM rt_bulk_vectors WHERE knn(embedding,1,(0,0,0,1)) LIMIT 1"
+––– output –––
+6
+6
+––– block: ../base/bulk-import-helpers –––
+––– comment –––
+searchd builds no KNN index for a loaded chunk and loads none it lacks: the chunk comes with its KNN index from the indexer, so the log has no 'KNN disabled'.
+––– input –––
+grep -c 'KNN disabled' /var/log/manticore/searchd.log
+––– output –––
+0
+––– comment –––
+A table with an embeddings model is refused when the load starts, over SQL and HTTP: indexer computes no embeddings, so
+the vectors that INSERT would compute would stay empty.
+––– input –––
+source /tmp/bi.sh; bi_sql "CREATE TABLE bulk_m (title text, v float_vector knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title')"; bi_load bulk_m "(id,title) VALUES (1,'one')" 2>&1; printf '%s\n' '{"insert":{"table":"bulk_m","id":2,"doc":{"title":"two"}}}' | curl -sS -H 'Content-Type: application/x-ndjson' --data-binary @- 'http://localhost:9308/bulk?bulk_import=bulk_m' | grep -o '"type":"[^"]*"'; bi_sql "SELECT COUNT(*) FROM bulk_m"
+––– output –––
+ERROR 1064 (42000) at line 1: bulk_import does not support embeddings models (attribute 'v'); load such tables with INSERT
+"type":"bulk_import does not support embeddings models (attribute 'v'); load such tables with INSERT"
+0
+––– comment –––
+A table with a float_vector_array attribute, with or without a model, is refused when the load starts, and the message says what to do.
+––– input –––
+source /tmp/bi.sh; bi_sql "CREATE TABLE bulk_arr (title text, v float_vector_array knn_type='hnsw' knn_dims='2' hnsw_similarity='L2')"; bi_sql "CREATE TABLE bulk_arrm (title text, v float_vector_array knn_type='hnsw' hnsw_similarity='L2' model_name='sentence-transformers/all-MiniLM-L6-v2' from='title' chunk_strategy='fixed' max_tokens='16')"; for t in bulk_arr bulk_arrm; do bi_load $t "(id,title) VALUES (1,'one')" 2>&1; done
+––– output –––
+ERROR 1064 (42000) at line 1: bulk_import does not support float_vector_array attributes (attribute 'v'); load such tables with INSERT
+ERROR 1064 (42000) at line 1: bulk_import does not support float_vector_array attributes (attribute 'v'); load such tables with INSERT

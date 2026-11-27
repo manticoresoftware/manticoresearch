@@ -8902,8 +8902,8 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	// an empty result here means the planner chose brute force over the graph
 	bKNNIteratorCreated = !dKNNIterators.IsEmpty();
 
-	// secondary index iterators: with fulltext search, cutoff applies only after intersecting with fulltext matches
-	dSIIterators = m_tSI.CreateSecondaryIndexIterator ( dSIInfo, dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), pRanker ? -1 : iCutoff, bUseSICache, tMeta.m_sWarning );
+	// secondary index iterators: with fulltext search or a knn iterator, cutoff applies only after intersecting with their matches
+	dSIIterators = m_tSI.CreateSecondaryIndexIterator ( dSIInfo, dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), ( pRanker || bKNNIteratorCreated ) ? -1 : iCutoff, bUseSICache, tMeta.m_sWarning );
 
 	// lookup-by-id (.SPT) iterators
 	dLookupIterators = CreateLookupIterator ( dSIInfo, dFilters, m_tDocidLookup.GetReadPtr(), m_uVersion, RowID_t(m_iDocinfo) );

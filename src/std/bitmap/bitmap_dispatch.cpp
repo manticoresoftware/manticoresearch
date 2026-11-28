@@ -134,4 +134,10 @@ const Operations_t & GetOperations()
 	}();
 	return *pOps;
 }
+
+
+uint64_t CountBytes ( const uint8_t * pBytes, size_t nBytes )
+{
+	return GetOperations().m_fnCountBytes ( pBytes, nBytes );
+}
 } // namespace bitmap

@@ -10,6 +10,7 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
+#include "postings/singleton.h"
 #include "indexformat.h"
 #include "diskqword.h"
 
@@ -51,6 +52,7 @@ void DiskIndexQwordTraits_c::SetDocReader ( DataReaderFactory_c * pReader )
 	if ( !pReader )
 		return;
 
+	m_iDocFileSize = pReader->GetFilesize();
 	m_rdDoclist = pReader->MakeReader ( m_pDocsBuf, MINIBUFFER_LEN );
 	OnDocReaderChanged();
 }
@@ -140,6 +142,7 @@ struct DiskExpandedPayload_t
 	int			m_iHits;
 	uint64_t	m_uDoclistOff;
 	int			m_iDoclistHint;
+	const BYTE * m_pSingletonPayload;
 };
 
 
@@ -180,6 +183,7 @@ struct DictEntryDiskPayload_t : public DictTerm2Expanded_i
 			tExpand.m_iHits = tWord.m_iHits;
 			tExpand.m_uDoclistOff = tWord.m_iDoclistOffset;
 			tExpand.m_iDoclistHint = tWord.m_iDoclistHint;
+			tExpand.m_pSingletonPayload = tWord.m_pSingletonPayload;
 		}
 	}
 
@@ -217,8 +221,9 @@ struct DictEntryDiskPayload_t : public DictTerm2Expanded_i
 			LimitExpanded ( tArgs.m_iExpansionLimit, m_dWordPayload );
 
 			std::unique_ptr<DiskSubstringPayload_t> pPayload ( new DiskSubstringPayload_t ( m_dWordPayload.GetLength() ) );
-			// sorting by ascending doc-list offset gives some (15%) speed-up too
-			sphSort ( m_dWordPayload.Begin(), m_dWordPayload.GetLength(), bind ( &DiskExpandedPayload_t::m_uDoclistOff ) );
+			// Read physical doclists in file order. Multi-hit dictionary records all share locator 1.
+			if ( m_dWordPayload.any_of ( []( const auto & tWord ){ return !tWord.m_pSingletonPayload; } ) )
+				sphSort ( m_dWordPayload.Begin(), m_dWordPayload.GetLength(), bind ( &DiskExpandedPayload_t::m_uDoclistOff ) );
 
 			ARRAY_FOREACH ( i, m_dWordPayload )
 			{
@@ -229,6 +234,8 @@ struct DictEntryDiskPayload_t : public DictTerm2Expanded_i
 				iTotalHits += tCur.m_iHits;
 				pPayload->m_dDoclist[i].m_uOff = tCur.m_uDoclistOff;
 				pPayload->m_dDoclist[i].m_iLen = tCur.m_iDoclistHint;
+				if ( tCur.m_pSingletonPayload )
+					pPayload->m_dDoclist[i].SetDictionaryRecord(tCur.m_pSingletonPayload);
 			}
 
 			pPayload->m_iTotalDocs = iTotalDocs;
@@ -277,11 +284,12 @@ void CWordlist::Reset ()
 }
 
 
-bool CWordlist::Preread ( const CSphString & sName, DictFormat_e eDictFormat, int iSkiplistBlockSize, CSphString & sError )
+bool CWordlist::Preread ( const CSphString & sName, DictFormat_e eDictFormat, int iSkiplistBlockSize, bool bMultiHitSingletons, CSphString & sError )
 {
 	assert ( m_iDictCheckpointsOffset>0 );
 
 	m_eDictFormat = eDictFormat;
+	m_bMultiHitSingletons = bMultiHitSingletons;
 	m_bWordDict = eDictFormat!=DictFormat_e::CRC;
 	m_iWordsEnd = m_iDictCheckpointsOffset; // set wordlist end
 	m_iSkiplistBlockSize = iSkiplistBlockSize;
@@ -548,7 +556,7 @@ void CWordlist::GetPrefixedWords ( const char * sSubstring, int iSubLen, const c
 	// assume dict=crc never has word with wordid=0, however just don't consider it and explicitly set nullptr.
 	const CSphWordlistCheckpoint * pCheckpoint = m_bWordDict ? FindCheckpointWrd ( sSubstring, iSubLen, true ) : nullptr;
 	const int iSkipMagic = ( BYTE(*sSubstring)<0x20 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
-	auto pDictReader = pCheckpoint ? CreateKeywordsBlockReader ( nullptr, m_iSkiplistBlockSize, m_eDictFormat ) : nullptr;
+	auto pDictReader = pCheckpoint ? CreateKeywordsBlockReader ( nullptr, m_iSkiplistBlockSize, m_eDictFormat, m_bMultiHitSingletons ) : nullptr;
 	while ( pCheckpoint )
 	{
 		// decode wordlist chunk
@@ -607,7 +615,7 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 
 	WildcardBuf_t tWildcardBuf ( m_eDictFormat==DictFormat_e::KEYWORDS_V2 ? WildcardBufMode_e::Extended : WildcardBufMode_e::Legacy );
 	const int * pWildcard = tWildcardBuf.DecodePattern ( sWildcard );
-	auto pDictReader = CreateKeywordsBlockReader ( nullptr, m_iSkiplistBlockSize, m_eDictFormat );
+	auto pDictReader = CreateKeywordsBlockReader ( nullptr, m_iSkiplistBlockSize, m_eDictFormat, m_bMultiHitSingletons );
 
 	// walk those checkpoints, check all their words
 	ARRAY_FOREACH ( i, dPoints )
@@ -633,6 +641,24 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 
 	tDict2Payload.Convert ( tArgs );
 }
+
+
+/// dict=keywords block reader
+class KeywordsBlockReader_c final : public ISphKeywordsBlockReader
+{
+public:
+					KeywordsBlockReader_c ( const BYTE * pBuf, int iSkiplistBlockSize, bool bMultiHitSingletons );
+
+	void			Reset ( const BYTE * pBuf ) override;
+	bool			UnpackWord() override;
+	bool			ReadKeywordText();
+	void			SkipPosting();
+	using ISphKeywordsBlockReader::ReadPosting;
+
+private:
+	std::array<BYTE, MAX_KEYWORD_BYTES>	m_sWord;
+};
+
 
 #if WITH_RE2
 struct RegexMatch_t
@@ -667,31 +693,46 @@ void CWordlist::ScanRegexWords ( const VecTraits_T<RegexTerm_t> & dTerms, const 
 	}
 
 	const int iSkipMagic = ( tArgs.m_bHasExactForms ? 1 : 0 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
-	auto pDictReader = CreateKeywordsBlockReader ( nullptr, m_iSkiplistBlockSize, m_eDictFormat );
+	KeywordsBlockReader_c tReader ( nullptr, m_iSkiplistBlockSize, m_bMultiHitSingletons );
 
 	// walk those checkpoints, check all their words
 	ARRAY_FOREACH ( i, m_dCheckpoints )
 	{
 		const auto & tCP = m_dCheckpoints[i];
 
-		pDictReader->Reset ( m_tBuf.GetReadPtr() + tCP.m_iWordlistOffset );
-		while ( pDictReader->UnpackWord() )
+		tReader.Reset ( m_tBuf.GetReadPtr() + tCP.m_iWordlistOffset );
+		while ( tReader.ReadKeywordText() )
 		{
 			if ( sphInterrupted () )
 				break;
 
 			// stemmed terms should not match suffixes
-			if ( tArgs.m_bHasExactForms && *pDictReader->GetWord()!=MAGIC_WORD_HEAD_NONSTEMMED )
+			if ( tArgs.m_bHasExactForms && *tReader.GetWord()!=MAGIC_WORD_HEAD_NONSTEMMED )
+			{
+				tReader.SkipPosting();
 				continue;
+			}
 
-			int iLen = pDictReader->GetWordLen();
-			re2::StringPiece sDictToken ( pDictReader->GetWord()+iSkipMagic, iLen );
+			bool bPostingRead = false;
+			int iLen = tReader.GetWordLen();
+			re2::StringPiece sDictToken ( tReader.GetWord()+iSkipMagic, iLen );
 
 			ARRAY_FOREACH ( i, dRegex )
 			{
-				if ( RE2::FullMatchN ( sDictToken, *dRegex[i].m_pRe, nullptr, 0 ) )
-					dRegex[i].m_pPayload->Add ( *pDictReader, iLen );
+				if ( !RE2::FullMatchN ( sDictToken, *dRegex[i].m_pRe, nullptr, 0 ) )
+					continue;
+
+				if ( !bPostingRead )
+				{
+					tReader.ReadPosting();
+					bPostingRead = true;
+				}
+
+				dRegex[i].m_pPayload->Add ( tReader, iLen );
 			}
+
+			if ( !bPostingRead )
+				tReader.SkipPosting();
 		}
 
 		if ( sphInterrupted () )
@@ -731,25 +772,11 @@ bool CWordlist::ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) cons
 
 //////////////////////////////////////////////////////////////////////////
 
-/// dict=keywords block reader
-class KeywordsBlockReader_c final : public ISphKeywordsBlockReader
-{
-public:
-					KeywordsBlockReader_c ( const BYTE * pBuf, int iSkiplistBlockSize );
-
-	void			Reset ( const BYTE * pBuf ) override;
-	bool			UnpackWord() override;
-
-private:
-	std::array<BYTE, MAX_KEYWORD_BYTES>	m_sWord;
-};
-
-
 /// dict=keywords_v2 block reader
 class KeywordsBlockReaderV2_c final : public ISphKeywordsBlockReader
 {
 public:
-					KeywordsBlockReaderV2_c ( const BYTE * pBuf, int iSkiplistBlockSize );
+					KeywordsBlockReaderV2_c ( const BYTE * pBuf, int iSkiplistBlockSize, bool bMultiHitSingletons );
 
 	void			Reset ( const BYTE * pBuf ) override;
 	bool			UnpackWord() override;
@@ -759,8 +786,36 @@ private:
 };
 
 
-KeywordsBlockReader_c::KeywordsBlockReader_c ( const BYTE * pBuf, int iSkiplistBlockSize )
-	: ISphKeywordsBlockReader ( iSkiplistBlockSize )
+void ISphKeywordsBlockReader::ReadPosting()
+{
+	m_pSingletonPayload = nullptr;
+	m_iDoclistOffset = UnzipOffsetBE ( m_pBuf );
+	if ( m_bMultiHitSingletons && m_iDoclistOffset==postings::MULTI_HIT_MARKER )
+	{
+		m_pSingletonPayload = m_pBuf;
+		m_pBuf += 1 + *m_pSingletonPayload;
+		m_iDocs = 1;
+		m_iHits = postings::SingletonTF(m_pSingletonPayload);
+		m_iDoclistHint = 0;
+		m_iSkiplistOffset = 0;
+		return;
+	}
+
+	m_iDocs = UnzipIntBE ( m_pBuf );
+	m_iHits = UnzipIntBE ( m_pBuf );
+	postings::UnpackKeywordPosting ( m_iDoclistOffset, m_iDocs, m_iHits );
+	const DWORD uLayoutDocs = (DWORD)( m_iDocs & HITLESS_DOC_MASK );
+	const BYTE uHint = ( uLayoutDocs>=(DWORD)DOCLIST_HINT_THRESH ) ? *m_pBuf++ : 0;
+	m_iDoclistHint = DoclistHintUnpack ( uLayoutDocs, uHint );
+	if ( uLayoutDocs>(DWORD)m_iSkiplistBlockSize )
+		m_iSkiplistOffset = UnzipOffsetBE ( m_pBuf );
+	else
+		m_iSkiplistOffset = 0;
+}
+
+
+KeywordsBlockReader_c::KeywordsBlockReader_c ( const BYTE * pBuf, int iSkiplistBlockSize, bool bMultiHitSingletons )
+	: ISphKeywordsBlockReader ( iSkiplistBlockSize, bMultiHitSingletons )
 {
 	Reset ( pBuf );
 }
@@ -776,6 +831,31 @@ void KeywordsBlockReader_c::Reset ( const BYTE * pBuf )
 
 
 bool KeywordsBlockReader_c::UnpackWord()
+{
+	if ( !ReadKeywordText() )
+		return false;
+
+	ReadPosting();
+	return true;
+}
+
+
+void KeywordsBlockReader_c::SkipPosting()
+{
+	// Dictionary singletons have no size hint or skiplist offset.
+	if ( *m_pBuf==0 )
+	{
+		++m_pBuf;
+		UnzipIntBE(m_pBuf);
+		UnzipIntBE(m_pBuf);
+	} else if ( m_bMultiHitSingletons && *m_pBuf==postings::MULTI_HIT_MARKER )
+		m_pBuf += 2+m_pBuf[1]; // marker, length and payload
+	else
+		ReadPosting();
+}
+
+
+bool KeywordsBlockReader_c::ReadKeywordText()
 {
 	if ( !m_pBuf )
 		return false;
@@ -814,24 +894,13 @@ bool KeywordsBlockReader_c::UnpackWord()
 	m_iLen = iMatch + iDelta;
 	m_sWord[m_iLen] = '\0';
 
-	m_iDoclistOffset = UnzipOffsetBE ( m_pBuf );
-	m_iDocs = UnzipIntBE ( m_pBuf );
-	m_iHits = UnzipIntBE ( m_pBuf );
-	const DWORD uLayoutDocs = (DWORD)( m_iDocs & HITLESS_DOC_MASK );
-	const BYTE uHint = ( uLayoutDocs>=(DWORD)DOCLIST_HINT_THRESH ) ? *m_pBuf++ : 0;
-	m_iDoclistHint = DoclistHintUnpack ( uLayoutDocs, uHint );
-	if ( uLayoutDocs>(DWORD)m_iSkiplistBlockSize )
-		m_iSkiplistOffset = UnzipOffsetBE ( m_pBuf );
-	else
-		m_iSkiplistOffset = 0;
-
 	assert ( m_iLen>0 );
 	return true;
 }
 
 
-KeywordsBlockReaderV2_c::KeywordsBlockReaderV2_c ( const BYTE * pBuf, int iSkiplistBlockSize )
-	: ISphKeywordsBlockReader ( iSkiplistBlockSize )
+KeywordsBlockReaderV2_c::KeywordsBlockReaderV2_c ( const BYTE * pBuf, int iSkiplistBlockSize, bool bMultiHitSingletons )
+	: ISphKeywordsBlockReader ( iSkiplistBlockSize, bMultiHitSingletons )
 {
 	m_dWord.Resize ( GetKeywordBufSize ( DictFormat_e::KEYWORDS_V2 ) );
 	Reset ( pBuf );
@@ -891,38 +960,29 @@ bool KeywordsBlockReaderV2_c::UnpackWord()
 	m_dWord[m_iLen] = '\0';
 	m_szKeyword = m_dWord.Begin();
 
-	m_iDoclistOffset = UnzipOffsetBE ( m_pBuf );
-	m_iDocs = UnzipIntBE ( m_pBuf );
-	m_iHits = UnzipIntBE ( m_pBuf );
-	const DWORD uLayoutDocs = (DWORD)( m_iDocs & HITLESS_DOC_MASK );
-	const BYTE uHint = ( uLayoutDocs>=(DWORD)DOCLIST_HINT_THRESH ) ? *m_pBuf++ : 0;
-	m_iDoclistHint = DoclistHintUnpack ( uLayoutDocs, uHint );
-	if ( uLayoutDocs>(DWORD)m_iSkiplistBlockSize )
-		m_iSkiplistOffset = UnzipOffsetBE ( m_pBuf );
-	else
-		m_iSkiplistOffset = 0;
+	ReadPosting();
 
 	assert ( m_iLen>0 );
 	return true;
 }
 
 
-std::unique_ptr<ISphKeywordsBlockReader> CreateKeywordsBlockReader ( const BYTE * pBuf, int iSkiplistBlockSize, DictFormat_e eDictFormat )
+std::unique_ptr<ISphKeywordsBlockReader> CreateKeywordsBlockReader ( const BYTE * pBuf, int iSkiplistBlockSize, DictFormat_e eDictFormat, bool bMultiHitSingletons )
 {
 	switch ( eDictFormat )
 	{
 	case DictFormat_e::KEYWORDS:
-		return std::make_unique<KeywordsBlockReader_c> ( pBuf, iSkiplistBlockSize );
+		return std::make_unique<KeywordsBlockReader_c> ( pBuf, iSkiplistBlockSize, bMultiHitSingletons );
 
 	case DictFormat_e::KEYWORDS_V2:
-		return std::make_unique<KeywordsBlockReaderV2_c> ( pBuf, iSkiplistBlockSize );
+		return std::make_unique<KeywordsBlockReaderV2_c> ( pBuf, iSkiplistBlockSize, bMultiHitSingletons );
 
 	case DictFormat_e::CRC:
 		break;
 	}
 
 	assert ( 0 && "unsupported dictionary format for keywords block reader" );
-	return std::make_unique<KeywordsBlockReader_c> ( pBuf, iSkiplistBlockSize );
+	return nullptr;
 }
 
 static int g_iExpandMergeDocs = 32;
@@ -943,6 +1003,7 @@ void ExpandedMergeThdHits ( int iHits )
 	g_iExpandMergeHits = iHits;
 }
 
+
 ////////////////////////////////////////////////////////////////////
 
 void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, JsonEscapedBuilder& sJson, bool bForceWordDict, bool SkipEmbeddDict )
@@ -953,7 +1014,7 @@ void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t 
 	sJson.NamedString ( "meta_created_time_utc", sphCurrentUtcTime() );
 
 	// version
-	sJson.NamedVal ( "index_format_version", tBuildHeader.m_uFormatVersion ? tBuildHeader.m_uFormatVersion : INDEX_FORMAT_VERSION );
+	sJson.NamedVal ( "index_format_version", tBuildHeader.m_uFormatVersion ? tBuildHeader.m_uFormatVersion : (tWriteHeader.m_pSettings->m_uPostingsFormat ? INDEX_FORMAT_VERSION : 74) );
 
 	// index stats - json (put here to be similar with .meta)
 	sJson.NamedValNonDefault ( "total_documents", tBuildHeader.m_iTotalDocuments );

@@ -17,6 +17,7 @@
 
 #include "sphinxstd.h"
 #include "indexsettings.h"
+#include "indexhints.h"
 #include "fileutils.h"
 #include "collation.h"
 #include "binlog_defs.h"
@@ -482,25 +483,6 @@ public:
 
 class QueryParser_i;
 
-enum class SecondaryIndexType_e
-{
-	NONE,
-	FILTER,
-	LOOKUP,
-	INDEX,
-	ANALYZER,
-
-	TOTAL
-};
-
-
-struct IndexHint_t
-{
-	CSphString				m_sIndex;
-	SecondaryIndexType_e	m_eType = SecondaryIndexType_e::NONE;
-	bool					m_bForce = true;
-};
-
 struct OnFilter_t
 {
 	CSphString	m_sIdx1;
@@ -633,7 +615,7 @@ struct CSphQuery
 	CSphVector<CSphFilterSettings>	m_dFilters;		///< filters
 	CSphVector<FilterTreeItem_t>	m_dFilterTree;
 
-	CSphVector<IndexHint_t>			m_dIndexHints;	///< secondary index hints
+	IndexHints_c					m_tIndexHints;	///< optimizer hints
 
 	JoinType_e		m_eJoinType = JoinType_e::NONE;	///< JOIN type
 	CSphString		m_sJoinIdx;						///< index to perform join on
@@ -668,7 +650,7 @@ struct CSphQuery
 
 	CSphString		m_sSelect;				///< select-list (attributes and/or expressions)
 	CSphString		m_sOrderBy;				///< order-by clause
-	bool			m_bExplicitOrderBy = false;	///< SQL ORDER BY was supplied by the client
+	bool			m_bExplicitOrderBy = false;	///< the client supplied SQL ORDER BY or JSON sort
 	CSphVector<CSphString> m_dOrderByItems;	///< parsed expressions in the explicit SQL ORDER BY
 
 	CSphString		m_sOuterOrderBy;		///< temporary (?) subselect hack
@@ -1273,7 +1255,7 @@ struct UpdateContext_t
 bool CheckStoredFields ( const CSphSchema & tSchema, const CSphIndexSettings & tSettings, CSphString & sError );
 
 class DiskIndexQwordTraits_c;
-DiskIndexQwordTraits_c * sphCreateDiskIndexQword ( bool bInlineHits );
+DiskIndexQwordTraits_c * sphCreateDiskIndexQword ( bool bInlineHits, bool bBlockPostings = false );
 
 /// returns ranker name as string
 const char * sphGetRankerName ( ESphRankMode eRanker );
@@ -1339,6 +1321,7 @@ public:
 	virtual void				Setup ( const CSphIndexSettings & tSettings );
 	const CSphIndexSettings &	GetSettings () const { return m_tSettings; }
 	virtual bool				IsRT() const { return false; }
+	virtual bool				ConvertPostings ( const CSphString & sOutput, CSphString & sError ) { sError = "convert one offline plain table/disk chunk at a time"; return false; }
 	virtual bool				IsPQ() const { return false; }
 	void						SetBinlog ( bool bBinlog ) { m_bBinlog = bBinlog; }
 	virtual int64_t *			GetFieldLens() const { return nullptr; }

@@ -2,6 +2,11 @@
 
 <test>
 <name>snippets vs SPZ</name>
+
+<requires>
+	<!-- Exercises CRC dictionaries, which block postings do not support. -->
+	<legacy_format/>
+</requires>
 <skip_db/>
 <config>
 searchd

@@ -303,9 +303,64 @@ jobs:
           path: .mcl-package-cache
           key: ${{ inputs.package_cache_key }}
 
-      - name: Upload build artifacts
-        if: success()
-        uses: manticoresoftware/upload_artifact_with_retries@v6
+      - name: Archive package artifacts
+        env:
+          ARTIFACT_LIST: ${{ inputs.artifact_list }}
+        run: |
+          shopt -s globstar
+          find $ARTIFACT_LIST -type f -print0 | xargs -0 tar -cvf artifact.tar || true
+          ls -la artifact.tar
+      # Artifact names are immutable. Retrying an upload after a successful upload
+      # but failed verification causes a 409 Conflict.
+      - name: Upload artifact
+        id: upload
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ inputs.artifact_name }}
-          path: ${{ inputs.artifact_list }}
+          path: artifact.tar
+          if-no-files-found: error
+      - name: Download artifact (attempt 1)
+        id: download1
+        uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          artifact-ids: ${{ steps.upload.outputs.artifact-id }}
+          path: ${{ runner.temp }}/artifact-check-${{ steps.upload.outputs.artifact-id }}
+      - name: Wait before retrying download
+        if: steps.download1.outcome == 'failure'
+        run: sleep 5
+      - name: Download artifact (attempt 2)
+        id: download2
+        if: steps.download1.outcome == 'failure'
+        uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          artifact-ids: ${{ steps.upload.outputs.artifact-id }}
+          path: ${{ runner.temp }}/artifact-check-${{ steps.upload.outputs.artifact-id }}
+      - name: Wait before final download attempt
+        if: steps.download2.outcome == 'failure'
+        run: sleep 10
+      - name: Download artifact (attempt 3)
+        id: download3
+        if: steps.download2.outcome == 'failure'
+        uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          artifact-ids: ${{ steps.upload.outputs.artifact-id }}
+          path: ${{ runner.temp }}/artifact-check-${{ steps.upload.outputs.artifact-id }}
+      - name: Verify downloaded archive
+        env:
+          DOWNLOAD_DIR: ${{ steps.download1.outputs.download-path || steps.download2.outputs.download-path || steps.download3.outputs.download-path }}
+        run: |
+          if [[ -z "$DOWNLOAD_DIR" ]]; then
+            echo "::error::Uploaded artifact could not be downloaded for verification"
+            exit 1
+          fi
+          if [[ ! -f "$DOWNLOAD_DIR/artifact.tar" ]]; then
+            echo "::error::Missing downloaded archive at $DOWNLOAD_DIR/artifact.tar"
+            exit 1
+          fi
+          if ! cmp -s artifact.tar "$DOWNLOAD_DIR/artifact.tar"; then
+            echo "::error::Downloaded artifact differs from uploaded archive"
+            exit 1
+          fi

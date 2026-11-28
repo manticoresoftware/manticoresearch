@@ -11,6 +11,8 @@ set ( GTESTS_SRC
 		gtests_docidlookup.cpp
 		gtests_rtstuff.cpp
 		gtests_windowcount.cpp
+		gtests_sortbound.cpp
+		gtests_termproducer.cpp
 		gtests_text.cpp
 		gtests_functions.cpp
 		gtests_globalstate.cpp

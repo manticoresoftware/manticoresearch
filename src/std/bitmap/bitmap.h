@@ -11,6 +11,7 @@
 #pragma once
 
 #include "../ints.h"
+#include "bitmap_count.h"
 #include <cstddef>
 #include <cstdint>
 
@@ -25,7 +26,7 @@ using Count_fn = uint64_t (*) ( const DWORD *, size_t );
 using CountBinary_fn = uint64_t (*) ( const DWORD *, const DWORD *, size_t );
 using Binary_fn = void (*) ( DWORD *, const DWORD *, const DWORD *, size_t );
 
-// Lengths are in 32-bit words, NOT bits or bytes. All bits are significant;
+// Word-operation lengths are in 32-bit words, NOT bits or bytes. All bits are significant;
 // callers must mask unused bits in the last word. Buffers need only DWORD
 // alignment, with no extra padding. Zero-length calls allow null pointers.
 // Output may equal either input; other partial overlaps are not supported.
@@ -43,6 +44,9 @@ struct Operations_t
 	Binary_fn 		m_fnOr;
 	Binary_fn 		m_fnXor;
 	Binary_fn 		m_fnAndNot;
+
+	// Byte count accepts arbitrary alignment and an unpadded tail.
+	CountBytes_fn	m_fnCountBytes;
 };
 
 // Thread-safe, immutable dispatch table, selected once per process.

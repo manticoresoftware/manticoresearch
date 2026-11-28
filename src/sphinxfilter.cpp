@@ -1842,7 +1842,7 @@ bool FilterCoversIndex ( const CSphFilterSettings & tFilter, const CreateFilterC
 	{
 		if ( pMatch->m_pExpr )
 		{
-			if ( !pMatch->IsColumnarExpr() )
+			if ( !pMatch->IsColumnarExpr() && !pMatch->IsStoredExpr() )
 				return false;
 
 			CSphString sColumn;
@@ -2196,7 +2196,7 @@ static void TransformForJsonSI ( const CreateFilterContext_t & tCtx, CSphVector<
 				}
 			}
 
-			if ( tCtx.m_pSI->IsEnabled(sTransformed) )
+			if ( sTransformed!=tFilter.m_sAttrName && tCtx.m_pSI->IsEnabled(sTransformed) )
 			{
 				CSphFilterSettings tOriginal = tFilter;
 				tFilter.m_sAttrName = sTransformed;

@@ -1,6 +1,11 @@
 <test>
 <name>field position limit vs many hits</name>
 
+<requires>
+	<!-- Exercises CRC dictionaries, which block postings do not support. -->
+	<legacy_format/>
+</requires>
+
 <config>
 indexer
 {

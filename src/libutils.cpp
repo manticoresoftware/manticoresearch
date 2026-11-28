@@ -59,10 +59,7 @@ void * DlSym ( void * pHandle, const char * szFunc, const CSphString & sLib, CSp
 #if HAVE_DLOPEN
 	auto * pSym = dlsym ( pHandle, szFunc );
 	if ( !pSym )
-	{
 		sError.SetSprintf ( "symbol '%s' not found in '%s'", szFunc, sLib.cstr() );
-		dlclose ( pHandle );
-	}
 
 	return pSym;
 #else

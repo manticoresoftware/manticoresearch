@@ -152,6 +152,12 @@ Integer. Specifies the maximum number of matches to process. If not set, Mantico
 
 When Manticore cannot determine the exact count of matching documents, the `total_relation` field in the query [meta information](../Node_info_and_management/SHOW_META.md#SHOW-META) will show `gte`, which stands for **Greater Than or Equal to**. This indicates that the actual count of matches is at least the reported `total_found` (in SQL) or `hits.total` (in JSON). When the count is exact, `total_relation` will display `eq`.
 
+For an ungrouped full-text search, Manticore can stop after collecting `OFFSET + LIMIT` qualifying matches when the request explicitly disables ranking and leaves results unordered. In SQL, use `OPTION ranker=none` and omit `ORDER BY`. With HTTP `/search`, use `"options": {"ranker": "none"}` and omit `sort` and `aggs`. Rows tied on weight may be returned in a different order or subset. To request an exact match count, also set `cutoff=0` in SQL or `"cutoff": 0` in JSON options.
+
+For supported full-text queries on block-format disk chunks sorted by a direct integer or timestamp attribute, an unset `cutoff` also permits competitive pruning. Once the collector is full, candidates strictly worse than its retained sort boundary can be skipped before document collection or phrase verification. Equal keys remain eligible, including when further sort keys break ties. This preserves the requested top results; when candidates are skipped, `total_found` is a lower bound (`total_relation: gte`). Set `OPTION cutoff=0` to disable this pruning and count all matches. Grouping, joins, unsupported collectors and query shapes use their existing execution paths.
+
+For attribute-only queries ordered by a direct integer or timestamp, Manticore can visit the most competitive rowwise or columnar blocks first. Once the sorter is full, it skips blocks whose best value is strictly worse than the last retained value. Equal values remain eligible for tie-breaking. When a table or secondary index supplies the exact count, `total_relation` stays `eq`. Otherwise, skipping blocks gives a lower bound (`gte`). Use `OPTION cutoff=0` to request an exhaustive scan.
+
 Note: Using `cutoff` in aggregation queries is not recommended because it can produce inaccurate or incomplete results.
 
 <!-- request Example -->
@@ -506,13 +512,26 @@ Restricts the maximum number of expanded keywords for a single wildcard, with a 
 
 <!-- example options_force -->
 
-In rare cases, Manticore's built-in query analyzer may be incorrect in understanding a query and determining whether a docid index, secondary indexes, or columnar scan should be used. To override the query optimizer's decisions, you can use the following hints in your query:
+Optimizer hints let you request or disable a particular access method for a query.
 
 * `/*+ DocidIndex(id) */`  to force the use of a docid index, `/*+ NO_DocidIndex(id) */` to tell the optimizer to ignore it
 * `/*+ SecondaryIndex(<attr_name1>[, <attr_nameN>]) */` to force the use of a secondary index (if available), `/*+ NO_SecondaryIndex(id) */`  to tell the optimizer to ignore it
 * `/*+ ColumnarScan(<attr_name1>[, <attr_nameN>]) */`  to force the use of a columnar scan (if the attribute is columnar), `/*+ NO_ColumnarScan(id) */` to tell the optimizer to ignore it
+* `/*+ SortBound(ts) */` to force a sort-bound scan on eligible disk chunks. Name the underlying attribute of the first `ORDER BY` key. The scan visits blocks with the highest maxima first for `DESC`, or the lowest minima first for `ASC`. Once the sorter is full, it can skip blocks whose best value is strictly worse than the worst retained value. Ties remain eligible for secondary sort keys.
+* `/*+ NO_SortBound(ts) */` to disable the sort-bound scan when `ts` is the primary sort attribute. The optimizer chooses among the ordinary scan and filter iterators. Without either hint, the optimizer compares the cost of those plans with the sort-bound scan.
 
-Note that when executing a full-text query with filters, the query optimizer decides between intersecting the results of the full-text tree with the filter results or using a standard match-then-filter approach. Specifying *any* hint will force the daemon to use the code path that performs the intersection of the full-text tree results with the filter results.
+Place the hint after `LIMIT` and any `OPTION` clause. These two queries let you compare plans with identical cutoff and sorter settings.
+
+```sql
+SELECT id, ts FROM logs WHERE service = 'api' ORDER BY ts DESC, id ASC LIMIT 10 /*+ SortBound(ts) */;
+SELECT id, ts FROM logs WHERE service = 'api' ORDER BY ts DESC, id ASC LIMIT 10 /*+ NO_SortBound(ts) */;
+```
+
+Sort-bound hints apply to attribute fullscans on disk, including RT disk chunks. Forcing bypasses the cost and block-overlap estimates. The query still needs a single eligible sorter, an integer, bigint, or timestamp primary sort attribute with block min/max values, automatic cutoff, and at most one supported attribute predicate after simplification. An explicit filter iterator hint takes precedence. RT RAM segments silently ignore the hint. If a disk chunk cannot use the forced scan, the query falls back on that chunk and `SHOW WARNINGS` gives the reason.
+
+On a local table, `SHOW META` reports `SortBoundMinMax` for rowwise storage or `SortBoundColumnar` for columnar storage. Distributed tables forward the hint to their agents. To inspect an agent's iterator name, run the query directly on that agent. When the scan skips blocks, `total_found` counts the matches collected and `total_relation` is `gte`.
+
+For a full-text query with filters, the optimizer decides between intersecting the full-text matches with the filter results and applying the filters after matching. A filter iterator hint (`DocidIndex`, `SecondaryIndex`, `ColumnarScan`, or its negative form) selects the intersection path. Sort-bound hints apply only to attribute fullscans.
 
 For more information on how the query optimizer works, refer to the [Cost based optimizer](../Searching/Cost_based_optimizer.md) page.
 

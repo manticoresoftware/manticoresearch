@@ -10,6 +10,7 @@
 //
 
 #include "secondaryindex.h"
+#include "costestimate.h"
 
 #include <algorithm>
 
@@ -606,27 +607,12 @@ SIDefault_e GetSecondaryIndexDefault ()
 }
 
 
-static bool CheckIndexHint ( const CSphFilterSettings & tFilter, const CSphVector<IndexHint_t> & dHints, SecondaryIndexType_e eType, bool & bForce )
-{
-	bForce = false;
-
-	for ( const auto & i : dHints )
-		if ( i.m_sIndex==tFilter.m_sAttrName && i.m_eType==eType )
-		{
-			bForce = i.m_bForce;
-			return bForce;
-		}
-
-	return true;
-}
-
-
 static bool HaveSI ( const CSphFilterSettings & tFilter, const SelectIteratorCtx_t & tCtx, bool & bForce )
 {
 	if ( !tCtx.IsEnabled_SI(tFilter) )
 		return false;
 
-	if ( !CheckIndexHint ( tFilter, tCtx.m_tQuery.m_dIndexHints, SecondaryIndexType_e::INDEX, bForce ) )
+	if ( !tCtx.m_tQuery.m_tIndexHints.AllowsIterator ( tFilter.m_sAttrName, SecondaryIndexType_e::INDEX, bForce ) )
 		return false;
 
 	if ( !IsSecondaryLibLoaded() || GetSecondaryIndexDefault()==SIDefault_e::DISABLED )
@@ -647,18 +633,18 @@ static bool HaveAnalyzer ( const CSphFilterSettings & tFilter, const SelectItera
 	if ( !tCtx.IsEnabled_Analyzer(tFilter) )
 		return false;
 
-	return CheckIndexHint ( tFilter, tCtx.m_tQuery.m_dIndexHints, SecondaryIndexType_e::ANALYZER, bForce );
+	return tCtx.m_tQuery.m_tIndexHints.AllowsIterator ( tFilter.m_sAttrName, SecondaryIndexType_e::ANALYZER, bForce );
 }
 
 
-static bool HaveLookup ( const CSphFilterSettings & tFilter, const CSphVector<IndexHint_t> & dHints, bool & bForce )
+static bool HaveLookup ( const CSphFilterSettings & tFilter, const IndexHints_c & tHints, bool & bForce )
 {
 	if ( tFilter.m_sAttrName!=sphGetDocidName() )
 		return false;
 	if ( tFilter.m_eType==SPH_FILTER_VALUES && tFilter.m_bExclude )
 		return false;
 
-	return CheckIndexHint ( tFilter, dHints, SecondaryIndexType_e::LOOKUP, bForce );
+	return tHints.AllowsIterator ( tFilter.m_sAttrName, SecondaryIndexType_e::LOOKUP, bForce );
 }
 
 
@@ -698,7 +684,7 @@ static void MarkAvailableLookup ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, co
 			continue;
 
 		bool bForce = false;
-		if ( !HaveLookup( tCtx.m_dFilters[i], tCtx.m_tQuery.m_dIndexHints, bForce ) )
+		if ( !HaveLookup( tCtx.m_dFilters[i], tCtx.m_tQuery.m_tIndexHints, bForce ) )
 			continue;
 
 		dSIInfo[i].m_dCapabilities.Add ( SecondaryIndexType_e::LOOKUP );
@@ -966,8 +952,11 @@ static void CheckHint ( const IndexHint_t & tHint, const CSphFilterSettings & tF
 static void CheckHints ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, StrVec_t & dWarnings )
 {
 	const auto & dFilters = tCtx.m_dFilters;
-	for ( auto & tHint : tCtx.m_tQuery.m_dIndexHints )
+	for ( const auto & tHint : tCtx.m_tQuery.m_tIndexHints.GetAll() )
 	{
+		if ( !tHint.IsFilterIteratorHint() )
+			continue;
+
 		int iFilter = -1;
 		ARRAY_FOREACH ( i, dFilters )
 			if ( dFilters[i].m_sAttrName==tHint.m_sIndex )
@@ -988,10 +977,10 @@ static void CheckHints ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const
 
 	ARRAY_FOREACH ( i, dFilters )
 	{
-		for ( auto & tHint : tCtx.m_tQuery.m_dIndexHints )
+		for ( const auto & tHint : tCtx.m_tQuery.m_tIndexHints.GetAll() )
 		{
 			const CSphFilterSettings & tFilter = dFilters[i];
-			if ( tHint.m_sIndex==tFilter.m_sAttrName && tHint.m_bForce )
+			if ( tHint.IsFilterIteratorHint() && tHint.m_bForce && tHint.m_sIndex==tFilter.m_sAttrName )
 			{
 				if ( !dSIInfo[i].m_dCapabilities.any_of ( [&tHint]( auto eSupported ){ return tHint.m_eType==eSupported; } ) )
 				{
@@ -1019,7 +1008,7 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 
 	if ( !tCtx.m_pHistograms )
 	{
-		if ( tCtx.m_tQuery.m_dIndexHints.GetLength() )
+		if ( tCtx.m_tQuery.m_tIndexHints.HasFilterIteratorHints() )
 			dWarnings.Add ( "index has no histograms; secondary indexes are unavailable" );
 
 		return dSIInfo;
@@ -1028,7 +1017,7 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 	// no iterators with OR queries
 	if ( !tCtx.m_tQuery.m_dFilterTree.IsEmpty() )
 	{
-		if ( tCtx.m_tQuery.m_dIndexHints.GetLength() )
+		if ( tCtx.m_tQuery.m_tIndexHints.HasFilterIteratorHints() )
 			dWarnings.Add ( "secondary indexes are not available when using the OR operator between filters" );
 
 		return dSIInfo;
@@ -1079,7 +1068,7 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 }
 
 
-const CSphFilterSettings * GetRowIdFilter ( const CSphVector<CSphFilterSettings> & dFilters, RowID_t uTotalDocs, RowIdBoundaries_t & tRowidBounds )
+const CSphFilterSettings * GetRowIdFilter ( const VecTraits_T<CSphFilterSettings> & dFilters, RowID_t uTotalDocs, RowIdBoundaries_t & tRowidBounds )
 {
 	const CSphFilterSettings * pRowIdFilter = nullptr;
 	for ( const auto & tFilter : dFilters )
@@ -1132,6 +1121,42 @@ private:
 };
 
 /////////////////////////////////////////////////////////////////////
+
+std::unique_ptr<RowidIterator_i> CreateSortBoundIterator ( const SIContainer_c & tSI, const CSphString & sAttr, SphAttr_t tValue, bool bDescending, RowID_t tRows, bool & bSelected )
+{
+	bSelected = false;
+	common::Filter_t tFilter;
+	tFilter.m_sName = sAttr.cstr();
+	tFilter.m_eType = common::FilterType_e::RANGE;
+	tFilter.m_iMinValue = tValue;
+	tFilter.m_iMaxValue = tValue;
+	tFilter.m_bLeftUnbounded = !bDescending;
+	tFilter.m_bRightUnbounded = bDescending;
+
+	uint32_t uCount = 0;
+	CSphString sError, sWarning;
+	if ( !tSI.CalcCount ( uCount, tFilter, tRows, sError ) || uCount>tRows/8 )
+		return {};
+
+	std::vector<common::BlockIterator_i *> dIterators;
+	if ( !tSI.CreateIterators ( dIterators, tFilter, nullptr, tRows, uCount, -1, false, sWarning, sError ) )
+	{
+		for ( auto * pIterator : dIterators )
+			delete pIterator;
+
+		return {};
+	}
+
+	bSelected = true;
+	if ( dIterators.empty() )
+		return {};
+
+	if ( dIterators.size()==1 )
+		return std::unique_ptr<RowidIterator_i> ( CreateIteratorWrapper ( dIterators[0], nullptr ) );
+
+	return std::make_unique<RowidIterator_Union_T<common::BlockIterator_i,false>> ( dIterators.data(), int(dIterators.size()) );
+}
+
 
 class SIIteratorCreator_c
 {
@@ -1548,9 +1573,4 @@ void BuildStoreSI ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool
 			break;
 		}
 	}
-}
-
-bool HasForceHints ( const VecTraits_T<IndexHint_t> & dHints )
-{
-	return dHints.any_of ( [] ( const auto & tHint ) { return ( tHint.m_bForce && tHint.m_eType==SecondaryIndexType_e::INDEX ); } );
 }

@@ -42,7 +42,7 @@ struct ScalarTraits_t
 	using Vec_t = uint64_t;
 	static constexpr size_t WORDS = 2;
 	static Vec_t Zero() { return 0; }
-	static Vec_t Load ( const DWORD * p ) { Vec_t u; std::memcpy ( &u, p, sizeof(u) ); return u; }
+	static Vec_t Load ( const void * p ) { Vec_t u; std::memcpy ( &u, p, sizeof(u) ); return u; }
 	static void Store ( DWORD * p, Vec_t u ) { std::memcpy ( p, &u, sizeof(u) ); }
 	template<Op_e OP> static Vec_t Apply ( Vec_t a, Vec_t b ) { return Combine<OP> ( a, b ); }
 	static Vec_t Count ( Vec_t u ) { return ScalarCount(u); }
@@ -79,6 +79,33 @@ uint64_t CountWords ( const DWORD * pWords, size_t nWords )
 	return CountWords<T, Op_e::COPY> ( pWords, nullptr, nWords );
 }
 
+template<typename T>
+uint64_t CountBytes ( const uint8_t * pBytes, size_t nBytes )
+{
+	constexpr size_t BYTES = T::WORDS*sizeof(DWORD);
+	auto tSum = T::Zero();
+	size_t i = 0;
+	for ( ; nBytes-i>=BYTES; i+=BYTES )
+		tSum = T::Add ( tSum, T::Count ( T::Load(pBytes+i) ) );
+
+	uint64_t uCount = T::Sum(tSum);
+	for ( ; nBytes-i>=sizeof(uint64_t); i+=sizeof(uint64_t) )
+	{
+		uint64_t uWord;
+		std::memcpy ( &uWord, pBytes+i, sizeof(uWord) );
+		uCount += ScalarCount(uWord);
+	}
+
+	if ( i<nBytes )
+	{
+		uint64_t uWord = 0;
+		std::memcpy ( &uWord, pBytes+i, nBytes-i );
+		uCount += ScalarCount(uWord);
+	}
+
+	return uCount;
+}
+
 template<typename T, Op_e OP>
 void BinaryWords ( DWORD * pDst, const DWORD * pLeft, const DWORD * pRight, size_t nWords )
 {
@@ -94,6 +121,6 @@ constexpr bitmap::Operations_t MakeOperations ( bitmap::Backend_e eBackend, cons
 {
 	return { eBackend, sName, &CountWords<T>,
 		&CountWords<T, Op_e::AND>, &CountWords<T, Op_e::OR>, &CountWords<T, Op_e::XOR>, &CountWords<T, Op_e::AND_NOT>,
-		&BinaryWords<T, Op_e::AND>, &BinaryWords<T, Op_e::OR>, &BinaryWords<T, Op_e::XOR>, &BinaryWords<T, Op_e::AND_NOT> };
+		&BinaryWords<T, Op_e::AND>, &BinaryWords<T, Op_e::OR>, &BinaryWords<T, Op_e::XOR>, &BinaryWords<T, Op_e::AND_NOT>, &CountBytes<T> };
 }
 } // namespace

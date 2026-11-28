@@ -9,6 +9,7 @@ ini_set ( "error_reporting", $error_reporting );
 ini_set ('memory_limit', '256M');
 
 require_once ( $g_locals['api'] );
+require_once ( 'helpers_block.inc' );
 
 function MyMicrotime ()
 {
@@ -1076,6 +1077,23 @@ function CompareColumns ( $a, $b )
 }
 
 
+// Compare SHOW CREATE TABLE independently of the physical postings format.
+function CreateTableRsetFixup ( &$row )
+{
+	if ( !is_array($row) || !isset ( $row["Table"], $row["Create Table"] ) )
+		return;
+
+	if ( !preg_match ( '/^CREATE TABLE\b/i', $row["Create Table"] ) )
+		return;
+
+	// Preserve quoted identifiers and option values containing postings_format text.
+	$pattern = <<<'REGEX'
+~(?:'(?:[^'\\]|\\.|'')*'|"(?:[^"\\]|\\.|"")*"|`(?:[^`]|``)*`)(*SKIP)(*F)|[ \t]+postings_format[ \t]*=[ \t]*'(?:legacy|block)'~i
+REGEX;
+	$row["Create Table"] = preg_replace ( $pattern, '', $row["Create Table"] );
+}
+
+
 function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls, $has_knn=false, $vector_roundoff=0 )
 {
 	if ( isset ( $set["rows"] ) )
@@ -1117,6 +1135,8 @@ function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls, $has_knn=false, $ve
 			{
 				foreach ( $row["data"] as &$entry )
 				{
+					CreateTableRsetFixup ( $entry );
+
 					if ( is_array($entry) && isset ( $entry["Properties"] ) && $columnar )
 						$entry["Properties"] = RemoveColumnarProperty ( $entry["Properties"] );
 				}
@@ -1138,6 +1158,8 @@ function SqlRsetFixup ( &$set, $columnar )
 
 	foreach	( $set["rows"] as &$row )
 	{
+		CreateTableRsetFixup ( $row );
+
 		if ( count($row)!=3 )
 			continue;
 
@@ -3987,6 +4009,12 @@ class SphinxConfig
 		$config = fread ( $fp, filesize ( $filename ) );
 		fclose ( $fp );
 
+		if ( IsBlock() )
+		{
+			$config = BlockPostingsConfig ( $config );
+			file_put_contents ( $filename, $config );
+		}
+
 		// for rt case - extract the schema from the config
 		// and make the new config, making the index as rt instead
 		if ( IsRt() )
@@ -4840,6 +4868,12 @@ function CheckConfig ( $config, $path )
 	if ( $config->Requires("non-rt") && IsRt() )
 	{
 		printf ( "SKIPPING %s, %s - explicitly non-RT test skipped in RT mode\n", $path, $config->Name () );
+		return false;
+	}
+
+	if ( $config->Requires("legacy_format") && IsBlock() )
+	{
+		printf ( "SKIPPING %s, %s - requires legacy postings format\n", $path, $config->Name () );
 		return false;
 	}
 

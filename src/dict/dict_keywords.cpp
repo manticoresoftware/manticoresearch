@@ -10,6 +10,7 @@
 // did not, you can find it at http://www.gnu.org
 //
 
+#include "postings/singleton.h"
 #include "dict_crc.h"
 #include "bin.h"
 #include "dict/infix/infix_builder.h"
@@ -111,6 +112,7 @@ private:
 	{
 		char* m_sKeyword;
 		SphOffset_t m_uOff;
+		const BYTE * m_pSingletonPayload;
 		int m_iDocs;
 		int m_iHits;
 		BYTE m_uHint;
@@ -201,6 +203,7 @@ private:
 	HitblockKeyword_t* HitblockAddKeyword ( DWORD uHash, const char* pWord, int iLen, SphWordID_t uID );
 
 	inline bool IsSorted() const noexcept { return m_iDictLimit==0; }
+	static bool ReadSingletonFromTempDict ( CSphBin& dBin, DictKeyword_t& tEntry, CSphVector<BYTE>& dKeyword, CSphString& sError );
 	bool DictReadEntry ( CSphBin& dBin, DictKeywordTagged_t& tEntry, CSphVector<BYTE>& dKeyword, CSphString& sError );
 	void DictFlush();
 	void DictEntryNonSorted ( const DictEntry_t& tEntry );
@@ -489,6 +492,36 @@ bool CSphDictKeywords::CheckKeywordLength ( const char* sContext, int iLen )
 }
 
 
+bool CSphDictKeywords::ReadSingletonFromTempDict ( CSphBin& dBin, DictKeyword_t& tEntry, CSphVector<BYTE>& dKeyword, CSphString& sError )
+{
+	BYTE uSize;
+	if ( dBin.ReadBytes ( &uSize, 1 )!=BIN_READ_OK )
+	{
+		sError = "truncated temporary dictionary singleton";
+		return false;
+	}
+
+	assert ( uSize && uSize<=postings::MAX_SINGLETON_PAYLOAD );
+	dKeyword.Resize ( tEntry.m_iKeywordLen+2+uSize+1 );
+	tEntry.m_sKeyword = (char*)dKeyword.Begin();
+
+	BYTE * pRecord = dKeyword.Begin()+tEntry.m_iKeywordLen+1;
+	*pRecord = uSize;
+	pRecord[1+uSize] = 0;
+	if ( dBin.ReadBytes ( pRecord+1, uSize )!=BIN_READ_OK )
+	{
+		sError = "truncated temporary dictionary singleton";
+		return false;
+	}
+
+	tEntry.m_pSingletonPayload = pRecord;
+	tEntry.m_uOff = postings::MULTI_HIT_MARKER;
+	tEntry.m_iDocs = 1;
+	tEntry.m_iHits = postings::SingletonTF(pRecord);
+	return true;
+}
+
+
 bool CSphDictKeywords::DictReadEntry ( CSphBin& dBin, DictKeywordTagged_t& tEntry, CSphVector<BYTE>& dKeyword, CSphString& sError )
 {
 	int iKeywordLen = GetSettings().IsKeywordsV2() ? (int)dBin.UnzipInt() : dBin.ReadByte();
@@ -521,8 +554,18 @@ bool CSphDictKeywords::DictReadEntry ( CSphBin& dBin, DictKeywordTagged_t& tEntr
 	tEntry.m_sKeyword = (char*)dKeyword.Begin();
 	tEntry.m_iKeywordLen = iKeywordLen;
 	tEntry.m_uOff = dBin.UnzipOffset();
-	tEntry.m_iDocs = dBin.UnzipInt();
-	tEntry.m_iHits = dBin.UnzipInt();
+	tEntry.m_pSingletonPayload = nullptr;
+	if ( tEntry.m_uOff==postings::TEMP_MULTI_HIT_MARKER )
+	{
+		if ( !ReadSingletonFromTempDict ( dBin, tEntry, dKeyword, sError ) )
+			return false;
+	} else
+	{
+		tEntry.m_iDocs = dBin.UnzipInt();
+		tEntry.m_iHits = dBin.UnzipInt();
+		postings::UnpackKeywordPosting ( tEntry.m_uOff, tEntry.m_iDocs, tEntry.m_iHits );
+	}
+
 	tEntry.m_uHint = (BYTE)dBin.ReadByte();
 	if ( ( tEntry.m_iDocs & HITLESS_DOC_MASK ) > m_iSkiplistBlockSize )
 		tEntry.m_iSkiplistPos = dBin.UnzipOffset();
@@ -610,6 +653,7 @@ void CSphDictKeywords::PutCheckpoint ( const CSphWordlistCheckpoint& tCheckpoint
 	m_wrDict.PutBytes ( tCheckpoint.m_szWord, iLen );
 	m_wrDict.PutOffset ( tCheckpoint.m_iWordlistOffset );
 }
+
 
 bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphString& sError )
 {
@@ -733,10 +777,8 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 			m_pFinalizer->PutDeltaV2 ( m_wrDict, (const BYTE*)tWord.m_sKeyword, iLen );
 		else
 			m_pFinalizer->PutDeltaKw ( m_wrDict, (const BYTE*)tWord.m_sKeyword, iLen );
-		m_wrDict.ZipOffset ( tWord.m_uOff );
-		m_wrDict.ZipInt ( tWord.m_iDocs );
-		m_wrDict.ZipInt ( tWord.m_iHits );
-		if ( tWord.m_uHint )
+		postings::WriteKeywordPosting ( m_wrDict, tWord.m_uOff, tWord.m_iDocs, tWord.m_iHits, tWord.m_pSingletonPayload );
+		if ( (tWord.m_iDocs & HITLESS_DOC_MASK)>=DOCLIST_HINT_THRESH )
 			m_wrDict.PutByte ( tWord.m_uHint );
 		if ( ( tWord.m_iDocs & HITLESS_DOC_MASK ) > m_iSkiplistBlockSize )
 			m_wrDict.ZipOffset ( tWord.m_iSkiplistPos );
@@ -770,6 +812,7 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphStrin
 	}
 	return SortedDictEnd ( pHeader, sError );
 }
+
 
 bool CSphDictKeywords::SortedDictEnd ( DictHeader_t * pHeader, CSphString& sError )
 {
@@ -902,9 +945,7 @@ void CSphDictKeywords::DictFlush()
 		else
 			m_wrTmpDict.PutByte ( (BYTE)iLen );
 		m_wrTmpDict.PutBytes ( pWord->m_sKeyword, iLen );
-		m_wrTmpDict.ZipOffset ( pWord->m_uOff );
-		m_wrTmpDict.ZipInt ( pWord->m_iDocs );
-		m_wrTmpDict.ZipInt ( pWord->m_iHits );
+		postings::WriteKeywordPosting ( m_wrTmpDict, pWord->m_uOff, pWord->m_iDocs, pWord->m_iHits, pWord->m_pSingletonPayload, postings::TEMP_MULTI_HIT_MARKER );
 		m_wrTmpDict.PutByte ( pWord->m_uHint );
 		assert ( ( ( pWord->m_iDocs & HITLESS_DOC_MASK ) > m_iSkiplistBlockSize ) == ( pWord->m_iSkiplistPos != 0 ) );
 		if ( ( pWord->m_iDocs & HITLESS_DOC_MASK ) > m_iSkiplistBlockSize )
@@ -917,12 +958,13 @@ void CSphDictKeywords::DictFlush()
 	ResetDictChunks();
 }
 
+
 void CSphDictKeywords::DictEntry ( const DictEntry_t& tEntry )
 {
 	assert ( tEntry.m_iDocs );
 	assert ( tEntry.m_iHits );
 	assert ( tEntry.m_iDoclistOffset );
-	assert ( tEntry.m_iDoclistLength > 0 );
+	assert ( tEntry.m_pSingletonPayload || tEntry.m_iDoclistLength>0 || tEntry.m_iDoclistOffset<0 );
 	assert ( m_iSkiplistBlockSize > 0 );
 
 	if ( !IsSorted() )
@@ -963,11 +1005,9 @@ void CSphDictKeywords::DictEntry ( const DictEntry_t& tEntry )
 		m_pFinalizer->PutDeltaV2 ( m_wrDict, (const BYTE*)tEntry.m_szKeyword, iLen );
 	else
 		m_pFinalizer->PutDeltaKw ( m_wrDict, (const BYTE*)tEntry.m_szKeyword, iLen );
-	m_wrDict.ZipOffset ( tEntry.m_iDoclistOffset );
-	m_wrDict.ZipInt ( tEntry.m_iDocs );
-	m_wrDict.ZipInt ( tEntry.m_iHits );
+	postings::WriteKeywordPosting ( m_wrDict, tEntry.m_iDoclistOffset, tEntry.m_iDocs, tEntry.m_iHits, tEntry.m_pSingletonPayload );
 	auto uHint = sphDoclistHintPack ( tEntry.m_iDocs & HITLESS_DOC_MASK, tEntry.m_iDoclistLength );
-	if ( uHint )
+	if ( (tEntry.m_iDocs & HITLESS_DOC_MASK)>=DOCLIST_HINT_THRESH )
 		m_wrDict.PutByte ( uHint );
 	if ( ( tEntry.m_iDocs & HITLESS_DOC_MASK ) > m_iSkiplistBlockSize )
 		m_wrDict.ZipOffset ( tEntry.m_iSkiplistOffset );
@@ -980,6 +1020,7 @@ void CSphDictKeywords::DictEntry ( const DictEntry_t& tEntry )
 			m_pFinalizer->m_pInfixer->AddWord ( (const BYTE*)tEntry.m_szKeyword, iLen, (int)iCheckpoint, HasMorphology() );
 	}
 }
+
 
 // non-sorted case - we push all entries into huge temporary file, and then finalize it in DictEnd()
 void CSphDictKeywords::DictEntryNonSorted ( const DictEntry_t& tEntry )
@@ -994,6 +1035,7 @@ void CSphDictKeywords::DictEntryNonSorted ( const DictEntry_t& tEntry )
 	if ( !CheckKeywordLength ( "dictionary", iLen-1 ) )
 		return;
 
+	int iRecordLen = tEntry.m_pSingletonPayload ? 1+*tEntry.m_pSingletonPayload : 0;
 	while ( true )
 	{
 		// alloc dict entry
@@ -1011,7 +1053,7 @@ void CSphDictKeywords::DictEntryNonSorted ( const DictEntry_t& tEntry )
 		}
 
 		// alloc keyword
-		if ( m_iKeywordChunkFree < iLen )
+		if ( m_iKeywordChunkFree < iLen+iRecordLen )
 		{
 			if ( m_iDictLimit && ( m_iMemUse + KEYWORD_CHUNK ) > m_iDictLimit )
 			{
@@ -1037,6 +1079,15 @@ void CSphDictKeywords::DictEntryNonSorted ( const DictEntry_t& tEntry )
 	m_pKeywordChunk[iLen - 1] = '\0';
 	m_pKeywordChunk += iLen;
 	m_iKeywordChunkFree -= iLen;
+
+	pWord->m_pSingletonPayload = nullptr;
+	if ( iRecordLen )
+	{
+		memcpy ( m_pKeywordChunk, tEntry.m_pSingletonPayload, iRecordLen );
+		pWord->m_pSingletonPayload = m_pKeywordChunk;
+		m_pKeywordChunk += iRecordLen;
+		m_iKeywordChunkFree -= iRecordLen;
+	}
 
 	pWord->m_uOff = tEntry.m_iDoclistOffset;
 	pWord->m_iDocs = tEntry.m_iDocs;

@@ -10,7 +10,9 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
+#include "postings/singleton.h"
 #include "indexcheck.h"
+#include "postings/blockqwordvalidation.h"
 
 #include "fileutils.h"
 #include "attribute.h"
@@ -385,6 +387,7 @@ static SphOffset_t UnzipSkiplistOffsetForCheck ( CSphAutoreader & tReader, DWORD
 
 struct DictEntryForCheck_t
 {
+	postings::SingletonReadBuffer_t m_dSingletonPayload {};
 	int64_t			m_iDictPos = 0;
 	SphWordID_t		m_uWordid = 0;
 	SphOffset_t		m_iDoclistOffset = 0;
@@ -473,10 +476,29 @@ static DictReadResult_e ReadDictEntryForCheck ( CSphAutoreader & tReader, DictFo
 		UnpackWordDictKeywordForCheck ( tReader, eDictFormat, (BYTE)iDeltaWord, dWord, tEntry.m_iDictPos, tReporter, tEntry );
 
 		tEntry.m_iDoclistOffset = tReader.UnzipOffset();
-		tEntry.m_iRawDocs = tReader.UnzipInt();
+		if ( uVersion>=postings::MULTI_HIT_FORMAT_VERSION && tIndexSettings.m_uPostingsFormat && tEntry.m_iDoclistOffset==postings::MULTI_HIT_MARKER )
+		{
+			tEntry.m_dSingletonPayload[0] = tReader.GetByte();
+			tReader.GetBytes ( tEntry.m_dSingletonPayload.data()+1, tEntry.m_dSingletonPayload[0] );
+
+			postings::Posting_t tPosting;
+			if ( !postings::CheckDictionarySingleton ( tEntry.m_dSingletonPayload.data(), tPosting, tIndexSettings.m_eHitless!=SPH_HITLESS_ALL ) )
+				tReporter.Fail ( "invalid multi-hit dictionary singleton at offset " INT64_FMT, tEntry.m_iDictPos );
+
+			tEntry.m_iRawDocs = 1;
+			tEntry.m_iHits = tPosting.m_uTF;
+		} else
+		{
+			tEntry.m_iRawDocs = tReader.UnzipInt();
+			tEntry.m_iHits = tReader.UnzipInt();
+			if ( tEntry.m_iDoclistOffset<0 || (!tEntry.m_iDoclistOffset && (uVersion<76 || !tIndexSettings.m_uPostingsFormat || tEntry.m_iRawDocs<0 || !tEntry.m_iHits)) )
+				tReporter.Fail ( "invalid dictionary posting locator at offset " INT64_FMT, tEntry.m_iDictPos );
+
+			postings::UnpackKeywordPosting ( tEntry.m_iDoclistOffset, tEntry.m_iRawDocs, tEntry.m_iHits );
+		}
+
 		tEntry.m_iLayoutDocs = GetDictDocsForCheck ( tEntry.m_iRawDocs, bLegacySkiplistLayout );
 		tEntry.m_iDocs = tEntry.m_iRawDocs;
-		tEntry.m_iHits = tReader.UnzipInt();
 		if ( tEntry.m_iLayoutDocs>=DOCLIST_HINT_THRESH )
 			tEntry.m_iHint = DoclistHintUnpack ( tEntry.m_iLayoutDocs, (BYTE)tReader.GetByte() );
 
@@ -662,7 +684,7 @@ bool DiskIndexChecker_c::Impl_c::ReadLegacyHeader ( const CSphString& sHeader )
 		return false;
 	}
 
-	return m_tWordlist.Preread ( GetFilename(SPH_EXT_SPI), eDictFormat, m_pIndex->GetSettings().m_iSkiplistBlockSize, m_sError );
+	return m_tWordlist.Preread ( GetFilename(SPH_EXT_SPI), eDictFormat, m_pIndex->GetSettings().m_iSkiplistBlockSize, m_pIndex->GetSettings().m_uPostingsFormat && m_uVersion>=postings::MULTI_HIT_FORMAT_VERSION, m_sError );
 	// FIXME! add more header checks
 
 }
@@ -735,7 +757,7 @@ bool DiskIndexChecker_c::Impl_c::ReadHeader ( const CSphString& sHeader )
 	m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
 
 	auto eDictFormat = m_pIndex->GetDictionary()->GetSettings().GetDictFormat();
-	return m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), eDictFormat, m_pIndex->GetSettings().m_iSkiplistBlockSize, m_sError );
+	return m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), eDictFormat, m_pIndex->GetSettings().m_iSkiplistBlockSize, m_pIndex->GetSettings().m_uPostingsFormat && m_uVersion>=postings::MULTI_HIT_FORMAT_VERSION, m_sError );
 	// FIXME! add more header checks
 }
 
@@ -1133,8 +1155,8 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 	int64_t iSkiplistLen = m_tSkipsReader.GetFilesize();
 
 	m_tDictReader.SeekTo ( 1, READ_NO_SIZE_HINT );
-	m_pDocsReader->SeekTo ( 1 );
-	m_pHitsReader->SeekTo ( 1 );
+	m_pDocsReader->SeekTo ( tIndexSettings.m_uPostingsFormat ? 9 : 1 );
+	m_pHitsReader->SeekTo ( tIndexSettings.m_uPostingsFormat ? 9 : 1 );
 
 	SphWordID_t uWordid = 0;
 	SphOffset_t iDoclistOffset = 0;
@@ -1170,8 +1192,23 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 		iDoclistOffset = tEntry.m_iDoclistOffset;
 		bool bHitless = tEntry.m_bHitless;
 
+		if ( iDoclistOffset<0 && tIndexSettings.m_uPostingsFormat && bWordDict )
+		{
+			RowID_t tRow = postings::SingletonRow(iDoclistOffset);
+			Hitpos_t uHit = postings::SingletonHit(iDoclistOffset);
+			int iField = HITMAN::GetField(uHit);
+			if ( tRow>=m_iNumRows || iField>=m_tSchema.GetFieldsCount() || !HITMAN::GetPos(uHit) || tIndexSettings.m_eHitless==SPH_HITLESS_ALL )
+				m_tReporter.Fail ( "invalid dictionary singleton (word=%s, row=%u, hit=%u)", tEntry.m_szWord, tRow, uHit );
+			else if ( fnCbWordid )
+				fnCbWordid ( tRow, tCbWordid, iField, HITMAN::GetPos(uHit), HITMAN::IsEnd(uHit) );
+
+			++iWordsChecked;
+			++iWordsTotal;
+			continue;
+		}
+
 		// check whether the offset is as expected
-		if ( iDoclistOffset!=m_pDocsReader->GetPos() )
+		if ( !tEntry.m_dSingletonPayload[0] && iDoclistOffset!=m_pDocsReader->GetPos() )
 		{
 			if ( !bWordDict )
 				m_tReporter.Fail ( "unexpected doclist offset (wordid=" UINT64_FMT "(%s)(%d), dictpos=" INT64_FMT ", doclistpos=" INT64_FMT ")",
@@ -1188,7 +1225,9 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 		}
 
 		// create and manually setup doclist reader
-		DiskIndexQwordTraits_c * pQword = sphCreateDiskIndexQword ( tIndexSettings.m_eHitFormat==SPH_HIT_FORMAT_INLINE );
+		DiskIndexQwordTraits_c * pQword = tIndexSettings.m_uPostingsFormat
+			? new BlockIndexQwordValidation_c
+			: sphCreateDiskIndexQword ( tIndexSettings.m_eHitFormat==SPH_HIT_FORMAT_INLINE );
 
 		pQword->m_tDoc.Reset ( m_tSchema.GetDynamicSize() );
 		pQword->m_tDoc.m_tRowID = INVALID_ROWID;
@@ -1196,6 +1235,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 		pQword->m_iHits = 0;
 		pQword->SetDocReader ( m_pDocsReader );
 		pQword->SetHitReader ( m_pHitsReader );
+		pQword->SeekDocReader ( iDoclistOffset, READ_NO_SIZE_HINT, tEntry.m_dSingletonPayload[0] ? tEntry.m_dSingletonPayload.data() : nullptr );
 
 		// loop the doclist
 		int iDoclistDocs = 0;
@@ -1224,7 +1264,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 				break;
 
 			// checks!
-			if ( tDoc.m_tRowID>m_iNumRows )
+			if ( tDoc.m_tRowID>m_iNumRows || (tEntry.m_dSingletonPayload[0] && tDoc.m_tRowID==m_iNumRows) )
 				m_tReporter.Fail ( "rowid out of bounds (wordid=" UINT64_FMT "(%s), rowid=%u)",	uint64_t(uWordid), tEntry.m_szWord, tDoc.m_tRowID );
 
 			++iDoclistDocs;
@@ -1233,7 +1273,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 			// check position in case of regular (not-inline) hit
 			if (!( pQword->m_iHitlistPos>>63 ))
 			{
-				if ( !bWordDict && pQword->m_iHitlistPos!=pQword->GetHitReaderPos() )
+				if ( !bWordDict && !bHitless && pQword->m_iHitlistPos!=pQword->GetHitReaderPos() )
 					m_tReporter.Fail ( "unexpected hitlist offset (wordid=" UINT64_FMT "(%s), rowid=%u, expected=" INT64_FMT ", actual=" INT64_FMT ")",
 						(uint64_t)uWordid, tEntry.m_szWord, pQword->m_tDoc.m_tRowID, (int64_t)pQword->m_iHitlistPos, (int64_t)pQword->GetHitReaderPos() );
 			}
@@ -1301,6 +1341,12 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 			m_pHitsReader->SeekTo ( pQword->GetHitReaderPos() );
 		}
 
+		if ( tIndexSettings.m_uPostingsFormat && !tEntry.m_dSingletonPayload[0] )
+			static_cast<BlockIndexQwordValidation_c *>(pQword)->CheckDirectory ( m_tSkipsReader, tEntry.m_iSkiplistOffset, m_tSchema.GetFieldsCount() );
+
+		if ( const char * sError = pQword->GetReadError() )
+			m_tReporter.Fail ( "posting read failed: %s", sError );
+
 		// do checks
 		if ( tEntry.m_iDocs!=iDoclistDocs )
 			m_tReporter.Fail ( "doc count mismatch (wordid=" UINT64_FMT "(%s), dict=%d, doclist=%d, hitless=%s)", uint64_t(uWordid), tEntry.m_szWord, tEntry.m_iDocs, iDoclistDocs, ( bHitless?"true":"false" ) );
@@ -1308,7 +1354,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 		if ( ( tEntry.m_iHits!=iDoclistHits || tEntry.m_iHits!=iHitlistHits ) && !bHitless )
 			m_tReporter.Fail ( "hit count mismatch (wordid=" UINT64_FMT "(%s), dict=%d, doclist=%d, hitlist=%d)", uint64_t(uWordid), tEntry.m_szWord, tEntry.m_iHits, iDoclistHits, iHitlistHits );
 
-		while ( iDoclistDocs>tIndexSettings.m_iSkiplistBlockSize && !bHitless )
+		while ( !tIndexSettings.m_uPostingsFormat && iDoclistDocs>tIndexSettings.m_iSkiplistBlockSize && !bHitless )
 		{
 			if ( tEntry.m_iSkiplistOffset<=0 || tEntry.m_iSkiplistOffset>iSkiplistLen )
 			{
@@ -1359,7 +1405,8 @@ void DiskIndexChecker_c::Impl_c::CheckDocs( cbWordidFn&& fnCbWordid )
 		}
 
 		// move my reader instance forward too
-		m_pDocsReader->SeekTo ( pQword->GetDocReaderPos() );
+		if ( !tEntry.m_dSingletonPayload[0] )
+			m_pDocsReader->SeekTo ( pQword->GetDocReaderPos() );
 
 		// cleanup
 		SafeDelete ( pQword );

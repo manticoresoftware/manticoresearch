@@ -1322,6 +1322,18 @@ pid_file = /run/manticore/searchd.pid
 ```
 <!-- end -->
 
+### postings_format
+
+Sets the default postings format for new plain and real-time tables. Values are `legacy` (the default) and `block`. Both `searchd` and `indexer` read this setting from the `searchd` section. An explicit per-table `postings_format` takes precedence. Percolate and distributed tables are unaffected.
+
+Existing tables retain the format stored in their files. Changing this default does not convert existing tables; rebuilding a plain table with `indexer` uses the configured default unless the table specifies its own format. Block postings require `dict=keywords` or `dict=keywords_32k`.
+
+```ini
+searchd {
+    postings_format = block
+}
+```
+
 ### preopen_tables
 
 <!-- example conf preopen_tables -->

@@ -272,8 +272,9 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	SendQueryItems ( tOut, q.m_dRefItems );
 	tOut.SendDword ( q.m_eExpandKeywords );
 
-	tOut.SendInt ( q.m_dIndexHints.GetLength() );
-	for ( const auto & i : q.m_dIndexHints )
+	auto dHints = q.m_tIndexHints.GetAll();
+	tOut.SendInt ( dHints.GetLength() );
+	for ( const auto & i : dHints )
 	{
 		tOut.SendString ( i.m_sIndex.cstr() );
 		tOut.SendDword ( (DWORD)i.m_eType );
@@ -1221,12 +1222,18 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		int iIndexHints = 0;
 		if ( !ReadApiCount ( tReq, tOut, "index hint", iIndexHints ) )
 			return false;
-		tQuery.m_dIndexHints.Resize ( iIndexHints );
-		for ( auto & i : tQuery.m_dIndexHints )
+		tQuery.m_tIndexHints.Reserve(iIndexHints);
+		for ( int i=0; i<iIndexHints; ++i )
 		{
-			i.m_sIndex = tReq.GetString();
-			i.m_eType = (SecondaryIndexType_e)tReq.GetDword();
-			i.m_bForce = !!tReq.GetDword();
+			IndexHint_t tHint;
+			tHint.m_sIndex = tReq.GetString();
+			tHint.m_eType = (SecondaryIndexType_e)tReq.GetDword();
+			tHint.m_bForce = !!tReq.GetDword();
+			if ( !tQuery.m_tIndexHints.Add ( std::move(tHint), sError ) )
+			{
+				SendErrorReply ( tOut, "%s", sError.cstr() );
+				return false;
+			}
 		}
 	}
 

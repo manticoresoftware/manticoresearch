@@ -3,6 +3,8 @@
 <name>replication for RT</name>
 
 <requires>
+	<!-- Exercises CRC dictionaries, which block postings do not support. -->
+	<legacy_format/>
 	<replication/>
 	<non-windows/>
 	<force-rt/>

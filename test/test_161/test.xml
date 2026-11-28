@@ -2,6 +2,11 @@
 
 <test>
 <name>xmlpipe2 indexing vs prefix search</name>
+
+<requires>
+	<!-- Exercises CRC dictionaries, which block postings do not support. -->
+	<legacy_format/>
+</requires>
 <skip_db/>
 <config>
 indexer

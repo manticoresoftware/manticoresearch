@@ -460,6 +460,7 @@ public:
 	int64_t			EstimateMinMax ( const common::Filter_t & tFilter, const columnar::BlockTester_i & tBlockTester ) const final { return -1; }
 
 	bool			GetAttrInfo ( const std::string & sName, columnar::AttrInfo_t & tInfo ) const override;
+	const columnar::BlockBounds_i * GetBlockBounds ( const std::string & ) const override { return nullptr; }
 	bool			EarlyReject ( const std::vector<common::Filter_t> & dFilters, const columnar::BlockTester_i & tBlockTester ) const override { return false; }
 	bool			IsFilterDegenerate ( const common::Filter_t & tFilter ) const override { return false; }
 

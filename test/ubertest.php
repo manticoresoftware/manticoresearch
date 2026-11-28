@@ -44,6 +44,7 @@ if ( !is_array($args) || empty($args) )
 	print ( "--rt\t\t\ttest RT backend (auto-convert all local indexes)\n" );
 	print ( "--rt-indexer\t\ttest RT backend and load converted indexes through indexer\n" );
 	print ( "--columnar\t\t\ttest attrs as columnar\n" );
+	print ( "--block\t\t\tdefault to block postings unless the test specifies a format\n" );
 	print ( "--no-drop-db\t\tKeep test db tables after the test (for debugging)\n");
 	print ( "--keep-all\t\tKeep test db and all test data (like generated configs, etc.) after the test (for debugging)\n");
 	print ( "--no-demo\t\tJust skip all tests without models. Else - run them, but never fail (for debugging)\n");
@@ -70,6 +71,7 @@ $locals = array();
 $locals['rt_mode'] = false;
 $locals['rt_indexer_mode'] = false;
 $locals['columnar_mode'] = false;
+$locals['block_mode'] = false;
 $locals['testdir'] = '';
 $locals['scriptdir'] = '';
 $locals['ctest'] = false;
@@ -111,6 +113,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="--rt" )						$locals['rt_mode'] = true;
 	else if ( $arg=="--rt-indexer" )				{ $locals['rt_mode'] = true; $locals['rt_indexer_mode'] = true; }
 	else if ( $arg=="--columnar" )					$locals['columnar_mode'] = true;
+	else if ( $arg=="--block" )						$locals['block_mode'] = true;
 	else if ( $arg=="--strict" )					$g_strict = true;
 	else if ( $arg=="--strict-verbose" )			{ $g_strict = true; $g_strictverbose = true; }
 	else if ( $arg=="--valgrind-searchd" )			$locals['valgrindsearchd'] = true;

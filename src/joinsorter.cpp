@@ -709,7 +709,17 @@ public:
 	int64_t		GetTotalCount() const override;
 	void		Finalize ( MatchProcessor_i & tProcessor, bool bCallProcessInResultSetOrder, bool bFinalizeMatches ) override { m_pSorter->Finalize ( tProcessor, bCallProcessInResultSetOrder, bFinalizeMatches ); }
 	int			Flatten ( CSphMatch * pTo ) override								{ return m_pSorter->Flatten(pTo); }
-	const CSphMatch * GetWorst() const override										{ return m_pSorter->GetWorst(); }
+
+
+	const CSphMatch * GetWorst ( bool * pFull = nullptr ) const override
+	{
+		if ( pFull )
+			*pFull = false;
+
+		return m_pSorter->GetWorst();
+	}
+
+
 	bool		CanBeCloned() const override										{ return m_pSorter->CanBeCloned(); }
 	ISphMatchSorter * Clone() const override;
 	void		MoveTo ( ISphMatchSorter * pRhs, bool bCopyMeta ) override			{ m_pSorter->MoveTo ( ((JoinSorter_c *)pRhs)->m_pSorter.get(), bCopyMeta ); }
@@ -2414,7 +2424,17 @@ public:
 	int64_t		GetTotalCount() const override;
 	void		Finalize ( MatchProcessor_i & tProcessor, bool bCallProcessInResultSetOrder, bool bFinalizeMatches ) override;
 	int			Flatten ( CSphMatch * pTo ) override;
-	const CSphMatch * GetWorst() const override										{ return m_dJoinSorters[0]->GetWorst();	}
+
+
+	const CSphMatch * GetWorst ( bool * pFull = nullptr ) const override
+	{
+		if ( pFull )
+			*pFull = false;
+
+		return m_dJoinSorters[0]->GetWorst();
+	}
+
+
 	bool		CanBeCloned() const override										{ return m_dJoinSorters[0]->CanBeCloned(); }
 	ISphMatchSorter * Clone() const override										{ return new JoinSorterN_c(m_dJoinSorters);	}
 	void		MoveTo ( ISphMatchSorter * pRhs, bool bCopyMeta ) override;
@@ -2825,7 +2845,17 @@ public:
 	int64_t		GetTotalCount() const override										{ return m_pSorter->GetTotalCount(); }
 	void		Finalize ( MatchProcessor_i & tProcessor, bool bCallProcessInResultSetOrder, bool bFinalizeMatches ) override { m_pSorter->Finalize ( tProcessor, bCallProcessInResultSetOrder, bFinalizeMatches ); }
 	int			Flatten ( CSphMatch * pTo ) override								{ return m_pSorter->Flatten(pTo); }
-	const CSphMatch * GetWorst() const override										{ return m_pSorter->GetWorst(); }
+
+
+	const CSphMatch * GetWorst ( bool * pFull = nullptr ) const override
+	{
+		if ( pFull )
+			*pFull = false;
+
+		return m_pSorter->GetWorst();
+	}
+
+
 	bool		CanBeCloned() const override										{ return m_pSorter->CanBeCloned(); }
 	ISphMatchSorter * Clone() const override										{ return new SorterWrapperNoPush_c ( m_pSorter->Clone() ); }
 	void		MoveTo ( ISphMatchSorter * pRhs, bool bCopyMeta ) override			{ m_pSorter->MoveTo ( ((SorterWrapperNoPush_c *)pRhs)->m_pSorter, bCopyMeta ); }

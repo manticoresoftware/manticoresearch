@@ -1,0 +1,54 @@
+––– comment –––
+indexer builds the KNN index of a plain table (no 'KNN disabled' when searchd loads it), and indexer --merge builds it
+for the merged table without coroutines and does not crash.
+Two tables of 1000 rows with a rowwise 8-bit L2 and a columnar COSINE KNN attribute.
+––– input –––
+root=/tmp/indexer-plain-knn; rm -rf "$root"; mkdir -p "$root"; for t in main:1 delta:1001; do awk -v from=${t#*:} 'BEGIN { for (i=from; i<from+1000; i++) { v=""; w=""; for (d=1; d<=8; d++) { v=v (d>1?",":"") sprintf("%.4f", sin(i*d)); w=w (d>1?",":"") sprintf("%.4f", cos(i*d)) } printf "%d,\"t%d\",\"%s\",\"%s\"\n", i, i, v, w } }' > "$root/${t%%:*}.csv"; done; printf '%s\n' 'source s_main {' '  type = csvpipe' "  csvpipe_command = cat $root/main.csv" '  csvpipe_field = title' '  csvpipe_attr_float_vector = v' '  csvpipe_attr_float_vector = w' '}' 'source s_delta : s_main {' "  csvpipe_command = cat $root/delta.csv" '}' 'index main {' '  type = plain' '  source = s_main' "  path = $root/main" '  columnar_attrs = w' '  knn = {"attrs":[{"name":"v","type":"hnsw","dims":8,"hnsw_similarity":"L2","quantization":"8bit"},{"name":"w","type":"hnsw","dims":8,"hnsw_similarity":"COSINE"}]}' '}' 'index delta : main {' '  source = s_delta' "  path = $root/delta" '}' 'searchd {' '  listen = 19319:mysql41' "  log = $root/searchd.log" "  pid_file = $root/searchd.pid" '  binlog_path =' '}' > "$root/manticore.conf"; indexer --config "$root/manticore.conf" --all > "$root/build.log" 2>&1; echo "build exit=$?"; ls "$root" | grep -c "\.spknn$"; indexer --config "$root/manticore.conf" --merge main delta > "$root/merge.log" 2>&1; echo "merge exit=$?"; grep -c -i "crashed" "$root/merge.log"; ls "$root" | grep -c "^main\.spknn$"
+––– output –––
+build exit=0
+2
+merge exit=0
+0
+1
+––– input –––
+root=/tmp/indexer-plain-knn; MANTICORE_NO_BUDDY=1 searchd --config "$root/manticore.conf" > /dev/null; for i in $(seq 1 100); do mysql -h0 -P19319 -e 'SELECT 1' > /dev/null 2>&1 && break; sleep 0.1; done; q=$(awk -F'"' 'NR==500 { print $4 }' "$root/delta.csv"); r=$(awk -F'"' 'NR==500 { print $6 }' "$root/delta.csv"); echo "rows: $(mysql --skip-table --batch --raw --skip-column-names -h0 -P19319 -e 'SELECT COUNT(*) FROM main')"; for t in main delta; do for a in "v:$q" "w:$r"; do mysql --skip-table --batch --raw --skip-column-names -h0 -P19319 -e "SELECT id FROM $t WHERE knn(${a%%:*}, 5, (${a#*:}))" 2>&1 | grep -qx 1500 && echo "$t knn ${a%%:*}: delta row found" || echo "$t knn ${a%%:*}: delta row NOT found"; done; done; grep -c "KNN disabled" "$root/searchd.log"
+––– output –––
+rows: 2000
+main knn v: delta row found
+main knn w: delta row found
+delta knn v: delta row found
+delta knn w: delta row found
+0
+––– comment –––
+A plain table whose KNN attribute has an embeddings model is refused by indexer: it computes no embeddings, so the vectors
+would stay empty. A KNN query with text on a plain table is refused (a plain table does not embed query text) instead of
+crashing searchd.
+––– input –––
+root=/tmp/indexer-plain-knn; searchd --config "$root/manticore.conf" --stopwait > /dev/null 2>&1; printf '1,"red bag",""\n' > "$root/model.csv"; printf '%s\n' 'source s_model {' '  type = csvpipe' "  csvpipe_command = cat $root/model.csv" '  csvpipe_field = title' '  csvpipe_attr_float_vector = v' '}' 'index pm {' '  type = plain' '  source = s_model' "  path = $root/pm" '  knn = {"attrs":[{"name":"v","type":"hnsw","hnsw_similarity":"L2","model_name":"sentence-transformers/all-MiniLM-L6-v2","from":"title"}]}' '}' >> "$root/manticore.conf"; indexer --config "$root/manticore.conf" pm > "$root/build_pm.log" 2>&1; echo "build exit=$?"; grep -o "ERROR: table 'pm': .*" "$root/build_pm.log"; ls "$root" | grep -c "^pm\."; MANTICORE_NO_BUDDY=1 searchd --config "$root/manticore.conf" > /dev/null 2>&1; for i in $(seq 1 100); do mysql -h0 -P19319 -e 'SELECT 1' > /dev/null 2>&1 && break; sleep 0.1; done; mysql --skip-table --batch --raw --skip-column-names -h0 -P19319 -e "SELECT id FROM main WHERE knn(v, 1, 'red bag')" 2>&1; mysql --skip-table --batch --raw --skip-column-names -h0 -P19319 -e 'SELECT 1'
+––– output –––
+build exit=1
+ERROR: table 'pm': embeddings models are not supported by indexer (attribute 'v').
+0
+ERROR 1064 (42000) at line 1: table main: Embeddings generation string specified, but embeddings are not loaded
+1
+––– comment –––
+indexer --keep-attrs with a rowwise float_vector: all attributes kept, only the string kept (--keep-attrs-names=s, the
+vector comes from the source), only the vector kept (--keep-attrs-names=v); the names forms crashed indexer.
+––– input –––
+root=/tmp/indexer-plain-knn/keep; rm -rf "$root"; mkdir -p "$root"; printf '1,red,"0.1,0.2"\n2,blue,"0.3,0.4"\n' > "$root/old.csv"; printf '1,green,"0.5,0.6"\n2,navy,"0.7,0.8"\n' > "$root/new.csv"; printf '%s\n' 'source s_old {' '  type = csvpipe' "  csvpipe_command = cat $root/old.csv" '  csvpipe_attr_string = s' '  csvpipe_attr_float_vector = v' '}' 'source s_new : s_old {' "  csvpipe_command = cat $root/new.csv" '}' 'index a {' '  type = plain' '  source = s_old' "  path = $root/a" '  knn = {"attrs":[{"name":"v","type":"hnsw","dims":2,"hnsw_similarity":"L2"}]}' '}' 'index b1 : a {' '  source = s_new' "  path = $root/b1" '}' 'index b2 : b1 {' "  path = $root/b2" '}' 'index b3 : b1 {' "  path = $root/b3" '}' 'searchd {' '  listen = 19320:mysql41' "  log = $root/searchd.log" "  pid_file = $root/searchd.pid" '  binlog_path =' '}' > "$root/keep.conf"; indexer --config "$root/keep.conf" a > "$root/a.log" 2>&1; echo "a exit=$?"; k="--keep-attrs=$root/a"; indexer --config "$root/keep.conf" b1 $k > "$root/b1.log" 2>&1; echo "b1 exit=$?"; indexer --config "$root/keep.conf" b2 $k --keep-attrs-names=s > "$root/b2.log" 2>&1; echo "b2 exit=$?"; indexer --config "$root/keep.conf" b3 $k --keep-attrs-names=v > "$root/b3.log" 2>&1; echo "b3 exit=$?"; MANTICORE_NO_BUDDY=1 searchd --config "$root/keep.conf" > /dev/null 2>&1; for i in $(seq 1 100); do mysql -h0 -P19320 -e 'SELECT 1' > /dev/null 2>&1 && break; sleep 0.1; done; for t in b1 b2 b3; do mysql --skip-table --batch --raw --skip-column-names -h0 -P19320 -e "SELECT id, s, v FROM $t ORDER BY id ASC" | sed "s/^/$t /"; done; mysql --skip-table --batch --raw --skip-column-names -h0 -P19320 -e "SELECT id FROM b3 WHERE knn(v, 1, (0.3,0.4)) LIMIT 1"; searchd --config "$root/keep.conf" --stopwait > /dev/null 2>&1
+––– output –––
+a exit=0
+b1 exit=0
+b2 exit=0
+b3 exit=0
+b1 1	red	0.100000,0.200000
+b1 2	blue	0.300000,0.400000
+b2 1	red	0.500000,0.600000
+b2 2	blue	0.700000,0.800000
+b3 1	green	0.100000,0.200000
+b3 2	navy	0.300000,0.400000
+2
+––– input –––
+searchd --config /tmp/indexer-plain-knn/manticore.conf --stopwait > /dev/null 2>&1; echo STOPPED
+––– output –––
+STOPPED

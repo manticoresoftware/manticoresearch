@@ -214,6 +214,9 @@ public:
 			: DiskAttachRes_e::NOT_ATTACHED;
 	}
 
+	/// load a disk chunk with the runtime settings of this index
+	virtual std::unique_ptr<CSphIndex> PreallocDiskChunk ( const CSphString & sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * szName=nullptr ) const { return nullptr; }
+
 	/// attach all the content of the RT index (flush ramchunk then disk chunks) to the current index
 	virtual bool AttachRtIndex ( AttachArgs_t & tArgs, CSphString & sError ) { return true; }
 

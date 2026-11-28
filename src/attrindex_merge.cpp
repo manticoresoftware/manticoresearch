@@ -22,8 +22,6 @@
 #include "attrindex_merge.h"
 #include "tracer.h"
 #include "sphinxrt.h"
-#include "coroutine.h"
-#include "client_task_info.h"
 
 #include <atomic>
 #include <algorithm>
@@ -392,8 +390,7 @@ bool AttrMerger_c::Impl_c::CopyAttributes ( const CSphIndex & tIndex, const VecT
 
 void AttrMerger_c::Impl_c::RunKNNStoreWorker ( int64_t iWorkerStart, int64_t iWorkerEnd, const CSphFixedVector<int64_t> & dInputStarts, std::atomic<bool> & bStop, std::atomic<bool> & bInterrupted, CSphString & sWorkerError )
 {
-	Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
-
+	// the throttling period is set by RunParallelKNNStore for a coroutine worker; indexer runs it without coroutines
 	const int iNumInputs = m_dKNNInputs.GetLength();
 
 	knn::BuildContext_t tBuildCtx;

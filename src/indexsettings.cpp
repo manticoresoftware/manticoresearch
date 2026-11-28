@@ -209,6 +209,7 @@ private:
 
 public:
 	const ExtFilesFormat_e m_eExt = ExtFilesFormat_e::FILE;
+	bool		m_bConfig = false;	// a config section: a key with several values (wordforms) takes one line per value
 };
 
 
@@ -812,11 +813,18 @@ void CSphDictSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * 
 		CSphString sStopwordsFile = FormatPath ( m_sStopwords, pFilenameBuilder );
 		tOut.Add ( "stopwords", sStopwordsFile, !sStopwordsFile.IsEmpty() );
 
-		StringBuilder_c sAllWordforms(" ");
-		for ( const auto & i : m_dWordforms )
-			sAllWordforms << FormatPath ( i, pFilenameBuilder );
+		if ( tOut.m_bConfig )
+		{
+			for ( const auto & i : m_dWordforms )
+				tOut.Add ( "wordforms", FormatPath ( i, pFilenameBuilder ), true );
+		} else
+		{
+			StringBuilder_c sAllWordforms(" ");
+			for ( const auto & i : m_dWordforms )
+				sAllWordforms << FormatPath ( i, pFilenameBuilder );
 
-		tOut.Add ( "wordforms",	sAllWordforms.cstr(), !sAllWordforms.IsEmpty() );
+			tOut.Add ( "wordforms",	sAllWordforms.cstr(), !sAllWordforms.IsEmpty() );
+		}
 
 	} else
 	{
@@ -2522,11 +2530,82 @@ void DumpSettings ( StringBuilder_c & tBuf, const CSphIndexSettings & tSettings,
 }
 
 
-void DumpSettingsCfg ( FILE * fp, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder )
+// the column storage of a schema as the config keys CSphSchema::SetupFlags reads; CREATE TABLE writes the same keys
+// from its statement (IndexSettingsContainer_c::Populate)
+static void FormatColumnStorageCfg ( const CSphSchema & tSchema, SettingsFormatter_c & tOut )
 {
-	SettingsFormatterState_t tState(fp);
+	StringBuilder_c sStored ( "," ), sStoredOnly ( "," );
+	for ( int i = 0; i < tSchema.GetFieldsCount(); ++i )
+	{
+		const CSphColumnInfo & tField = tSchema.GetField(i);
+		if ( tField.m_uFieldFlags==CSphColumnInfo::FIELD_STORED )
+			sStoredOnly << tField.m_sName;
+		else if ( tField.m_uFieldFlags & CSphColumnInfo::FIELD_STORED )
+			sStored << tField.m_sName;
+	}
+
+	StringBuilder_c sColumnar ( "," ), sRowwise ( "," ), sNoFastFetch ( "," ), sNoHash ( "," ), sJsonSI ( "," );
+	CSphVector<NamedKNNSettings_t> dKNN;
+	const int iNumColumnar = tSchema.GetColumnarAttrsCount();
+	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+		if ( sphIsInternalAttr ( tAttr.m_sName ) || tAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT )
+			continue;
+
+		if ( tAttr.m_eEngine==AttrEngine_e::COLUMNAR )
+			sColumnar << tAttr.m_sName;
+		else if ( tAttr.m_eEngine==AttrEngine_e::ROWWISE )
+			sRowwise << tAttr.m_sName;
+
+		// SetupFlags makes columnar attrs fast fetch when there are several
+		if ( tAttr.IsColumnar() && tAttr.m_eAttrType!=SPH_ATTR_JSON && !tAttr.IsStored() && iNumColumnar>1 )
+			sNoFastFetch << tAttr.m_sName;
+
+		if ( tAttr.IsColumnar() && tAttr.m_eAttrType==SPH_ATTR_STRING && !( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_COLUMNAR_HASHES ) )
+			sNoHash << tAttr.m_sName;
+
+		if ( tAttr.IsIndexedSI() )
+			sJsonSI << tAttr.m_sName;
+
+		if ( tAttr.IsIndexedKNN() )
+		{
+			NamedKNNSettings_t & tKNN = dKNN.Add();
+			(knn::IndexSettings_t &)tKNN = tAttr.m_tKNN;
+			(knn::ModelSettings_t &)tKNN = tAttr.m_tKNNModel;
+			tKNN.m_sName = tAttr.m_sName;
+			tKNN.m_sFrom = tAttr.m_sKNNFrom;
+			tKNN.m_tChunk = tAttr.m_tKNNChunk;
+		}
+	}
+
+	tOut.Add ( "stored_fields",				sStored.cstr(),			true );
+	tOut.Add ( "stored_only_fields",		sStoredOnly.cstr(),		!sStoredOnly.IsEmpty() );
+	tOut.Add ( "columnar_attrs",			sColumnar.cstr(),		!sColumnar.IsEmpty() );
+	tOut.Add ( "rowwise_attrs",				sRowwise.cstr(),		!sRowwise.IsEmpty() );
+	tOut.Add ( "columnar_no_fast_fetch",	sNoFastFetch.cstr(),	!sNoFastFetch.IsEmpty() );
+	tOut.Add ( "columnar_strings_no_hash",	sNoHash.cstr(),			!sNoHash.IsEmpty() );
+	tOut.Add ( "json_secondary_indexes",	sJsonSI.cstr(),			!sJsonSI.IsEmpty() );
+	if ( !dKNN.IsEmpty() )
+		tOut.Add ( "knn", FormatKNNConfigStr ( dKNN ), true );
+}
+
+
+void DumpIndexCfg ( StringBuilder_c & tBuf, const CSphIndex & tIndex, const CSphSchema & tSchema, FilenameBuilder_i * pFilenameBuilder )
+{
+	SettingsFormatterState_t tState(tBuf);
 	SettingsFormatter_c tFormatter ( tState, "\t", " = ", "", "\n" );
+	tFormatter.m_bConfig = true;
 	FormatAllSettings ( tIndex, tFormatter, pFilenameBuilder );
+
+	const CSphIndexSettings & tSettings = tIndex.GetSettings();
+	tFormatter.Add ( "embedded_limit", tSettings.m_iEmbeddedLimit, true );
+	FormatColumnStorageCfg ( tSchema, tFormatter );
+
+	// the settings omit the engine that matches the searchd default, and an indexer does not read searchd
+	bool bDefaultColumnar = tSettings.m_eEngine==AttrEngine_e::DEFAULT && tSettings.m_eDefaultEngine==AttrEngine_e::COLUMNAR && GetDefaultAttrEngine()==AttrEngine_e::COLUMNAR;
+	tFormatter.Add ( "engine", "columnar", bDefaultColumnar );
+	tBuf << "\n";
 }
 
 

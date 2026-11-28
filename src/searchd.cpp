@@ -10327,15 +10327,9 @@ DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const Serv
 		}
 	}
 
-	auto pPlain = LoadIndexerRtBulkChunk ( sPath, sTable, sError );
+	auto pPlain = LoadIndexerRtBulkChunk ( pServed, sPath, sError );
 	if ( !pPlain )
 		return DiskAttachRes_e::NOT_ATTACHED;
-
-	if ( pPlain->GetMatchSchema().HasKNNAttrs() && !pPlain->AlterKNN ( sError ) )
-	{
-		sError.SetSprintf ( "failed building KNN index for bulk_import chunk: %s", sError.cstr() );
-		return DiskAttachRes_e::NOT_ATTACHED;
-	}
 
 	// the attach turns the RAM segments into a disk chunk under the write lock of the table, in a cluster inside the
 	// ordered commit section of every node; do it now, so the attach has only the rows written since
@@ -10378,18 +10372,27 @@ DiskAttachRes_e AttachIndexerRtBulkChunk ( const CSphString & sTable, const Serv
 }
 
 
-// the chunk names the external files of sTable as the table does, so they are found as for its own disk chunks
-std::unique_ptr<CSphIndex> LoadIndexerRtBulkChunk ( const CSphString & sPath, const CSphString & sTable, CSphString & sError )
+// the chunk names the external files of the table as the table does, so they are found as for its own disk chunks
+std::unique_ptr<CSphIndex> LoadIndexerRtBulkChunk ( const cServedIndexRefPtr_c & pServed, const CSphString & sPath, CSphString & sError )
 {
-	auto pChunk = sphCreateIndexPhrase ( "indexer_rt_bulk_chunk", sPath );
-	sphLogDebugRpl ( "bulk_import chunk LoadIndexerRtBulkChunk '%s' object %p", sPath.cstr(), pChunk.get() );
 	StrVec_t dWarnings;
-	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( sTable.cstr() );
-	if ( pChunk->Prealloc ( false, pFilenameBuilder.get(), dWarnings ) )
-		return pChunk;
+	std::unique_ptr<CSphIndex> pChunk;
+	{
+		RIdx_T<RtIndex_i *> pRt { pServed };
+		std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( pRt->GetName() );
+		pChunk = pRt->PreallocDiskChunk ( sPath, 0, pFilenameBuilder.get(), dWarnings, sError, GetIndexerRtBulkChunkName() );
+	}
+	sphLogDebugRpl ( "bulk_import chunk LoadIndexerRtBulkChunk '%s' object %p", sPath.cstr(), pChunk.get() );
+	if ( !pChunk )
+	{
+		sError.SetSprintf ( "failed loading bulk_import chunk: %s", sError.cstr() );
+		return nullptr;
+	}
 
-	sError.SetSprintf ( "failed loading bulk_import chunk: %s", pChunk->GetLastError().cstr() );
-	return nullptr;
+	// read the chunk files now, while the chunk is not in the table: the attach runs under the write lock of the
+	// table (in a cluster also inside the ordered commit), and every query to the table would wait for this read
+	pChunk->Preread();
+	return pChunk;
 }
 
 

@@ -62,7 +62,7 @@ public:
 	RowBuffer_i * 		m_pSqlRowBuffer = nullptr;
 	void*				m_pSessionOpaque1 = nullptr;
 	void*				m_pSessionOpaque2 = nullptr;
-	static std::atomic<int> m_iClients;
+	static std::atomic<int> m_iClients; // ordinary clients: neither VIP nor Buddy
 	static std::atomic<int> m_iVips;
 	static std::atomic<int> m_iBuddy;
 
@@ -228,10 +228,10 @@ namespace session {
 } // namespace session
 
 namespace myinfo {
-	// num of client tasks, not including vips
+	// num of client tasks, excluding both VIP and Buddy connections
 	inline int CountClients ()
 	{
-		return session::GetClients() - ( session::GetVips() + session::GetBuddyCount() );
+		return session::GetClients();
 	}
 
 	// num of real tasks (that is mini-info + client-info)

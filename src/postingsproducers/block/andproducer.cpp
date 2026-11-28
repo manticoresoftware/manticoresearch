@@ -96,7 +96,19 @@ bool BlockAndProducer_c::IntersectRowsWithOrdinals ( const PostingWindow_t & tWi
 		if ( tA>=tWindow.m_uEnd || tB>=tWindow.m_uEnd )
 			break;
 
-		if ( tA==tB && tLeft.PassesFieldCheck(i) && tRight.PassesFieldCheck(j) )
+		if ( tA<tB )
+		{
+			++i;
+			continue;
+		}
+
+		if ( tB<tA )
+		{
+			++j;
+			continue;
+		}
+
+		if ( tLeft.PassesFieldCheck(i) && tRight.PassesFieldCheck(j) )
 		{
 			assert ( tA>=tWindow.m_tMin );
 			(*m_pOrdinals)[0][m_iCount] = uint16_t(i);
@@ -104,10 +116,8 @@ bool BlockAndProducer_c::IntersectRowsWithOrdinals ( const PostingWindow_t & tWi
 			m_dRows[m_iCount++] = tA;
 		}
 
-		if ( tA<=tB )
-			++i;
-		if ( tB<=tA )
-			++j;
+		++i;
+		++j;
 	}
 
 	return true;

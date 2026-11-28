@@ -39,15 +39,6 @@ constexpr std::array<ByteMap_t,256> BuildHitRefOrdinalMaps()
 }
 
 
-uint64_t HitRefView_c::Get ( unsigned int iIdx ) const
-{
-	if ( m_pIndices )
-		return m_pRefs[m_pIndices[iIdx]];
-
-	return m_pInlineBytes ? INLINE_HIT | m_pInlineBytes[iIdx] : m_pRefs[iIdx];
-}
-
-
 void HitRefView_c::UseDecodedRefs ( const uint64_t * pRefs )
 {
 	m_pRefs = pRefs;

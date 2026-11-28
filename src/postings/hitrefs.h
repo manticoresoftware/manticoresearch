@@ -43,6 +43,14 @@ private:
 	const uint8_t *		m_pInlineBytes = nullptr;		// Points directly to encoded hits when every posting has a one-byte inline hit.
 };
 
+inline uint64_t HitRefView_c::Get ( unsigned int iIdx ) const
+{
+	if ( m_pIndices )
+		return m_pRefs[m_pIndices[iIdx]];
+
+	return m_pInlineBytes ? INLINE_HIT | m_pInlineBytes[iIdx] : m_pRefs[iIdx];
+}
+
 // Decode a packed 32-bit hit from up to five canonical LEB128 bytes.
 template<bool CHECKED>
 bool InlineHitValue ( Bytes_t & tData, uint32_t & uValue, std::string & sError )

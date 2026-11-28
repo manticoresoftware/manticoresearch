@@ -2365,6 +2365,52 @@ TEST ( functions, direct_blob_expression )
 }
 
 
+TEST ( functions, uuid_docid_expression_resolution )
+{
+	CSphSchema tSchema;
+	CSphColumnInfo tId ( sphGetDocidName(), SPH_ATTR_BIGINT );
+	tId.m_uAttrFlags = CSphColumnInfo::ATTR_UUID_LINK | CSphColumnInfo::ATTR_COLUMNAR;
+	tSchema.AddAttr ( tId, false );
+	CSphColumnInfo tUuid ( sphGetUuidDocidName(), SPH_ATTR_STRING );
+	tUuid.m_uAttrFlags = CSphColumnInfo::ATTR_COLUMNAR;
+	tSchema.AddAttr ( tUuid, false );
+
+	CSphString sError;
+	ESphAttr eType = SPH_ATTR_NONE;
+	ExprParseArgs_t tArgs;
+	tArgs.m_pAttrType = &eType;
+
+	// User expressions resolve id to the UUID column.
+	ISphExprRefPtr_c pPublic ( sphExprParse ( sphGetDocidName(), tSchema, sError, tArgs ) );
+	ASSERT_TRUE ( pPublic.Ptr() ) << sError.cstr();
+	EXPECT_EQ ( eType, SPH_ATTR_STRINGPTR );
+	CSphString sColumn;
+	pPublic->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sColumn );
+	EXPECT_STREQ ( sColumn.cstr(), sphGetUuidDocidName() );
+
+	// Materialization must use the original physical column and numeric type.
+	tArgs.m_bResolveUuidDocid = false;
+	ISphExprRefPtr_c pPhysical ( sphExprParse ( sphGetDocidName(), tSchema, sError, tArgs ) );
+	ASSERT_TRUE ( pPhysical.Ptr() ) << sError.cstr();
+	EXPECT_EQ ( eType, SPH_ATTR_BIGINT );
+	pPhysical->Command ( SPH_EXPR_GET_COLUMNAR_COL, &sColumn );
+	EXPECT_STREQ ( sColumn.cstr(), sphGetDocidName() );
+
+	// A standalone result schema is built one column at a time. The UUID
+	// column need not exist yet when the numeric ID expression is created.
+	CSphSchema tPartial;
+	tId.m_uAttrFlags &= ~CSphColumnInfo::ATTR_COLUMNAR;
+	tPartial.AddAttr ( tId, true );
+	ISphExprRefPtr_c pStandalone ( sphExprParse ( sphGetDocidName(), tPartial, sError, tArgs ) );
+	ASSERT_TRUE ( pStandalone.Ptr() ) << sError.cstr();
+	ASSERT_EQ ( eType, SPH_ATTR_BIGINT );
+	CSphMatch tMatch;
+	tMatch.Reset ( tPartial.GetDynamicSize() );
+	tMatch.SetAttr ( tPartial.GetAttr(0).m_tLocator, 1234567890123LL );
+	EXPECT_EQ ( pStandalone->Int64Eval(tMatch), 1234567890123LL );
+}
+
+
 TEST ( functions, histogram_expression )
 {
 	CSphColumnInfo tCol;

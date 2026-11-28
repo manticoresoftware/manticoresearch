@@ -174,6 +174,7 @@ void TransformedSchemaBuilder_c::ReplaceColumnarAttrWithExpression ( CSphColumnI
 	// parse expression as if it is not columnar
 	CSphString		 sError;
 	ExprParseArgs_t	 tExprArgs;
+	tExprArgs.m_bResolveUuidDocid = false;
 	tAttr.m_pExpr = sphExprParse ( tAttr.m_sName.cstr(), m_tNewSchema, sError, tExprArgs );
 	assert ( tAttr.m_pExpr );
 
@@ -316,7 +317,8 @@ void MatchesToNewSchema_c::SetupAction ( const CSphColumnInfo & tOld, const CSph
 	{
 		CSphString		sError;
 		ExprParseArgs_t tExprArgs;
-		tAction.m_pExpr =  sphExprParse ( tOld.m_sName.cstr(), *pOldSchema, sError, tExprArgs );
+		tExprArgs.m_bResolveUuidDocid = false;
+		tAction.m_pExpr = sphExprParse ( tOld.m_sName.cstr(), *pOldSchema, sError, tExprArgs );
 		assert ( tAction.m_pExpr );
 
 		switch ( tNew.m_eAttrType )

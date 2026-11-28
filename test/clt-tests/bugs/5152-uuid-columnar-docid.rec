@@ -1,0 +1,120 @@
+––– comment –––
+Regression for #5152: physical DocIDs must remain numeric when UUID columnar
+matches are materialized. Public UUID and stored field values must be correct.
+––– block: ../base/start-searchd –––
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "CREATE TABLE uuid_col (id uuid, title text, tag string, price int) engine='columnar'"
+––– output –––
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "INSERT INTO uuid_col (id,title,tag,price) VALUES ('550e8400-e29b-41d4-a716-846655440001','First','one',10),('550e8400-e29b-41d4-a716-846655440002','Second','two',20)"
+––– output –––
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT * FROM uuid_col ORDER BY price ASC"
+––– output –––
+First	550e8400-e29b-41d4-a716-846655440001	one	10
+Second	550e8400-e29b-41d4-a716-846655440002	two	20
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT id,title,tag,price FROM uuid_col ORDER BY price ASC"
+––– output –––
+550e8400-e29b-41d4-a716-846655440001	First	one	10
+550e8400-e29b-41d4-a716-846655440002	Second	two	20
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT title FROM uuid_col ORDER BY price ASC"
+––– output –––
+First
+Second
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT id,title FROM uuid_col WHERE id='550e8400-e29b-41d4-a716-846655440002'"
+––– output –––
+550e8400-e29b-41d4-a716-846655440002	Second
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT * FROM uuid_col ORDER BY price ASC LIMIT 1"
+––– output –––
+First	550e8400-e29b-41d4-a716-846655440001	one	10
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "FLUSH RAMCHUNK uuid_col"
+––– output –––
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT * FROM uuid_col ORDER BY price ASC"
+––– output –––
+First	550e8400-e29b-41d4-a716-846655440001	one	10
+Second	550e8400-e29b-41d4-a716-846655440002	two	20
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT id,title,tag,price FROM uuid_col ORDER BY price ASC"
+––– output –––
+550e8400-e29b-41d4-a716-846655440001	First	one	10
+550e8400-e29b-41d4-a716-846655440002	Second	two	20
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT title FROM uuid_col ORDER BY price ASC"
+––– output –––
+First
+Second
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT id,title FROM uuid_col WHERE id='550e8400-e29b-41d4-a716-846655440002'"
+––– output –––
+550e8400-e29b-41d4-a716-846655440002	Second
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT * FROM uuid_col ORDER BY price ASC LIMIT 1"
+––– output –––
+First	550e8400-e29b-41d4-a716-846655440001	one	10
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "DROP TABLE uuid_col"
+––– output –––
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "CREATE TABLE uuid_col_noff (id uuid, title text, tag string fast_fetch='0', price int fast_fetch='0') engine='columnar'"
+––– output –––
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "INSERT INTO uuid_col_noff (id,title,tag,price) VALUES ('550e8400-e29b-41d4-a716-846655440001','First','one',10),('550e8400-e29b-41d4-a716-846655440002','Second','two',20)"
+––– output –––
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT * FROM uuid_col_noff ORDER BY price ASC"
+––– output –––
+First	550e8400-e29b-41d4-a716-846655440001	one	10
+Second	550e8400-e29b-41d4-a716-846655440002	two	20
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT id,title,tag,price FROM uuid_col_noff ORDER BY price ASC"
+––– output –––
+550e8400-e29b-41d4-a716-846655440001	First	one	10
+550e8400-e29b-41d4-a716-846655440002	Second	two	20
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT title FROM uuid_col_noff ORDER BY price ASC"
+––– output –––
+First
+Second
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT id,title FROM uuid_col_noff WHERE id='550e8400-e29b-41d4-a716-846655440002'"
+––– output –––
+550e8400-e29b-41d4-a716-846655440002	Second
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT * FROM uuid_col_noff ORDER BY price ASC LIMIT 1"
+––– output –––
+First	550e8400-e29b-41d4-a716-846655440001	one	10
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "FLUSH RAMCHUNK uuid_col_noff"
+––– output –––
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT * FROM uuid_col_noff ORDER BY price ASC"
+––– output –––
+First	550e8400-e29b-41d4-a716-846655440001	one	10
+Second	550e8400-e29b-41d4-a716-846655440002	two	20
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT id,title,tag,price FROM uuid_col_noff ORDER BY price ASC"
+––– output –––
+550e8400-e29b-41d4-a716-846655440001	First	one	10
+550e8400-e29b-41d4-a716-846655440002	Second	two	20
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT title FROM uuid_col_noff ORDER BY price ASC"
+––– output –––
+First
+Second
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT id,title FROM uuid_col_noff WHERE id='550e8400-e29b-41d4-a716-846655440002'"
+––– output –––
+550e8400-e29b-41d4-a716-846655440002	Second
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "SELECT * FROM uuid_col_noff ORDER BY price ASC LIMIT 1"
+––– output –––
+First	550e8400-e29b-41d4-a716-846655440001	one	10
+––– input –––
+timeout 15s mysql -h0 -P9306 --batch --skip-table --skip-column-names -e "DROP TABLE uuid_col_noff"
+––– output –––

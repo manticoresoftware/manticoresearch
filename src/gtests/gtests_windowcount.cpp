@@ -72,7 +72,7 @@ public:
 	int FilterRows ( RowID_t *, int ) final { ADD_FAILURE() << "expected term enumeration"; return 0; }
 
 
-	bool ReadPayloads ( const RowID_t *, int, QwordDoc_t *, bool, bool ) final { ADD_FAILURE() << "membership must not read payloads"; return false; }
+	bool ReadPayloads ( const RowID_t *, int, QwordDoc_t *, bool, bool, const uint16_t * ) final { ADD_FAILURE() << "membership must not read payloads"; return false; }
 
 private:
 	const Docs_t &	m_dDocs;

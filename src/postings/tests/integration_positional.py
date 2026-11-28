@@ -124,6 +124,14 @@ def main():
             sql("DELETE FROM " + table + " WHERE id IN (1,129,257,513)")
             sql("FLUSH RAMCHUNK " + table)
         compare("disk")
+        if case == "plain":
+            for expr in ['@body "alpha beta"', '@body "alpha beta"~3', '"beta alpha"~1']:
+                for table in tables:
+                    predicate = f"FROM {table} WHERE MATCH('{expr}')"
+                    ranked = sql(f"SELECT id {predicate} ORDER BY id ASC LIMIT 2000 OPTION max_matches=2000,ranker=proximity_bm25,threads=1")
+                    count = sql(f"SELECT COUNT(*) n {predicate} OPTION threads=1")
+                    assert count["data"][0]["n"] == len(ranked["data"]), (table, expr)
+
         for table in tables:
             sql("OPTIMIZE TABLE " + table + " OPTION sync=1,cutoff=1")
         compare("merged")

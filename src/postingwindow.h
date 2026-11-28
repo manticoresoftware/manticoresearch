@@ -105,6 +105,18 @@ struct PostingLeaf_t
 	bool		m_bDecoded = false;
 };
 
+// Row and field columns for a decoded leaf. Array indices are posting ordinals.
+struct DecodedPostingRows_t
+{
+	const uint32_t *	m_pRows = nullptr;
+	const uint32_t *	m_pFields = nullptr;
+	DWORD				m_uMask = 0;
+	int					m_iBegin = 0;
+	int					m_iEnd = 0;
+
+	bool PassesFieldCheck ( int i ) const { return !m_pFields || (m_pFields[i] & m_uMask); }
+};
+
 // Exclusive posting view for candidate intersection followed by lazy payload
 // gathering. The qword must outlive it; only hit reads may use the qword directly.
 class PostingBlock_i
@@ -128,9 +140,13 @@ public:
 	// Compact sorted candidates to exact field-aware matches in the prepared leaf.
 	virtual int		FilterRows ( RowID_t * pRows, int iCount ) = 0;
 
+	// Access the rows of a decoded leaf for intersection by posting ordinal.
+	virtual DecodedPostingRows_t GetDecodedRows() const { return {}; }
+
 	// Gather payloads for sorted surviving rows, including after Intersect/FilterRows.
+	// Optional ordinals locate these rows in the prepared leaf.
 	// Decode only requested columns; unrequested TF/hit references are zeroed.
-	virtual bool	ReadPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits ) = 0;
+	virtual bool	ReadPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits, const uint16_t * pOrdinals=nullptr ) = 0;
 };
 
 // A conservative prefilter. May retain false positives

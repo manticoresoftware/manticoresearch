@@ -11,6 +11,8 @@
 #include "andproducer.h"
 #include "../andproducerbase.h"
 
+#include "postings/codec.h"
+
 #include <algorithm>
 #include <array>
 
@@ -22,17 +24,24 @@ class BlockAndProducer_c final : public AndProducerBase_c
 public:
 	BlockAndProducer_c ( const AndProducerSetup_t & tSetup, std::vector<std::unique_ptr<PostingBlock_i>> dCursors, std::vector<std::unique_ptr<PostingWindow_i>> dExcluded );
 
-	bool					HasTaggedHitRefs() const final { return true; }
-	PostingCandidateBatch_t	NextCandidates ( int iCapacity ) final;
-	const QwordDoc_t *		ReadPayloads ( int iTerm, const RowID_t * pRows, int iCount ) final;
+	bool						HasTaggedHitRefs() const final { return true; }
+	PostingCandidateBatch_t		NextCandidates ( int iCapacity ) final;
+	const QwordDoc_t *			ReadPayloads ( int iTerm, const RowID_t * pRows, int iCount ) final;
 
 private:
-	PostingCandidateBatch_t	ReadRows ( RowID_t tMin, uint64_t uEnd, int iCapacity );
+	PostingCandidateBatch_t		ReadRows ( RowID_t tMin, uint64_t uEnd, int iCapacity );
 	bool						FillCandidates ( uint64_t uEnd );
+	bool						IntersectCandidates ( const PostingWindow_t & tWindow, bool bDecoded );
 	bool						IntersectBitmap ( const PostingWindow_t & tWindow );
 	void						ExtractRows ( RowID_t tBase, const DWORD * pBits, int iWords );
 	bool						SubtractRows();
 
+	bool						IntersectRowsWithOrdinals ( const PostingWindow_t & tWindow );
+
+	using RowOrdinals_t = std::array<std::array<uint16_t,postings::MAX_VALUES>,2>;
+
+	std::unique_ptr<RowOrdinals_t>	m_pOrdinals;
+	bool							m_bHaveOrdinals = false;
 	std::vector<std::unique_ptr<PostingBlock_i>>	m_dCursors;
 	std::vector<std::unique_ptr<PostingWindow_i>>	m_dExcluded;
 	std::array<RowID_t,PostingWindow_t::ROWS>		m_dRows;
@@ -63,19 +72,65 @@ PostingCandidateBatch_t BlockAndProducer_c::NextCandidates ( int iCapacity )
 }
 
 
+bool BlockAndProducer_c::IntersectRowsWithOrdinals ( const PostingWindow_t & tWindow )
+{
+	const auto & tPayloads = m_tSetup.m_tPayloads;
+	if ( !tPayloads.m_bHits || tPayloads.m_bTF || m_dCursors.size()!=2 || m_tSetup.m_pFilter || !m_dExcluded.empty() )
+		return false;
+
+	const auto tLeft = m_dCursors[0]->GetDecodedRows();
+	const auto tRight = m_dCursors[1]->GetDecodedRows();
+	if ( !tLeft.m_pRows || !tRight.m_pRows )
+		return false;
+
+	if ( !m_pOrdinals )
+		m_pOrdinals = std::make_unique<RowOrdinals_t>();
+
+	m_iCount = 0;
+	int i = tLeft.m_iBegin;
+	int j = tRight.m_iBegin;
+	while ( i<tLeft.m_iEnd && j<tRight.m_iEnd )
+	{
+		const RowID_t tA = tLeft.m_pRows[i];
+		const RowID_t tB = tRight.m_pRows[j];
+		if ( tA>=tWindow.m_uEnd || tB>=tWindow.m_uEnd )
+			break;
+
+		if ( tA==tB && tLeft.PassesFieldCheck(i) && tRight.PassesFieldCheck(j) )
+		{
+			assert ( tA>=tWindow.m_tMin );
+			(*m_pOrdinals)[0][m_iCount] = uint16_t(i);
+			(*m_pOrdinals)[1][m_iCount] = uint16_t(j);
+			m_dRows[m_iCount++] = tA;
+		}
+
+		if ( tA<=tB )
+			++i;
+		if ( tB<=tA )
+			++j;
+	}
+
+	return true;
+}
+
+
 const QwordDoc_t * BlockAndProducer_c::ReadPayloads ( int iTerm, const RowID_t * pRows, int iCount )
 {
 	assert ( iTerm>=0 && iTerm<int(m_tSetup.m_dTerms.size()) );
+	const uint16_t * pOrdinals = nullptr;
 	if ( !pRows )
 	{
 		pRows = m_tRows.m_pRows;
 		iCount = m_tRows.m_iCount;
+		// ReadRows can return just a slice of the intersection stored in m_dRows.
+		if ( m_bHaveOrdinals && iCount )
+			pOrdinals = (*m_pOrdinals)[iTerm].data() + (pRows-m_dRows.data());
 	}
 
 	assert ( iCount>=0 && iCount<=m_tRows.m_iCount );
 
 	const auto & tRequirements = m_tSetup.m_tPayloads;
-	if ( !m_dCursors[iTerm]->ReadPayloads ( pRows, iCount, m_dPayloads.data(), tRequirements.m_bTF, tRequirements.m_bHits ) )
+	if ( !m_dCursors[iTerm]->ReadPayloads ( pRows, iCount, m_dPayloads.data(), tRequirements.m_bTF, tRequirements.m_bHits, pOrdinals ) )
 		return nullptr;
 
 	return m_dPayloads.data();
@@ -152,24 +207,8 @@ bool BlockAndProducer_c::FillCandidates ( uint64_t uEnd )
 		uLimit = std::min ( uLimit, uint64_t(tFirst)+PostingWindow_t::ROWS );
 
 		PostingWindow_t tWindow { tFirst, tFirst, uLimit };
-		if ( (bDecoded || m_dCursors.size()==1) && m_dExcluded.empty() )
-		{
-			m_iCount = m_dCursors.front()->ReadRows ( tWindow, m_dRows.data() );
-			if ( m_tSetup.m_pFilter && m_tSetup.m_pFilter->GetFilterComplexity()<=1.0f && m_iCount && m_dCursors.size()>1 )
-			{
-				if ( !m_iEarlyFilterRetry )
-				{
-					int iBefore = m_iCount;
-					m_iCount = m_tSetup.m_pFilter->SelectRows ( m_dRows.data(), m_iCount );
-					// Retry every 32 batches when the filter rejects less than half the candidates.
-					m_iEarlyFilterRetry = m_iCount*2<=iBefore ? 0 : 31;
-				} else
-					--m_iEarlyFilterRetry;
-			}
-
-			for ( size_t i=1; i<m_dCursors.size() && m_iCount; ++i )
-				m_iCount = m_dCursors[i]->FilterRows ( m_dRows.data(), m_iCount );
-		} else if ( !IntersectBitmap(tWindow) )
+		m_bHaveOrdinals = bDecoded && IntersectRowsWithOrdinals(tWindow);
+		if ( !m_bHaveOrdinals && !IntersectCandidates ( tWindow, bDecoded ) )
 			return false;
 
 		m_tNext = RowID_t(uLimit);
@@ -179,6 +218,31 @@ bool BlockAndProducer_c::FillCandidates ( uint64_t uEnd )
 	}
 
 	return false;
+}
+
+
+bool BlockAndProducer_c::IntersectCandidates ( const PostingWindow_t & tWindow, bool bDecoded )
+{
+	if ( (!bDecoded && m_dCursors.size()>1) || !m_dExcluded.empty() )
+		return IntersectBitmap(tWindow);
+
+	m_iCount = m_dCursors.front()->ReadRows ( tWindow, m_dRows.data() );
+	if ( m_tSetup.m_pFilter && m_tSetup.m_pFilter->GetFilterComplexity()<=1.0f && m_iCount && m_dCursors.size()>1 )
+	{
+		if ( !m_iEarlyFilterRetry )
+		{
+			int iBefore = m_iCount;
+			m_iCount = m_tSetup.m_pFilter->SelectRows ( m_dRows.data(), m_iCount );
+			// Retry every 32 batches when the filter rejects less than half the candidates.
+			m_iEarlyFilterRetry = m_iCount*2<=iBefore ? 0 : 31;
+		} else
+			--m_iEarlyFilterRetry;
+	}
+
+	for ( size_t i=1; i<m_dCursors.size() && m_iCount; ++i )
+		m_iCount = m_dCursors[i]->FilterRows ( m_dRows.data(), m_iCount );
+
+	return true;
 }
 
 

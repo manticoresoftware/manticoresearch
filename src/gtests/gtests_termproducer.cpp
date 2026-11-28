@@ -42,7 +42,7 @@ public:
 	}
 
 
-	bool ReadPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits ) final
+	bool ReadPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits, const uint16_t * ) final
 	{
 		++m_iReads;
 		for ( int i=0; i<iCount; ++i )

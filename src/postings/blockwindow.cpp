@@ -31,11 +31,12 @@ public:
 	int						Intersect ( const PostingWindow_t & tWindow, DWORD * pBits ) final;
 	int						ReadRows ( const PostingWindow_t & tWindow, RowID_t * pRows ) final;
 	int						FilterRows ( RowID_t * pRows, int iCount ) final;
-	bool					ReadPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits ) final;
+	DecodedPostingRows_t	GetDecodedRows() const final;
+	bool					ReadPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits, const uint16_t * pOrdinals ) final;
 
 private:
 	template<bool INLINE_REFS>
-	bool					ReadLeafPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits );
+	bool					ReadLeafPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits, const uint16_t * pOrdinals );
 	int						DrainDecodedRows ( uint64_t uEnd, RowID_t * pRows, int iCapacity );
 	const uint32_t *			FindDecodedRow ( RowID_t tRow, unsigned iHint ) const;
 	void					BuildBitmapOrdinals();
@@ -695,21 +696,31 @@ int BlockPostingWindow_T<MAPPED>::FilterRows ( RowID_t * pRows, int iCount )
 
 
 template<bool MAPPED>
-bool BlockPostingWindow_T<MAPPED>::ReadPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits )
+DecodedPostingRows_t BlockPostingWindow_T<MAPPED>::GetDecodedRows() const
+{
+	if ( !m_bRowsDecoded )
+		return {};
+
+	return { m_tReader.GetRows().data(), m_bAllFields ? nullptr : m_dFields.data(), m_uFields, int(m_iPos), int(m_tBlock.m_uCount) };
+}
+
+
+template<bool MAPPED>
+bool BlockPostingWindow_T<MAPPED>::ReadPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits, const uint16_t * pOrdinals )
 {
 	if ( !iCount )
 		return true;
 
 	if ( bHits && m_tReader.GetDesc().m_tHitRefs.m_eCodec==postings::Codec_e::INLINE_HITS && m_tReader.GetDesc().m_bPositions )
-		return ReadLeafPayloads<true> ( pRows, iCount, pDocs, bTF, true );
+		return ReadLeafPayloads<true> ( pRows, iCount, pDocs, bTF, true, pOrdinals );
 
-	return ReadLeafPayloads<false> ( pRows, iCount, pDocs, bTF, bHits );
+	return ReadLeafPayloads<false> ( pRows, iCount, pDocs, bTF, bHits, pOrdinals );
 }
 
 
 template<bool MAPPED>
 template<bool INLINE_REFS>
-bool BlockPostingWindow_T<MAPPED>::ReadLeafPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits )
+bool BlockPostingWindow_T<MAPPED>::ReadLeafPayloads ( const RowID_t * pRows, int iCount, QwordDoc_t * pDocs, bool bTF, bool bHits, const uint16_t * pOrdinals )
 {
 	if ( (!m_bLowFields && !m_tReader.ReadLowFields ( m_dFields.data(), m_tWord.m_sError )) || (bTF && !m_tReader.ReadTF(m_tWord.m_sError)) )
 	{
@@ -752,7 +763,15 @@ bool BlockPostingWindow_T<MAPPED>::ReadLeafPayloads ( const RowID_t * pRows, int
 		pDocs[i] = { pRows[i], m_dFields[iOrdinal], bTF ? m_tReader.GetTF()[iOrdinal] : 0, iRef };
 	};
 
-	if ( !m_bRowsDecoded && m_tBlock.m_eKind==postings::Rows_e::RANGE )
+	if ( pOrdinals )
+	{
+		assert ( m_bRowsDecoded );
+		for ( int i=0; i<iCount; ++i )
+		{
+			assert ( m_tReader.GetRows()[pOrdinals[i]]==pRows[i] );
+			Store ( i, pOrdinals[i] );
+		}
+	} else if ( !m_bRowsDecoded && m_tBlock.m_eKind==postings::Rows_e::RANGE )
 	{
 		for ( int i=0; i<iCount; ++i )
 			Store ( i, pRows[i]-m_tBlock.m_uFirst );
